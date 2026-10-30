@@ -269,6 +269,9 @@ jobs:
       - run: python3 bench/h54gpu/test_h54gpu.py
       - run: python3 bench/h57d/test_h57d.py
       - run: python3 bench/h59/test_h59.py
+      # The H59-family runner (amendment R1): renders through the launcher against the fit
+      # fixtures, arm.sh against a local stub server, its records scored by h59.py.
+      - run: python3 bench/h59/test_run.py
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
       - run: bash bench/admission/test_run.sh
