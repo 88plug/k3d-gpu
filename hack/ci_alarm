@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# ci_alarm: one GitHub issue per alarm key, labelled ci-alarm.
+#
+#   hack/ci_alarm open <key> <title> <body-file>
+#       Keeps one open issue titled "[ci-alarm] <key>: <title>", labelled ci-alarm
+#       (created with `gh label create --force` when the issue is filed), assigned
+#       to $ALARM_OWNER with an @mention in its body. When the key's issue is
+#       already open: a new body replaces the issue body and is posted as a
+#       comment; the same body comments again only once 24 h have passed since
+#       the last comment (or since the issue was opened).
+#   hack/ci_alarm close <key> <comment>
+#       Comments and closes the key's open issue; no open issue is a no-op.
+#   hack/ci_alarm list
+#       Prints the key of every open ci-alarm issue, one per line.
+#
+# A key is [A-Za-z0-9._:/@+-]+ (no spaces), e.g. red:build-and-push.yml,
+# release:0.1.76, watchdog-error. gh picks the repository from GH_REPO, else the
+# checkout's remote.
+#
+# When the repository has issues disabled, `open` prints a ::error workflow
+# annotation with the title and appends the body to $GITHUB_STEP_SUMMARY, and
+# every command exits 3. Exit 2 is a usage error, 1 any other gh failure.
+#
+# Env: ALARM_OWNER (default 88plug), CI_ALARM_NOW (epoch seconds, for tests),
+#      GITHUB_STEP_SUMMARY.
+set -euo pipefail
+
+OWNER=${ALARM_OWNER:-88plug}
+LABEL=ci-alarm
+NOW=${CI_ALARM_NOW:-$(date -u +%s)}
+DAY=86400
+
+usage() { sed -n '2,24p' "$0" >&2; exit 2; }
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/ci_alarm.XXXXXX")
+trap 'rm -rf "$TMP"' EXIT
+
+# gh_run ARGS...: run gh; on failure print its stderr and exit 3 (issues
+# disabled) or 1 (anything else).
+gh_run() {
+    if gh "$@" > "$TMP/gh.out" 2> "$TMP/gh.err"; then
+        cat "$TMP/gh.out"
+        return 0
+    fi
+    cat "$TMP/gh.err" >&2
+    if grep -qi 'disabled issues' "$TMP/gh.err"; then exit 3; fi
+    exit 1
+}
+
+# open_issues: JSON array of the open ci-alarm issues.
+open_issues() {
+    gh_run issue list --label "$LABEL" --state open --limit 200 --json number,title,body,comments,createdAt
+}
+
+# issue_for KEY: the key's open issue (lowest number) as JSON, or nothing.
+issue_for() {
+    open_issues > "$TMP/issues.json"
+    jq -c --arg p "[ci-alarm] $1: " \
+        'map(select(.title | startswith($p))) | sort_by(.number) | .[0] // empty' "$TMP/issues.json"
+}
+
+check_key() {
+    [[ "$1" =~ ^[A-Za-z0-9._:/@+-]+$ ]] || { echo "ci_alarm: bad key '$1' (want [A-Za-z0-9._:/@+-]+)" >&2; exit 2; }
+}
+
+cmd_open() {
+    [ $# -eq 3 ] || usage
+    local key=$1 title=$2 file=$3 full issue num old new last
+    check_key "$key"
+    [ -n "$title" ] || { echo "ci_alarm: empty title" >&2; exit 2; }
+    [ -r "$file" ] || { echo "ci_alarm: cannot read body file '$file'" >&2; exit 2; }
+    full="[ci-alarm] $key: $title"
+    # shellcheck disable=SC2016 # markdown backticks, not a command substitution
+    { printf '@%s ci-alarm `%s`\n\n' "$OWNER" "$key"; cat "$file"; } > "$TMP/body"
+
+    issue=$(issue_for "$key") || exit $?
+    if [ -z "$issue" ]; then
+        gh_run label create "$LABEL" --force --color B60205 \
+            --description "Automation alarm filed by hack/ci_alarm" >/dev/null
+        gh_run issue create --title "$full" --body-file "$TMP/body" --label "$LABEL" --assignee "$OWNER"
+        return 0
+    fi
+
+    num=$(jq -r .number <<< "$issue")
+    # GitHub may store the body with CRLF and without the trailing newline.
+    old=$(jq -r '.body | gsub("\r\n"; "\n") | sub("\\s+$"; "")' <<< "$issue")
+    new=$(jq -Rrs 'gsub("\r\n"; "\n") | sub("\\s+$"; "")' "$TMP/body")
+    if [ "$old" != "$new" ] || [ "$(jq -r .title <<< "$issue")" != "$full" ]; then
+        gh_run issue edit "$num" --title "$full" --body-file "$TMP/body" >/dev/null
+        gh_run issue comment "$num" --body-file "$TMP/body" >/dev/null
+        echo "ci_alarm: $key updated (#$num)"
+        return 0
+    fi
+    last=$(jq -r '[.createdAt] + [.comments[].createdAt] | max' <<< "$issue")
+    if [ $(( NOW - $(date -u -d "$last" +%s) )) -ge "$DAY" ]; then
+        printf '@%s still open: %s\n' "$OWNER" "$full" > "$TMP/reminder"
+        gh_run issue comment "$num" --body-file "$TMP/reminder" >/dev/null
+        echo "ci_alarm: $key reminded (#$num)"
+    else
+        echo "ci_alarm: $key unchanged (#$num)"
+    fi
+}
+
+cmd_close() {
+    [ $# -eq 2 ] || usage
+    local key=$1 comment=$2 issue num
+    check_key "$key"
+    issue=$(issue_for "$key") || exit $?
+    if [ -z "$issue" ]; then
+        echo "ci_alarm: no open alarm $key"
+        return 0
+    fi
+    num=$(jq -r .number <<< "$issue")
+    gh_run issue close "$num" --comment "$comment" >/dev/null
+    echo "ci_alarm: $key closed (#$num)"
+}
+
+cmd_list() {
+    [ $# -eq 0 ] || usage
+    open_issues > "$TMP/issues.json"
+    jq -r '.[].title | capture("^\\[ci-alarm\\] (?<k>[^ ]+): ") | .k' "$TMP/issues.json"
+}
+
+# Issues disabled: `open` still reaches the run's log and summary.
+annotate() {
+    local key=$1 title=$2 file=$3
+    echo "::error title=ci-alarm ${key}::${title} (not filed: this repository has issues disabled)"
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        # shellcheck disable=SC2016 # markdown backticks
+        { printf '### ci-alarm `%s`: %s\n\n' "$key" "$title"; cat "$file"; echo; } >> "$GITHUB_STEP_SUMMARY"
+    fi
+}
+
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+case "$cmd" in
+    open)
+        set +e
+        (cmd_open "$@")
+        rc=$?
+        set -e
+        if [ "$rc" -eq 3 ] && [ $# -eq 3 ]; then annotate "$@"; fi
+        exit "$rc" ;;
+    close) cmd_close "$@" ;;
+    list)  cmd_list "$@" ;;
+    *) usage ;;
+esac

@@ -1,0 +1,699 @@
+#!/usr/bin/env python3
+"""watchdog: notice red, missing or stuck automation within hours, not days.
+
+Each run (.github/workflows/watchdog.yml: hourly, and after every listed workflow
+completes on main) checks the repository and opens or closes one hack/ci_alarm
+issue per finding:
+
+  a. scheduled workflows  Every .github/workflows/*.yml with a cron. stale:<file>
+                          when its last successful scheduled run is older than the
+                          cron period + 6 h (none at all counts, unless the workflow
+                          was added within that time). red:<file> when the latest
+                          completed scheduled run concluded failure, startup_failure
+                          or timed_out: the run, its failed jobs, the last 60 lines
+                          of its failed log up to the last ##[error], and the hint of
+                          the first matching hack/ci_alarm_signatures.tsv line. Once
+                          per failed run id (kept in the alarm body) the workflow is
+                          re-dispatched on main when it has workflow_dispatch. A
+                          green latest scheduled run closes red:<file>.
+  b. workflow state       A workflow file whose Actions state is not active:
+                          disabled:<file>.
+  c. main CI              main's HEAD older than 30 min with no ci.yml run (push or
+                          workflow_dispatch) for its SHA: dispatch ci.yml on main
+                          (the dispatched run is for that SHA, so it happens once);
+                          still none 2 h after HEAD: ci-missing. The latest completed
+                          ci.yml run on main red: ci-main; green closes it.
+  d. release integrity    The newest aur-v* tag older than 45 min (tag time = its
+                          commit's committer date in --root's git) must have
+                          cryptoandcoffee/k3d-gpu:<ver> on Docker Hub,
+                          ghcr.io/<owner>/k3d-gpu:<ver>, the GitHub release
+                          aur-v<ver> with its .deb, .rpm and SHA256SUMS, and AUR at
+                          <ver> or later. A missing Docker Hub image dispatches
+                          build-and-push.yml -f release=<ver> once (kept in the alarm
+                          body). Any gap: release:<ver>, listing older tags from the
+                          last 14 days with gaps as information. Other release:*
+                          alarms close as superseded. Skipped while a release
+                          workflow is queued or running.
+  e. stuck bot PRs        Open autobump/* PRs from this repository (not a fork's)
+                          older than 72 h whose head SHA has no successful ci.yml
+                          run: bot-pr-stuck.
+  f. simulate_red         SIMULATE_RED=true opens simulate; a run without it closes it.
+
+A re-dispatch (a and d) is recorded in its alarm before it runs, and the record is
+what stops the next one. A run that cannot read or file the alarm (issues
+disabled, the open alarms could not be listed, the alarm write failed) therefore
+dispatches nothing; a dispatch that fails is not recorded, and the next run tries
+again. Recording after dispatching let every watchdog run that could not file
+alarms re-dispatch the red workflows, watchdog.yml among them, without end.
+
+A failed gh, git, registry or AUR call is collected and filed as watchdog-error
+with its text (the other checks still run); a run with no error closes it. Exit 0
+unless an alarm could not be filed (the repository has issues disabled, or
+ci_alarm failed for watchdog-error itself): then ::error annotations and exit 1.
+
+Usage: hack/watchdog [--root DIR] [--list-scheduled]
+  --root DIR        the checkout to read workflows and aur-v* tags from (default:
+                    this repo). The workflow needs fetch-depth: 0 for the tags.
+  --list-scheduled  print "<file> <cron period in hours>" per scheduled workflow
+
+Env: GH_REPO or GITHUB_REPOSITORY (owner/repo), SIMULATE_RED, ALARM_OWNER (for
+ci_alarm), GITHUB_STEP_SUMMARY; for tests: WATCHDOG_NOW (epoch seconds),
+WATCHDOG_ALARM (ci_alarm path), WATCHDOG_IMAGES_LOCK (the file registry_digest is
+loaded from; default scripts/images-lock), WATCHDOG_AUR_URL.
+
+Python standard library; gh on PATH.
+"""
+
+import argparse
+import datetime
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import traceback
+import urllib.error
+import urllib.request
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(HERE)
+MINUTE, HOUR, DAY = 60, 3600, 86400
+RED = ("failure", "startup_failure", "timed_out")
+DECIDED = RED + ("success",)
+RELEASE_WORKFLOWS = ("Auto-update, Build & Release", "Auto-release AUR",
+                     "Release packages (deb, rpm, Homebrew)", "AUR Deploy")
+HUB_REPO = "cryptoandcoffee/k3d-gpu"
+AUR_URL = "https://aur.archlinux.org/rpc/v5/info?arg[]=k3d-gpu"
+TAG_RE = re.compile(r"^aur-v(\d+)\.(\d+)\.(\d+)$")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+CRON_LINE_RE = re.compile(r"""^\s*-\s*cron:\s*(['"]?)([^'"#\n]+?)\1\s*(?:#.*)?$""", re.M)
+DISPATCH_RE = re.compile(r"^\s+workflow_dispatch:|^on:.*\bworkflow_dispatch\b", re.M)
+LOG_LINES, LOG_WIDTH = 60, 300
+
+
+class ToolError(Exception):
+    """A gh, git, registry or AUR call failed."""
+
+
+def ts(s):
+    return datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+
+
+def iso(t):
+    return datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def hours(seconds):
+    return "%g" % round(seconds / HOUR, 2)
+
+
+def vkey(ver):
+    return tuple(int(x) for x in ver.split("."))
+
+
+# ── cron ─────────────────────────────────────────────────────────────────────
+
+def cron_values(field, lo, hi):
+    """The set a cron field allows: *, n, a-b, with /step, comma lists."""
+    out = set()
+    for part in field.split(","):
+        step = 1
+        if "/" in part:
+            part, s = part.split("/", 1)
+            step = int(s)
+        if part == "*":
+            a, b = lo, hi
+        elif "-" in part:
+            a, b = (int(x) for x in part.split("-", 1))
+        else:
+            a = int(part)
+            b = hi if step > 1 else a
+        if a < lo or b > hi or a > b or step < 1:
+            raise ValueError("cron field %r out of range %d-%d" % (field, lo, hi))
+        out.update(range(a, b + 1, step))
+    return out
+
+
+def cron_period(crons):
+    """The longest gap, in seconds, between consecutive firings of the crons (UTC)."""
+    specs = []
+    for c in crons:
+        f = c.split()
+        if len(f) != 5:
+            raise ValueError("cron %r: want 5 fields" % c)
+        specs.append((cron_values(f[0], 0, 59), cron_values(f[1], 0, 23), cron_values(f[2], 1, 31),
+                      cron_values(f[3], 1, 12), {d % 7 for d in cron_values(f[4], 0, 7)},
+                      f[2] != "*", f[4] != "*"))
+    start = datetime.datetime(2026, 1, 5, tzinfo=datetime.timezone.utc)  # a Monday
+    fires = []
+    for day in range(800):
+        d = start + datetime.timedelta(days=day)
+        dow = (d.weekday() + 1) % 7  # cron: Sunday is 0
+        for mins, hrs, doms, mons, dows, dom_set, dow_set in specs:
+            if d.month not in mons:
+                continue
+            dom_ok, dow_ok = d.day in doms, dow in dows
+            if not ((dom_ok or dow_ok) if (dom_set and dow_set) else (dom_ok and dow_ok)):
+                continue
+            base = d.timestamp()
+            fires.extend(base + h * HOUR + m * MINUTE for h in hrs for m in mins)
+    fires = sorted(set(fires))
+    if len(fires) < 2:
+        return 366 * DAY
+    return max(b - a for a, b in zip(fires, fires[1:]))
+
+
+def scheduled_workflows(root):
+    d = os.path.join(root, ".github", "workflows")
+    out = []
+    for f in sorted(os.listdir(d)):
+        if not f.endswith((".yml", ".yaml")):
+            continue
+        with open(os.path.join(d, f)) as fh:
+            text = fh.read()
+        crons = [m.group(2).strip() for m in CRON_LINE_RE.finditer(text)]
+        if crons:
+            out.append({"file": f, "crons": crons, "period": cron_period(crons),
+                        "dispatch": bool(DISPATCH_RE.search(text))})
+    return out
+
+
+def has_dispatch(root, f):
+    try:
+        with open(os.path.join(root, ".github", "workflows", f)) as fh:
+            return bool(DISPATCH_RE.search(fh.read()))
+    except FileNotFoundError:
+        return False
+
+
+# ── tools ────────────────────────────────────────────────────────────────────
+
+class Gh:
+    def __init__(self, repo):
+        self.repo = repo
+
+    def run(self, *args):
+        p = subprocess.run(["gh", *args], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise ToolError("gh %s: exit %d: %s" % (" ".join(args), p.returncode, p.stderr.strip()[-800:]))
+        return p.stdout
+
+    def json(self, *args):
+        out = self.run(*args)
+        try:
+            return json.loads(out) if out.strip() else None
+        except ValueError:
+            raise ToolError("gh %s: not JSON: %s" % (" ".join(args), out[:200])) from None
+
+
+def load_registry_digest():
+    path = os.environ.get("WATCHDOG_IMAGES_LOCK") or os.path.join(REPO_ROOT, "scripts", "images-lock")
+    loader = importlib.machinery.SourceFileLoader("watchdog_images_lock", path)
+    spec = importlib.util.spec_from_loader("watchdog_images_lock", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod.registry_digest
+
+
+def marker(body, name):
+    m = re.search(r"<!-- watchdog:%s=(\S+) -->" % re.escape(name), body or "")
+    return m.group(1) if m else None
+
+
+class Alarms:
+    """hack/ci_alarm, plus the open alarms (key -> issue body) read once per run."""
+
+    def __init__(self, gh, script):
+        self.script = script
+        self.open = None  # None: unknown (the listing failed)
+        self.disabled = False
+        self.undelivered = []
+        self.opened, self.closed = [], []
+        try:
+            issues = gh.json("issue", "list", "--label", "ci-alarm", "--state", "open", "--limit", "200",
+                             "--json", "number,title,body") or []
+            self.open = {}
+            for it in issues:
+                m = re.match(r"^\[ci-alarm\] (\S+): ", it["title"])
+                if m:
+                    self.open.setdefault(m.group(1), it.get("body") or "")
+        except ToolError as e:
+            if "disabled issues" in str(e).lower():
+                self.disabled = True
+                self.open = {}
+            self.list_error = e
+        else:
+            self.list_error = None
+
+    def body(self, key):
+        return (self.open or {}).get(key)
+
+    def keys(self, prefix):
+        return [k for k in (self.open or {}) if k.startswith(prefix)]
+
+    def _call(self, *args):
+        p = subprocess.run([self.script, *args], capture_output=True, text=True)
+        sys.stdout.write(p.stdout)
+        sys.stderr.write(p.stderr)
+        return p
+
+    def raise_(self, key, title, body):
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(body.rstrip() + "\n")
+        try:
+            p = self._call("open", key, title, f.name)
+        finally:
+            os.unlink(f.name)
+        if p.returncode == 3:
+            if key not in self.undelivered:
+                self.undelivered.append(key)
+            return False
+        if p.returncode != 0:
+            raise ToolError("ci_alarm open %s: exit %d: %s" % (key, p.returncode, p.stderr.strip()[-400:]))
+        print("::warning title=ci-alarm %s::%s" % (key, title))
+        if (key, title) not in self.opened:
+            self.opened.append((key, title))
+        return True
+
+    def clear(self, key, comment):
+        if self.disabled or (self.open is not None and key not in self.open):
+            return
+        p = self._call("close", key, comment)
+        if p.returncode not in (0, 3):
+            raise ToolError("ci_alarm close %s: exit %d: %s" % (key, p.returncode, p.stderr.strip()[-400:]))
+        if self.open and key in self.open:
+            self.closed.append(key)
+
+
+class Watchdog:
+    def __init__(self, root, repo, now):
+        self.root, self.repo, self.now = root, repo, now
+        self.gh = Gh(repo)
+        self.errors = []
+        self.alarms = Alarms(self.gh, os.environ.get("WATCHDOG_ALARM") or os.path.join(HERE, "ci_alarm"))
+        if self.alarms.list_error:
+            self.errors.append("listing open alarms: %s" % self.alarms.list_error)
+        self._registry = None
+        self.signatures = []
+        with open(os.path.join(HERE, "ci_alarm_signatures.tsv")) as f:
+            for ln in f:
+                if ln.strip() and not ln.startswith("#"):
+                    rx, hint = ln.rstrip("\n").split("\t", 1)
+                    self.signatures.append((re.compile(rx), hint))
+
+    def guard(self, name, fn, *args):
+        try:
+            return fn(*args)
+        except ToolError as e:
+            self.errors.append("%s: %s" % (name, e))
+        except Exception:  # a bug in a check must not silence the others
+            self.errors.append("%s: %s" % (name, traceback.format_exc(limit=3).strip()))
+        return None
+
+    # ── one dispatch per token ───────────────────────────────────────────
+
+    def raise_dispatching(self, key, title, body, token, argv, done_text):
+        """Raise alarm KEY and run `gh ARGV` once per TOKEN. The record of the
+        dispatch (<!-- watchdog:dispatched=TOKEN -->) is written into the alarm
+        before the dispatch runs, so a run that cannot read or write the alarm
+        dispatches nothing:
+          - issues disabled: the alarm is annotated only, nothing is dispatched;
+          - the open alarms could not be listed: the alarm is left as it is (its
+            record stays), nothing is dispatched; watchdog-error says why;
+          - the alarm write fails: nothing is dispatched (the error is collected);
+          - the dispatch fails: the alarm is rewritten without the record and
+            says so, and the next run tries again."""
+        claimed = "\n".join(body + ["", done_text, "<!-- watchdog:dispatched=%s -->" % token])
+        if self.alarms.disabled:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        if self.alarms.open is None:
+            return
+        if marker(self.alarms.body(key), "dispatched") == token:
+            self.alarms.raise_(key, title, claimed)
+            return
+        if not self.alarms.raise_(key, title, claimed):
+            return
+        try:
+            self.gh.run(*argv)
+            print("dispatched: gh %s" % " ".join(argv))
+        except ToolError as e:
+            self.errors.append("dispatching for %s: %s" % (key, e))
+            self.alarms.raise_(key, title, "\n".join(body + ["", "Re-dispatch failed: %s" % e]))
+
+    # ── failed-run description ───────────────────────────────────────────
+
+    def describe_failed_run(self, run):
+        rid = str(run["databaseId"])
+        jobs = (self.gh.json("run", "view", rid, "-R", self.repo, "--json", "jobs") or {}).get("jobs", [])
+        failed = [j["name"] for j in jobs if j.get("conclusion") in ("failure", "timed_out")]
+        lines = ["Run: %s" % run.get("url", rid),
+                 "Conclusion: **%s**, created %s, commit %s" % (run.get("conclusion"), run.get("createdAt", "?"),
+                                                                 run.get("headSha", "?")),
+                 "Failed jobs: %s" % (", ".join(failed) or "(none reported)")]
+        try:
+            log = ANSI_RE.sub("", self.gh.run("run", "view", rid, "-R", self.repo, "--log-failed"))
+        except ToolError as e:
+            lines.append("Failed log unavailable: %s" % str(e)[-300:])
+            return lines
+        rows = log.splitlines()
+        hint = next((h for rx, h in self.signatures if any(rx.search(r) for r in rows)), None)
+        lines.append("Hint: %s" % (hint or "no known signature matched"))
+        errs = [i for i, r in enumerate(rows) if "##[error]" in r]
+        end = errs[-1] + 1 if errs else len(rows)
+        tail = [r.replace("\t", " ")[:LOG_WIDTH].replace("```", "'''") for r in rows[max(0, end - LOG_LINES):end]]
+        lines += ["", "<details><summary>Last %d lines of the failed log</summary>" % len(tail), "",
+                  "```text", *tail, "```", "</details>"]
+        return lines
+
+    # ── a + b ────────────────────────────────────────────────────────────
+
+    def check_workflow_state(self):
+        doc = self.gh.json("api", "repos/%s/actions/workflows?per_page=100" % self.repo) or {}
+        meta = {}
+        for w in doc.get("workflows", []):
+            path = w.get("path", "")
+            if not path.startswith(".github/workflows/"):
+                continue
+            f = path.rsplit("/", 1)[1]
+            meta[f] = w
+            if not os.path.exists(os.path.join(self.root, path)):
+                continue
+            key = "disabled:" + f
+            if w.get("state") != "active":
+                self.alarms.raise_(key, "%s is %s" % (f, w.get("state")), "\n".join([
+                    "Workflow `%s` (%s) has Actions state `%s`, so it runs no more." % (f, w.get("name"), w.get("state")),
+                    "", "Enable it: Actions, %s, Enable workflow (or `gh workflow enable %s`)." % (w.get("name"), f)]))
+            else:
+                self.alarms.clear(key, "%s is active again." % f)
+        return meta
+
+    def check_scheduled(self, wf, meta):
+        f = wf["file"]
+        fields = "databaseId,conclusion,status,createdAt,url,headSha,workflowName"
+        runs = self.gh.json("run", "list", "-R", self.repo, "--workflow", f, "--event", "schedule",
+                            "--limit", "30", "--json", fields) or []
+        success = next((r for r in runs if r.get("conclusion") == "success"), None)
+        if success is None:
+            more = self.gh.json("run", "list", "-R", self.repo, "--workflow", f, "--event", "schedule",
+                                "--status", "success", "--limit", "1", "--json", fields) or []
+            success = more[0] if more else None
+        threshold = wf["period"] + 6 * HOUR
+        created = (meta or {}).get(f, {}).get("created_at")
+        fresh = success is not None and self.now - ts(success["createdAt"]) <= threshold
+        new = success is None and created is not None and self.now - ts(created) <= threshold
+        key = "stale:" + f
+        if fresh or new:
+            self.alarms.clear(key, "A scheduled run of %s succeeded within %s h." % (f, hours(threshold)))
+        else:
+            last = ("%s at %s" % (success["url"], success["createdAt"])) if success else "none found"
+            self.alarms.raise_(key, "no successful scheduled run within %s h" % hours(threshold), "\n".join([
+                "`%s` (cron %s, every %s h) has no successful scheduled run within %s h (period + 6 h)."
+                % (f, ", ".join("`%s`" % c for c in wf["crons"]), hours(wf["period"]), hours(threshold)),
+                "", "Last successful scheduled run: %s" % last,
+                "", "A scheduled run that never starts leaves no red run: check the workflow is enabled "
+                    "and that its last runs were not skipped."]))
+
+        latest = next((r for r in runs if r.get("status") == "completed" and r.get("conclusion") in DECIDED), None)
+        key = "red:" + f
+        if latest is None:
+            return
+        if latest["conclusion"] == "success":
+            self.alarms.clear(key, "The latest scheduled run is green: %s" % latest.get("url"))
+            return
+        rid = str(latest["databaseId"])
+        body = ["The latest scheduled run of `%s` failed." % f, ""] + self.describe_failed_run(latest)
+        title = "scheduled run %s" % latest["conclusion"]
+        if not wf["dispatch"]:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        self.raise_dispatching(key, title, body, rid, ("workflow", "run", f, "-R", self.repo, "--ref", "main"),
+                               "Re-dispatched `%s` on main once after this run; a further re-dispatch "
+                               "happens only after a new failed scheduled run." % f)
+
+    # ── c ────────────────────────────────────────────────────────────────
+
+    def check_main_ci(self):
+        head = self.gh.json("api", "repos/%s/commits/main" % self.repo) or {}
+        sha = head["sha"]
+        age = self.now - ts(head["commit"]["committer"]["date"])
+        runs = self.gh.json("run", "list", "-R", self.repo, "--workflow", "ci.yml", "--commit", sha,
+                            "--limit", "20", "--json", "databaseId,event,status,conclusion") or []
+        if any(r.get("event") in ("push", "workflow_dispatch") for r in runs):
+            self.alarms.clear("ci-missing", "ci.yml runs for main's HEAD %s." % sha)
+        elif age >= 2 * HOUR:
+            self.alarms.raise_("ci-missing", "main's HEAD has no ci.yml run", "\n".join([
+                "main's HEAD `%s` (committed %s) has no ci.yml run from a push or workflow_dispatch, "
+                "2 h after the commit." % (sha, head["commit"]["committer"]["date"]),
+                "", "A push made with GITHUB_TOKEN starts no workflow; the watchdog dispatched ci.yml on main "
+                    "once when HEAD was 30 min old. Dispatch it: `gh workflow run ci.yml --ref main`."]))
+        else:
+            self.alarms.clear("ci-missing", "main moved to %s." % sha)
+            if age >= 30 * MINUTE and has_dispatch(self.root, "ci.yml"):
+                self.gh.run("workflow", "run", "ci.yml", "-R", self.repo, "--ref", "main")
+                print("dispatched ci.yml on main for HEAD %s (no ci.yml run %s min after the commit)"
+                      % (sha, int(age // MINUTE)))
+
+        runs = self.gh.json("run", "list", "-R", self.repo, "--workflow", "ci.yml", "--branch", "main",
+                            "--limit", "20", "--json", "databaseId,event,status,conclusion,url,headSha,createdAt") or []
+        latest = next((r for r in runs if r.get("status") == "completed"
+                       and r.get("event") in ("push", "workflow_dispatch")
+                       and r.get("conclusion") in DECIDED), None)
+        if latest is None:
+            return
+        if latest["conclusion"] == "success":
+            self.alarms.clear("ci-main", "ci.yml on main is green: %s" % latest.get("url"))
+        else:
+            self.alarms.raise_("ci-main", "ci.yml on main %s" % latest["conclusion"],
+                               "\n".join(["The latest completed ci.yml run on main failed.", ""]
+                                         + self.describe_failed_run(latest)))
+
+    # ── d ────────────────────────────────────────────────────────────────
+
+    def registry_status(self, name, tag):
+        if self._registry is None:
+            self._registry = load_registry_digest()
+        try:
+            self._registry(name, tag)
+            return "ok"
+        except ValueError as e:
+            if re.search(r"HTTP 404\b", str(e)):
+                return "missing"
+            raise ToolError(str(e)) from None
+        except (urllib.error.URLError, OSError) as e:
+            raise ToolError("%s:%s: %s" % (name, tag, e)) from None
+
+    def aur_version(self):
+        url = os.environ.get("WATCHDOG_AUR_URL") or AUR_URL
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                doc = json.load(r)
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise ToolError("AUR RPC %s: %s" % (url, e)) from None
+        res = doc.get("results") or []
+        return res[0]["Version"].split("-", 1)[0] if res else None
+
+    def release_gaps(self, ver, newest):
+        owner = self.repo.split("/", 1)[0].lower()
+        ghcr = "ghcr.io/%s/k3d-gpu" % owner
+        gaps = []
+        hub_missing = self.registry_status("docker.io/" + HUB_REPO, ver) == "missing"
+        if hub_missing:
+            gaps.append("Docker Hub: %s:%s has no manifest (HTTP 404)" % (HUB_REPO, ver))
+        if self.registry_status(ghcr, ver) == "missing":
+            gaps.append("GHCR: %s:%s has no manifest (HTTP 404)" % (ghcr, ver))
+        want = ["k3d-gpu_%s-1_all.deb" % ver, "k3d-gpu-%s-1.noarch.rpm" % ver, "SHA256SUMS"]
+        try:
+            rel = self.gh.json("release", "view", "aur-v" + ver, "-R", self.repo, "--json", "assets") or {}
+            have = {a["name"] for a in rel.get("assets", []) if a.get("state", "uploaded") == "uploaded"}
+            missing = [w for w in want if w not in have]
+            if missing:
+                gaps.append("GitHub release aur-v%s lacks %s" % (ver, ", ".join(missing)))
+        except ToolError as e:
+            if "release not found" not in str(e):
+                raise
+            gaps.append("GitHub release aur-v%s does not exist (no %s)" % (ver, ", ".join(want)))
+        if newest:
+            aur = self.aur_version()
+            if aur is None or not re.match(r"^\d+\.\d+\.\d+$", aur) or vkey(aur) < vkey(ver):
+                gaps.append("AUR: k3d-gpu is at %s, not %s" % (aur or "nothing", ver))
+        return gaps, hub_missing
+
+    def release_tags(self):
+        p = subprocess.run(["git", "-C", self.root, "for-each-ref", "--format=%(refname:strip=2) %(creatordate:unix)",
+                            "refs/tags/aur-v*"], capture_output=True, text=True)
+        if p.returncode != 0:
+            raise ToolError("git for-each-ref: %s" % p.stderr.strip())
+        out = []
+        for ln in p.stdout.splitlines():
+            name, _, when = ln.partition(" ")
+            m = TAG_RE.match(name)
+            if m and when.isdigit():
+                out.append((".".join(m.groups()), int(when)))
+        return sorted(out, key=lambda t: vkey(t[0]), reverse=True)
+
+    def check_release(self):
+        recent = self.gh.json("run", "list", "-R", self.repo, "--limit", "100",
+                              "--json", "workflowName,status,databaseId") or []
+        busy = sorted({r["workflowName"] for r in recent
+                       if r.get("workflowName") in RELEASE_WORKFLOWS and r.get("status") != "completed"})
+        if busy:
+            print("release check deferred: %s is queued or running" % ", ".join(busy))
+            return
+        cands = [(v, t) for v, t in self.release_tags() if self.now - t >= 45 * MINUTE]
+        if not cands:
+            return
+        ver = cands[0][0]
+        key = "release:" + ver
+        gaps, hub_missing = self.release_gaps(ver, newest=True)
+        for k in self.alarms.keys("release:"):
+            if k != key:
+                self.alarms.clear(k, "Superseded: the newest release older than 45 min is %s%s."
+                                  % (ver, "" if gaps else ", and it is complete"))
+        if not gaps:
+            self.alarms.clear(key, "Release %s is complete: images, packages and AUR." % ver)
+            return
+        body = ["Release %s (tag aur-v%s) is incomplete:" % (ver, ver), ""] + ["- " + g for g in gaps]
+        if not hub_missing and any(g.startswith(("Docker Hub", "GHCR")) for g in gaps):
+            body += ["", "Docker Hub has %s:%s, so a release build would stop at its overwrite guard; "
+                         "push the GHCR tag by hand or cut a new release." % (HUB_REPO, ver)]
+        info = []
+        for v, t in cands[1:21]:
+            if self.now - t > 14 * DAY:
+                break
+            try:
+                g, _ = self.release_gaps(v, newest=False)
+            except ToolError as e:
+                g = ["not checked: %s" % str(e)[:200]]
+            if g:
+                info.append("- %s: %s" % (v, "; ".join(g)))
+        if info:
+            body += ["", "Older releases from the last 14 days with gaps (information only; a newer release "
+                         "supersedes them):", ""] + info
+        title = "release %s is incomplete" % ver
+        if not hub_missing:
+            self.alarms.raise_(key, title, "\n".join(body))
+            return
+        self.raise_dispatching(key, title, body, ver,
+                               ("workflow", "run", "build-and-push.yml", "-R", self.repo, "--ref", "main",
+                                "-f", "release=" + ver),
+                               "Dispatched `build-and-push.yml -f release=%s` once; it builds the image from the "
+                               "tag and then dispatches the AUR and package releases. It is not dispatched again."
+                               % ver)
+
+    # ── e + f ────────────────────────────────────────────────────────────
+
+    def check_bot_prs(self):
+        prs = self.gh.json("pr", "list", "-R", self.repo, "--state", "open", "--limit", "100",
+                           "--json", "number,headRefName,headRefOid,createdAt,url,title,isCrossRepository") or []
+        stuck = []
+        for pr in sorted(prs, key=lambda p: p["number"]):
+            # A fork can name its branch autobump/* too; only this repository's branches are bot PRs.
+            if (pr.get("isCrossRepository") or not pr["headRefName"].startswith("autobump/")
+                    or self.now - ts(pr["createdAt"]) <= 72 * HOUR):
+                continue
+            runs = self.gh.json("run", "list", "-R", self.repo, "--workflow", "ci.yml", "--commit", pr["headRefOid"],
+                                "--limit", "20", "--json", "databaseId,event,status,conclusion") or []
+            if any(r.get("conclusion") == "success" for r in runs):
+                continue
+            seen = sorted({"%s %s" % (r.get("event"), r.get("conclusion") or r.get("status")) for r in runs})
+            stuck.append("- %s %s (`%s`, open since %s): ci.yml at %s: %s" % (
+                pr["url"], pr["title"], pr["headRefName"], pr["createdAt"], pr["headRefOid"][:12],
+                ", ".join(seen) or "no run"))
+        if stuck:
+            self.alarms.raise_("bot-pr-stuck", "bot PRs open over 72 h without green CI", "\n".join(
+                ["These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:", ""]
+                + stuck + ["", "A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): "
+                               "approve them, or dispatch ci.yml on the branch."]))
+        else:
+            self.alarms.clear("bot-pr-stuck", "No autobump PR is stuck any more.")
+
+    def check_simulate(self, simulate):
+        if simulate:
+            self.alarms.raise_("simulate", "simulated red", "\n".join([
+                "The watchdog was dispatched with simulate_red=true: this checks that an alarm reaches its owner.",
+                "", "The next watchdog run without simulate_red closes it."]))
+        else:
+            self.alarms.clear("simulate", "The next watchdog run without simulate_red closed it.")
+
+    # ── run ──────────────────────────────────────────────────────────────
+
+    def run(self, simulate):
+        meta = self.guard("workflow state", self.check_workflow_state)
+        try:
+            scheduled = scheduled_workflows(self.root)
+        except (OSError, ValueError) as e:
+            scheduled = []
+            self.errors.append("reading scheduled workflows: %s" % e)
+        for wf in scheduled:
+            self.guard("scheduled %s" % wf["file"], self.check_scheduled, wf, meta)
+        self.guard("main CI", self.check_main_ci)
+        self.guard("release integrity", self.check_release)
+        self.guard("bot PRs", self.check_bot_prs)
+        self.guard("simulate_red", self.check_simulate, simulate)
+
+        fatal = False
+        if self.errors:
+            for e in self.errors:
+                print("::error title=watchdog::%s" % e.splitlines()[0][:400], file=sys.stderr)
+            body = "\n".join(["The watchdog hit %d error(s); the checks they stopped did not run:" % len(self.errors),
+                              "", "```text", *[e.replace("```", "'''") for e in self.errors], "```"])
+            try:
+                self.alarms.raise_("watchdog-error", "the watchdog could not complete its checks", body)
+            except ToolError as e:
+                print("::error title=watchdog::cannot file watchdog-error: %s" % e, file=sys.stderr)
+                fatal = True
+        else:
+            try:
+                self.alarms.clear("watchdog-error", "A watchdog run completed every check.")
+            except ToolError as e:
+                print("::error title=watchdog::cannot close watchdog-error: %s" % e, file=sys.stderr)
+                fatal = True
+
+        if self.alarms.undelivered:
+            print("::error title=watchdog::%d alarm(s) not filed (%s): this repository has issues disabled; "
+                  "enable Issues in Settings > General > Features" % (len(self.alarms.undelivered),
+                                                                     ", ".join(self.alarms.undelivered)),
+                  file=sys.stderr)
+            fatal = True
+        self.summary()
+        return 1 if fatal else 0
+
+    def summary(self):
+        lines = ["## Watchdog %s" % iso(self.now), ""]
+        lines += ["- open: `%s` %s" % (k, t) for k, t in self.alarms.opened]
+        lines += ["- closed: `%s`" % k for k in self.alarms.closed]
+        lines += ["- not filed: `%s`" % k for k in self.alarms.undelivered]
+        lines += ["- error: %s" % e.splitlines()[0][:300] for e in self.errors]
+        if len(lines) == 2:
+            lines.append("No alarm.")
+        text = "\n".join(lines) + "\n"
+        print(text)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                f.write(text)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--root", default=REPO_ROOT)
+    ap.add_argument("--list-scheduled", action="store_true")
+    a = ap.parse_args(argv)
+    if a.list_scheduled:
+        for wf in scheduled_workflows(a.root):
+            print("%s %s" % (wf["file"], hours(wf["period"])))
+        return 0
+    repo = os.environ.get("GH_REPO") or os.environ.get("GITHUB_REPOSITORY")
+    if not repo:
+        print("watchdog: set GH_REPO or GITHUB_REPOSITORY (owner/repo)", file=sys.stderr)
+        return 2
+    now = float(os.environ.get("WATCHDOG_NOW") or datetime.datetime.now(datetime.timezone.utc).timestamp())
+    simulate = os.environ.get("SIMULATE_RED", "").strip().lower() == "true"
+    return Watchdog(a.root, repo, now).run(simulate)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

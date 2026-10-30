@@ -156,5 +156,15 @@ else
     fail "release does not read UBUNTU_2404_IMAGE from the Dockerfile for the 24.04 variant"
 fi
 
+# Alarm, watchdog and release hardening: tests/ops/workflow_checks.py reads every
+# workflow with PyYAML (a second parser: hack/watchdog reads crons with its own
+# regex) and prints one "ok <what>" or "FAIL <what>" line per check.
+while IFS= read -r line; do
+    case "${line}" in
+        "ok "*) ok "${line#ok }" ;;
+        *) fail "${line#FAIL }" ;;
+    esac
+done < <(python3 "${ROOT}/tests/ops/workflow_checks.py" "${ROOT}" 2>&1 || echo "FAIL tests/ops/workflow_checks.py exited non-zero")
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

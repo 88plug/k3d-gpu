@@ -18,9 +18,12 @@
 # release commit whose tag did not land), else one patch above the last tag.
 #
 # EVENT=push releases when main's VERSION is above the last tag, or when a
-# commit above the last tag touches packaging/, scripts/, share/ or Dockerfile
-# and carries no [skip release] in its message; otherwise it exits 0 with no
-# tag. Any other EVENT (workflow_dispatch) always releases.
+# commit above the last tag touches a path main's hack/release-paths lists (what
+# nfpm, the AUR package, the formula and the image ship) and carries no
+# [skip release] in its message; otherwise it prints "nothing to release" and
+# exits 0 with no tag. auto-release.yml passes EVENT=push for pushes and for
+# mode=changed dispatches. Any other EVENT (a forced workflow_dispatch) always
+# releases.
 #
 # Env: EVENT, REMOTE (default origin), RELEASE_CAS_ATTEMPTS, GITHUB_OUTPUT
 # (receives tag= and ver= when a release is cut).
@@ -43,8 +46,12 @@ for attempt in $(seq 1 "${RELEASE_CAS_ATTEMPTS:-5}"); do
     VER=0.1.0
   else
     if [ "$EVENT" = push ]; then
+      # hack/release-paths entries: a file, or dir/** (the pathspec dir).
+      [ -f hack/release-paths ] || { echo "no hack/release-paths on $REMOTE/main"; exit 1; }
+      mapfile -t paths < <(sed -e 's/#.*//' -e 's/[[:space:]]*$//' -e '/^$/d' -e 's|/\*\*$||' hack/release-paths)
+      [ "${#paths[@]}" -gt 0 ] || { echo "hack/release-paths lists no path"; exit 1; }
       n=$(git log -F --invert-grep --grep='[skip release]' --format=%H "$LATEST..HEAD" \
-            -- packaging scripts share Dockerfile | wc -l)
+            -- "${paths[@]}" | wc -l)
       if [ "$n" -eq 0 ]; then echo "nothing to release above $LATEST"; exit 0; fi
     fi
     VER=${LAST%.*}.$(( ${LAST##*.} + 1 ))

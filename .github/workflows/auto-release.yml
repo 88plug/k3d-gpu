@@ -1,11 +1,20 @@
 name: Auto-release AUR
 
-# Auto-tag a release on changes to packaging/, scripts/, share/ or the Dockerfile,
-# and when build-and-push.yml's nightly check bumps upstream pins (dispatch).
+# Auto-tag a release when a commit on main changes a path hack/release-paths lists
+# (what the packages, the formula and the image ship: packaging/, scripts/,
+# share/, the Dockerfile, console/, images.lock and the shipped bench/ and oracle/
+# files), and when build-and-push.yml's nightly check bumps upstream pins
+# (dispatch). The push paths: below repeat hack/release-paths (GitHub reads no
+# file there); tests/ci_wiring_test.sh checks they are equal.
 # Tag format: aur-vX.Y.Z. The launcher at that tag defaults to node image
 # cryptoandcoffee/k3d-gpu:X.Y.Z, so after tagging this dispatches build-and-push.yml
 # with release=X.Y.Z; that run publishes the image and then dispatches aur-deploy.yml.
 # Dispatches bypass the GITHUB_TOKEN downstream-trigger limit.
+#
+# A dispatch's mode: force (the default) always releases; changed releases only
+# when a commit above the last tag changed a shipped path (release_cas.sh runs as
+# for a push), so a merge that a GITHUB_TOKEN push did not announce can still cut
+# its release, and a dispatch with nothing shipped cuts none.
 #
 # hack/release_cas.sh releases from a fresh origin/main and pushes main and the
 # tag in one atomic push (--atomic), retrying when another writer moved main or
@@ -14,9 +23,9 @@ name: Auto-release AUR
 # other rejection classes a release commit can land
 # without its tag, and the next run tags it in place. A push run whose commits
 # an earlier run already released exits with no tag. The
-# concurrency group only queues runs; correctness does not depend on it. Push and
-# dispatch runs queue separately, so a pending forced dispatch is never replaced
-# by a push run that finds nothing to release.
+# concurrency group only queues runs; correctness does not depend on it. Push
+# runs and each dispatch mode queue separately, so a pending forced dispatch is
+# never replaced by a run that finds nothing to release.
 
 on:
   push:
@@ -26,7 +35,28 @@ on:
       - 'scripts/**'
       - 'share/**'
       - 'Dockerfile'
+      - 'console/**'
+      - 'images.lock'
+      - 'bench/vs.py'
+      - 'bench/llm_load.py'
+      - 'bench/energy.sh'
+      - 'bench/agent_trace.py'
+      - 'bench/agent_trace_gen.py'
+      - 'bench/apb/apb.py'
+      - 'bench/apb/capacity.py'
+      - 'bench/competitors.lock'
+      - 'oracle/bundle.py'
+      - 'oracle/project.py'
+      - 'oracle/validate.py'
+      - 'oracle/share.py'
+      - 'oracle/schema/bundle-v1.json'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'force: always release; changed: release only when a shipped path changed since the last tag'
+        type: choice
+        options: [force, changed]
+        default: force
 
 permissions:
   contents: write
@@ -36,8 +66,9 @@ jobs:
   release:
     if: "github.actor != '88plug-bot' && !contains(github.event.head_commit.message, '[skip release]')"
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     concurrency:
-      group: auto-release-${{ github.event_name }}
+      group: auto-release-${{ github.event_name }}-${{ inputs.mode || 'push' }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +79,7 @@ jobs:
       - name: Release (atomic push of main and the tag)
         id: rel
         env:
-          EVENT: ${{ github.event_name }}
+          EVENT: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'changed' && 'push' || github.event_name }}
         run: |
           git config user.name  "88plug-bot"
           git config user.email "andrew@88plug.com"

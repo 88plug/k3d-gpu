@@ -41,6 +41,7 @@ jobs:
   image:
     name: Docs interpreter pin
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       ref: ${{ steps.pin.outputs.ref }}
     steps:
@@ -58,6 +59,7 @@ jobs:
     name: Build (mkdocs --strict)
     needs: image
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       pages: ${{ steps.pages.outputs.enabled }}
     container:
@@ -89,6 +91,7 @@ jobs:
     if: needs.build.outputs.pages == 'true'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       pages: write
       id-token: write

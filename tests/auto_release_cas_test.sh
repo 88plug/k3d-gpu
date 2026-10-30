@@ -36,7 +36,9 @@ setup() {
   git clone -q "file://$D/origin.git" "$D/seed" 2>/dev/null
   ( cd "$D/seed" || exit 1
     git checkout -q -b main
-    mkdir -p scripts packaging/aur Formula share console
+    mkdir -p scripts packaging/aur Formula share console hack
+    # The shipped paths a push run releases for: the repo's own list.
+    cp "$ROOT/hack/release-paths" hack/release-paths
     # Stand-in for console/model_opt.py ledger-rules: the JSON names the ledger's line count.
     cat > console/model_opt.py <<'PY'
 import sys
@@ -57,7 +59,7 @@ PY
 write() {
   ( cd "$D/seed" || exit 1
     git fetch -q origin; git reset -q --hard origin/main
-    echo "x $RANDOM" >> "$1"; git add "$1"; git commit -q -m "$2"; git push -q origin HEAD:main )
+    mkdir -p "$(dirname "$1")"; echo "x $RANDOM" >> "$1"; git add "$1"; git commit -q -m "$2"; git push -q origin HEAD:main )
 }
 runner() { git clone -q "file://$D/origin.git" "$D/$1" 2>/dev/null; }
 # release DIR EVENT [HOOK]: run the release body in a runner checkout.
@@ -204,6 +206,34 @@ want="{\"rows\": $(o show "$m:EXPERIMENTS.md" | wc -l)}"
 got=$(o show "$m:console/ledger-rules.json" 2>&1)
 c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.6)" = "$m" ] && [ "$got" = "$want" ] && c=0
 check ledger_rules_regenerated $c "rc=$rc got=$got want=$want"
+
+# shipped_paths: a push run (and a mode=changed dispatch, which runs as a push)
+# releases for a change to any path hack/release-paths lists: console/, a shipped
+# bench or oracle file; and not for the ledger or a bench file nothing ships.
+for c in "console/plan.py:release" "bench/vs.py:release" "oracle/schema/bundle-v1.json:release" \
+         "images.lock:release" "EXPERIMENTS.md:none" "bench/h54/run.sh:none" "docs/x.md:none"; do
+  f=${c%%:*}; want=${c#*:}
+  setup "shipped_${f//\//_}"; write "$f" "change: $f"; before=$(main); runner r; release r push; rc=$?
+  if [ "$want" = release ]; then
+    c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.6)" = "$(main)" ] && o merge-base --is-ancestor "$before" "$(main)" && c=0
+  else
+    c=1; [ "$rc" -eq 0 ] && [ "$(main)" = "$before" ] && [ "$(tags)" = "aur-v0.1.5 " ] && grep -q 'nothing to release' "$D/r.log" && c=0
+  fi
+  check "shipped_paths: $f -> $want" $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+done
+
+# release_paths_read: the path filter is read from main's hack/release-paths, not
+# built in: listing docs/** makes a docs-only change releasable.
+setup release_paths_read
+( cd "$D/seed" && echo 'docs/**' >> hack/release-paths && git commit -qam "ci: ship docs [skip release]" && git push -q origin HEAD:main )
+write docs/x.md "docs: x"; runner r; release r push; rc=$?
+c=1; [ "$rc" -eq 0 ] && [ "$(tagsha aur-v0.1.6)" = "$(main)" ] && c=0
+check release_paths_read $c "rc=$rc tags=$(tags) $(tail -1 "$D/r.log")"
+if grep -qF 'hack/release-paths' "$REL" && ! grep -qE -- '-- packaging scripts share Dockerfile' "$REL"; then
+  ok "release_cas.sh takes its path filter from hack/release-paths"
+else
+  fail "release_cas.sh does not read hack/release-paths (or keeps a built-in path list)"
+fi
 
 # no_env_command_hook: the release script runs no command named by the environment.
 if grep -n 'BEFORE_PUSH' "$REL"; then fail "no_env_command_hook: env-named command in $REL"
