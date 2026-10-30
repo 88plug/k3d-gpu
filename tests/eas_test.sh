@@ -50,7 +50,8 @@
 #            - refs: a profile and a SHA go as given, any other ref through git ls-remote
 #            - no secret value in an argument list, a log, choices.txt or a state file
 #            - refusals stop before any change
-#            - down clears AIGatewayRoute finalizers before teardown platform --force
+#            - down clears AIGatewayRoute finalizers before teardown platform --force, and
+#              the teardown gets install's extra vars (refused without the overrides)
 #            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
 #            - the bastion pins what pins.json's bastion profile names, and ships a
@@ -1135,7 +1136,7 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     local ES="${WORK}/cli/es"
     mkdir -p "${ES}"
     command cp -f "${STATE}"/k3d-gpu-overrides.yaml "${STATE}"/global_config.edit.yaml "${STATE}"/models.edit.yaml \
-        "${STATE}"/repos.agent-toolkit.yaml "${ES}/"
+        "${STATE}"/repos.agent-toolkit.yaml "${STATE}"/k3d-gpu-images.yaml "${ES}/"
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit -- -e x=1 2>&1); rc=$?
@@ -1183,6 +1184,20 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" down >/dev/null 2>&1
     cli_has    "cli: eas.sh down: teardown platform, forced (no terminal)" "$(cat "${LOG}")" "installer teardown platform --env k3d-gpu --force"
+    # Teardown resolves components by the same enabled flags as install (EAS
+    # filter_plugins/resolve_components.py), so it gets the same extra vars; without them
+    # nfd_enabled defaults to true and EI's nfd teardown deletes k3d-gpu's own NFD namespace.
+    cli_has    "cli: eas.sh down: teardown gets install's extra vars (the overrides last)" "$(cat "${LOG}")" \
+        "installer teardown platform --env k3d-gpu --force -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml"
+    command mv "${ES}/k3d-gpu-overrides.yaml" "${ES}/k3d-gpu-overrides.yaml.away"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" down 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'k3d-gpu-overrides.yaml' <<< "${out}" && ! grep -q 'installer teardown' "${LOG}"; then
+        ok "cli: eas.sh down refuses without the overrides, before any teardown"
+    else
+        fail "cli: eas.sh down without the overrides: rc=${rc} ${out}"
+    fi
+    command mv "${ES}/k3d-gpu-overrides.yaml.away" "${ES}/k3d-gpu-overrides.yaml"
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" status >/dev/null 2>&1
     cli_has    "cli: eas.sh status" "$(cat "${LOG}")" "installer status --env k3d-gpu"
