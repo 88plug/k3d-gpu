@@ -17,8 +17,19 @@
   h54.py carry RESULTS_DIR HOLD ARM...           the arms HOLD carries to the next hold's front
   h54.py recheck RESULTS_DIR                     apply `served` to every arm recorded measured
 
-Python 3 standard library only, except render/derive-vllm (PyYAML)."""
+H54q (amendments Q1 and Q2): quality only, items scored one by one and paired by item.
+  h54.py q-base ARM                              the H54a arm whose config an H54q arm runs
+  h54.py q-render ARM OUT.yaml                   the arm's manifest, from H54a's records
+  h54.py q-todo RESULTS_DIR ARM                  the items ARM still has to answer, in order
+  h54.py q-items URL MODEL RESULTS_DIR ARM OUT STOP
+                                                 ask them, 16 in flight, until epoch STOP
+  h54.py q-smoke URL MODEL OUT STOP              the wiring smoke's two non-GSM8K questions
+  h54.py q-plan RESULTS_DIR                      the arms the next hold runs, in order
+  h54.py score-q RESULTS_DIR                     the H54q tests and verdict
 
+Python 3 standard library only, except render/derive-vllm/q-render (PyYAML)."""
+
+import collections
 import concurrent.futures
 import glob
 import json
@@ -28,6 +39,7 @@ import re
 import statistics
 import struct
 import sys
+import threading
 import time
 import urllib.request
 
@@ -505,6 +517,298 @@ def score_a(results):
     return rep
 
 
+# ---- H54q (amendment Q1, runner amendment Q2) --------------------------------------------------
+# Each H54q arm runs an H54a config. OVQ, OVB and Lg apply the manifest H54a's scored run applied,
+# byte for byte; R and Vi derive from H54a's recorded B1g render as H54a's arm.sh does. Items 0-49
+# of OVQ, OVB and Lg are H54a's records of those runs (Q1 item 2).
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+H54A = os.path.join(HERE, "results", "2026-10-21", "H54a")
+Q_N = 200
+Q_ORDER = ["R", "OVQ", "OVB", "Lg", "Vi"]
+Q_ARMS = {
+    "R": dict(base="Vq", first=0, derive="hold2/B1g/deploy.yaml"),
+    "OVQ": dict(base="A1g", first=50, copy="hold3/A1g/deploy.yaml", h54a="hold3/A1g"),
+    "OVB": dict(base="A1o", first=50, copy="hold3/A1o/deploy.yaml", h54a="hold3/A1o"),
+    "Lg": dict(base="Lg", first=50, copy="hold2/Lg/deploy.yaml", h54a="hold2/Lg"),
+    "Vi": dict(base="Vi", first=0, derive="hold2/B1g/deploy.yaml", probe=True),
+}
+LOST = ("not_deliverable", "failed")   # statuses of a hold in which the arm did not serve its turn
+
+
+def q_render(arm, out, h54a=H54A):
+    a = Q_ARMS[arm]
+    if "copy" in a:
+        with open(os.path.join(h54a, a["copy"]), "rb") as f, open(out, "wb") as g:
+            g.write(f.read())
+        return
+    import yaml
+    with open(os.path.join(h54a, a["derive"])) as f:
+        docs = derive_vllm(a["base"], [d for d in yaml.safe_load_all(f) if d])
+    with open(out, "w") as f:
+        yaml.safe_dump_all(docs, f, sort_keys=False)
+
+
+def holds(results):
+    """The hold numbers recorded under RESULTS_DIR, ascending."""
+    out = []
+    for d in glob.glob(os.path.join(results, "hold*")):
+        tail = os.path.basename(d)[4:]
+        if tail.isdigit():
+            out.append(int(tail))
+    return sorted(out)
+
+
+def q_rows(path):
+    """(rows, discarded seqs) of one items.jsonl: the rows of finished requests, and the seqs a
+    `stopped` event discards."""
+    rows, discard = [], set()
+    if not os.path.exists(path):
+        return rows, discard
+    with open(path) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue   # a line cut by a kill; its item stays unanswered
+            if r.get("event") == "stopped":
+                discard.update(r.get("discard") or [])
+            elif "idx" in r:
+                rows.append(r)
+    return rows, discard
+
+
+def q_state(results, arm, h54a=H54A):
+    """{idx: {"ok": True/False/None, "errors": n, "src": where}} over H54a's imported items and
+    every H54q hold. The first answer counts; a second error is a wrong answer (Q1 item 5)."""
+    a = Q_ARMS[arm]
+    st = {}
+    if a.get("h54a"):
+        for r in jload(os.path.join(h54a, a["h54a"], "quality.json"))["rows"]:
+            if r["idx"] < a["first"]:
+                st[r["idx"]] = {"ok": bool(r["ok"]), "errors": 0, "src": "H54a/" + a["h54a"]}
+    for h in holds(results):
+        rows, discard = q_rows(os.path.join(results, f"hold{h}", arm, "items.jsonl"))
+        for r in sorted(rows, key=lambda x: x.get("seq", 0)):
+            if r.get("seq") in discard or not (a["first"] <= r["idx"] < Q_N):
+                continue
+            s = st.setdefault(r["idx"], {"ok": None, "errors": 0, "src": None})
+            if s["ok"] is not None:
+                continue
+            if r.get("error"):
+                s["errors"] += 1
+                if s["errors"] >= 2:
+                    s.update(ok=False, src=f"hold{h}", final_error=True)
+            else:
+                s.update(ok=bool(r["ok"]), src=f"hold{h}")
+    return st
+
+
+def q_todo(results, arm, h54a=H54A):
+    """[(idx, errors so far)] still to ask: the items that errored once first, then the items not
+    asked yet, each in item order."""
+    st = q_state(results, arm, h54a)
+    left = [(i, st.get(i, {}).get("errors", 0)) for i in range(Q_ARMS[arm]["first"], Q_N)
+            if st.get(i, {}).get("ok") is None]
+    return [x for x in left if x[1]] + [x for x in left if not x[1]]
+
+
+def q_lost(results, arm):
+    """The number of holds in which ARM was not deliverable or failed."""
+    n = 0
+    for h in holds(results):
+        try:
+            if jload(os.path.join(results, f"hold{h}", arm, "status.json")).get("status") in LOST:
+                n += 1
+        except (OSError, ValueError):
+            pass
+    return n
+
+
+def q_plan(results, h54a=H54A):
+    """The arms the next hold runs, in Q1's order: every arm with items left, except an arm lost in
+    two holds (R3 carries a stopped arm once) and the probe-first Vi once it is lost."""
+    return [a for a in Q_ORDER if q_todo(results, a, h54a)
+            and q_lost(results, a) < (1 if Q_ARMS[a].get("probe") else 2)]
+
+
+def ready(url, model, timeout=300):
+    """The readiness check: the model list and a 16-token chat."""
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/models", timeout=10) as r:
+            r.read()
+        body = {"model": model, "max_tokens": 16, "messages": [{"role": "user", "content": "Say hello."}]}
+        req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            r.read()
+        return True
+    except Exception:  # noqa: BLE001 - any failure reads as not answering
+        return False
+
+
+def q_ask(todo, out, stop, ask, probe, workers=16, stall_s=600, streak_max=16, probe_s=300, clock=time.time,
+          tick=0.5):
+    """Ask items `workers` in flight and append one JSON row per finished request to `out`.
+
+    todo: [(item, errors so far)]. ask(item, timeout) returns (reply, usage) or raises;
+    probe(timeout) returns True when the server answers. No request starts at or after epoch `stop`; a request
+    still running then is cut and leaves no row, so its item stays unanswered. An item's first
+    error queues it once more at the back (Q1 item 5). The server is probed after `streak_max`
+    errors in a row, after `stall_s` s with requests in flight and none finishing, and when the
+    queue ends on an error, each probe given at most `probe_s` s and ending 5 s before `stop` (none
+    starts with less than 30 s left). A failed probe stops the arm: a `stopped` event discards the
+    run of errors that ended there, whose items stay unanswered."""
+    def probe_by_stop():
+        t = min(probe_s, stop - clock() - 5)
+        return None if t < 30 else probe(t)
+
+    pending = collections.deque(todo)
+    lock = threading.Lock()
+    st = {"seq": 0, "inflight": 0, "last": clock(), "streak": [], "closed": False, "answered": 0, "errors": 0}
+    t_start = clock()
+    f = open(out, "a")
+
+    def write(row):
+        f.write(json.dumps(row) + "\n")
+        f.flush()
+
+    def work(it, prior):
+        t0 = clock()
+        try:
+            reply, usage = ask(it, max(1.0, min(1800.0, stop - t0)))
+            err = None
+        except Exception as e:  # noqa: BLE001 - recorded per item
+            reply, usage, err = "", {}, f"{type(e).__name__}: {e}"
+        t1 = clock()
+        with lock:
+            st["inflight"] -= 1
+            if st["closed"]:
+                return
+            st["seq"] += 1
+            write({"seq": st["seq"], "idx": it["idx"], "ok": err is None and grade(reply, it["answer"]),
+                   "gold": gold(it["answer"]), "reply": reply, "usage": usage, "error": err, "prior_errors": prior,
+                   "t0": round(t0, 3), "t1": round(t1, 3), "s": round(t1 - t0, 2)})
+            st["last"] = t1
+            if err is None:
+                st["streak"] = []
+                st["answered"] += 1
+            else:
+                st["streak"].append(st["seq"])
+                st["errors"] += 1
+                if prior == 0:
+                    pending.append((it, 1))
+
+    stopped, end = None, "queue empty"
+    while True:
+        now = clock()
+        with lock:
+            if now >= stop:
+                end = "item stop"
+                break
+            if not pending and st["inflight"] == 0:
+                break
+            while pending and st["inflight"] < workers:
+                it, prior = pending.popleft()
+                st["inflight"] += 1
+                threading.Thread(target=work, args=(it, prior), daemon=True).start()
+            streak = len(st["streak"])
+            stalled = st["inflight"] > 0 and now - st["last"] >= stall_s
+        if streak >= streak_max or stalled:
+            if probe_by_stop() is False:
+                stopped = f"{streak} errors in a row" if streak >= streak_max else f"no request finished in {stall_s} s"
+                break
+            with lock:
+                st["streak"] = []
+                st["last"] = clock()
+        time.sleep(tick)
+    with lock:
+        trailing = bool(st["streak"])
+    if stopped is None and end == "queue empty" and trailing and probe_by_stop() is False:
+        stopped = "the queue ended on an error"
+    with lock:
+        st["closed"] = True
+        if stopped:
+            write({"event": "stopped", "reason": f"{STOPPED}: {stopped}", "discard": st["streak"], "at": round(clock(), 3)})
+        summary = {"todo": len(todo), "answered": st["answered"], "errors": st["errors"],
+                   "discarded": len(st["streak"]) if stopped else 0, "cut": st["inflight"],
+                   "not_asked": len({it["idx"] for it, _ in pending}),
+                   "stopped": f"{STOPPED}: {stopped}" if stopped else None, "end": "stopped" if stopped else end,
+                   "t0": round(t_start, 3), "t1": round(clock(), 3)}
+    f.close()
+    return summary
+
+
+def q_items(url, model, results, arm, out, stop, h54a=H54A):
+    """One arm's turn in a hold: ask its q_todo items; write OUT/items.jsonl and OUT/q.json."""
+    with open(os.path.join(HERE, "gsm8k-test-0-199.jsonl")) as f:
+        items = {r["idx"]: r for r in (json.loads(x) for x in f if x.strip())}
+    todo = [(items[i], e) for i, e in q_todo(results, arm, h54a)]
+    s = q_ask(todo, os.path.join(out, "items.jsonl"), stop,
+              ask=lambda it, t: chat(url, model, it["question"], timeout=t), probe=lambda t: ready(url, model, t))
+    s["first_items"] = [it["idx"] for it, _ in todo[:20]]
+    s["status"] = "failed" if s["stopped"] else "measured"
+    s["reason"] = s["stopped"] or (f"{s['answered']} answered, {s['errors']} errored, {s['cut']} cut, "
+                                   f"{s['not_asked']} not asked ({s['end']})")
+    with open(os.path.join(out, "q.json"), "w") as f:
+        json.dump(s, f, indent=1)
+    return s
+
+
+def paired_boot(d, n=10000, seed=1):
+    """95% percentile bootstrap CI of mean(d), resampling items, with H54a's percentile indices."""
+    rng = random.Random(seed)
+    m = len(d)
+    means = sorted(sum(rng.choices(d, k=m)) / m for _ in range(n))
+    return means[int(0.025 * n)], means[int(0.975 * n) - 1]
+
+
+def score_q(results, h54a=H54A, n=10000, seed=1):
+    """The H54q row's two tests (OVQ - R, OVB - OVQ) and verdict, plus descriptive differences."""
+    rep = {"arms": {}, "tests": {}, "descriptive": {}}
+    full = {}
+    for arm in Q_ORDER:
+        st = q_state(results, arm, h54a)
+        ans = {i: s["ok"] for i, s in st.items() if s["ok"] is not None}
+        rep["arms"][arm] = {"answered": len(ans), "correct": sum(ans.values()),
+                            "accuracy": sum(ans.values()) / len(ans) if ans else None,
+                            "not_answered": Q_N - len(ans),
+                            "from_h54a": sum(1 for s in st.values() if str(s.get("src")).startswith("H54a")),
+                            "wrong_by_error": sum(1 for s in st.values() if s.get("final_error")),
+                            "lost_holds": q_lost(results, arm)}
+        if len(ans) == Q_N:
+            full[arm] = [int(ans[i]) for i in range(Q_N)]
+
+    def test(a, b):
+        if a not in full or b not in full:
+            return {"missing": f"{' and '.join(x for x in (a, b) if x not in full)} did not answer all {Q_N} items"}
+        d = [x - y for x, y in zip(full[a], full[b])]
+        lo, hi = paired_boot(d, n, seed)
+        return {"n": Q_N, "diff": sum(d) / Q_N, "ci95": [lo, hi],
+                "a_only": sum(1 for x in d if x > 0), "b_only": sum(1 for x in d if x < 0)}
+    t1, t2 = test("OVQ", "R"), test("OVB", "OVQ")
+    rep["tests"] = {"OVQ-R": t1, "OVB-OVQ": t2}
+    for a, b in (("Lg", "R"), ("OVB", "R"), ("Vi", "R")):
+        rep["descriptive"][f"{a}-{b}"] = test(a, b)
+    ref = []
+    if "ci95" in t1 and t1["ci95"][1] < -0.05:
+        ref.append("CI upper bound of OVQ - R < -0.05")
+    if "ci95" in t2 and t2["ci95"][0] > 0:
+        ref.append("CI lower bound of OVB - OVQ > 0")
+    if ref:
+        rep.update(verdict="REFUTED", reason="; ".join(ref))
+    elif "ci95" in t1 and "ci95" in t2 and t1["ci95"][0] >= -0.05 and t2["ci95"][1] < 0:
+        rep.update(verdict="SUPPORTED", reason="CI lower bound of OVQ - R >= -0.05 and CI upper bound of OVB - OVQ < 0")
+    else:
+        missing = [k for k, t in rep["tests"].items() if "missing" in t]
+        rep.update(verdict="INCONCLUSIVE",
+                   reason=("tests missing: " + ", ".join(missing)) if missing
+                   else "neither the SUPPORTED bounds nor a REFUTED bound hold")
+    return rep
+
+
 def main(argv):
     if not argv:
         raise SystemExit(__doc__)
@@ -546,6 +850,27 @@ def main(argv):
         print(" ".join(carry(a[0], int(a[1]), a[2:])))
     elif cmd == "score-a":
         print(json.dumps(score_a(a[0]), indent=1))
+    elif cmd == "q-base":
+        print(Q_ARMS[a[0]]["base"])
+    elif cmd == "q-render":
+        q_render(a[0], a[1])
+    elif cmd == "q-todo":
+        print(" ".join(f"{i}" + ("*" if e else "") for i, e in q_todo(a[0], a[1])))
+    elif cmd == "q-items":
+        s = q_items(a[0], a[1], a[2], a[3], a[4], float(a[5]))
+        print(f"q-items {a[3]}: {s['reason']}")
+        return 3 if s["stopped"] else 0
+    elif cmd == "q-smoke":
+        with open(os.path.join(HERE, "q-smoke.jsonl")) as f:
+            rows = [json.loads(x) for x in f if x.strip()]
+        s = q_ask([(r, 0) for r in rows], os.path.join(a[2], "smoke-items.jsonl"), float(a[3]),
+                  ask=lambda it, t: chat(a[0], a[1], it["question"], timeout=t), probe=lambda t: ready(a[0], a[1], t))
+        print(f"q-smoke: {json.dumps(s)}")
+        return 3 if s["stopped"] else 0
+    elif cmd == "q-plan":
+        print(" ".join(q_plan(a[0])))
+    elif cmd == "score-q":
+        print(json.dumps(score_q(a[0]), indent=1))
     else:
         raise SystemExit(f"h54.py: unknown command {cmd}")
     return 0

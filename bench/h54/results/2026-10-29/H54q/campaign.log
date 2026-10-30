@@ -1,0 +1,18 @@
+== H54smokeq-hold1 waiting for the lock (arms: R OVQ Lg) 2026-10-29T19:40:54Z
+== H54smokeq-hold1 lock taken 2026-10-29T19:40:54Z
+== H54smokeq-hold1 start: R OVQ Lg 2026-10-29T19:40:55Z
+== H54smokeq-hold1 rc=0; clusters deleted: k3dgpu-g-h54smokeq-1; now:  2026-10-29T19:45:48Z
+== H54q-hold1 waiting for the lock (arms: R OVQ OVB Lg Vi) 2026-10-29T19:46:09Z
+== H54q-hold1 lock taken 2026-10-29T19:46:09Z
+== H54q-hold1 start: R OVQ OVB Lg Vi 2026-10-29T19:46:10Z
+== H54q-hold1 rc=0; clusters deleted: k3dgpu-g-h54q-1; now:  2026-10-29T20:20:00Z
+== H54q-hold2 waiting for the lock (arms: OVB Lg Vi) 2026-10-29T20:20:00Z
+== H54q-hold2 lock taken 2026-10-29T20:20:10Z
+== H54q-hold2 busy (load1 30.44, aiperf 0): waiting 120 s 2026-10-29T20:20:11Z
+== H54q-hold2 start: OVB Lg Vi 2026-10-29T20:22:12Z
+== H54q-hold2 rc=0; clusters deleted: k3dgpu-g-h54q-2; now:  2026-10-29T20:59:42Z
+== H54q-hold3 waiting for the lock (arms: Vi) 2026-10-29T20:59:42Z
+== H54q-hold3 lock taken 2026-10-29T20:59:42Z
+== H54q-hold3 start: Vi 2026-10-29T20:59:44Z
+== H54q-hold3 rc=0; clusters deleted: k3dgpu-g-h54q-3; now:  2026-10-29T21:15:39Z
+== H54q campaign done 2026-10-29T21:15:39Z

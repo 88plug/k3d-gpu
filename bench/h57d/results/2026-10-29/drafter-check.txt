@@ -1,0 +1,2 @@
+drafter q4_0 sha256 8eb21d5b7efad6e9761b81066e0b094b73623c60e46ba4c0925cdbbf49c93ca9 bytes 321145696
+c57ecf359d9e252a7dddff510154992292d45a477603f68f8b32679b23dbacd3  /home/andrew/k3dgpu-h57d/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov/graph.pbtxt

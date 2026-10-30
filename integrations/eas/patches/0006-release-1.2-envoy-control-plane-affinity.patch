@@ -1,0 +1,77 @@
+From 0d13b34a8ab3c5b271ab8fad3a82b726c013a4b1 Mon Sep 17 00:00:00 2001
+From: Andrew Mello <andrew@88plug.com>
+Date: Thu, 29 Oct 2026 13:35:38 -0700
+Subject: [PATCH] envoy_gateway: select control-plane nodes by label presence
+ (release-1.2)
+
+The release-1.2 form of the main-branch change in
+roles/envoy_gateway/tasks/controller.yaml. On release-1.2 the EnvoyProxy
+task still lives in roles/envoy_gateway/tasks/install.yaml (EAS #42
+moved it to controller.yaml on main), so the same change is cut against
+that file.
+
+The EnvoyProxy DaemonSet pins envoy to control-plane nodes with
+nodeSelector node-role.kubernetes.io/control-plane: "". That matches
+kubeadm / kubespray nodes, which carry the label with an empty value,
+but k3s sets it to "true" (k3s-io/k3s pkg/server/server.go,
+util.ControlPlaneRoleLabelKey), so on a BYO k3s or k3d cluster the
+DaemonSet schedules no pods and the gateway has no data plane.
+
+Use a required node affinity with operator Exists on the same key, and
+set nodeSelector to null so a re-install over an older EnvoyProxy (a
+JSON merge patch, which keeps every key it does not null) drops the old
+selector. Behaviour on kubeadm / kubespray clusters is unchanged; the
+toleration is untouched.
+
+Checked statically: release-1.2 pins envoy_gateway_version 1.7.1, the
+same gateway-helm whose v1alpha1 EnvoyProxy CRD includes pod.affinity.
+Modelling create (null pruned) and re-install over the old object
+(RFC 7386 merge) both leave affinity and no nodeSelector.
+---
+ roles/envoy_gateway/tasks/install.yaml | 23 ++++++++++++++++-------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/roles/envoy_gateway/tasks/install.yaml b/roles/envoy_gateway/tasks/install.yaml
+index 9f3d423..72c3444 100644
+--- a/roles/envoy_gateway/tasks/install.yaml
++++ b/roles/envoy_gateway/tasks/install.yaml
+@@ -191,11 +191,12 @@
+ # MetalLB elects at any given moment: every CP node always has a local
+ # envoy. Survives CP failover, no hostname pinning, no cp[0] dance.
+ #
+-# nodeSelector keys on the standard control-plane label (empty string is
+-# how kubespray / kubeadm stamp it) rather than the taint, because
+-# operators can remove the taint; the label is the stable Kubernetes
+-# control-plane marker. Toleration is kept for the case where the taint
+-# is still in place.
++# Node affinity keys on the standard control-plane label rather than the
++# taint, because operators can remove the taint; the label is the stable
++# Kubernetes control-plane marker. It matches on the label's presence, not
++# its value: kubespray / kubeadm stamp it with "" while k3s stamps
++# it with "true", and an exact-value nodeSelector schedules no envoy there.
++# Toleration is kept for the case where the taint is still in place.
+ - name: "envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)"
+   kubernetes.core.k8s:
+     state: present
+@@ -211,8 +212,16 @@
+           kubernetes:
+             envoyDaemonSet:
+               pod:
+-                nodeSelector:
+-                  node-role.kubernetes.io/control-plane: ""
++                # null drops the nodeSelector an older install left behind:
++                # this update is a JSON merge patch, which keeps omitted keys.
++                nodeSelector: null
++                affinity:
++                  nodeAffinity:
++                    requiredDuringSchedulingIgnoredDuringExecution:
++                      nodeSelectorTerms:
++                        - matchExpressions:
++                            - key: node-role.kubernetes.io/control-plane
++                              operator: Exists
+                 tolerations:
+                   - key: node-role.kubernetes.io/control-plane
+                     operator: Exists
+-- 
+2.53.0
+

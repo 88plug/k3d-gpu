@@ -218,38 +218,56 @@ Simulation fixture: `tests/fixtures/xeon-dmr` (topology borrowed from
 
 ## Intel Enterprise Agent Toolkit (EAT)
 
-EAT is a software stack, not a hardware family, so it has no fixture. Its pins:
+EAT is a software stack, not a hardware family, so it has no fixture. It reaches k3d-gpu
+two ways, one per EAT generation. Its pins:
 
-- `integrations/eat/eat-up.sh` deploys the pinned tag `release-1.0.3-hotfix`
-  ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333)).
-  The latest tag is [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)
+- **EAT 1.x:** `integrations/eat/eat-up.sh` deploys the pinned tag
+  [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)
   ([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a),
-  published 2026-10-22, [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)),
-  the merge of [PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21). Its tree,
-  `04969afa`, is the same as that of #21's head `c86c42b`.
+  published 2026-10-22), still the latest tag on 2026-10-29
+  ([tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)) and the merge of
+  [PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21). Its tree, `04969afa`,
+  is the same as that of #21's head `c86c42b`. Until 2026-10-29 the pin was
+  `release-1.0.3-hotfix`
+  ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
+  [compare](https://github.com/intel/enterprise-agent-toolkit/compare/0d3438d7119de44cafc5903f66665c0b623e3333...0c726f576595971c53cc45b94e08ba969beb4a4a),
+  204 files). `bench/eatflow` keeps its own EAT pins (`bench/eatflow/agent.lock`).
+- **EAT 2.0:** `k3d-gpu eas up --agent-toolkit` installs EAT through Intel's EAS installer
+  (`es_auto_installer.sh install agent-toolkit`) on the cluster. It pins EAS `main`
+  `97f6157`, enterprise-inference `main` `3e8a244` and EAT `release-2.0.0` `036b662` in
+  `integrations/eas/pins.json`, with EAS `v1.2.0-rc.1` as an opt-in profile. Choices,
+  patches, refusals and limits: [intel/eas.md](intel/eas.md). It has not run end to end
+  yet; F3 in [EXPERIMENTS.md](../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29)
+  is PENDING.
 - `docs/intel.md`, `contrib/eat/` and `integrations/eat/upstream/` read `main` at
   [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a8331e8b502ef41e08bf6d2881416178c5).
 
-`eat-up.sh` and `brownfield.sh` stay on `release-1.0.3-hotfix` while pre-registered
-ledger rows pin EAT stock at `0d3438d` (H50, H50o and H51, and `bench/apb/PROTOCOL.md`
-through `eat-up.sh`). Moving them to `release-1.1.0` still needs the two checks
-described below: `brownfield.sh` has to export `DEPLOY_GUARDRAILS=off`, and the vLLM
-CPU image has to be re-pinned to `v0.28.0` by digest. A fresh run like H1b's then has
-to pass on it [ledger:H1b].
+The `release-1.1.0` path has not run. It is pre-registered as F4 in
+[EXPERIMENTS.md](../EXPERIMENTS.md#f4-pre-registration-i9-13900t-2026-10-29) and is
+unverified until F4 is SUPPORTED; the run on `release-1.0.3-hotfix` passed [ledger:H1b].
+The move makes the two changes described below: `brownfield.sh` hands the config's
+`deploy_guardrails` (`off` in `agentic-config.cfg`) to EAT's `DEPLOY_GUARDRAILS`, and
+`vllm-values.yaml` pins the vLLM CPU image `v0.28.0` by digest. `agentic-config.cfg` also
+writes `deploy_vllm_sr`, `deploy_openshell`, `deploy_kata_containers`, `deploy_ceph` and
+`rack_scale_mode` out as `off`. The ledger rows that pinned EAT stock at `0d3438d` use their
+own EAT checkouts and set their own vLLM image tag (H50, H50o and H51 under crescent
+amendment E1, H7x under its amendment V1, and `bench/apb/h7.sh` and `arm.sh` for H7 and H8),
+so the move changes none of them.
 
 `release-1.1.0` ships NVIDIA OpenShell as an opt-in component
 (`deploy_openshell=off` by default, [PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14)).
-The pinned tag has no OpenShell role, so `eat-up.sh` stops on a config that sets
-`deploy_openshell=on` instead of letting the tag skip the key. Upstream lists a CNI
+It has not run on a k3d-gpu cluster, so `eat-up.sh` stops on a config that sets
+`deploy_openshell=on` before it touches the cluster. Upstream lists a CNI
 that enforces `NetworkPolicy` and best-effort Landlock as OpenShell requirements
-([docs/openshell.md](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/docs/openshell.md)).
-k3d-gpu adds no OpenShell checks while `eat-up.sh` stays on the pinned tag.
+([docs/openshell.md](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/docs/openshell.md)).
+k3d-gpu adds no OpenShell checks; enabling it needs its own ledger row first.
 
 Upstream work that changes this integration:
 
 - [EAT PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19) replaces
   `deploy-agentic-stack.sh` with `es_auto_installer.sh install agent-toolkit`. It merged
-  on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it yet.
+  on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no EAT tag carries it yet;
+  EAS's pre-release `v1.2.0-rc.1` pins it. `k3d-gpu eas` is the EAT 2.0 path.
   The status of each EAT PR is in the table below.
 - [enterprise-inference PR #22](https://github.com/intel/enterprise-inference/pull/22)
   merged on 2026-10-22 as "Integrate Agentic toolkit" (`4bc7fed`), the inference-layer
@@ -267,14 +285,16 @@ Upstream work that changes this integration:
 Read with `gh`, `git ls-remote` and a read-only clone only. EAT `main` is `4a2e930`:
 `release-1.1.0` plus the architecture diagram from
 [#27](https://github.com/intel/enterprise-agent-toolkit/pull/27).
-`release-1.0.3-hotfix` still points at `0d3438d`.
+`release-1.0.3-hotfix` still points at `0d3438d`; `eat-up.sh` moved from it to
+`release-1.1.0` on 2026-10-29, and `k3d-gpu eas` took over EAT 2.0. The #19 and #21 rows
+were re-read that day; EAT `main` was still `4a2e930`.
 
 | PR | Head | What it changes | Impact on k3d-gpu | Action |
 |---|---|---|---|---|
 | [#5](https://github.com/intel/enterprise-agent-toolkit/pull/5) Bitnami to SolDevelo images | `fcec7ef`, rebased onto `main` | `bitnami/kubectl:latest` becomes `soldevelo/kubectl:1.29` in the GenAI Gateway restore job, and `bitnamilegacy/minio:2024.12.18` becomes `soldevelo/minio:2024.12.18` in `docker/docker-compose.yml` | None. Neither line runs on our path: `restoreJob.enabled` is `false`, and `eat-up.sh` does not use EAT's Docker Compose mode. Every Bitnami image our path renders pulled on 2026-10-18 (`docker manifest inspect`, amd64 and arm64). See the note below | None. Recheck if a `bitnamilegacy` pull fails |
-| [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | Merged 2026-10-27 into `release-2.0.0`, not `main`: final head `fb59459`, merge `036b662`, no tag | Deletes `deploy-agentic-stack.sh`, `core/lib` (the brownfield path with it), `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh`. `release-2.0.0`'s README says Intel Arc (XPU) deployment is not in that release | Ends the path `eat-up.sh` uses, once a tag ships it. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) passes `git apply --check` on the draft head `9d842f5` but not on `fb59459` or `036b662`, so it needs a re-base before it is sent | Keep `eat-up.sh` on the tag. Move to the EAS BYO path after a tag that includes #19 |
+| [#19](https://github.com/intel/enterprise-agent-toolkit/pull/19) unified convention | Merged 2026-10-27 into `release-2.0.0`, not `main`: final head `fb59459`, merge `036b662`, no tag | Deletes `deploy-agentic-stack.sh`, `core/lib` (the brownfield path with it), `core/playbooks` and `core/roles`; installs through EAS `es_auto_installer.sh`. `release-2.0.0`'s README says Intel Arc (XPU) deployment is not in that release | `eat-up.sh` cannot deploy it: the brownfield path it drives is gone. `k3d-gpu eas up --agent-toolkit` installs it through the EAS bring-your-own-cluster path at `036b662`, the commit EAS `v1.2.0-rc.1` pins too; read from source, F3 PENDING. The drafted EAT docs patch in [upstream-eat.md](intel/upstream-eat.md) passes `git apply --check` on the draft head `9d842f5` but not on `fb59459` or `036b662`, so it needs a re-base before it is sent | EAT 2.0: `k3d-gpu eas up --agent-toolkit` ([intel/eas.md](intel/eas.md)). EAT 1.x stays on `eat-up.sh` |
 | [#20](https://github.com/intel/enterprise-agent-toolkit/pull/20) OpenClaw operator | `10deb6d`, on #19's branch `agentic-toolkit-migration` (forked at `dab3a98`, before #19's final head) | Optional `openclaw_operator` role (`claw_enabled: false`): operator chart and image `0.38.3` pinned by digest, 3 CRDs (`openclaw.rocks/v1alpha1`). It also adds a `cosign verify` of the chart and the operator image when `cosign` is on the installer's `PATH` (`openclaw_operator_cosign_required: false` by default) | Not reachable from the pinned tag. The operator itself fits one k3d-gpu node: CPU only (100m / 128Mi request), no GPU, no webhook, `kubeVersion >=1.28`, and both images publish amd64. Its example instance is the gap (see below) | None until #19 and #20 reach a tag |
-| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | Merged 2026-10-22 as `0c726f5` and released as `release-1.1.0`; head `c86c42b`, 204 files against `release-1.0.3-hotfix` | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds Qwen3Guard guardrails (on by default), Kata sandboxes (`kata-fc` Firecracker and `kata-qemu`), vLLM Semantic Router, rack-scale mode, an NVIDIA B300 profile, and an Arc B60/B70 XPU path (`compute_platform=xpu`); OVMS as a Docker engine; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked into NUMA-aware per-node policies | None on the pinned tag. On `release-1.1.0`: `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes would bite, and the XPU path would overlap what k3d-gpu already installs; all read from source, not run (see below) | Before moving `eat-up.sh` to `release-1.1.0`: turn the guardrail off and re-pin the vLLM image. Validation on 4x Arc Pro B70 is in progress, no results yet |
+| [#21](https://github.com/intel/enterprise-agent-toolkit/pull/21) Release 1.1.0 | Merged 2026-10-22 as `0c726f5` and released as `release-1.1.0`; head `c86c42b`, 204 files against `release-1.0.3-hotfix` | Keeps the old layout (`deploy-agentic-stack.sh`, `core/lib`); adds Qwen3Guard guardrails (on by default), Kata sandboxes (`kata-fc` Firecracker and `kata-qemu`), vLLM Semantic Router, rack-scale mode, an NVIDIA B300 profile, and an Arc B60/B70 XPU path (`compute_platform=xpu`); OVMS as a Docker engine; vLLM CPU image `v0.24.0` to `v0.28.0`; NRI balloons role reworked into NUMA-aware per-node policies | `eat-up.sh` deploys it since 2026-10-29. `core/lib/brownfield/` and `deploy-genai-gateway.yml` are unchanged, every function `brownfield.sh` calls still exists, and `gateway-charts.py` runs clean on its charts. Two changes needed handling (the guardrail and the vLLM image), and the XPU path would overlap what k3d-gpu already installs; all read from source, not run (see below) | Done 2026-10-29: `eat-up.sh` deploys `release-1.1.0` with the guardrail and the other new components off and the vLLM CPU image re-pinned to `v0.28.0` by digest; the path is pre-registered as F4, not yet run. Validation on 4x Arc Pro B70 is in progress, no results yet |
 | [#22](https://github.com/intel/enterprise-agent-toolkit/pull/22)-[#26](https://github.com/intel/enterprise-agent-toolkit/pull/26) agent toolkit stack | `a627fad`, `a32c5aa`, `9edf77d`, `6dfbcbc`, `7cc4344`, stacked on #20, base `agentic-toolkit-migration` | `Agent`, `AgentGrant` and `Tool` CRDs (`intel-stack.io`) with an agent operator (#22); per-agent memory (#23); sandbox, GitHub and web tools for agents (#24); an agent REST API (#25); a browser console and agent dashboards (#26). Its images are built into an in-cluster registry (`registry.kube-system.svc.cluster.local:5000`, the `kubernetes_registry_enabled` add-on) | Not reachable from the pinned tag. The stack claims sandboxes through `SandboxClaim` at `extensions.agents.x-k8s.io/v1beta1`, the version k3d-gpu's agent-sandbox v1.0.7 serves. Read from source, not run | None until the stack reaches a tag |
 
 Bitnami images on the pinned path. `deploy-genai-gateway.yml` runs `helm dependency update`
@@ -303,7 +323,8 @@ Rendered with Helm v3.14.0, the pinned charts differ from EAT's only in the 11 `
 
 What #21 (`c86c42b`) changes for `eat-up.sh`, compared with `release-1.0.3-hotfix`.
 It applies verbatim to `release-1.1.0`, whose tree is `c86c42b`'s. Read from a read-only
-clone; nothing here has run against a 1.1.0 stack.
+clone; nothing here has run against a 1.1.0 stack. The guardrail and vLLM-image items are
+the two the move of `eat-up.sh` to `release-1.1.0` had to handle.
 
 - Unchanged: `core/lib/brownfield/` (so the `5 / 1 / yes` prompt answers),
   `core/playbooks/deploy-genai-gateway.yml` (so the `helm_charts_base_genai{,_trace}`
@@ -320,15 +341,23 @@ clone; nothing here has run against a 1.1.0 stack.
   at top level (line 195), which runs when `brownfield.sh` sources it. The `deploy_guardrails`
   key in `agentic-config.cfg` is read only inside `main()` (line 1138), which a sourced run
   skips. `fresh-install.sh` (line 419) then deploys the `Qwen/Qwen3Guard-Gen-0.6B` guard.
-  `brownfield.sh` would have to export `DEPLOY_GUARDRAILS=off` to keep today's stack.
+  `brownfield.sh` now reads `deploy_guardrails` from the config, as `read_config_file` reads
+  every other toggle, and exports `DEPLOY_GUARDRAILS` before it sources the script;
+  `agentic-config.cfg` sets it `off`.
 - vLLM image. #21's `xeon-values.yaml` (line 34) moves `vllm/vllm-openai-cpu` from
-  `v0.24.0` to `v0.28.0`. `vllm-values.yaml` merges over it with no tag check, so it would
-  keep `v0.24.0` by digest under 1.1.0's model configs. Re-pin it with the bump.
+  `v0.24.0` to `v0.28.0`. `vllm-values.yaml` merges over it with no tag check, so it now
+  pins `v0.28.0` by digest (`sha256:197354e6...df9647`, Docker Hub, read 2026-10-29).
 - New `agentic-config.cfg` keys (`deploy_kata_containers`, `kata_runtime`, `deploy_ceph`,
   `rack_scale_mode`, `deploy_guardrails`, `deploy_vllm_sr`, `deploy_openshell`) are all
-  opt-in except `deploy_guardrails`. The NRI balloons role is reworked (`install_nri.yaml`
-  removed); `eat-up.sh` keeps `deploy_nri_balloon_policy=off`, so k3d-gpu's policy stays the
-  only one.
+  opt-in except `deploy_guardrails`. k3d-gpu's `agentic-config.cfg` writes each toggle out
+  as `off`. The NRI balloons role is reworked (`install_nri.yaml` removed); `eat-up.sh`
+  keeps `deploy_nri_balloon_policy=off`, so k3d-gpu's policy stays the only one.
+- The gateway's config moves to `/app/proxy_config.yaml` through a `subPath` mount, so an edit
+  to the `genai-gateway-config` ConfigMap reaches LiteLLM only after the pod restarts;
+  `eat-remote.sh` already restarts it. Every name the hybrid-router callback imports from or
+  patches in LiteLLM is defined at the pinned `v1.83.14-stable.patch.2`
+  ([`router.py`](https://github.com/BerriAI/litellm/blob/b36fb1dc191620e8ff2b3a43854c05f5189cd813/litellm/router.py):
+  `_is_auto_router_deployment`, `_add_deployment`, `async_pre_routing_hook`).
 - #21 does not contain #19: it keeps `deploy-agentic-stack.sh`, which #19 deletes.
 
 #21's XPU path (`compute_platform=xpu`, `docs/intel-arc-xpu-deployment.md`), set against
@@ -360,7 +389,7 @@ B70 runs land:
 Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
 
 - It calls the EAS inference layer's `ai-gateway` in `envoy-gateway-system`. The
-  `release-1.0.3-hotfix` stack has LiteLLM behind ingress-nginx instead, so `baseUrl`
+  `release-1.1.0` stack `eat-up.sh` deploys has LiteLLM behind ingress-nginx instead, so `baseUrl`
   has to change.
 - Its namespace joins the Istio ambient mesh, and its egress rule names HBONE port 15008.
   A k3d-gpu cluster has no Istio, and k3s enforces `NetworkPolicy` by default. Without the mesh, the

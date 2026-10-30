@@ -920,7 +920,8 @@ that of every variant the trusted orgs publish of it, found by name and by
   for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
   OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
   (`console/convert-pins.json`, moved nightly to the newest compatible releases).
-  It ranks below the official IR until H54q measures it, and
+  It ranks below the official IR until a quality row promotes it (H54q is that
+  row, and its run did not promote it), and
   `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
   commands. A QAT target only takes a QAT drafter, as the model card requires.
 - **Speculative decoding.** It uses the engine's documented method and stays inside
@@ -1420,9 +1421,19 @@ the in-process stub in `bench/test_agent_trace.py`.
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
 annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys the
-pinned tag `release-1.0.3-hotfix` (the latest, `release-1.1.0`, adds OpenShell;
-`eat-up.sh` refuses `deploy_openshell=on` because its pinned tag has no OpenShell
-role). See [docs/platforms.md](docs/platforms.md).
+pinned tag `release-1.1.0`, the latest, with its guardrail, vLLM Semantic Router,
+OpenShell, Kata and rack-scale mode off. That path is pre-registered as F4 and has
+not run yet; the previous pin, `release-1.0.3-hotfix`, passed end to end
+[ledger:H1b]. See [docs/platforms.md](docs/platforms.md#intel-enterprise-agent-toolkit-eat).
+
+EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer instead.
+`k3d-gpu eas up --agent-toolkit` runs it against the k3d-gpu cluster in EAS's
+bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
+k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
+layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
+layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. It has
+not run end to end yet: F3 in [EXPERIMENTS.md](EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+See [docs/intel/eas.md](docs/intel/eas.md).
 
 ### Experimental features (auto-adapting)
 

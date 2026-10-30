@@ -1,0 +1,75 @@
+{
+  "agent_sandbox": null,
+  "cluster": "k3d-gpu",
+  "containerd_cni_bin_dirs": [
+    "/var/lib/rancher/k3s/data/cni"
+  ],
+  "daemonsets": [],
+  "docker_rootless": false,
+  "fit": {
+    "Qwen/Qwen2.5-Coder-14B-Instruct": {
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=4",
+        "VLLM_CPU_KVCACHE_SPACE=64"
+      ],
+      "schema": "k3d-gpu.fit/v1",
+      "summary": "fit: Qwen/Qwen2.5-Coder-14B-Instruct on CPU via vllm"
+    },
+    "Qwen/Qwen2.5-Coder-7B-Instruct": {
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=4",
+        "VLLM_CPU_KVCACHE_SPACE=64"
+      ],
+      "schema": "k3d-gpu.fit/v1",
+      "summary": "fit: Qwen/Qwen2.5-Coder-7B-Instruct on CPU via vllm"
+    },
+    "meta-llama/Llama-3.1-8B-Instruct": {
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=4",
+        "VLLM_CPU_KVCACHE_SPACE=64"
+      ],
+      "schema": "k3d-gpu.fit/v1",
+      "summary": "fit: meta-llama/Llama-3.1-8B-Instruct on CPU via vllm"
+    }
+  },
+  "host": {
+    "inotify_max_user_instances": 8192,
+    "inotify_max_user_watches": 1048576,
+    "mem_available_kib": 520093696
+  },
+  "namespaces": [
+    "default",
+    "kube-node-lease",
+    "kube-public",
+    "kube-system"
+  ],
+  "nodes": [
+    {
+      "allocatable": {
+        "cpu": "96",
+        "memory": "512Gi",
+        "pods": "110"
+      },
+      "annotations": {
+        "k3s.io/node-args": "[\"server\", \"--disable\", \"traefik\", \"--disable\", \"nri-balloons\", \"--tls-san\", \"0.0.0.0\"]"
+      },
+      "labels": {
+        "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512F": "true",
+        "kubernetes.io/hostname": "k3d-k3d-gpu-server-0",
+        "node-role.kubernetes.io/control-plane": "true"
+      },
+      "name": "k3d-k3d-gpu-server-0"
+    }
+  ],
+  "nri_socket": true,
+  "schema": "k3d-gpu.eas-facts/v1",
+  "server_version": "v1.37.1+k3s1"
+}
