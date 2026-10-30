@@ -70,7 +70,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.81"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.82"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
