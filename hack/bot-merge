@@ -13,12 +13,14 @@
 #      OWNER, MEMBER or COLLABORATOR. No such human's latest review may request
 #      changes. Labels never change the verdict.
 #   b. ci_status SHA BRANCH is green (ci.yml carries pin-guard and the pins checks).
-#   c. When the policy names canary engines (its canary list): the newest
-#      canary.yml run for SHA succeeded, and its canary-result artifact, made for
-#      SHA, shows verdict pass, hard and exact for every one of them. A hard pass
-#      with exact false is a review condition: the PR is labelled canary-drift and
-#      merges on a human approval at SHA. Any other verdict (fail, isa-skip,
-#      too-big, unparseable) never merges.
+#   c. When the policy names canary engines (its canary list): every canary.yml run
+#      for SHA (its pull_request runs and its dispatches on the PR branch, held ones
+#      aside) completed, the newest succeeded, and for every one of those engines the
+#      newest canary-result artifact, made for SHA, that holds it shows verdict
+#      pass, hard and exact (an isa-skip re-dispatch reruns only the skipped
+#      engines). A hard pass with exact false is a review condition: the PR is
+#      labelled canary-drift and merges on a human approval at SHA. Any other
+#      verdict (fail, isa-skip, too-big, unparseable) never merges.
 #   d. base_ok SHA and not rules_stale SHA. Otherwise the pass dispatches
 #      freshness.yml -f group=<group> to regenerate the branch from main: at most 3
 #      per group per UTC day, counted from today's dispatched freshness runs whose
@@ -128,30 +130,45 @@ regen() {
     echo "regeneration dispatched ($((used + 1)) of $REGEN_CAP for $g today)"
   else echo "the freshness.yml dispatch failed"; return 1; fi
 }
-# canary SHA ENGINES_JSON DIR: one line per finding: "ok E", "drift E", "block WHY",
-# then "url URL" when a run exists.
+# canary SHA BRANCH ENGINES_JSON DIR: one line per finding: "ok E", "drift E",
+# "block WHY", and "url URL" for each run whose result counted. The canary runs at SHA
+# are its pull_request runs and its workflow_dispatch runs on BRANCH; a held
+# (action_required) run is not an attempt. Every one must be complete and the newest
+# must have succeeded. Each engine's newest result decides, because an isa-skip
+# re-dispatch reruns only the skipped engines; a run, newer than the one deciding an
+# engine, without a canary-result for SHA blocks, since what it found is unknown.
 canary() {
-  local runs id st concl url
-  runs=$(gh run list -w canary.yml -c "$1" -L 20 --json databaseId,status,conclusion,createdAt,url) \
-    || { echo "block cannot read canary.yml runs"; return; }
-  read -r id st concl url < <(jq -r 'max_by(.createdAt) // empty
-    | "\(.databaseId) \(.status) \(if (.conclusion // "") == "" then "-" else .conclusion end) \(.url)"' <<<"$runs")
-  [ -n "${id:-}" ] || { echo "block canary has not run at this head"; return; }
-  echo "url $url"
-  [ "$st" = completed ] || { echo "block canary is pending ($url)"; return; }
-  if gh run download "$id" -n canary-result -D "$3/artifact" >/dev/null 2>&1 && [ -f "$3/artifact/canary-result.json" ]; then
-    jq -r --arg sha "$1" --argjson want "$2" '
-      if .sha != $sha then "block canary result is for \(.sha), not this head"
-      else $want[] as $e | (.engines[$e] // null) as $r
-        | if $r == null then "block canary result lacks engine \($e)"
-          elif $r.verdict == "pass" and $r.hard == true and $r.exact == true then "ok \($e)"
-          elif $r.verdict == "pass" and $r.hard == true then "drift \($e)"
-          else "block canary \($e): \($r.verdict)" end
-      end' "$3/artifact/canary-result.json" 2>/dev/null || echo "block canary-result.json is unreadable ($url)"
-  else
-    echo "block canary run has no canary-result artifact ($url)"
-  fi
+  local runs concl url id f got left found
+  runs=$(gh run list -w canary.yml -c "$1" -L 50 --json databaseId,event,headBranch,status,conclusion,createdAt,url \
+         | jq -c --arg b "$2" '[.[] | select(.conclusion != "action_required")
+                                | select(.event == "pull_request" or (.event == "workflow_dispatch" and .headBranch == $b))]
+                               | sort_by(.createdAt) | reverse') || { echo "block cannot read canary.yml runs"; return; }
+  [ "$(jq length <<<"$runs")" -gt 0 ] || { echo "block canary has not run at this head"; return; }
+  url=$(jq -r '[.[] | select(.status != "completed") | .url] | first // empty' <<<"$runs")
+  [ -z "$url" ] || { echo "block canary is pending ($url)"; return; }
+  read -r concl url < <(jq -r '.[0] | "\(if (.conclusion // "") == "" then "-" else .conclusion end) \(.url)"' <<<"$runs")
   [ "$concl" = success ] || echo "block canary run concluded $concl ($url)"
+  left=$3
+  while read -r id url; do
+    [ "$(jq length <<<"$left")" -gt 0 ] || break
+    f=$4/canary-$id/canary-result.json
+    if ! gh run download "$id" -n canary-result -D "$4/canary-$id" >/dev/null 2>&1 || [ ! -f "$f" ]; then
+      echo "block canary run has no canary-result artifact ($url)"; return
+    fi
+    got=$(jq -r 'if (.engines | type) == "object" then .sha else error("no engines") end' "$f" 2>/dev/null) \
+      || { echo "block canary-result.json is unreadable ($url)"; return; }
+    [ "$got" = "$1" ] || { echo "block canary result is for $got, not this head ($url)"; return; }
+    if ! found=$(jq -r --argjson want "$left" '.engines as $m | $want[] as $e | select($m | has($e)) | $m[$e]
+           | if type != "object" then "block canary \($e): no result object"
+             elif .verdict == "pass" and .hard == true and .exact == true then "ok \($e)"
+             elif .verdict == "pass" and .hard == true then "drift \($e)"
+             else "block canary \($e): \(.verdict)" end' "$f" 2>/dev/null) \
+       || ! left=$(jq -c --argjson want "$left" '.engines as $m | [$want[] | select(. as $e | $m | has($e) | not)]' "$f"); then
+      echo "block canary-result.json is unreadable ($url)"; return
+    fi
+    [ -z "$found" ] || { echo "$found"; echo "url $url"; }
+  done < <(jq -r '.[] | "\(.databaseId) \(.url)"' <<<"$runs")
+  jq -r '.[] | "block canary result lacks engine \(.)"' <<<"$left"
 }
 # ci_url SHA BRANCH: the newest successful ci.yml run that ci_status counts.
 ci_url() {
@@ -220,8 +237,8 @@ while read -r c <&3; do
   # canary
   curl_=
   if [ "$engines" != "[]" ]; then
-    canary "$sha" "$engines" "$D" > "$D/canary"
-    curl_=$(sed -n 's/^url //p' "$D/canary")
+    canary "$sha" "$br" "$engines" "$D" > "$D/canary"
+    curl_=$(sed -n 's/^url //p' "$D/canary" | paste -sd' ' -)
     while read -r w; do why "${w#block }"; done < <(grep '^block ' "$D/canary")
     drift=$(sed -n 's/^drift //p' "$D/canary" | paste -sd, -)
     if [ -n "$drift" ]; then

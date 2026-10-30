@@ -116,9 +116,10 @@ review() {
     '. + [{user: {login: $u, type: $t}, author_association: $a, state: $s, commit_id: $c, submitted_at: $at}]' \
     "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 }
-# canary SHA BRANCH ENGINES_JSON [STATUS] [CONCLUSION]: a canary.yml run for SHA and its artifact.
+# canary SHA BRANCH ENGINES_JSON [STATUS] [CONCLUSION] [MINUTES_AGO]: a canary.yml run for SHA
+# (dispatched on BRANCH) and its artifact.
 canary() {
-  run canary.yml workflow_dispatch "$1" "$2" "${4:-completed}" "${5:-success}" "$(ago 15)" Canary
+  run canary.yml workflow_dispatch "$1" "$2" "${4:-completed}" "${5:-success}" "$(ago "${6:-15}")" Canary
   mkdir -p "$FIX/gh/artifacts/$LASTRUN/canary-result"
   jq -n --arg sha "$1" --arg ref "$2" --argjson e "$3" '{sha: $sha, ref: $ref, engines: $e}' \
     > "$FIX/gh/artifacts/$LASTRUN/canary-result/canary-result.json"
@@ -240,6 +241,57 @@ if [ "$(merges)" -eq 0 ]; then ok "canary_wrong_sha: no merge"; else fail "canar
 fx canary_lacks_engine; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu","ovms-cpu"]'
 canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true}}'; run_bm
 if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'ovms-cpu'; then ok "canary_lacks_engine: no merge"; else fail "canary_lacks_engine: $(show)"; fi
+# an engine entry that is not a result object (null) is not a verdict.
+fx canary_null_entry; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu","ovms-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true},"ovms-cpu":null}'; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'ovms-cpu'; then ok "canary_null_entry: no merge"; else fail "canary_null_entry: $(show)"; fi
+
+# 8d. a held (action_required) pull_request canary run newer than the green dispatched one
+#     is not an attempt: merges.
+fx canary_held_newer; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true}}' completed success 20
+run canary.yml pull_request "$SHA" autobump/g1 completed action_required "$(ago 5)" Canary; run_bm
+if [ "$(merged 1)" -eq 1 ]; then ok "canary_held_newer: the held run is ignored"
+else fail "canary_held_newer: $(show) comment=$(comment 1)"; fi
+# 8e. an isa-skip re-dispatch reruns only the skipped engine: each engine's newest result at
+#     the head decides, so the first run's pass for vllm-cpu and the re-dispatch's pass for
+#     ovms-cpu merge, and the comment links both runs.
+fx canary_redispatch; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu","ovms-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true},"ovms-cpu":{"verdict":"isa-skip","hard":false,"exact":false}}' completed failure 40
+c1=$LASTRUN
+canary "$SHA" autobump/g1 '{"ovms-cpu":{"verdict":"pass","hard":true,"exact":true}}' completed success 15
+c2=$LASTRUN; run_bm
+if [ "$(merged 1)" -eq 1 ] && comment 1 | grep -qF "actions/runs/$c1" && comment 1 | grep -qF "actions/runs/$c2"; then
+  ok "canary_redispatch: per-engine newest result, merged"
+else fail "canary_redispatch: $(show) comment=$(comment 1)"; fi
+# ...but a re-dispatch that fails blocks...
+fx canary_redispatch_fail; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu","ovms-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true},"ovms-cpu":{"verdict":"isa-skip","hard":false,"exact":false}}' completed failure 40
+canary "$SHA" autobump/g1 '{"ovms-cpu":{"verdict":"fail","hard":false,"exact":false}}' completed failure 15; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'ovms-cpu: fail'; then ok "canary_redispatch_fail: no merge"
+else fail "canary_redispatch_fail: $(show) comment=$(comment 1)"; fi
+# ...a newer result for the same engine supersedes an older pass...
+fx canary_newer_fail; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true}}' completed success 40
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"fail","hard":false,"exact":false}}' completed failure 15; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'vllm-cpu: fail'; then ok "canary_newer_fail: no merge"
+else fail "canary_newer_fail: $(show) comment=$(comment 1)"; fi
+# ...a newer completed run without a canary-result artifact blocks: what it found is unknown...
+fx canary_newest_no_artifact; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true}}' completed success 40
+run canary.yml workflow_dispatch "$SHA" autobump/g1 completed cancelled "$(ago 15)" Canary; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'no canary-result artifact'; then ok "canary_newest_no_artifact: no merge"
+else fail "canary_newest_no_artifact: $(show) comment=$(comment 1)"; fi
+# ...a newest run that is red on an engine the policy does not map still blocks...
+fx canary_run_red; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true},"node":{"verdict":"fail","hard":false,"exact":false}}' completed failure; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'canary run concluded failure'; then ok "canary_run_red: no merge"
+else fail "canary_run_red: $(show) comment=$(comment 1)"; fi
+# ...and a canary dispatched on another branch at the same SHA is not this PR's run.
+fx canary_other_branch; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/other '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":true}}'; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -qi 'canary has not run'; then ok "canary_other_branch: no merge"
+else fail "canary_other_branch: $(show) comment=$(comment 1)"; fi
 
 # 9. canary hard pass with exact false: label canary-drift, no merge (review)...
 fx canary_drift; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
