@@ -67,6 +67,10 @@ k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes i
 - Arguments after `--` go to `ansible-playbook`, for example
   `k3d-gpu eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'` to
   install without EAT's chat model.
+- `eas down` gives the teardown the same image pins and overrides as `eas up` gave the
+  install. EAS picks teardown components by the same `enabled` flags as install
+  ([resolve_components.py](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/filter_plugins/resolve_components.py#L245)),
+  so components `eas up` left to k3d-gpu, such as its NFD, stay.
 
 What `eas up` does, in order:
 
