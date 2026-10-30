@@ -53,7 +53,8 @@
 #            - down clears AIGatewayRoute finalizers before teardown platform --force
 #            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
-#            - the bastion pins what pins.json's bastion profile names
+#            - the bastion pins what pins.json's bastion profile names, and ships a
+#              sha256-checked jq (EI's deploy_models.yaml runs jq on the bastion)
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -1248,13 +1249,21 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     want=$(python3 - "${EAS_DIR}/pins.json" <<'PY'
 import json, sys
 rows = {r["name"]: r for r in json.load(open(sys.argv[1]))["pins"] if r["profile"] == "bastion"}
-print("FROM ubuntu:%s@sha256:%s kubectl %s helm %s yq %s kubernetes.core %s"
+print("FROM ubuntu:%s@sha256:%s kubectl %s helm %s yq %s jq %s kubernetes.core %s"
       % (rows["ubuntu"]["ref"], rows["ubuntu"]["sha"], rows["kubectl"]["ref"], rows["helm"]["ref"], rows["yq"]["ref"],
-         rows["kubernetes.core"]["ref"]))
+         rows["jq"]["ref"], rows["kubernetes.core"]["ref"]))
 PY
 )
-    got="$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile") kubectl $(sed -n 's/^ARG KUBECTL_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") helm $(sed -n 's/^ARG HELM_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") yq $(sed -n 's/^ARG YQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") kubernetes.core $(sed -n 's/^ARG KUBERNETES_CORE_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile")"
+    got="$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile") kubectl $(sed -n 's/^ARG KUBECTL_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") helm $(sed -n 's/^ARG HELM_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") yq $(sed -n 's/^ARG YQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") jq $(sed -n 's/^ARG JQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") kubernetes.core $(sed -n 's/^ARG KUBERNETES_CORE_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile")"
     cli_eq "cli: bastion.Dockerfile pins what pins.json's bastion profile names" "${got}" "${want}"
+    # EI's llm_services role pipes yq into jq on the installer host to pick the models to
+    # deploy (roles/llm_services/tasks/deploy_models.yaml); EAS's configure installs no jq.
+    if grep -q '^ARG JQ_SHA256=[0-9a-f]\{64\}$' "${EAS_DIR}/bastion.Dockerfile" \
+        && grep -q 'echo "${JQ_SHA256}  /usr/local/bin/jq" | sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile"; then
+        ok "cli: the bastion ships jq, checked by sha256 (EI's deploy_models.yaml runs it on the bastion)"
+    else
+        fail "cli: the bastion has no sha256-checked jq; EI's deploy_models.yaml fails with 'jq: command not found'"
+    fi
     cli_eq "cli: bastion FROM is the EAT bastion's digest" \
         "$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile")" "$(grep -m1 '^FROM ' "${ROOT}/integrations/eat/bastion.Dockerfile")"
     want=$(python3 -c 'import json, sys
