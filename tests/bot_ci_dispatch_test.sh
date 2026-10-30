@@ -170,11 +170,12 @@ if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/b; the
 else fail "one_branch: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions")"; fi
 
 # 8. --workflow canary.yml: a head gets canary.yml, with engines=auto, only when
-#    `hack/pins policy origin/main SHA` maps canary engines for it, read on the head
-#    fetched from origin. canary_repo NAME: a bare origin whose branches autobump/a,
-#    autobump/b and autobump/c each carry one commit off main, and a clone on main
-#    whose hack/ holds bot-ci-dispatch and a fixture pins that prints
-#    policy/<head>.json (no file: it fails) and a note on stderr (which must not
+#    `hack/pins policy MERGE_BASE SHA` (MERGE_BASE: of origin/main and SHA) maps canary
+#    engines for it, read on the head fetched from origin. canary_repo NAME: a bare
+#    origin whose branches autobump/a, autobump/b and autobump/c each carry one commit
+#    off main, and a clone on main whose hack/ holds bot-ci-dispatch and a fixture
+#    pins that prints policy/<head>.json (no file, or a base that is not an ancestor of
+#    the head, so not the PR's own diff: it fails) and a note on stderr (which must not
 #    read as the policy). Sets SHA_A, SHA_B, SHA_C.
 canary_repo() {
   fixture "$1" '[]' '[]'; CR=$FIX/repo
@@ -188,6 +189,7 @@ canary_repo() {
     mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch
     printf '%s\n' '#!/usr/bin/env bash' \
       '[ "$1" = policy ] && git rev-parse -q --verify "$2^{commit}" >/dev/null && git cat-file -e "$3^{commit}" || exit 1' \
+      'git merge-base --is-ancestor "$2" "$3" || { echo "pins: $2 is not an ancestor of $3" >&2; exit 1; }' \
       'echo "pins: a note on stderr" >&2' \
       'cat "$(dirname "$0")/../policy/$3.json"' > hack/pins
     chmod +x hack/pins hack/bot-ci-dispatch )
@@ -211,6 +213,16 @@ canary_repo canary_moved; echo "[$(pr 1 autobump/a "$SHA_B")]" > "$FIX/prs.json"
 cp "$CR/policy/$SHA_A.json" "$CR/policy/$SHA_B.json"; bcd_repo --workflow canary.yml
 if [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/a.*moved' <<<"$OUT"; then ok "canary_moved: no dispatch"
 else fail "canary_moved: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# main moved (a ledger commit) since the heads were cut: the policy still reads each
+# head's own diff, from its merge-base with main.
+canary_repo canary_main_moved
+( cd "$CR" && export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+    GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t && echo ledger > g && git add g && git commit -qm ledger \
+    && git push -q origin main && git fetch -q origin )
+echo "[$(pr 1 autobump/a "$SHA_A")]" > "$FIX/prs.json"; bcd_repo --workflow canary.yml
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a canary.yml; then
+  ok "canary_main_moved: policy from the merge-base, dispatched"
+else fail "canary_main_moved: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 # ci.yml never consults the policy, and its dispatch carries no inputs.
 canary_repo ci_no_policy; rm "$CR/hack/pins"
 echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 2 autobump/b "$SHA_B")]" > "$FIX/prs.json"

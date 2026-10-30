@@ -19,10 +19,11 @@
 # picked up by the next call (.github/workflows/bot-sweep.yml, hourly).
 #
 # --workflow canary.yml dispatches with -f engines=auto, and only for a head whose
-# `hack/pins policy origin/main SHA` maps canary engines (a non-empty
-# canary list); the head is fetched from origin for that, never checked out. A
-# head that moved on origin since the PR list was read waits for the next call; a
-# policy that fails is an error for that PR.
+# `hack/pins policy MB SHA` (MB: the merge-base of origin/main and SHA, so the PR's
+# own diff) maps canary engines (a non-empty canary list); the head is fetched
+# from origin for that, never checked out. A head that moved on origin since the
+# PR list was read waits for the next call; a policy that fails is an error for
+# that PR.
 #
 # A branch whose workflow file lacks the workflow_dispatch trigger (cut before
 # ci.yml had it) is skipped; the nightly's hack/autobump-branch-reset recreates it.
@@ -55,7 +56,8 @@ fi
 canary_engines() {
   git fetch -q origin "+refs/heads/$1:refs/remotes/origin/$1" || return 1
   [ "$(git rev-parse -q --verify "refs/remotes/origin/$1^{commit}")" = "$2" ] || { echo moved; return 0; }
-  hack/pins policy origin/main "$2" | jq -ce '.canary | arrays'
+  local mb; mb=$(git merge-base origin/main "$2") || return 1
+  hack/pins policy "$mb" "$2" | jq -ce '.canary | arrays'
 }
 
 prs=$(gh pr list --state open --base main --limit 200 \

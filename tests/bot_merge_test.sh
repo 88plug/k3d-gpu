@@ -65,12 +65,20 @@ fx() {
   cp "$BOT_MERGE" "$R/hack/bot-merge"; cp "$GATE_LIB" "$R/hack/gate_lib.sh"
   cat > "$R/hack/pins" <<'PINS'
 #!/usr/bin/env bash
-# fixture: `pins policy BASE HEAD` prints $FIX/policy/HEAD.json once both refs resolve
+# fixture: `pins policy BASE HEAD` prints $FIX/policy/HEAD.json once both refs resolve.
+# Like hack/pins it judges the diff BASE..HEAD: a file that diff changes and HEAD's own
+# diff (from its merge-base with BASE) does not is a line that is no pin move, so the
+# verdict is review (changes-defaults) and the group mixed.
 [ "$1" = policy ] || exit 2
 echo "pins $*" >> "$FIX/gh/trace"
 git rev-parse -q --verify "$2^{commit}" >/dev/null || { echo "pins: no base $2" >&2; exit 1; }
 git cat-file -e "$3^{commit}" 2>/dev/null || { echo "pins: head $3 not fetched" >&2; exit 1; }
-cat "$FIX/policy/$3.json"
+mb=$(git merge-base "$2" "$3") || exit 1
+extra=$(git diff --name-only "$2" "$3" | grep -vxF -f <(git diff --name-only "$mb" "$3") | paste -sd' ' -)
+if [ -n "$extra" ]; then
+  jq --arg x "$extra" '.verdict = "review" | .group = "mixed"
+                       | .reasons += ["changes-defaults: changed lines that are no pin move in " + $x]' "$FIX/policy/$3.json"
+else cat "$FIX/policy/$3.json"; fi
 PINS
   chmod +x "$R/hack/pins" "$R/hack/bot-merge"
   run ci.yml push "$(rgit rev-parse HEAD)" main completed success "$(ago "${2:-60}")"
@@ -78,22 +86,27 @@ PINS
 
 wfname() { case $1 in ci.yml) echo CI;; canary.yml) echo Canary;; freshness.yml) echo Freshness;;
   auto-release.yml) echo 'Auto-release AUR';; build-and-push.yml) echo 'Auto-update, Build & Release';; *) echo "$1";; esac; }
-# run WORKFLOW EVENT SHA BRANCH STATUS CONCLUSION [CREATED] [TITLE]: add a workflow run; sets LASTRUN.
+# run WORKFLOW EVENT SHA BRANCH STATUS CONCLUSION [CREATED] [TITLE] [HEAD_REPO]: add a workflow
+# run whose head came from HEAD_REPO (default o/r, this repository); sets LASTRUN.
 run() {
   RUNID=$((RUNID + 1)); LASTRUN=$RUNID
   jqi runs.json --argjson id "$RUNID" --arg wf "$1" --arg name "$(wfname "$1")" --arg ev "$2" --arg sha "$3" \
     --arg br "$4" --arg st "$5" --arg c "$6" --arg at "${7:-$(ago 30)}" --arg t "${8:-$(wfname "$1")}" \
+    --arg hr "${9:-o/r}" \
     '. + [{databaseId: $id, workflow: $wf, workflowName: $name, event: $ev, headSha: $sha, headBranch: $br,
-           status: $st, conclusion: $c, createdAt: $at, displayTitle: $t, attempt: 1,
+           headRepository: $hr, status: $st, conclusion: $c, createdAt: $at, displayTitle: $t, attempt: 1,
            url: ("https://github.com/o/r/actions/runs/\($id)")}]'
 }
-# mkpr N [FILE] [CREATED_MINUTES_AGO]: bot PR #N on autobump/gN, one commit changing FILE
-# (default pins.txt) off origin/main; policy auto with no canary engines, a green
-# ci.yml dispatch run on the branch. Sets SHA.
+# mkpr N [FILE] [CREATED_MINUTES_AGO] [CONTENT]: bot PR #N on autobump/gN, one commit off
+# origin/main changing FILE (default pins.txt: a line appended, or the file set to
+# CONTENT); policy auto with no canary engines, a green ci.yml dispatch run on the
+# branch. Sets SHA.
 mkpr() {
   local n=$1 f=${2:-pins.txt} br=autobump/g$1
   rgit fetch -q origin; rgit checkout -q -B "$br" origin/main
-  mkdir -p "$(dirname "$FIX/repo/$f")"; echo "bump $n" >> "$FIX/repo/$f"; rgit add "$f"
+  mkdir -p "$(dirname "$FIX/repo/$f")"
+  if [ -n "${4:-}" ]; then printf '%s' "$4" > "$FIX/repo/$f"; else echo "bump $n" >> "$FIX/repo/$f"; fi
+  rgit add "$f"
   commit_at "${3:-50}" "chore(g$n): bump"; rgit push -q -f origin "$br"; SHA=$(rgit rev-parse HEAD)
   rgit checkout -q main
   jqi pulls.json --argjson n "$n" --arg br "$br" --arg sha "$SHA" --arg at "$(ago "${3:-50}")" \
@@ -140,6 +153,7 @@ botcommit() {
 # main_commit MINUTES_AGO FILE CONTENT [AUTHOR] [MSG]: a commit on origin's main by someone else.
 main_commit() {
   rgit fetch -q origin; rgit checkout -q main; rgit reset -q --hard origin/main
+  mkdir -p "$(dirname "$FIX/repo/$2")"
   printf '%s' "$3" > "$FIX/repo/$2"; rgit add "$2"; commit_at "$1" "${5:-edit $2}" "${4:-t}"; rgit push -q origin main
 }
 
@@ -293,6 +307,26 @@ canary "$SHA" autobump/other '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":
 if [ "$(merges)" -eq 0 ] && comment 1 | grep -qi 'canary has not run'; then ok "canary_other_branch: no merge"
 else fail "canary_other_branch: $(show) comment=$(comment 1)"; fi
 
+# ...nor is a pull_request run at the same SHA whose head is a fork's (a fork can push the
+#    bot's commit to a branch it names autobump/g1 and open a PR into any base): newer and
+#    exact, it does not override this PR's own drift, so the PR still needs a review...
+fx canary_fork_run; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":false}}' completed success 30
+run canary.yml pull_request "$SHA" autobump/g1 completed success "$(ago 10)" Canary someone/r
+mkdir -p "$FIX/gh/artifacts/$LASTRUN/canary-result"
+jq -n --arg sha "$SHA" '{sha: $sha, ref: "autobump/g1", engines: {"vllm-cpu": {verdict: "pass", hard: true, exact: true}}}' \
+  > "$FIX/gh/artifacts/$LASTRUN/canary-result/canary-result.json"; run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'canary-drift'; then ok "canary_fork_run: a fork's run is not this PR's evidence"
+else fail "canary_fork_run: $(show) comment=$(comment 1)"; fi
+# ...while this PR's own pull_request run (approved, so not held) is.
+fx canary_own_pr_run; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
+run canary.yml pull_request "$SHA" autobump/g1 completed success "$(ago 10)" Canary
+mkdir -p "$FIX/gh/artifacts/$LASTRUN/canary-result"
+jq -n --arg sha "$SHA" '{sha: $sha, ref: "autobump/g1", engines: {"vllm-cpu": {verdict: "pass", hard: true, exact: true}}}' \
+  > "$FIX/gh/artifacts/$LASTRUN/canary-result/canary-result.json"; run_bm
+if [ "$(merged 1)" -eq 1 ]; then ok "canary_own_pr_run: this PR's own pull_request run counts"
+else fail "canary_own_pr_run: $(show) comment=$(comment 1)"; fi
+
 # 9. canary hard pass with exact false: label canary-drift, no merge (review)...
 fx canary_drift; mkpr 1; pol "$SHA" '.canary = ["vllm-cpu"]'
 canary "$SHA" autobump/g1 '{"vllm-cpu":{"verdict":"pass","hard":true,"exact":false,"detail":"golden differs"}}'; run_bm
@@ -318,7 +352,7 @@ done
 # 11. main moved under code since the head was tested: regeneration dispatched (freshness.yml
 #     group=g1); a second PR's group counts separately...
 fx base_moved_code; mkpr 1; main_commit 10 scripts/other.sh 'echo moved'; run_bm
-if [ "$(merges)" -eq 0 ] && [ "$(disp '^freshness.yml ref=main group=g1 reason=')" -eq 1 ] && comment 1 | grep -q 'main moved'; then
+if [ "$(merges)" -eq 0 ] && [ "$(disp '^freshness.yml ref=main group=g1$')" -eq 1 ] && comment 1 | grep -q 'main moved'; then
   ok "base_moved_code: regeneration dispatched"
 else fail "base_moved_code: $(show)"; fi
 # ...two of today's dispatched runs name g1 and one names g10: a third g1 regeneration goes out...
@@ -328,7 +362,7 @@ run freshness.yml workflow_dispatch "$(rgit rev-parse origin/main)" main complet
 run freshness.yml workflow_dispatch "$(rgit rev-parse origin/main)" main completed success "$(ago 90)" "Freshness group=g10 reason=x"
 run freshness.yml workflow_dispatch "$(rgit rev-parse origin/main)" main completed success "$(iso $((NOW - 15 * 3600)))" "Freshness group=g1 reason=x"
 run_bm
-if [ "$(disp '^freshness.yml ref=main group=g1 ')" -eq 1 ]; then ok "regen_under_cap: 2 of 3 used today, dispatched"
+if [ "$(disp '^freshness.yml ref=main group=g1$')" -eq 1 ]; then ok "regen_under_cap: 2 of 3 used today, dispatched"
 else fail "regen_under_cap: $(show)"; fi
 # ...with three today the cap holds.
 fx regen_cap; mkpr 1; main_commit 10 scripts/other.sh 'echo moved'
@@ -350,12 +384,37 @@ run ci.yml push "$(rgit rev-parse origin/main)" main completed success "$(ago 12
 if [ "$(merged 1)" -eq 1 ] && [ "$(disp freshness.yml)" -eq 0 ]; then ok "base_moved_release: merged, no regeneration"
 else fail "base_moved_release: $(show)"; fi
 
+# 12b. main moved only in the ledger since the head was cut: the policy judges the PR's own
+#      diff (from its merge-base with main), not main's ledger lines read backwards, so an
+#      auto bump still merges.
+fx ledger_moved_auto; mkpr 1; mb=$(rgit rev-parse origin/main)
+main_commit 15 docs/provenance.md $'ledger\n'
+run ci.yml push "$(rgit rev-parse origin/main)" main completed success "$(ago 12)"; run_bm
+if [ "$(merged 1)" -eq 1 ] && [ "$(disp freshness.yml)" -eq 0 ] && grep -qxF "pins policy $mb $SHA" "$(G trace)"; then
+  ok "ledger_moved_auto: policy from the merge-base, merged"
+else fail "ledger_moved_auto: $(show) trace=$(grep '^pins' "$(G trace)" | tr '\n' ';') comment=$(comment 1)"; fi
+# 12c. a release commit that conflicts with the head (each release rewrites K3D_GPU_VERSION in
+#      packaging/install.sh, on the line above the k3d pin) passes base_ok, but GitHub would
+#      refuse that merge on every pass: regenerate instead, and the next eligible PR merges
+#      in the same pass.
+fx base_conflict_release
+main_commit 55 packaging/install.sh $'K3D_GPU_VERSION=0.1.79\nK3D_VERSION=v5.9.0\n'
+mkpr 1 packaging/install.sh 50 $'K3D_GPU_VERSION=0.1.79\nK3D_VERSION=v5.9.1\n'
+main_commit 20 packaging/install.sh $'K3D_GPU_VERSION=0.1.80\nK3D_VERSION=v5.9.0\n' 88plug-bot \
+  'release: install.sh k3d-gpu 0.1.80 [skip release]'
+run ci.yml push "$(rgit rev-parse origin/main)" main completed success "$(ago 12)"
+mkpr 2 other.txt 10; run_bm
+if [ "$(merged 1)" -eq 0 ] && [ "$(merged 2)" -eq 1 ] && [ "$(disp '^freshness.yml ref=main group=g1$')" -eq 1 ] \
+   && comment 1 | grep -q 'conflicts with main' && ! grep -q refused <<<"$OUT"; then
+  ok "base_conflict_release: no merge attempt, regenerated; the next PR merged"
+else fail "base_conflict_release: $(show) comment=$(comment 1)"; fi
+
 # 13. main's ledger moved (a new SUPPORTED row) without ledger-rules.json: the merged tree's
 #     rules are stale, so regenerate.
 fx rules_stale; mkpr 1
 main_commit 10 EXPERIMENTS.md $'## Hypotheses\n\n| H34 | on the i9-13900T | p | m | SUPPORTED |\n| H34b | on the i5-12500T | q | n | SUPPORTED |\n'
 run ci.yml push "$(rgit rev-parse origin/main)" main completed success "$(ago 8)"; run_bm
-if [ "$(merges)" -eq 0 ] && [ "$(disp '^freshness.yml ref=main group=g1 ')" -eq 1 ] && comment 1 | grep -q 'ledger-rules.json'; then
+if [ "$(merges)" -eq 0 ] && [ "$(disp '^freshness.yml ref=main group=g1$')" -eq 1 ] && comment 1 | grep -q 'ledger-rules.json'; then
   ok "rules_stale: regeneration dispatched"
 else fail "rules_stale: $(show) comment=$(comment 1)"; fi
 
@@ -376,6 +435,13 @@ for k in ci-main ci-missing:freshness.yml release:aur-v0.1.79 red:canary; do
   if [ "$(merges)" -eq 0 ] && comment 1 | grep -qF "$k"; then ok "alarm $k: nothing merges"
   else fail "alarm $k: $(show)"; fi
 done
+
+# 15b. the alarm issues cannot be read: nothing merges, and the pass fails, so the sweep
+#      goes red instead of sitting green while it merges nothing.
+fx breaker_unreadable; mkpr 1; echo 1 > "$(G issue_list_rc)"; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$RC" -eq 1 ] && comment 1 | grep -q 'cannot read ci-alarm issues'; then
+  ok "breaker_unreadable: no merge, exit 1"
+else fail "breaker_unreadable: $(show) comment=$(comment 1)"; fi
 
 # 16. an alarm whose key is not a breaker key: merges.
 fx alarm_other; mkpr 1; alarm 'blind-spot:k3s'; run_bm

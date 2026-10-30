@@ -7,10 +7,13 @@ State lives under $FIX/gh:
   files/<n>.json        REST pull files ([{filename}])
   reviews/<n>.json      REST reviews
   comments/<n>.json     REST issue comments (POST and PATCH edit this file)
-  runs.json             `gh run list --json` rows, plus "workflow" (the file name)
+  runs.json             `gh run list --json` rows, plus "workflow" (the file name) and
+                        "headRepository" (owner/repo the head came from); the REST
+                        workflow runs list is served from them too
   artifacts/<id>/<name>/  files `gh run download <id> -n <name>` extracts
   issues.json           [{number, title, state, labels: [{name}]}]
   merge_rc              exit code sequence for `gh pr merge` (last one repeats)
+  issue_list_rc         exit code sequence for `gh issue list` (last one repeats)
 Calls are logged to $FIX/gh/calls; dispatches to $FIX/gh/dispatches, merges to
 $FIX/gh/merges, label additions to $FIX/gh/labels.
 
@@ -172,6 +175,21 @@ def api(argv):
                     return emit(c, jq_expr)
         print("gh: Not Found (HTTP 404)", file=sys.stderr)
         return 1
+    if rest[:2] == ["actions", "workflows"] and len(rest) == 4 and rest[3] == "runs" and method == "GET":
+        q = dict(kv.split("=", 1) for kv in query.split("&") if kv)
+        log("calls", f"api-runs {rest[2]} " + " ".join(f"{k}={v}" for k, v in sorted(q.items())))
+        out = [r for r in load(G / "runs.json", []) if wf_match(r, rest[2])
+               and q.get("head_sha", r["headSha"]) == r["headSha"]
+               and q.get("branch", r["headBranch"]) == r["headBranch"]
+               and q.get("event", r["event"]) == r["event"]]
+        out.sort(key=lambda r: r["createdAt"], reverse=True)
+        out = out[: int(q.get("per_page", 30))]
+        return emit({"total_count": len(out), "workflow_runs": [
+            {"id": r["databaseId"], "name": r.get("workflowName"), "event": r["event"],
+             "head_sha": r["headSha"], "head_branch": r["headBranch"],
+             "head_repository": {"full_name": r.get("headRepository", "o/r")},
+             "status": r["status"], "conclusion": r.get("conclusion") or None,
+             "created_at": r["createdAt"], "html_url": r["url"]} for r in out]}, jq_expr)
     if rest[:1] == ["issues"] and len(rest) == 3 and rest[2] == "labels" and method == "POST":
         n = int(rest[1])
         names = fields.get("labels[]", [])
@@ -271,7 +289,11 @@ def pr_merge(argv):
     if sha != p["head"]["sha"]:
         print("GraphQL: Head branch was modified. Review and try the merge again. (mergePullRequest)", file=sys.stderr)
         return 1
-    tree = git_origin("merge-tree", "--write-tree", "main", sha).splitlines()[0]
+    try:
+        tree = git_origin("merge-tree", "--write-tree", "main", sha).splitlines()[0]
+    except subprocess.CalledProcessError:
+        print(f"Pull request #{n} is not mergeable: the merge commit cannot be cleanly created.", file=sys.stderr)
+        return 1
     when = os.environ["BOT_MERGE_NOW"] + " +0000"
     env = dict(os.environ, GIT_AUTHOR_NAME="github-actions[bot]",
                GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com",
@@ -294,6 +316,10 @@ def pr_view(argv):
 # ---- gh issue / workflow / repo -------------------------------------------
 def issue_list(argv):
     pos, opts = flags(argv, {"--label", "-l", "--state", "-s", "--json", "-L", "--limit", "-q", "--jq"})
+    rc = int(pop("issue_list_rc", "0"))
+    if rc != 0:
+        print("HTTP 502: Server Error (https://api.github.com/graphql)", file=sys.stderr)
+        return rc
     label = one(opts, "--label", "-l")
     state = one(opts, "--state", "-s") or "open"
     issues = [i for i in load(G / "issues.json", [])
