@@ -1,0 +1,12 @@
+{
+ "prompt": "The capital of France is",
+ "regex": "Paris",
+ "exact": " Paris. The capital of Italy is Rome",
+ "recorded_with": {
+  "engine": "ghcr.io/ggml-org/llama.cpp:server-b11960 (build b11960-8642541b2)",
+  "model": "ggml-org/Qwen3-0.6B-GGUF@13ac06624948e4d8589cb4b6f90100837342fcb8 Qwen3-0.6B-Q8_0.gguf",
+  "request": "POST /v1/completions temperature 0, top_k 1, seed 0, max_tokens 8",
+  "cpu": "Intel Core i9-13900T (avx2, no avx512f), 2 CPUs",
+  "date": "2026-10-29"
+ }
+}
