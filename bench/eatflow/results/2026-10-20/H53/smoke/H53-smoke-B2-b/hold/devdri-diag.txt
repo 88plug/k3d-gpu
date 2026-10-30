@@ -1,0 +1,72 @@
+2026-10-30T00:36:13Z
+## host: ls -la /dev/dri /dev/dri/by-path
+/dev/dri:
+total 0
+drwxr-xr-x  3 root root        240 Sep 15 22:48 .
+drwxr-xr-x 19 root root       6480 Oct 29 18:47 ..
+drwxr-xr-x  2 root root        240 Sep 15 22:48 by-path
+crw-rw----+ 1 root video  226,   0 Sep 16 00:04 card0
+crw-rw----+ 1 root video  226,   1 Sep 16 00:04 card1
+crw-rw----+ 1 root video  226,   2 Sep 16 00:04 card2
+crw-rw----+ 1 root video  226,   3 Sep 16 00:04 card3
+crw-rw----+ 1 root video  226,   4 Sep 16 00:04 card4
+crw-rw----+ 1 root render 226, 128 Sep 16 00:04 renderD128
+crw-rw----+ 1 root render 226, 129 Sep 16 00:04 renderD129
+crw-rw----+ 1 root render 226, 130 Sep 16 00:04 renderD130
+crw-rw----+ 1 root render 226, 131 Sep 16 00:04 renderD131
+
+/dev/dri/by-path:
+total 0
+drwxr-xr-x 2 root root 240 Sep 15 22:48 .
+drwxr-xr-x 3 root root 240 Sep 15 22:48 ..
+lrwxrwxrwx+1 root root   8 Sep 15 22:48 pci-0000:12:00.0-card -> ../card1
+lrwxrwxrwx+1 root root  13 Sep 15 22:48 pci-0000:12:00.0-render -> ../renderD128
+lrwxrwxrwx+1 root root   8 Sep 15 22:48 pci-0000:2d:00.0-card -> ../card0
+lrwxrwxrwx+1 root root   8 Sep 15 22:47 pci-0000:2d:00.0-platform-simple-framebuffer.0-card -> ../card0
+lrwxrwxrwx+1 root root   8 Sep 15 22:48 pci-0000:48:00.0-card -> ../card2
+lrwxrwxrwx+1 root root  13 Sep 15 22:48 pci-0000:48:00.0-render -> ../renderD129
+lrwxrwxrwx+1 root root   8 Sep 15 22:48 pci-0000:7c:00.0-card -> ../card3
+lrwxrwxrwx+1 root root  13 Sep 15 22:48 pci-0000:7c:00.0-render -> ../renderD130
+lrwxrwxrwx+1 root root   8 Sep 15 22:48 pci-0000:96:00.0-card -> ../card4
+lrwxrwxrwx+1 root root  13 Sep 15 22:48 pci-0000:96:00.0-render -> ../renderD131
+## node k3d-k3dgpu-e-h53-server-0: ls -la /dev/dri /dev/dri/by-path
+/dev/dri:
+total 0
+drwxr-xr-x  2 root root       220 Oct 30 00:25 .
+drwxr-xr-x 14 root root      6300 Oct 30 00:25 ..
+crw-rw----  1 root video 226,   0 Oct 30 00:25 card0
+crw-rw----  1 root video 226,   1 Oct 30 00:25 card1
+crw-rw----  1 root video 226,   2 Oct 30 00:25 card2
+crw-rw----  1 root video 226,   3 Oct 30 00:25 card3
+crw-rw----  1 root video 226,   4 Oct 30 00:25 card4
+crw-rw----  1 root   990 226, 128 Oct 30 00:25 renderD128
+crw-rw----  1 root   990 226, 129 Oct 30 00:25 renderD129
+crw-rw----  1 root   990 226, 130 Oct 30 00:25 renderD130
+crw-rw----  1 root   990 226, 131 Oct 30 00:25 renderD131
+ls: cannot access '/dev/dri/by-path': No such file or directory
+## pod pod/vllm-qwen38-27b-xpu-69c59cbbdc-5zbzz: ls -la /dev/dri /dev/dri/by-path
+ls: cannot access '/dev/dri/by-path': No such file or directory
+/dev/dri:
+total 0
+drwxr-xr-x 2 root root      200 Oct 30 00:36 .
+drwxr-xr-x 6 root root      380 Oct 30 00:36 ..
+crw-rw---- 1 root root 226,   1 Oct 30 00:36 card1
+crw-rw---- 1 root root 226,   2 Oct 30 00:36 card2
+crw-rw---- 1 root root 226,   3 Oct 30 00:36 card3
+crw-rw---- 1 root root 226,   4 Oct 30 00:36 card4
+crw-rw---- 1 root root 226, 128 Oct 30 00:36 renderD128
+crw-rw---- 1 root root 226, 129 Oct 30 00:36 renderD129
+crw-rw---- 1 root root 226, 130 Oct 30 00:36 renderD130
+crw-rw---- 1 root root 226, 131 Oct 30 00:36 renderD131
+command terminated with exit code 2
+## pod: /dev/dri strings in the image oneCCL libraries
+/opt/venv/lib/libccl.so /opt/venv/lib/libccl.so
+      1 /dev/dri/by-path/
+/opt/venv/lib/libccl.so.1 /opt/venv/lib/libccl.so.1
+      1 /dev/dri/by-path/
+/opt/venv/lib/libccl.so.1.0 /opt/venv/lib/libccl.so.1.0
+      1 /dev/dri/by-path/
+/opt/venv/lib/libccl.so.2 /opt/venv/lib/libccl.so.2
+/opt/venv/lib/libccl.so.2.0 /opt/venv/lib/libccl.so.2.0
+## intel-gpu-plugin daemonset args and volumes
+intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33  [{"hostPath":{"path":"/dev/dri","type":"DirectoryOrCreate"},"name":"devfs"},{"hostPath":{"path":"/sys/class/drm","type":""},"name":"sysfsdrm"},{"hostPath":{"path":"/var/lib/kubelet/device-plugins","type":""},"name":"kubeletsockets"},{"hostPath":{"path":"/var/run/cdi","type":"DirectoryOrCreate"},"name":"cdipath"}]

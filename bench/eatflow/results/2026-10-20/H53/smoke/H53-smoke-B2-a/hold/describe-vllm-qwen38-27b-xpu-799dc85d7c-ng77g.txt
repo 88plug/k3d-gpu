@@ -1,0 +1,119 @@
+Name:             vllm-qwen38-27b-xpu-799dc85d7c-ng77g
+Namespace:        default
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-e-h53-server-0/172.19.0.2
+Start Time:       Fri, 30 Oct 2026 00:23:06 +0000
+Labels:           app.kubernetes.io/instance=vllm-qwen38-27b-xpu
+                  app.kubernetes.io/name=vllm
+                  pod-template-hash=799dc85d7c
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.14
+IPs:
+  IP:           10.42.0.14
+Controlled By:  ReplicaSet/vllm-qwen38-27b-xpu-799dc85d7c
+Containers:
+  vllm:
+    Container ID:    containerd://bf0eaf47310725fbdc8ba34fe3d4ed8108c6ae783b775c4d753d6fc589705d8f
+    Image:           vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3
+    Image ID:        docker.io/vllm/vllm-openai-xpu@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3
+    Port:            8000/TCP (http)
+    Host Port:       0/TCP (http)
+    SeccompProfile:  RuntimeDefault
+    Command:
+      bash
+      -c
+      source /opt/intel/oneapi/setvars.sh --force && python3 -m vllm.entrypoints.openai.api_server "$@"
+      --
+    Args:
+      --host
+      0.0.0.0
+      --dtype
+      float16
+      --block-size
+      64
+      --gpu-memory-utilization
+      0.9
+      --enforce-eager
+      --no-enable-prefix-caching
+      --trust-remote-code
+      --disable-sliding-window
+      --enable-auto-tool-choice
+      --tool-call-parser
+      qwen3_xml
+      --tensor-parallel-size
+      4
+      --model
+      /data/Qwen3.8-27B
+      --served-model-name
+      Qwen/Qwen3.6-27B
+      --port
+      8000
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Fri, 30 Oct 2026 00:25:08 +0000
+      Finished:     Fri, 30 Oct 2026 00:25:08 +0000
+    Ready:          False
+    Restart Count:  2
+    Limits:
+      gpu.intel.com/xe:  4
+    Requests:
+      gpu.intel.com/xe:  4
+    Readiness:           http-get http://:http/health delay=10s timeout=1s period=5s successThreshold=1 failureThreshold=200
+    Environment Variables from:
+      vllm-qwen38-27b-xpu-config  ConfigMap  Optional: false
+    Environment:                  <none>
+    Mounts:
+      /data from model-volume (rw)
+      /dev/shm from shm (rw)
+      /root/.cache/vllm from vllm-cache (rw)
+      /tmp from tmp (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-jxpk9 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  model-volume:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-ro
+    HostPathType:  Directory
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  1Gi
+  tmp:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  vllm-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-jxpk9:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  2m12s              default-scheduler  Successfully assigned default/vllm-qwen38-27b-xpu-799dc85d7c-ng77g to k3d-k3dgpu-e-h53-server-0
+  Normal   Pulling    2m12s              kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3"
+  Normal   Pulled     28s                kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3" in 1m43.931s (1m43.931s including waiting). Image size: 4143776505 bytes.
+  Normal   Created    11s (x3 over 28s)  kubelet            spec.containers{vllm}: Container created
+  Normal   Started    11s (x3 over 28s)  kubelet            spec.containers{vllm}: Container started
+  Normal   Pulled     11s (x2 over 26s)  kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-xpu:v0.28.0@sha256:4756b66a077627133cee653b551f6f5eaa1b9a981b5eea13edd33fcd3b0d3ca3" already present on machine and can be accessed by the pod
+  Warning  BackOff    10s (x4 over 25s)  kubelet            spec.containers{vllm}: Back-off restarting failed container vllm in pod vllm-qwen38-27b-xpu-799dc85d7c-ng77g_default(6077fde9-5952-450e-b869-3aa47c254b6a)

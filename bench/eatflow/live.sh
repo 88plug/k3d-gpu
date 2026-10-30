@@ -280,6 +280,19 @@ stage() {  # stage <local dir> <path under /var/apb-models> <uid>
         docker exec "${n}" chown -R "$3:$3" /var/apb-models
     done
 }
+# stage_path <local dir> <path under /var/apb-models> <uid>: copy into every node, chown that
+# path only. Top level, so the solo (H53) and pairs paths both have it (H53 amendment R1).
+stage_path() {
+    local n
+    for n in $(nodes); do
+        docker exec "${n}" mkdir -p "/var/apb-models/$2" /var/apb-models/.ov_cache
+        docker cp -L "${M}/$1/." "${n}:/var/apb-models/$2/"
+        docker exec "${n}" rm -rf "/var/apb-models/$2/.cache" "/var/apb-models/$2/.git"
+        docker exec "${n}" chown -R "$3:$3" "/var/apb-models/$2"
+        docker exec "${n}" chown 5000:5000 /var/apb-models/.ov_cache
+        docker exec "${n}" chmod 1777 /var/apb-models
+    done
+}
 # cpusets: H56's cpuset.txt, "<role> <name> <cpus>" lines that crescent/h56.py checks.
 cpusets() {
     local n c
@@ -316,6 +329,8 @@ if [ "${MODE}" = solo ]; then
     # AG (k3d-gpu's auto device and draft: OVMS on one card) or B2 (EAT PR #21's vLLM XPU path,
     # its xpu-qwen36-27b profile on these weights, LIVE_B2_TP cards). LIVE_GPU_FREE: the PCI
     # addresses of the cards the hold may use; every other card is held by a placeholder pod.
+    # LIVE_PAIRS_GUARD: the task-start guard, s (unset: agentbench solo's own; a wiring smoke
+    # sets it past the hold, so only the warm-up runs; H53 amendment R1).
     PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?} SOLO=${LIVE_SOLO:?LIVE_SOLO is AG or B2}
     read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
     [ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ] || { echo "solo: ARM must be H53 (a rule-L3 row)"; exit 2; }
@@ -428,7 +443,8 @@ if [ "${MODE}" = solo ]; then
     ${AB} solo --hyp "${ARM}" --hold "${HOLD}" --arm "${SOLO}" --out "${PD}" --deadline "${deadline}" --tasks B24 \
         --agent http://127.0.0.1:8090 --upstream "http://127.0.0.1:${P_LLM}" --proxy-port "${P_PROXY}" \
         --restart "${OUT}/agent.sh" --pod "${cg}" --mcp-url "http://127.0.0.1:${P_MCP}/mcp" --reset "${OUT}/reset-mcp.sh" \
-        --sampling "${SAMPLING}" --baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}" 2>&1 | tee -a "${OUT}/live.log"
+        --sampling "${SAMPLING}" --baseline "${PD}/baseline-hold${HOLD}.jsonl" --level "${LEVEL}" \
+        ${LIVE_PAIRS_GUARD:+--guard-s "${LIVE_PAIRS_GUARD}"} 2>&1 | tee -a "${OUT}/live.log"
     stamp finished
     exit 0
 fi
@@ -462,17 +478,6 @@ if [ "${MODE}" = pairs ]; then
     B_NS=default B_DEP=${B_REL} B_SVC=${B_REL}-service B_SPORT=80 B_API=/v1
     [ "${DESIGN}" = H50o ] && B_DEP=ovms-model-server B_SVC=ovms-model-server B_SPORT=8080 B_API=/v3
     DRAFT_DIR=OpenVINO-Qwen3-0.6B-int4-ov     # where OVMS --pull puts the draft, inside the target dir
-    stage_path() {  # stage_path <local dir> <path under /var/apb-models> <uid>: chown that path only
-        local n
-        for n in $(nodes); do
-            docker exec "${n}" mkdir -p "/var/apb-models/$2" /var/apb-models/.ov_cache
-            docker cp -L "${M}/$1/." "${n}:/var/apb-models/$2/"
-            docker exec "${n}" rm -rf "/var/apb-models/$2/.cache" "/var/apb-models/$2/.git"
-            docker exec "${n}" chown -R "$3:$3" "/var/apb-models/$2"
-            docker exec "${n}" chown 5000:5000 /var/apb-models/.ov_cache
-            docker exec "${n}" chmod 1777 /var/apb-models
-        done
-    }
     cluster_up
     stage_path "${TGT_DIR}" "${TGT}" 5000
     [ "${A_DRAFT}" = off ] || stage_path Qwen3-0.6B-int4-ov "${TGT}/${DRAFT_DIR}" 5000

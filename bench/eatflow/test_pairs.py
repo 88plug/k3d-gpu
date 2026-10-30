@@ -888,6 +888,68 @@ class H53Test(unittest.TestCase):
         self.assertLess(i_hold, i_apply)
         self.assertLess(i_check, i_run)
 
+    def test_stage_path_is_defined_before_the_solo_path_calls_it(self):
+        # H53 amendment R1: stage_path lived inside the pairs branch, so the solo AG path called an
+        # undefined function (bash went on: no -e) and OVMS would have served an empty hostPath.
+        live = self.live()
+        self.assertEqual(live.count("stage_path() {"), 1)
+        i_def = live.index("\nstage_path() {")                       # top level, not inside a branch
+        i_solo = live.index('if [ "${MODE}" = solo ]; then')
+        self.assertLess(i_def, i_solo)
+        blk = live[i_solo:live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('stage_path "${TGT_DIR}" "${TGT}" 5000', blk)
+        # Run the definition as bash does, with stub nodes/docker: it copies into every node.
+        fn = live[i_def + 1:live.index("\n}\n", i_def) + 3]
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        script = ("set -u\nM=/m\nnodes() { echo n1 n2; }\ndocker() { echo \"docker $*\" >> " + tmp + "/calls; }\n"
+                  + fn + 'stage_path Qwen3.8-27B-int4-ov OpenVINO/Qwen3.8-27B-int4-ov 5000\n')
+        import subprocess
+        p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(os.path.join(tmp, "calls")) as f:
+            calls = f.read()
+        for n in ("n1", "n2"):
+            self.assertIn(f"docker cp -L /m/Qwen3.8-27B-int4-ov/. {n}:/var/apb-models/OpenVINO/Qwen3.8-27B-int4-ov/", calls)
+            self.assertIn(f"docker exec {n} chown -R 5000:5000 /var/apb-models/OpenVINO/Qwen3.8-27B-int4-ov", calls)
+
+    def test_a_smoke_can_set_the_solo_task_guard(self):
+        live = self.live()
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('${LIVE_PAIRS_GUARD:+--guard-s "${LIVE_PAIRS_GUARD}"}', blk)
+        with open(os.path.join(HERE, "crescent", "solo-hold.sh")) as f:
+            self.assertNotIn("LIVE_PAIRS_GUARD", f.read())                  # holds keep agentbench's own guard
+
+    def test_h53_window_steps(self):
+        p = os.path.join(HERE, "results", "2026-10-20", "H53", "prehold", "prehold.sh")
+        with open(p) as f:
+            s = f.read()
+        # The four cards of both pairs (pre-registration "Cards and serving"), stop and start only.
+        self.assertIn('FREE="0000:12:00.0 0000:48:00.0 0000:7c:00.0 0000:96:00.0"', s)
+        self.assertIn('PAIRS="qwen38-a-hr qwen38-b-hr"', s)
+        self.assertNotIn("docker rm", s)
+        self.assertNotIn("docker stop", s)                                    # only through gpu-serving.sh
+        i_inspect, i_stop = s.index('docker inspect "${c}" > "${O}/inspect-${c}.before.json"'), s.index("gpu-serving.sh\" stop")
+        self.assertLess(i_inspect, i_stop)
+        # A smoke runs the warm-up only; holds run solo-hold.sh with the registered arm.
+        self.assertIn("LIVE_PAIRS_GUARD=99999", s)
+        self.assertIn('bash "${C}/crescent/solo-hold.sh" "${n}" "${arm}"', s)
+        self.assertIn('arm=$(python3 "${C}/pairs.py" arm H53 "${n}")', s)
+        # Holds 7 and 8 only when fewer than three blocks count after hold 6.
+        self.assertIn('[ "${k}" -ge 3 ] || { last=8;', s)
+        # Every card must be free before a smoke or a hold (polled, Prometheus scrapes every 15 s).
+        self.assertEqual(s.count("wait_cards ||"), 2)
+        self.assertIn("FREE_GIB=2", s)
+        # R1 item 5's futility stop reads solo.alive_blocks after every hold.
+        i_hold, i_alive = s.index('one_hold "${n}" "${rungs}" ||'), s.index("a=$(alive_blocks)")
+        self.assertLess(i_hold, i_alive)
+        self.assertIn('[ "$(wc -w <<< "${a}")" -lt 3 ]', s)
+        self.assertIn("solo.alive_blocks(rows,", s)
+        # E4: setup.sh runs from this checkout under the bench lock.
+        blk = s[s.index("\nsetup)"):s.index("\nverify)")]
+        self.assertIn("lock", blk)
+        self.assertIn('bash "${C}/crescent/setup.sh"', blk)
+
 
 class PrerunPinsTest(unittest.TestCase):
     """Crescent amendments E1 and E2 (EXPERIMENTS.md, 2026-10-29): every crescent agent-row
