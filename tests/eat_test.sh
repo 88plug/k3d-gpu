@@ -10,7 +10,10 @@
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
 #   3. eat-up.sh refuses deploy_openshell=on, unverified on k3d-gpu, and a config with no
-#      deploy_guardrails value, on which release-1.1.0 deploys its guardrail.
+#      deploy_guardrails value, on which release-1.1.0 deploys its guardrail. It also
+#      refuses a deploy_nri_balloon_policy other than off (a second balloons policy),
+#      compute_platform=xpu (an unpinned second GPU plugin), deploy_kata_containers=on
+#      (no /dev/kvm in a k3d node) and rack_scale_mode=on (it builds its own cluster).
 #   5. The GenAI Gateway installs from copies of its charts with exact dependency
 #      versions and every image name:tag@sha256 (gateway-charts.py, brownfield.sh).
 #   6. eat-opt.py puts the model optimizer's choices on EAT's own modelConfigs entry,
@@ -341,6 +344,74 @@ guard_case "deploy_guardrails=off" pass 'deploy_guardrails=off'
 guard_case "deploy_guardrails=on is the user's choice" pass 'deploy_guardrails=on'
 guard_case "spaces and quotes" pass ' deploy_guardrails = "off" '
 guard_case "set, then emptied: last wins" refuse 'deploy_guardrails=off' 'deploy_guardrails='
+
+# 3d. eat-up.sh stops before the cluster on release-1.1.0 settings that put a second copy
+#     of what a k3d-gpu cluster runs next to it, or that need what a k3d node lacks. Each
+#     case starts from the shipped config without the key's line; the key is read as
+#     read_config_file reads it (on -> yes, off -> no, last assignment wins).
+#     - deploy_nri_balloon_policy: fresh-install.sh:247 deploys EAT's NRI balloons policy
+#       on yes. prompt_for_input turns an absent key on for compute_platform c
+#       (parse-user-prompts.sh:55-66), and both the stack path (fresh-install.sh:39) and
+#       brownfield.sh model mode call it: only off or no pass.
+#     - compute_platform x or xpu: fresh-install.sh:219 applies intel-device-plugins'
+#       gpu_plugin from its main branch (deploy-intel-gpu-plugin.yml:12-14).
+#     - deploy_kata_containers on or yes: Kata needs /dev/kvm (deploy-kata-containers.yml).
+#     - rack_scale_mode on or yes: builds the cluster from rack-profile.yaml (netplan, BGP,
+#       the NVIDIA GPU operator; fresh-install.sh:195-210).
+# key_case <name> <expect: refuse|pass> <refusal text> <key> <lines appended...>
+key_case() {
+    local name=$1 want=$2 refused=$3 key=$4 out rc msg cfg
+    shift 4
+    N=$((N + 1))
+    cfg="${WORK}/key-${N}.cfg"
+    grep -v "^${key}=" "${EAT}/agentic-config.cfg" > "${cfg}"
+    [ "$#" -eq 0 ] || printf '%s\n' "$@" >> "${cfg}"
+    out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) && rc=0 || rc=$?
+    if [ "${want}" = refuse ]; then msg=${refused}; else msg=${PASSED}; fi
+    if [ "${rc}" -ne 0 ] && grep -qF "${msg}" <<< "${out}" && { [ "${want}" = pass ] || ! grep -qF "${PASSED}" <<< "${out}"; }; then
+        ok "eat-up ${key} ${want}: ${name}"
+    else
+        fail "eat-up ${key} ${want}: ${name} (rc=${rc}): ${out}"
+    fi
+}
+NRI_REFUSED="deploy_nri_balloon_policy must be off"
+key_case "absent (prompt_for_input turns it on)" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy
+key_case "on" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=on'
+key_case "yes" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=yes'
+key_case "empty" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy 'deploy_nri_balloon_policy='
+key_case "off then on, last wins" refuse "${NRI_REFUSED}" deploy_nri_balloon_policy \
+    'deploy_nri_balloon_policy=off' 'deploy_nri_balloon_policy=on'
+key_case "off" pass "" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=off'
+key_case "no" pass "" deploy_nri_balloon_policy 'deploy_nri_balloon_policy=no'
+key_case "spaces and quotes" pass "" deploy_nri_balloon_policy ' deploy_nri_balloon_policy = "off" '
+cfg="${WORK}/nri-absent.cfg"
+grep -v '^deploy_nri_balloon_policy=' "${EAT}/agentic-config.cfg" > "${cfg}"
+out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) || true
+if grep -qF 'deploys its own NRI balloons policy when it is on or absent' <<< "${out}"; then
+    ok "eat-up: the balloons refusal says an absent key deploys EAT's policy on the stack path too"
+else fail "eat-up: the balloons refusal ties an absent key to model mode only: ${out}"; fi
+XPU_REFUSED="compute_platform=xpu"
+key_case "xpu" refuse "${XPU_REFUSED}" compute_platform 'compute_platform=xpu'
+key_case "x" refuse "${XPU_REFUSED}" compute_platform 'compute_platform=x'
+key_case "quoted xpu" refuse "${XPU_REFUSED}" compute_platform 'compute_platform = "xpu"'
+key_case "cpu" pass "" compute_platform 'compute_platform=cpu'
+key_case "absent (EAT's default cpu)" pass "" compute_platform
+KATA_REFUSED="deploy_kata_containers=on"
+key_case "on" refuse "${KATA_REFUSED}" deploy_kata_containers 'deploy_kata_containers=on'
+key_case "yes" refuse "${KATA_REFUSED}" deploy_kata_containers 'deploy_kata_containers=yes'
+key_case "off then on, last wins" refuse "${KATA_REFUSED}" deploy_kata_containers \
+    'deploy_kata_containers=off' 'deploy_kata_containers=on'
+key_case "off" pass "" deploy_kata_containers 'deploy_kata_containers=off'
+RACK_REFUSED="rack_scale_mode=on"
+key_case "on" refuse "${RACK_REFUSED}" rack_scale_mode 'rack_scale_mode=on'
+key_case "yes" refuse "${RACK_REFUSED}" rack_scale_mode 'rack_scale_mode=yes'
+key_case "off" pass "" rack_scale_mode 'rack_scale_mode=off'
+cfg="${WORK}/xpu-reason.cfg"
+cp "${EAT}/agentic-config.cfg" "${cfg}"
+echo 'compute_platform=xpu' >> "${cfg}"
+out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) || true
+if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm' <<< "${out}"; then ok "eat-up: the xpu refusal points at vLLM on an Intel GPU through k3d-gpu agent up"
+else fail "eat-up: the xpu refusal names no alternative: ${out}"; fi
 
 # 5. The GenAI Gateway path installs pinned charts and images. EAT's
 #    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs

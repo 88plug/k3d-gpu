@@ -72,7 +72,7 @@ What differs on WSL2:
   agent does not request the WSL2 GPU yet. quickstart says so at step 1.
 - The NPU is not available under WSL2
   ([intel/linux-npu-driver#56](https://github.com/intel/linux-npu-driver/issues/56)),
-  so `recipe npu-embeddings` cannot run here.
+  so `recipe npu-embeddings` cannot run here. <!-- known-issue: linux-npu-driver-56 -->
 - WSL2 hides the P/E-core split; no P-core pinning applies.
 - The WSL2 VM gets half the Windows RAM by default. A 32 GB laptop shows about
   15.4 GiB and gets the 4B tier. Raise `memory=` in `%UserProfile%\.wslconfig`
