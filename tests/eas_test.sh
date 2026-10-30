@@ -9,6 +9,8 @@
 #            - overlay.json resolves every patch, upstream drafts first-class, no copies
 #            - main: 0002 and 0006 apply, 0003 only for nri-balloons, 0004 only on
 #              more than one node, 0005 never; the recorded `verified` cases hold
+#            - the same decisions with TMPDIR (the scratch index) on another
+#              filesystem than the checkout
 #            - patches already in the tree: drop-merged (git apply -R --check)
 #            - the fix done another way with the knob present: drop-fixed
 #            - the fix done another way with the knob renamed: STOP
@@ -201,6 +203,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "main: 0002 resolves to the upstream draft" "${ROOT}/integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch" \
         "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][0]["files"][0]')")"
     check "main: 0002 names the generator knob it needs" istio_platform "$(jq_ 'd["decisions"][0]["knob"]')"
+    # The scratch index can sit on another filesystem than the checkout: a tmpfs /tmp
+    # with the state dir on disk, or the bastion's own /tmp with the state dir bind-mounted.
+    local xdev="" d
+    for d in /dev/shm /var/tmp; do
+        [ -d "${d}" ] && [ -w "${d}" ] || continue
+        [ "$(stat -c %d "${d}")" != "$(stat -c %d "${WORK}")" ] || continue
+        xdev=$(mktemp -d "${d}/eas-test-xdev.XXXXXX") && break
+    done
+    if [ -n "${xdev}" ]; then
+        got=$(TMPDIR="${xdev}" brief "${WORK}/main" best-effort 1)
+        check "main with the scratch index on another filesystem (TMPDIR ${d}): the same decisions" \
+            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" "${got}"
+        check "main with the scratch index on another filesystem: exit 0" 0 "$(cat "${WORK}/rc")"
+        rm -rf "${xdev}"
+    else
+        echo "skip no writable /dev/shm or /var/tmp on another filesystem than ${WORK}: the cross-filesystem case did not run"
+    fi
 
     # Text: one `fact -> choice [source]` line per row, sources at the checkout's sha.
     local sha sha7
