@@ -18,9 +18,11 @@ Schemes:
   pep440         Python versions: epoch, release, aN/bN/rcN, .postN, .devN, +local.
                  A range without a local label ignores the candidate's. Breaking: major.
   docker-suffix  numeric core with a prefix and suffix that must match:
-                 3.14.8-slim, contrib-v1.40.0, release-1.0.3-hotfix. Tags of
-                 another flavour are incomparable (latest() skips them); a range
-                 reads the core only. Breaking: major.
+                 3.14.8-slim, contrib-v1.40.0. Tags of another flavour are
+                 incomparable (latest() skips them); a range reads the core
+                 only. Breaking: major.
+  eat            Intel EAT release tags: release-1.1.0, and release-1.0.3-hotfix
+                 (after release-1.0.3), one stream. Breaking: major.
   apt            Debian versions (dpkg order: epoch, upstream, revision, ~ before
                  the end). Breaking: major of the upstream's numeric prefix.
   hf-sha         a Hugging Face revision: no ordering; ranges are * and ==/!= only.
@@ -54,7 +56,7 @@ import json
 import re
 import sys
 
-SCHEMES = ("semver", "zerover", "k8s", "llama", "calver", "pep440", "docker-suffix", "apt", "hf-sha")
+SCHEMES = ("semver", "zerover", "k8s", "llama", "calver", "pep440", "docker-suffix", "eat", "apt", "hf-sha")
 TYPES = ("digest", "patch", "minor", "major")
 
 
@@ -219,6 +221,19 @@ def _docker(scheme, v):
     return Version(scheme, v, (prefix, suffix), (_pad(nums, 8),), rel, bool(DOCKER_PRE_RE.match(suffix)))
 
 
+# --- eat -----------------------------------------------------------------------
+
+EAT_RE = re.compile(r"^release-(\d+)\.(\d+)\.(\d+)(-hotfix)?$")
+
+
+def _eat(scheme, v):
+    m = EAT_RE.match(v)
+    if not m:
+        raise _bad(scheme, v)
+    rel = tuple(int(x) for x in m.group(1, 2, 3))
+    return Version(scheme, v, ("",), (rel, bool(m.group(4))), rel, False)
+
+
 # --- apt (dpkg) ----------------------------------------------------------------
 
 APT_RE = re.compile(r"^(?:(\d+):)?([0-9][A-Za-z0-9.+~:-]*)$")
@@ -289,7 +304,7 @@ def _hf(scheme, v):
 
 
 PARSERS = {"semver": _semver, "zerover": _semver, "k8s": _k8s, "llama": _llama, "calver": _calver,
-           "pep440": _pep440, "docker-suffix": _docker, "apt": _apt, "hf-sha": _hf}
+           "pep440": _pep440, "docker-suffix": _docker, "eat": _eat, "apt": _apt, "hf-sha": _hf}
 
 
 def parse(scheme, v):

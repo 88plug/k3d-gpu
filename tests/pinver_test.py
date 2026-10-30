@@ -180,6 +180,33 @@ class DockerSuffix(unittest.TestCase):
         self.assertFalse(pinver.in_range("docker-suffix", "v1.88.6-stable", "<1.84.0"))
 
 
+class Eat(unittest.TestCase):
+    """Intel EAT's release tags: one stream of release-X.Y.Z and release-X.Y.Z-hotfix."""
+
+    def test_hotfix_and_plain_releases_are_one_stream(self):
+        self.assertTrue(pinver.comparable("eat", "release-1.0.3-hotfix", "release-1.1.0"))
+        self.assertEqual(pinver.compare("eat", "release-1.0.3-hotfix", "release-1.1.0"), -1)
+        self.assertEqual(pinver.compare("eat", "release-1.0.2-hotfix", "release-1.0.3-hotfix"), -1)
+        self.assertEqual(pinver.compare("eat", "release-1.0.3", "release-1.0.3-hotfix"), -1)
+
+    def test_latest_moves_from_a_hotfix_to_the_next_release(self):
+        got = pinver.latest("eat", "release-1.0.3-hotfix",
+                            ["release-1.0.2-hotfix", "release-1.1.0", "release-1.0.0", "1.2.0", "latest"])
+        self.assertEqual(got, "release-1.1.0")
+
+    def test_update_types_and_ranges(self):
+        self.assertEqual(pinver.update_type("eat", "release-1.0.3-hotfix", "release-1.1.0"), "minor")
+        self.assertFalse(pinver.breaking("eat", "release-1.0.3-hotfix", "release-1.1.0"))
+        self.assertTrue(pinver.breaking("eat", "release-1.1.0", "release-2.0.0"))
+        self.assertTrue(pinver.in_range("eat", "release-1.0.3-hotfix", "<release-1.1.0"))
+        self.assertFalse(pinver.in_range("eat", "release-1.1.0", "<release-1.1.0"))
+
+    def test_garbage_is_rejected(self):
+        for bad in ("1.1.0", "release-1.1", "release-1.1.0-rc1", "latest"):
+            with self.assertRaises(ValueError, msg=bad):
+                pinver.parse("eat", bad)
+
+
 class Apt(unittest.TestCase):
     def test_dpkg_order(self):
         self.assertEqual(pinver.compare("apt", "1.20.1-1", "1.20.1-2"), -1)

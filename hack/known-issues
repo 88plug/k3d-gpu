@@ -25,9 +25,11 @@ with the release that fixes each (pins/known-issues.toml).
       the first whose compare/<tag>...<sha> reads "behind" or "identical". A
       fix of the form {repo, path, contains} takes the first release whose file
       contains the string; {ecosystem, package} reads the GitHub advisory
-      database for the lowest site version and takes the first patched version
-      outside every advisory's range. With an `image` template the image tag of
-      the fixing release must resolve (scripts/images-lock digest). Prints
+      database for the lowest site version and takes the first stable patched
+      version above it outside every advisory's range, reading each
+      candidate's own advisories too until one has none. With an `image`
+      template the image tag of the fixing release must resolve
+      (scripts/images-lock digest). Prints
       {id, state, fixed_in, tag, release_url, published_at, recorded, mismatch}
       per entry; exit 1 when an entry could not be read.
 
@@ -613,30 +615,52 @@ def gh_range(text):
     return ",".join(parts)
 
 
-def poll_advisory(api, root, e, out):
+def poll_advisory(api, root, e, out, rounds=10):
+    """The first stable patched version above the lowest site version that no advisory affects:
+    the advisories of the site version, then of each candidate, until a candidate has none."""
     fix, scheme = e["fix"], e["scheme"]
     floor = site_floor(root, e)
     if floor is None:
         raise ValueError("no site version to query the advisory database with")
-    q = urllib.parse.quote("%s@%s" % (fix["package"], floor.raw))
-    advs = api("advisories?ecosystem=%s&affects=%s&per_page=100" % (fix["ecosystem"], q)) or []
-    ranges, patched, ids = [], set(), []
-    for a in advs:
-        spec = []
-        for vul in a.get("vulnerabilities") or []:
-            pkg = vul.get("package") or {}
-            if (pkg.get("name") or "").lower() != fix["package"].lower():
-                continue
-            spec.append(gh_range(vul.get("vulnerable_version_range") or ""))
-            if vul.get("first_patched_version"):
-                patched.add(vul["first_patched_version"])
-        if spec:
-            ids.append(a["ghsa_id"])
-            ranges.append(" || ".join(spec))
-    clear = [p for p in patched if not any(pinver.in_range(scheme, p, r) for r in ranges)]
-    best = min(clear, key=functools.cmp_to_key(lambda a, b: pinver.compare(scheme, a, b))) if clear else ""
-    out.update(state="advisory", fixed_in=best, advisories=sorted(ids),
-               new_advisories=sorted(set(ids) - set(e.get("advisories", []))))
+    ranges, patched, affected = {}, set(), set()
+
+    def read(version):
+        """Add the advisories that affect version; True when there is one."""
+        q = urllib.parse.quote("%s@%s" % (fix["package"], version))
+        hit = False
+        for a in api("advisories?ecosystem=%s&affects=%s&per_page=100" % (fix["ecosystem"], q)) or []:
+            spec = []
+            for vul in a.get("vulnerabilities") or []:
+                pkg = vul.get("package") or {}
+                if (pkg.get("name") or "").lower() != fix["package"].lower():
+                    continue
+                spec.append(gh_range(vul.get("vulnerable_version_range") or ""))
+                if vul.get("first_patched_version"):
+                    patched.add(vul["first_patched_version"])
+            if spec:
+                ranges.setdefault(a["ghsa_id"], " || ".join(spec))
+                hit = True
+        return hit
+
+    def clear(p):
+        try:
+            return (p not in affected and not pinver.is_prerelease(scheme, p)
+                    and pinver.compare(scheme, p, floor) > 0
+                    and not any(pinver.in_range(scheme, p, r) for r in ranges.values()))
+        except ValueError:
+            return False
+
+    read(floor.raw)
+    for _ in range(rounds):
+        cands = [p for p in patched if clear(p)]
+        best = min(cands, key=functools.cmp_to_key(lambda a, b: pinver.compare(scheme, a, b))) if cands else ""
+        if not best or not read(best):
+            break
+        affected.add(best)
+    else:
+        raise ValueError("every patched version had advisories of its own after %d reads" % rounds)
+    out.update(state="advisory", fixed_in=best, advisories=sorted(ranges),
+               new_advisories=sorted(set(ranges) - set(e.get("advisories", []))))
     if best and fix["ecosystem"] == "pip":
         out["release_url"] = "https://pypi.org/project/%s/%s/" % (fix["package"], best)
 

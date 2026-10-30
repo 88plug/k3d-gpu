@@ -150,7 +150,7 @@ kind = "bug"
 upstream = "intel/enterprise-agent-toolkit#9"
 fix = {}
 component = "enterprise-agent-toolkit"
-scheme = "docker-suffix"
+scheme = "eat"
 affected = "*"
 fixed_in = ""
 adopt = "review"
@@ -169,8 +169,8 @@ upstream = ""
 fix = {ecosystem = "pip", package = "litellm"}
 component = "litellm"
 scheme = "pep440"
-affected = "<1.95.1 || >=1.96.0,<1.96.2"
-fixed_in = "1.95.1"
+affected = "<1.100.4 || >=1.101.0,<1.101.3 || >=1.102.0,<1.102.2 || >=1.103.0,<1.103.1 || >=1.104.0rc1,<1.104.0rc2"
+fixed_in = "1.100.4"
 adopt = "review"
 advisories = [
   "GHSA-4xpc-pv4p-pm3w",
@@ -179,6 +179,7 @@ advisories = [
   "GHSA-3cv6-jpf6-8222",
   "GHSA-hhww-mrg2-969h",
   "GHSA-g5ff-637f-6q2m",
+  "GHSA-7hp6-4w63-5g45",
 ]
 sites = [
   {file = "integrations/eat/gateway-values.yaml", regex = 'repository: docker\.litellm\.ai/berriai/litellm\n\s+tag: "v(?P<v>\d+\.\d+\.\d+)-'},
@@ -187,9 +188,11 @@ sites = [
 ]
 workarounds = []
 notes = """Read from the GitHub advisory database 2026-10-29: fixed in 1.84.0 (GHSA-4xpc, -4jcj, \
--7488), 1.85.0 (GHSA-hhww), 1.88.6 with backports up to 1.96.2 (GHSA-3cv6) and 1.95.0 \
-(GHSA-g5ff). 1.95.1 is the first release outside every range; 1.96.0 and 1.96.1 are affected \
-again (GHSA-3cv6). Both sites are EAT's stock gateway, so the check reports and does not fail."""
+-7488), 1.85.0 (GHSA-hhww), 1.88.6 with backports up to 1.96.2 (GHSA-3cv6), 1.95.0 (GHSA-g5ff) \
+and 1.100.4 with backports 1.101.3, 1.102.2 and 1.103.1 (GHSA-7hp6, high, published 2026-10-27; \
+it affects 1.91.0 through 1.100.3, so not 1.83.14 itself, but 1.95.1 and 1.96.2). 1.100.4 is the \
+first release outside every range, and the advisory database lists none for it. Both sites are \
+EAT's stock gateway, so the check reports and does not fail."""
 
 [[issue]]
 id = "vllm-0.32-num-spec-tokens"

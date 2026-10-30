@@ -354,9 +354,11 @@ def queue(root, measured, current, issues):
         if not (reasons or prio):
             continue
         tier = 1 if row in rules else 2 if row in cited else 3
+        follow = followup_id(row, taken)
+        taken.add(follow)
         items.append({"row": row, "tier": tier, "priority": bool(prio), "measured": m_out, "current": c_out,
                       "reason": "; ".join(prio + reasons), "known_issues": sorted(set(ids)),
-                      "suggested_followup_id": followup_id(row, taken)})
+                      "suggested_followup_id": follow})
     items.sort(key=lambda q: (q["tier"], not q["priority"], row_key(q["row"])))
     return items
 

@@ -425,38 +425,99 @@ class Poll(unittest.TestCase):
         got, _ = self.poll(reg, Api(routes))
         self.assertEqual((got["open-bug"]["state"], got["open-bug"]["fixed_in"]), ("released", "1.5.0"))
 
+    ADVISORY_ENTRY = textwrap.dedent("""
+        [[issue]]
+        id = "lib-advisories"
+        title = "advisories"
+        kind = "advisory"
+        upstream = ""
+        fix = {ecosystem = "pip", package = "lib"}
+        component = "lib"
+        scheme = "pep440"
+        affected = "<1.5.0"
+        fixed_in = "1.5.0"
+        adopt = "review"
+        advisories = ["GHSA-aaaa-aaaa-aaaa"]
+        sites = [{file = "req.txt", regex = '^lib==(?P<v>\\S+)$'}]
+        workarounds = []
+        notes = ""
+        """)
+
+    @staticmethod
+    def adv(ghsa, *vulns):
+        return {"ghsa_id": ghsa, "html_url": "https://github.com/advisories/" + ghsa,
+                "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "lib"},
+                                     "vulnerable_version_range": r, "first_patched_version": p} for r, p in vulns]}
+
     def test_advisories(self):
-        reg = textwrap.dedent("""
-            [[issue]]
-            id = "lib-advisories"
-            title = "advisories"
-            kind = "advisory"
-            upstream = ""
-            fix = {ecosystem = "pip", package = "lib"}
-            component = "lib"
-            scheme = "pep440"
-            affected = "<1.5.0"
-            fixed_in = "1.5.0"
-            adopt = "review"
-            advisories = ["GHSA-aaaa-aaaa-aaaa"]
-            sites = [{file = "req.txt", regex = '^lib==(?P<v>\\S+)$'}]
-            workarounds = []
-            notes = ""
-            """)
-
-        def adv(ghsa, *vulns):
-            return {"ghsa_id": ghsa, "html_url": "https://github.com/advisories/" + ghsa,
-                    "vulnerabilities": [{"package": {"ecosystem": "pip", "name": "lib"},
-                                         "vulnerable_version_range": r, "first_patched_version": p} for r, p in vulns]}
-
+        reg, adv = self.ADVISORY_ENTRY, self.adv
         routes = {"advisories?ecosystem=pip&affects=lib%401.2.0&per_page=100": [
             adv("GHSA-aaaa-aaaa-aaaa", ("< 1.5.0", "1.5.0")),
             adv("GHSA-bbbb-bbbb-bbbb", ("< 1.6.2", "1.6.2"), (">= 1.7.0, < 1.7.3", "1.7.3")),
-        ]}
+        ], "advisories?ecosystem=pip&affects=lib%401.6.2&per_page=100": []}
         got, _ = self.poll(reg, Api(routes), files={"req.txt": "lib==1.2.0\n"})
         o = got["lib-advisories"]
         self.assertEqual((o["state"], o["fixed_in"], o["mismatch"]), ("advisory", "1.6.2", True))
         self.assertEqual(o["new_advisories"], ["GHSA-bbbb-bbbb-bbbb"])
+
+    def test_advisories_of_the_candidate_count_and_versions_below_the_floor_do_not(self):
+        # The floor's advisories put the fix at 1.5.0 (1.1.5 is a backport below the floor, not a
+        # fix for it). 1.5.0 has an advisory of its own that 1.2.0 does not, so the fix is 1.6.0.
+        reg = self.ADVISORY_ENTRY
+        routes = {"advisories?ecosystem=pip&affects=lib%401.2.0&per_page=100": [
+            self.adv("GHSA-aaaa-aaaa-aaaa", ("< 1.1.5", "1.1.5"), (">= 1.2.0, < 1.5.0", "1.5.0")),
+        ], "advisories?ecosystem=pip&affects=lib%401.5.0&per_page=100": [
+            self.adv("GHSA-cccc-cccc-cccc", (">= 1.4.0, < 1.6.0", "1.6.0")),
+        ], "advisories?ecosystem=pip&affects=lib%401.6.0&per_page=100": []}
+        got, _ = self.poll(reg, Api(routes), files={"req.txt": "lib==1.2.0\n"})
+        o = got["lib-advisories"]
+        self.assertEqual((o["state"], o["fixed_in"], o["mismatch"]), ("advisory", "1.6.0", True))
+        self.assertEqual(o["advisories"], ["GHSA-aaaa-aaaa-aaaa", "GHSA-cccc-cccc-cccc"])
+        self.assertEqual(o["new_advisories"], ["GHSA-cccc-cccc-cccc"])
+
+    def test_a_prerelease_patch_is_not_a_fix(self):
+        routes = {"advisories?ecosystem=pip&affects=lib%401.2.0&per_page=100": [
+            self.adv("GHSA-aaaa-aaaa-aaaa", ("< 1.5.0rc2", "1.5.0rc2")),
+        ]}
+        got, _ = self.poll(self.ADVISORY_ENTRY, Api(routes), files={"req.txt": "lib==1.2.0\n"})
+        o = got["lib-advisories"]
+        self.assertNotIn("error", o)
+        self.assertEqual((o["state"], o["fixed_in"]), ("advisory", ""))
+
+    def test_eat_entry_sees_a_plain_release_after_a_hotfix(self):
+        # The registry's eat-9 entry, on EAT's real tag stream: release-1.0.3-hotfix is followed by
+        # release-1.1.0 and release-1.2.0, and the fix lands in release-1.2.0.
+        with open(ROOT / "pins" / "known-issues.toml", "rb") as f:
+            entry = next(e for e in tomllib.load(f)["issue"] if e["id"] == "eat-9")
+        reg = textwrap.dedent("""
+            [[issue]]
+            id = "eat-9"
+            title = "t"
+            kind = "bug"
+            upstream = "acme/toolkit#9"
+            fix = {}
+            component = "enterprise-agent-toolkit"
+            scheme = "%s"
+            affected = "*"
+            fixed_in = ""
+            adopt = "review"
+            sites = [{file = "eat-up.sh", regex = '%s'}]
+            workarounds = []
+            notes = ""
+            """) % (entry["scheme"], entry["sites"][0]["regex"])
+        sha = "d" * 40
+        routes = {"repos/acme/toolkit/issues/9": {"state": "closed", "state_reason": "completed"},
+                  "repos/acme/toolkit/issues/9/timeline?per_page=100&page=1": [
+                      {"event": "closed", "commit_id": sha,
+                       "commit_url": "https://api.github.com/repos/acme/toolkit/commits/" + sha}],
+                  "repos/acme/toolkit/releases?per_page=100&page=1": releases(
+                      "release-1.2.0", "release-1.1.0", "release-1.0.3-hotfix", "release-1.0.2-hotfix",
+                      "release-1.0.0", pre=("release-1.0.3-hotfix",)),
+                  "repos/acme/toolkit/compare/release-1.1.0..." + sha: {"status": "diverged"},
+                  "repos/acme/toolkit/compare/release-1.2.0..." + sha: {"status": "behind"}}
+        got, _ = self.poll(reg, Api(routes), files={"eat-up.sh": 'EAT_TAG="release-1.0.3-hotfix"\n'})
+        o = got["eat-9"]
+        self.assertEqual((o["state"], o["fixed_in"]), ("released", "release-1.2.0"), o)
 
     def test_untracked_entry(self):
         reg = OPEN.replace('upstream = "acme/engine#7"', 'upstream = ""').replace(

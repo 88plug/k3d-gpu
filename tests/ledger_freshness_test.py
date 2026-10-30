@@ -8,6 +8,8 @@ Usage: python3 tests/ledger_freshness_test.py
 """
 
 import hashlib
+import importlib.machinery
+import importlib.util
 import json
 import pathlib
 import shutil
@@ -208,6 +210,17 @@ class Fixture(unittest.TestCase):
             self.assertRegex(q["suggested_followup_id"], r"^H\d+[a-z]{1,2}$")
             self.assertNotIn(q["suggested_followup_id"], rows)
         self.assertEqual(self.queue["H60"]["suggested_followup_id"], "H60r")
+
+    def test_two_queued_rows_of_one_family_get_different_followup_ids(self):
+        # H57dm and H57de both suggest H57r first; the second must take the next free id.
+        loader = importlib.machinery.SourceFileLoader("ledger_freshness", str(TOOL))
+        spec = importlib.util.spec_from_loader("ledger_freshness", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        measured = {"H57dm": {"llama.cpp": "b11749"}, "H57de": {"llama.cpp": "b11749"}}
+        got = [q["suggested_followup_id"] for q in mod.queue(self.root, measured, {"llama.cpp": "b11960"}, [])]
+        self.assertEqual(len(got), 2)
+        self.assertEqual(len(set(got)), 2, got)
 
     def test_markdown(self):
         rc, out, err = run(self.root, "--md")
