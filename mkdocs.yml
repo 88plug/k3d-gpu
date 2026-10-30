@@ -36,6 +36,7 @@ nav:
       - Crescent removed models: hosts/crescent-removed-models.md
   - Integrations:
       - GPUStack: integrations/gpustack.md
+      - Intel EAS (EAT 2.0): intel/eas.md
   - Design:
       - Speculative decoding: design/speculative-decoding.md
       - Moat: moat-design.md

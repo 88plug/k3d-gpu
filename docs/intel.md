@@ -150,16 +150,27 @@ moves a row to verified. Please send its output.
 balloons policy) onto Kubernetes. It targets Xeon servers. We read it at
 [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a); a
 k3d-gpu cluster is a candidate bring-your-own target for a single developer
-machine. [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
-pinned tag `release-1.1.0`, the latest
-([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a);
-[tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
-2026-10-29), with its guardrail, vLLM Semantic Router, OpenShell, Kata and rack-scale
-mode off. `release-1.1.0` adds OpenShell
-([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
-`deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
-OpenShell has not run on a k3d-gpu cluster. The `release-1.1.0` path is pre-registered
-as F4 and has not run yet. Pins and upstream changes, Release 1.1.0
+machine. There are two paths, one per EAT generation:
+
+- **EAT 1.x.** [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) deploys the
+  pinned tag `release-1.1.0`, the latest
+  ([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a);
+  [tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags), checked
+  2026-10-29), through EAT's own brownfield path, with its guardrail, vLLM Semantic
+  Router, OpenShell, Kata and rack-scale mode off and the vLLM CPU image pinned by digest.
+  `release-1.1.0` adds OpenShell
+  ([PR #14](https://github.com/intel/enterprise-agent-toolkit/pull/14),
+  `deploy_openshell=off` by default); `eat-up.sh` refuses `deploy_openshell=on` because
+  OpenShell has not run on a k3d-gpu cluster. The `release-1.1.0` path is pre-registered
+  as F4 and has not run yet.
+- **EAT 2.0.** EAT [PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19)
+  moved the toolkit into Intel's EAS installer (`es_auto_installer.sh install
+  agent-toolkit`). `k3d-gpu eas up --agent-toolkit` runs that installer against the
+  cluster, with every k3d choice made from what it reads there:
+  [intel/eas.md](intel/eas.md). It has not run end to end yet; F3 in
+  [EXPERIMENTS.md](../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+
+Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
 [platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat).
 
@@ -194,20 +205,29 @@ i9-13900T [ledger:H18]. No Xeon run backs it yet.
 EAT's defaults are read from `release-1.0.3-hotfix`: `docs/prerequisites.md`,
 `docs/single-node-deployment.md`, `docker/README.md` and `core/helm-charts/`
 [provenance:P303]. The k3d-gpu column is what the launcher does today; where it has
-run on hardware, the row says which host.
+run on hardware, the row says which host. `release-1.1.0`, which `eat-up.sh` deploys now,
+moves the vLLM CPU image to `v0.28.0` and turns the Qwen3Guard guardrail on by default
+([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). EAT 2.0 keeps the same
+hardware minimums
+([prerequisites.md#L5-L9](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L5-L9))
+and installs through EAS.
 
 | | EAT by default | With k3d-gpu |
 |---|---|---|
 | Hosts | Xeon. Minimum 48 cores and 32 GB RAM, recommended 96+ cores and 64 GB; Docker mode asks for 96+ cores and 128 GB | Any Intel host it detects: client Core and Core Ultra, Xeon, Arc, Gaudi (detection and config fixture-tested per family, [platforms.md](platforms.md)). EAT ran end to end on one i9-13900T with no AMX and no AVX-512, n=1 [ledger:H1b] |
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
+| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). Not run yet; F3 is PENDING |
 | Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores; vLLM XPU (`v0.31.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
-Not covered by either column: EAT's XPU path for Arc B60/B70, which shipped in
-`release-1.1.0`, not in the pinned tag
-([platforms.md](platforms.md#eat-pull-requests-checked-2026-10-28)).
+Not covered by either column: EAT's XPU path for Arc B60/B70. It ships in
+`release-1.1.0`, but `eat-up.sh` deploys the CPU path
+([platforms.md](platforms.md#eat-pull-requests-checked-2026-10-28)), and EAT 2.0 leaves
+Arc out ("Not in this release: ... Intel® Arc™ (XPU) deployment",
+[README.md#L36](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/README.md#L36)).
+On k3d-gpu an Arc card is served by `k3d-gpu agent up`.
 
 **In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
 with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
