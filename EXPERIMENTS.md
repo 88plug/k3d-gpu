@@ -93,6 +93,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H57wb | H57db's hypothesis on wildct: inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights). | Written 2026-10-20: not runnable here as registered (disk and memory), so INCONCLUSIVE (not run) is expected (0.95). | H57db's design and gates; runs only if at a hold's start / has >= 15 + 70 GB available (51.6 GB of bf16 weights plus images) and MemAvailable >= 100 GiB; otherwise INCONCLUSIVE (not run), with both readings recorded and no bf16 download. | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
+| F4 | `integrations/eat/eat-up.sh` on EAT `release-1.1.0` (`0c726f5`) runs on a single non-Xeon machine: H1b's user path, unchanged except that `eat-up.sh` now deploys `release-1.1.0` (guardrail, vLLM Semantic Router, OpenShell, Kata, Ceph and rack-scale explicitly off; vLLM CPU `v0.28.0` by digest). Functional, n = 1, not a performance row. | Pre-registered 2026-10-29, before any F4 step. SUPPORTED (0.6): steps 1-4 exit 0 and `eat-check.sh` passes. The risks, read from source and not run: the GenAI Gateway's new hybrid-router callback, loaded into LiteLLM `v1.83.14-stable.patch.2` from a ConfigMap, fails to import and the gateway never turns Ready (0.15); vLLM CPU `v0.28.0` on this AVX2-only CPU does not load or answer Qwen3-1.7B inside the wait (0.15); anything else (0.1). | i9-13900T, one fresh cluster `k3dgpu-f4-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, the README's user path run once, each step timed: (1) `k3d-gpu up` with the README's EAT env; (2) `eat-up.sh`; (3) `eat-up.sh model cpu-qwen3-1-7b`; (4) `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`; (5) `eat-check.sh`; (6) `k3d-gpu down`. SUPPORTED only if steps 1-4 exit 0 and step 5 prints `EAT check passed` (non-empty chat, a `get_weather` tool call, sandbox stdout exactly `385`) with no Xeon-only instruction or node label needed. REFUTED by any of steps 1-3 or 5 failing, or by step 4 ending non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready. Grading, lock and the INCONCLUSIVE cases in [F4 pre-registration](#f4-pre-registration-i9-13900t-2026-10-29). Until this row is SUPPORTED no doc says the `release-1.1.0` path is verified. | PENDING |
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
@@ -9531,6 +9532,92 @@ kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeed
 kubectl get jobs -A                                              # every Job: COMPLETIONS 1/1
 integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
 scripts/k3d-gpu down; bench/load/load.py stop
+```
+
+### F4 pre-registration (i9-13900T, 2026-10-29)
+
+Written 2026-10-29, before any F4 step, in the change that moves `integrations/eat/eat-up.sh`
+from `release-1.0.3-hotfix` (`0d3438d`) to `release-1.1.0` (`0c726f5`). H1b keeps its verdict:
+it ran the old tag and says nothing about the new one. F4 is a new row, run once, and graded
+only by what is written here.
+
+Why a new row. The move changes what the path deploys, and none of it has run:
+
+- `eat-up.sh` clones `release-1.1.0` and refuses any other HEAD.
+- `agentic-config.cfg` sets `deploy_guardrails`, `deploy_vllm_sr`, `deploy_openshell`,
+  `deploy_kata_containers`, `deploy_ceph` and `rack_scale_mode` to `off`.
+- `brownfield.sh` hands the config's `deploy_guardrails` to `DEPLOY_GUARDRAILS`, the variable
+  that gates the guardrail step (`core/lib/cluster/deployment/fresh-install.sh:419` at
+  `0c726f5`). `deploy-agentic-stack.sh:195` sets it to `on` when the script is sourced, and only
+  its `main()` (`:1138`), which a sourced run skips, reads the config key. Without the hand-off,
+  the brownfield path deploys `Qwen/Qwen3Guard-Gen-0.6B` whatever the config says.
+- `vllm-values.yaml` pins `vllm/vllm-openai-cpu:v0.28.0`, the tag `release-1.1.0`'s
+  `xeon-values.yaml:34` names, to its index digest
+  `sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647` (Docker Hub,
+  read 2026-10-29).
+- EAT's own changes on the path: the GenAI Gateway chart turns on `customRouter.enabled` and
+  adds the `custom_hybrid_router.proxy_handler_instance` callback, whose code LiteLLM loads
+  from a ConfigMap; the config moves to `/app/proxy_config.yaml` through a `subPath` mount;
+  the vLLM chart's pod gains `fsGroup: 1001` and its PVC loses `storageClassName: local-path`
+  (k3s's default class is `local-path`).
+
+Unchanged from H1b: the node labels, the `5 / 1 / yes` menu answers
+(`core/lib/brownfield/` has no diff between the tags), the gateway pins (`gateway-charts.py`
+runs clean on `release-1.1.0`'s charts and pins the same images), the bastion image, the KV cache
+(6 GiB), the P-core balloon, and `eat-check.sh`.
+
+- **Host.** The shared i9-13900T. No load generator: F4 is functional, not graded against a
+  time budget. The host's other tenants keep running; `uptime`, `free -g` and the count of
+  running containers are recorded before step 1 and after step 6.
+- **One fresh cluster.** `k3dgpu-f4-eat`, created by this run and deleted after it, scratch
+  `KUBECONFIG` (never `~/.kube/config`), an empty `EAT_WORK`. Every step runs once; nothing is
+  retried and nothing is uninstalled between steps.
+- **Steps, each timed (wall s) and logged in order.** (0) before the host lock: `docker build`
+  of the node image at the commit under test (the README's note), the EAT clone at
+  `release-1.1.0` and the bastion build (no cluster touched); (1) `k3d-gpu up` with
+  `K3D_GPU_CLUSTER=k3dgpu-f4-eat` and the README's EAT env; (2) `eat-up.sh`, with every
+  `PLAY RECAP` line and the guardrail line ("Skipping content-safety guardrail deployment...")
+  recorded; (3) `eat-up.sh model cpu-qwen3-1-7b`; (4) `kubectl wait --for=condition=Ready pod
+  -A --field-selector=status.phase!=Succeeded --timeout=30m`, output and exit code recorded
+  verbatim; (4j) every Job on its own line (namespace/name, `Complete` or `Failed`, succeeded
+  and failed counts), and the pod list with each container's image ID; (5) `eat-check.sh`,
+  output verbatim; (6) `k3d-gpu down`. Host lock: `flock` on the shared live lock, at most
+  45 min from taking it to releasing it; the cluster is deleted before release.
+- **Recorded, not graded.** The vLLM pod's image digest; the gateway pod's log line
+  `[HybridRouterProxy] litellm.router.Router patched`; `helm list -A` (no guardrail release
+  expected).
+- **Grading, fixed now.** SUPPORTED only if steps 1-4 exit 0, step 5 exits 0 and prints
+  `EAT check passed` (a non-empty chat reply, a `get_weather` tool call with
+  `finish_reason: tool_calls`, sandbox stdout exactly `385`), and no Xeon-only instruction or
+  node label is needed. REFUTED by any of steps 1-3 failing, by step 5 failing, or by step 4
+  ending non-zero while a pod owned by a Deployment, StatefulSet, DaemonSet, ReplicaSet or
+  Sandbox is not Ready. INCONCLUSIVE when step 4 ends non-zero and every pod not Ready is a Job
+  pod or the wait ends on a pod deleted during it, when the lock runs out before step 5, or
+  when an image pull is refused by a registry rate limit (HTTP 429 in the pod's events, recorded
+  verbatim). A failure is not fixed and regraded inside F4; a fix lands in its own change with
+  a new row.
+- **Prediction.** P(SUPPORTED) = 0.6. The two named risks, read from source and not run: the
+  hybrid-router callback fails to import in LiteLLM `v1.83.14-stable.patch.2` and the gateway
+  never turns Ready (0.15; against it, every name the callback imports or patches is defined in
+  that tag's `litellm/router.py` and `litellm/router_strategy/complexity_router/config.py`), and
+  vLLM CPU `v0.28.0` does not load or answer Qwen3-1.7B on this AVX2-only CPU inside the wait
+  (0.15; H1b's `v0.24.0` did). Anything else, REFUTED or INCONCLUSIVE: 0.1.
+
+```bash
+# Reproduce on one fresh cluster. Host needs docker, k3d, kubectl, curl, jq.
+lscpu | grep 'Model name'; uname -r; git rev-parse HEAD; uptime; free -g
+export KUBECONFIG=$PWD/f4.kubeconfig K3D_GPU_CLUSTER=k3dgpu-f4-eat EAT_WORK=$PWD/eat-work
+IMAGE=k3d-gpu:eat-$(git rev-parse --short HEAD)
+docker build -q -t "$IMAGE" . && docker image inspect --format '{{.Id}}' "$IMAGE"
+K3D_GPU_IMAGE="$IMAGE" \
+K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true \
+K3D_GPU_K3S_ARGS=--disable=servicelb scripts/k3d-gpu up
+integrations/eat/eat-up.sh
+integrations/eat/eat-up.sh model cpu-qwen3-1-7b
+kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+kubectl get jobs -A; helm list -A
+integrations/eat/eat-check.sh                                    # expect: ==> EAT check passed.
+scripts/k3d-gpu down; uptime; free -g
 ```
 
 ### H2 run (i9-13900T, 2026-10-16)

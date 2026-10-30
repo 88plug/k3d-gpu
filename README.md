@@ -1420,9 +1420,10 @@ the in-process stub in `bench/test_agent_trace.py`.
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
 annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys the
-pinned tag `release-1.0.3-hotfix` (the latest, `release-1.1.0`, adds OpenShell;
-`eat-up.sh` refuses `deploy_openshell=on` because its pinned tag has no OpenShell
-role). See [docs/platforms.md](docs/platforms.md).
+pinned tag `release-1.1.0`, the latest, with its guardrail, vLLM Semantic Router,
+OpenShell, Kata and rack-scale mode off. That path is pre-registered as F4 and has
+not run yet; the previous pin, `release-1.0.3-hotfix`, passed end to end
+[ledger:H1b]. See [docs/platforms.md](docs/platforms.md).
 
 ### Experimental features (auto-adapting)
 
