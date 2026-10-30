@@ -71,7 +71,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.80"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.82"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -430,7 +430,8 @@ Environment:
   K3D_GPU_AUTOQUANT     auto | off: on OVMS/CPU with no K3D_GPU_AGENT_MODEL, serve the
                         precision measured for this host fingerprint (default: auto)
   K3D_GPU_AUTOQUANT_CACHE  measured-pick cache (default: \$XDG_STATE_HOME/k3d-gpu/autoquant.json)
-  K3D_GPU_AGENT_GPUS    vllm/llm-scaler: GPUs (or Gaudis) to shard the model across (default: 1)
+  K3D_GPU_AGENT_GPUS    vllm/llm-scaler/llama.cpp: GPUs (or Gaudis) to shard or split the model
+                        across (default: 1; OVMS serves one GPU)
   K3D_GPU_AGENT_MAX_LEN vllm/llm-scaler: max context tokens (default: 8192)
   K3D_GPU_FIT           auto | on | off: size the agent model with 'fit' before agent up
                         renders it (default: auto = a model you chose; on also sizes the
@@ -7787,8 +7788,9 @@ agent_config
 # OVMS only: DEBUG also prints the compiled model's EXECUTION_DEVICES (e.g. GPU.0:
 # Intel(R) UHD Graphics 770), and every HTTP request, readiness probes included.
 AGENT_LOG_LEVEL="${K3D_GPU_AGENT_LOG_LEVEL:-INFO}"
-# vLLM only: GPUs (or Gaudis) the model is sharded across (--tensor-parallel-size),
-# and the longest context, sized so the default model's KV cache fits a 12 GB card.
+# vLLM: GPUs (or Gaudis) the model is sharded across (--tensor-parallel-size); llama.cpp:
+# the cards its layers are split over. And the longest context, sized so the default
+# model's KV cache fits a 12 GB card.
 AGENT_GPUS="${K3D_GPU_AGENT_GPUS:-1}"
 AGENT_MAX_LEN="${K3D_GPU_AGENT_MAX_LEN:-8192}"
 
@@ -10359,7 +10361,8 @@ qs_step() { echo "${GRN}==>${RST} [$1/${QS_STEPS}] $(progress_bar "$(($1 - 1))" 
 # paravirtualization for NVIDIA only (https://docs.docker.com/desktop/features/gpu/);
 # the Intel path is /dev/dxg plus /usr/lib/wsl, as in OpenVINO's container recipe
 # (https://github.com/openvinotoolkit/docker_ci/blob/master/docs/accelerators.md).
-# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56).
+# The Intel NPU has no WSL2 driver (https://github.com/intel/linux-npu-driver/issues/56;
+# known-issue: linux-npu-driver-56).
 # agent_device requests gpu.intel.com/xe, i915, a Gaudi or the CPU, never
 # gpu.intel.com/dxg, so under WSL2 quickstart's LLM runs on the CPU.
 # Host changes are printed as suggestions, never run.
@@ -10380,7 +10383,9 @@ qs_wsl_guidance() {
     fi
     echo "  Docker: Docker Desktop with WSL integration enabled for this distro, or Docker Engine inside it."
     echo "  Docker Desktop's --gpus flag is NVIDIA-only; the Intel GPU goes through /dev/dxg instead."
+    # known-issue-begin: linux-npu-driver-56
     echo "  The Intel NPU is not reachable from WSL2 (intel/linux-npu-driver#56)."
+    # known-issue-end: linux-npu-driver-56
 }
 
 # Pid of the port-forward quickstart started, while it runs. A pid whose
@@ -11353,7 +11358,17 @@ agent_fit() {
         || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
-    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+    # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
+    # one GPU whatever it says. OVMS serves the model when the backend is set to it or, with
+    # the backend unset (the fit picks the engine), when it is an OpenVINO IR: only OVMS
+    # serves one, and the fit picks vLLM or llama.cpp for any other weights.
+    if [ -n "${K3D_GPU_AGENT_GPUS:-}" ]; then
+        if [ -n "${AGENT_BACKEND_SET}" ]; then
+            [ "${AGENT_APP}" = ovms ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        else
+            [ "$(fit_dir_format "${dir}")" = openvino ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        fi
+    fi
     # agent up replaces the running server (the Deployment is Recreate, and a backend
     # switch deletes the other one): it is stopped before the probe, so the memory it holds
     # is measured as free, not as someone else's. A model that then does not fit gets the
@@ -11763,7 +11778,12 @@ agent_model_format() {
     local d
     command -v python3 >/dev/null 2>&1 || return 0
     d=$(fit_model_dir "$1" "${K3D_GPU_AGENT_REVISION:-main}" 2>/dev/null) || return 0
-    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "${d}/weights.json" 2>/dev/null || true
+    fit_dir_format "${d}"
+}
+
+# fit_dir_format <dir>: the weight format a fit metadata directory names, or nothing.
+fit_dir_format() {
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "$1/weights.json" 2>/dev/null || true
 }
 
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
