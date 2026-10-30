@@ -135,7 +135,14 @@ elif url.endswith("/execute"):
     print(json.dumps({"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}))
 # anything else (the router readiness probe) succeeds with no output
 EOF
-chmod +x "${BIN}/kubectl" "${BIN}/curl"
+# jq: the real one, with each argv logged (a key must not reach any argument list).
+REAL_JQ=$(command -v jq)
+cat > "${BIN}/jq" <<EOF
+#!/usr/bin/env bash
+printf 'jqargv %s\n' "\$*" >> "\${STUB_LOG:-/dev/null}"
+exec "${REAL_JQ}" "\$@"
+EOF
+chmod +x "${BIN}/kubectl" "${BIN}/curl" "${BIN}/jq"
 
 # check_says <name> <want rc: 0|fail> <ERE on the output> [env assignments...]
 check_says() {
@@ -203,6 +210,13 @@ if grep '^argv ' "${WORK}/log" | grep -Eq 'sk-master-stub|sk-virtual-stub|Bearer
     fail "eas mode: a key reached curl's argv"
 else
     ok "eas mode: no key in any curl argv"
+fi
+if ! grep -q '^jqargv ' "${WORK}/log"; then
+    fail "eas mode: the jq argv log is empty (the jq wrapper did not run)"
+elif grep '^jqargv ' "${WORK}/log" | grep -Eq 'sk-master-stub|sk-virtual-stub|Bearer tok'; then
+    fail "eas mode: a key reached jq's argv: $(grep '^jqargv ' "${WORK}/log" | grep -Eo 'sk-(master|virtual)-stub' | sort -u | tr '\n' ' ')"
+else
+    ok "eas mode: no key in any jq argv"
 fi
 check_says "eas mode: the model is the first chat model the gateway lists" 0 '^model qwen2-5-coder-7b$' \
     EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
