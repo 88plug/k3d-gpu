@@ -464,9 +464,9 @@ jobs:
       - run: tests/kserve_test.sh
 
   # Part canary (.github/workflows/canary.yml runs the engines themselves): canary/run.sh
-  # against stub engines and a docker shim, the surface parser on vLLM v0.32.0's real
-  # sources and the pinned images' help output, flags.sh, the plan and the report. No image
-  # is pulled.
+  # against stub engines and a docker shim, canary/node.sh against scripted pod states, the
+  # surface parser on vLLM v0.32.0's real sources and the pinned images' help output,
+  # flags.sh, the plan and the report. No image is pulled.
   canary-tests:
     name: Canary harness (stub engines, surface parser, plan, report)
     runs-on: ubuntu-latest
@@ -478,5 +478,6 @@ jobs:
         with:
           persist-credentials: false
       - run: tests/canary_test.sh
+      - run: tests/canary_node_test.sh
       - run: tests/canary_spec_test.sh
       - run: python3 tests/canary_surface_test.py

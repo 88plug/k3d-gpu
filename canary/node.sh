@@ -4,12 +4,16 @@
 # pins (sha256-checked) and the arguments the launcher's cluster create passes on a host
 # without NVIDIA (NODE_ARGS), and within CANARY_NODE_TIMEOUT seconds (default 300) see:
 #   - the node Ready;
-#   - every kube-system pod Running with its containers ready, or Succeeded (a device
-#     plugin's pod may be Pending: a hosted runner has no devices);
+#   - every pod, in every namespace (kube-system, NFD, the device plugins), Running with
+#     its containers ready, or Succeeded. A plugin that needs hardware has no pod here
+#     (its node selector keeps it off a hosted runner), so a pod that exists must run:
+#     one still Pending at the timeout (an image that does not pull) fails;
 #   - every manifest the Dockerfile bakes into /var/lib/rancher/k3s/server/manifests;
-#   - every DaemonSet those baked manifests define (the device plugins, NFD).
-# Then delete the cluster. kubectl runs inside the node (k3s ships it), so nothing but
-# docker and curl is needed on the host.
+#   - every DaemonSet those baked manifests define (the device plugins, NFD);
+# and then the pods hold for CANARY_NODE_SETTLE seconds (default 20) with no container
+# restarting, so a container that crashes after it started is caught. Then delete the
+# cluster. kubectl runs inside the node (k3s ships it), so nothing but docker and curl is
+# needed on the host. CANARY_NODE_POLL (default 5) is the seconds between looks.
 #
 # Writes ${CANARY_OUT_DIR:-./canary-out}/node.json (kind node; pinned_ref the k3s pin)
 # and node.log, and exits non-zero unless the verdict is pass.
@@ -20,6 +24,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "${HERE}/.." && pwd)"
 OUT_DIR=${CANARY_OUT_DIR:-${PWD}/canary-out}
 TIMEOUT=${CANARY_NODE_TIMEOUT:-300}
+SETTLE=${CANARY_NODE_SETTLE:-20}
+POLL=${CANARY_NODE_POLL:-5}
 CLUSTER=canary
 NODE=k3d-${CLUSTER}-server-0
 IMAGE_TAG=k3d-gpu-canary:node
@@ -102,7 +108,7 @@ for path in sys.argv[1:]:
             print("%s/%s" % (ns.group(1) if ns else "default", name))
 ') | sort -u)
 
-problems=""
+problems="" steady="" steady_since=${SECONDS}
 deadline=$((SECONDS + TIMEOUT))
 while :; do
     problems=""
@@ -116,26 +122,35 @@ while :; do
     for d in ${daemonsets}; do
         grep -qx "${d}" <<< "${ds}" || problems+="DaemonSet ${d} missing; "
     done
-    # kube-system pods: Running with every container ready, or Succeeded; a pod a baked
-    # DaemonSet owns may also be Pending.
-    pods=$(kc get pods -n kube-system -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase} {.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name} {range .status.containerStatuses[*]}{.ready},{end}{"\n"}{end}' 2>> "${LOG}")
-    [ -n "${pods}" ] || problems+="no kube-system pods; "
-    while read -r name phase owner readies; do
+    # Every pod: Running with every container ready, or Succeeded. One line per pod:
+    # <namespace>/<name> <phase> <container>=<ready>:<restarts>,...
+    pods=$(kc get pods -A -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name} {.status.phase} {range .status.containerStatuses[*]}{.name}={.ready}:{.restartCount},{end}{"\n"}{end}' 2>> "${LOG}")
+    [ -n "${pods}" ] || problems+="no pods; "
+    while read -r name phase states; do
         [ -n "${name}" ] || continue
         case "${phase}" in
             Succeeded) continue ;;
-            Running) [[ "${readies}" != *false* ]] && continue ;;
-            Pending) [ "${owner%%/*}" = DaemonSet ] && grep -qx "kube-system/${owner#*/}" <<< "${daemonsets}" && continue ;;
+            Running) [ -n "${states}" ] && [[ "${states}" != *=false:* ]] && continue ;;
         esac
-        problems+="pod ${name} ${phase}${readies:+ ready=${readies%,}}; "
+        problems+="pod ${name} ${phase}${states:+ ${states%,}}; "
     done <<< "${pods}"
-    [ -n "${problems}" ] || break
-    [ "${SECONDS}" -lt "${deadline}" ] || break
-    sleep 5
+    if [ -z "${problems}" ]; then
+        # Up: it must now hold, the same pods with the same restart counts, for SETTLE.
+        [ "${pods}" = "${steady}" ] || { steady=${pods}; steady_since=${SECONDS}; }
+        [ $((SECONDS - steady_since)) -lt "${SETTLE}" ] || break
+        [ "${SECONDS}" -lt $((deadline + SETTLE)) ] || break
+    else
+        steady=""
+        [ "${SECONDS}" -lt "${deadline}" ] || break
+    fi
+    sleep "${POLL}"
 done
+if [ -z "${problems}" ] && [ $((SECONDS - steady_since)) -lt "${SETTLE}" ]; then
+    problems="the pods did not hold ${SETTLE}s without a restart: $(tr '\n' ' ' <<< "${pods}"); "
+fi
 waited=$((SECONDS - start))
 { kc get nodes -o wide; kc get pods -A -o wide; kc get ds -A; } >> "${LOG}" 2>&1
 if [ -n "${problems}" ]; then
     finish fail "after ${waited}s: ${problems%; }"
 fi
-finish pass "image built in ${built}s, cluster created in ${created}s, ready in ${waited}s; $(wc -w <<< "${manifests}") baked manifests, $(wc -w <<< "${daemonsets}") DaemonSets, every kube-system pod up"
+finish pass "image built in ${built}s, cluster created in ${created}s, ready in ${waited}s; $(wc -w <<< "${manifests}") baked manifests, $(wc -w <<< "${daemonsets}") DaemonSets, $(grep -c . <<< "${pods}") pods up and steady for ${SETTLE}s"
