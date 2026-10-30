@@ -21,7 +21,20 @@
 #            - release-1.2: 0006 variant b applies, 0006a and 0005 do not
 #            - --apply changes the checkout only when no row STOPs, and a re-run is a no-op
 #            - every decision prints as `fact -> choice [source]`; --explain gives permalinks
-# Needs bash, git, python3.
+#   config   integrations/eas/eas-config.py on golden fixtures, tests/fixtures/eas/config/<case>/:
+#            facts.json and the args file go in; expected/ holds what must come out,
+#            byte for byte: k3d-gpu-overrides.yaml, global_config.edit.yaml,
+#            models.edit.yaml, repos.<layer>.yaml and choices.txt (also its stdout).
+#            A case with expected/refusal.txt must exit 3, print exactly that on stderr
+#            and write no file. Also: the generator runs on the Python standard library
+#            alone (python3 -S), its outputs parse as YAML of the declared shape, a
+#            floating ref is refused, malformed facts exit 2, a refusal or a second run
+#            leaves no stale file of an earlier run, a KV cache lowered to fit's carries
+#            fit's --max-model-len, NFD is left to EI only under the release name EI's
+#            role looks for, --explain prints permalinks, every source it can cite is
+#            a permalink at a full commit SHA, and pins.json has the k3d-gpu.eas-pins/v1
+#            shape.
+# Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
 
@@ -481,7 +494,261 @@ EOF
     done < <(git -C "${ROOT}" ls-files -s -- 'integrations/eas/*.py')
 }
 
-SECTIONS=(overlay)
+section_config() {
+    local EAS="${ROOT}/integrations/eas" FIXTURES="${ROOT}/tests/fixtures/eas/config"
+    local case dir name args out rc f got want shape
+    # The generator on the standard library only (-S: no site-packages).
+    gen() { python3 -S "${EAS}/eas-config.py" "$@"; }
+
+    for dir in "${FIXTURES}"/*/; do
+        case=$(basename "${dir}")
+        out="${WORK}/out/${case}"
+        read -r -a args < "${dir}/args"
+        gen --facts "${dir}/facts.json" --out "${out}" "${args[@]}" \
+            > "${WORK}/${case}.stdout" 2> "${WORK}/${case}.stderr" && rc=0 || rc=$?
+        if [ -f "${dir}/expected/refusal.txt" ]; then
+            if [ "${rc}" -eq 3 ] && cmp -s "${dir}/expected/refusal.txt" "${WORK}/${case}.stderr"; then
+                ok "${case}: refused, with the expected reasons"
+            else
+                fail "${case}: want exit 3 and expected/refusal.txt on stderr (rc=${rc})"
+                diff "${dir}/expected/refusal.txt" "${WORK}/${case}.stderr" | sed 's/^/  | /'
+            fi
+            if [ -z "$(find "${out}" -type f 2>/dev/null)" ]; then
+                ok "${case}: a refusal writes no file"
+            else
+                fail "${case}: a refusal wrote $(find "${out}" -type f | tr '\n' ' ')"
+            fi
+            continue
+        fi
+        if [ "${rc}" -ne 0 ]; then
+            fail "${case}: exit ${rc}: $(cat "${WORK}/${case}.stderr")"
+            continue
+        fi
+        got=$(cd "${out}" 2>/dev/null && find . -type f | sort | tr '\n' ' ')
+        want=$(cd "${dir}/expected" && find . -type f | sort | tr '\n' ' ')
+        if [ "${got}" = "${want}" ]; then ok "${case}: writes exactly ${want}"; else fail "${case}: wrote ${got}, want ${want}"; fi
+        for f in "${dir}"/expected/*; do
+            name=$(basename "${f}")
+            if cmp -s "${f}" "${out}/${name}"; then
+                ok "${case}: ${name}"
+            else
+                fail "${case}: ${name} differs from the golden"
+                diff "${f}" "${out}/${name}" | sed 's/^/  | /'
+            fi
+        done
+        if cmp -s "${dir}/expected/choices.txt" "${WORK}/${case}.stdout"; then
+            ok "${case}: stdout is choices.txt"
+        else
+            fail "${case}: stdout is not choices.txt"
+            diff "${dir}/expected/choices.txt" "${WORK}/${case}.stdout" | sed 's/^/  | /'
+        fi
+        # Shape: overrides flat (scalars, or lists of strings), booleans typed; the
+        # edits and the manifest rewrite in their declared form; every rev a full SHA.
+        if shape=$(python3 - "${out}" <<'PY' 2>&1
+import glob, os, re, sys
+import yaml
+out = sys.argv[1]
+ov = yaml.safe_load(open(os.path.join(out, "k3d-gpu-overrides.yaml")))
+assert isinstance(ov, dict) and ov, "overrides: not a mapping"
+for k, v in ov.items():
+    assert isinstance(v, (str, bool)) or (isinstance(v, list) and all(isinstance(x, str) for x in v)), f"overrides {k}: {v!r}"
+    if k.endswith("_enabled"):
+        assert isinstance(v, bool), f"overrides {k} is not a boolean: {v!r}"
+gc = yaml.safe_load(open(os.path.join(out, "global_config.edit.yaml")))
+assert gc == {"existing_kubernetes": "/kube/config"}, f"global_config edit: {gc!r}"
+me = yaml.safe_load(open(os.path.join(out, "models.edit.yaml")))
+assert set(me) == {"defaults", "models"} and isinstance(me["defaults"]["require_amx"], bool), f"models edit: {me!r}"
+for m in me["models"]:
+    assert isinstance(m["name"], str) and all(isinstance(v, str) for v in m["env"].values()), f"models edit entry: {m!r}"
+    assert set(m) <= {"name", "env", "args_append"}, f"models edit entry: {m!r}"
+    # fit's KV cache holds a request only up to fit's context: a lowered KV cache always
+    # comes with that --max-model-len, or vLLM takes the model's own context and stops.
+    if "VLLM_CPU_KVCACHE_SPACE" in m["env"]:
+        a = m.get("args_append") or []
+        assert len(a) == 2 and a[0] == "--max-model-len" and a[1].isdigit(), f"KV cache without --max-model-len: {m!r}"
+(rf,) = glob.glob(os.path.join(out, "repos.*.yaml"))
+rp = yaml.safe_load(open(rf))
+for r in rp["repos"]:
+    assert set(r) == {"layer", "url", "rev"} and re.fullmatch(r"[0-9a-f]{40}", r["rev"]), f"repos row: {r!r}"
+    assert r["url"].startswith("https://github.com/intel/"), f"repos url: {r!r}"
+PY
+); then
+            ok "${case}: outputs parse as YAML of the declared shape"
+        else
+            fail "${case}: output shape: ${shape}"
+        fi
+    done
+
+    # A floating ref never reaches the installer: only a profile name or a full SHA.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/float" \
+        --layer agent-toolkit --ei-ref main > /dev/null 2> "${WORK}/float.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'not a commit SHA' "${WORK}/float.err" && [ ! -e "${WORK}/float" ]; then
+        ok "a floating --ei-ref is refused before anything is written"
+    else
+        fail "a floating --ei-ref: rc=${rc}: $(cat "${WORK}/float.err")"
+    fi
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/badprofile" \
+        --eas-ref v9.9.9 > /dev/null 2> "${WORK}/badprofile.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'not a commit SHA' "${WORK}/badprofile.err"; then
+        ok "an --eas-ref that is neither a profile nor a SHA is refused"
+    else
+        fail "an unknown --eas-ref: rc=${rc}: $(cat "${WORK}/badprofile.err")"
+    fi
+    # A full SHA is accepted as is and named in the manifest rewrite.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/sha" --layer agent-toolkit \
+        --ei-ref 0123456789abcdef0123456789abcdef01234567 > "${WORK}/sha.out" 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'rev: "0123456789abcdef0123456789abcdef01234567"' "${WORK}/sha/repos.agent-toolkit.yaml" \
+       && grep -q '^--ei-ref 0123456789abcdef0123456789abcdef01234567 -> repos.agent-toolkit.yaml inference rev' "${WORK}/sha.out"; then
+        ok "--ei-ref <sha> sets the inference rev and says so"
+    else
+        fail "--ei-ref <sha> (rc=${rc}): $(cat "${WORK}/sha.out")"
+    fi
+    # A refusal into a directory a previous run wrote leaves none of that run's files, and
+    # a run for another layer leaves no stale manifest rewrite behind.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/reuse" --layer agent-toolkit > /dev/null 2>&1
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/reuse" --layer inference > /dev/null 2>&1
+    got=$(cd "${WORK}/reuse" && find . -type f | sort | tr '\n' ' ')
+    if [ "${got}" = "./choices.txt ./global_config.edit.yaml ./k3d-gpu-overrides.yaml ./models.edit.yaml ./repos.inference.yaml " ]; then
+        ok "a second run for another layer replaces the first run's files"
+    else
+        fail "a second run for another layer left: ${got}"
+    fi
+    gen --facts "${FIXTURES}/servicelb-disabled/facts.json" --out "${WORK}/reuse" --layer agent-toolkit > /dev/null 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 3 ] && [ -z "$(find "${WORK}/reuse" -type f)" ]; then
+        ok "a refusal removes the files a previous run left in --out"
+    else
+        fail "a refusal after a run (rc=${rc}) left: $(find "${WORK}/reuse" -type f | tr '\n' ' ')"
+    fi
+    # A full EAS SHA is a custom profile: EI and EAT stay on the default profile's pins.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/eassha" --layer agent-toolkit \
+        --eas-ref 89abcdef0123456789abcdef0123456789abcdef > "${WORK}/eassha.out" 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q '^# k3d-gpu eas-config: profile custom, layer agent-toolkit' "${WORK}/eassha.out" \
+       && grep -q '^# eas intel/enterprise-ai-solutions 89abcdef0123456789abcdef0123456789abcdef$' "${WORK}/eassha.out" \
+       && grep -q '^pin ei main (profile main) -> ' "${WORK}/eassha.out"; then
+        ok "--eas-ref <sha> is a custom profile with the default EI and EAT pins"
+    else
+        fail "--eas-ref <sha> (rc=${rc}): $(cat "${WORK}/eassha.out")"
+    fi
+    # A k3s.io/node-args annotation that is not a JSON list is an input error.
+    python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/badargs.json" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+f["nodes"][0]["annotations"]["k3s.io/node-args"] = "--disable servicelb"
+json.dump(f, open(sys.argv[2], "w"))
+PY
+    gen --facts "${WORK}/badargs.json" --out "${WORK}/badargs" > /dev/null 2> "${WORK}/badargs.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'k3s.io/node-args is not JSON' "${WORK}/badargs.err" && [ ! -e "${WORK}/badargs" ]; then
+        ok "a k3s.io/node-args that is not JSON exits 2 and writes nothing"
+    else
+        fail "malformed k3s.io/node-args: rc=${rc}: $(cat "${WORK}/badargs.err")"
+    fi
+    # fit sizes the KV cache for its own --max-model-len; a lowered KV cache carries that
+    # context (16384 here, not a constant), and a fit document without one is malformed.
+    python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/ctx16k.json" "${WORK}/noctx.json" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+doc = f["fit"]["Qwen/Qwen2.5-Coder-7B-Instruct"]
+doc["flags"] = ["--max-model-len=16384", "--max-num-seqs=1", "VLLM_CPU_KVCACHE_SPACE=1"]
+json.dump(f, open(sys.argv[2], "w"))
+doc["flags"] = ["--max-num-seqs=1", "VLLM_CPU_KVCACHE_SPACE=1"]
+json.dump(f, open(sys.argv[3], "w"))
+PY
+    gen --facts "${WORK}/ctx16k.json" --out "${WORK}/ctx16k" --layer agent-toolkit > /dev/null 2> "${WORK}/ctx16k.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && shape=$(python3 - "${WORK}/ctx16k/models.edit.yaml" <<'PY' 2>&1
+import sys, yaml
+m = yaml.safe_load(open(sys.argv[1]))["models"]
+assert m == [{"name": "qwen2-5-coder-7b", "env": {"VLLM_CPU_KVCACHE_SPACE": "1"},
+              "args_append": ["--max-model-len", "16384"]}], m
+PY
+    ); then
+        ok "a lowered KV cache carries fit's own --max-model-len"
+    else
+        fail "fit at --max-model-len=16384 (rc=${rc}): ${shape:-} $(cat "${WORK}/ctx16k.err")"
+    fi
+    gen --facts "${WORK}/noctx.json" --out "${WORK}/noctx" --layer agent-toolkit > /dev/null 2> "${WORK}/noctx.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'no --max-model-len' "${WORK}/noctx.err" && [ ! -e "${WORK}/noctx" ]; then
+        ok "a fit KV cache without --max-model-len exits 2 and writes nothing"
+    else
+        fail "a fit KV cache without --max-model-len: rc=${rc}: $(cat "${WORK}/noctx.err")"
+    fi
+    # EI's NFD role skips only a Helm release named node-feature-discovery. NFD installed
+    # the way NFD's own docs name it (release nfd) is not that, so EI would add a second.
+    python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/nfdhelm.json" <<'PY'
+import json, sys
+f = json.load(open(sys.argv[1]))
+(d,) = [d for d in f["daemonsets"] if d["namespace"] == "node-feature-discovery"]
+d["annotations"] = {"meta.helm.sh/release-name": "nfd", "meta.helm.sh/release-namespace": "node-feature-discovery"}
+json.dump(f, open(sys.argv[2], "w"))
+PY
+    gen --facts "${WORK}/nfdhelm.json" --out "${WORK}/nfdhelm" --layer inference > "${WORK}/nfdhelm.out" 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] && grep -qx 'nfd_enabled: false' "${WORK}/nfdhelm/k3d-gpu-overrides.yaml" \
+       && grep -q '^DaemonSet node-feature-discovery/nfd-worker from Helm release nfd -> nfd_enabled: false' "${WORK}/nfdhelm.out"; then
+        ok "NFD from a Helm release other than node-feature-discovery: nfd_enabled false"
+    else
+        fail "NFD from Helm release nfd (rc=${rc}): $(grep -i nfd "${WORK}/nfdhelm.out")"
+    fi
+
+    # Facts of another schema are an input error, not a refusal.
+    printf '{"schema": "k3d-gpu.eas-facts/v0", "cluster": "x", "nodes": []}\n' > "${WORK}/old.json"
+    gen --facts "${WORK}/old.json" --out "${WORK}/old" > /dev/null 2> "${WORK}/old.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'k3d-gpu.eas-facts/v1' "${WORK}/old.err"; then
+        ok "facts of another schema exit 2 and name the expected schema"
+    else
+        fail "facts of another schema: rc=${rc}: $(cat "${WORK}/old.err")"
+    fi
+
+    # --explain: the same choices, each source as a full permalink.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/explain" --layer agent-toolkit --explain \
+        > "${WORK}/explain.out" 2>&1 && rc=0 || rc=$?
+    if [ "${rc}" -eq 0 ] \
+       && grep -qF '[https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1342-L1358]' "${WORK}/explain.out" \
+       && [ "$(grep -c '^[^#].* -> ' "${WORK}/explain.out")" -eq "$(grep -c '^[^#].* -> ' "${FIXTURES}/desktop-i9-13900T/expected/choices.txt")" ] \
+       && ! grep -E '^[^#].* -> ' "${WORK}/explain.out" | grep -qvE '\[https://[^] ]+\]$' \
+       && cmp -s "${FIXTURES}/desktop-i9-13900T/expected/choices.txt" "${WORK}/explain/choices.txt"; then
+        ok "--explain prints every source as a permalink; choices.txt keeps the short form"
+    else
+        fail "--explain (rc=${rc}): $(head -20 "${WORK}/explain.out")"
+    fi
+
+    # Every source the generator can cite is a GitHub permalink at a full commit SHA.
+    if gen --list-sources > "${WORK}/sources" 2>&1 && [ -s "${WORK}/sources" ] \
+       && ! grep -vE '^[a-z0-9_]+ https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(blob|tree)/[0-9a-f]{40}/[^ #]+(#L[0-9]+(-L[0-9]+)?)?$' "${WORK}/sources"; then
+        ok "--list-sources: $(wc -l < "${WORK}/sources") sources, each a permalink at a full SHA"
+    else
+        fail "--list-sources: $(grep -vE '^[a-z0-9_]+ https://github\.com/[^ ]+/(blob|tree)/[0-9a-f]{40}/' "${WORK}/sources" | head -5)"
+    fi
+
+    # pins.json: k3d-gpu.eas-pins/v1, flat rows; each profile carries eas, ei and eat.
+    if shape=$(python3 - "${EAS}/pins.json" <<'PY' 2>&1
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+assert d["schema"] == "k3d-gpu.eas-pins/v1", d.get("schema")
+assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", d["checked"]), d.get("checked")
+rows = d["pins"]
+assert rows, "no pins"
+for r in rows:
+    assert set(r) == {"profile", "name", "repo", "ref", "sha", "date", "source"}, r
+    assert all(isinstance(v, str) and v for v in r.values()), r
+    assert re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", r["sha"]), r
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", r["date"]), r
+    assert r["source"].startswith("https://"), r
+keys = [(r["profile"], r["name"]) for r in rows]
+assert len(keys) == len(set(keys)), "duplicate (profile, name)"
+profiles = {r["profile"] for r in rows if r["name"] in ("eas", "ei", "eat")}
+assert d["default_profile"] in profiles, d["default_profile"]
+for p in profiles:
+    assert {r["name"] for r in rows if r["profile"] == p} >= {"eas", "ei", "eat"}, p
+    assert all(re.fullmatch(r"[0-9a-f]{40}", r["sha"]) for r in rows if r["profile"] == p), p
+print(f"{len(rows)} rows, profiles {sorted(profiles)}")
+PY
+); then
+        ok "pins.json: ${shape}"
+    else
+        fail "pins.json: ${shape}"
+    fi
+}
+
+SECTIONS=(overlay config)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then
