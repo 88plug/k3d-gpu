@@ -20,7 +20,9 @@
 #      additive only, and prints each change against EAT stock.
 #   7. The pins for EAT release-1.1.0: the tag and commit eat-up.sh clones, the
 #      components agentic-config.cfg turns off, brownfield.sh handing the config's
-#      deploy_guardrails to EAT's DEPLOY_GUARDRAILS, and the vLLM CPU image by digest.
+#      deploy_guardrails to EAT's DEPLOY_GUARDRAILS, and the vLLM CPU image by digest,
+#      for the guard too: deploy-guardrails.yml alone gets a chart copy whose
+#      guardrail-values.yaml carries vllm-values.yaml's digest (guard-values.py).
 # Needs bash, jq, python3 (with PyYAML).
 
 set -euo pipefail
@@ -598,6 +600,26 @@ BF="${WORK}/bf"
 mkdir -p "${BF}/bin" "${BF}/home"
 cp -r "${FIX}" "${BF}/eat"
 echo 'cluster_url=api.example.com' > "${BF}/eat/core/inventory/agentic-config.cfg"
+# EAT 0c726f5 core/helm-charts/vllm/guardrail-values.yaml, cut to the keys around its
+# image, and a chart file: deploy-guardrails.yml installs that chart with these values.
+mkdir -p "${BF}/eat/core/helm-charts/vllm/templates"
+cat > "${BF}/eat/core/helm-charts/vllm/guardrail-values.yaml" <<'EOF'
+fullnameOverride: vllm-guard
+
+LLM_MODEL_ID: "Qwen/Qwen3Guard-Gen-0.6B"
+cpu: 2
+memory: 16Gi
+
+image:
+  repository: vllm/vllm-openai-cpu
+  tag: "v0.28.0"
+  pullPolicy: IfNotPresent
+
+deploymentStrategy:
+  type: Recreate
+EOF
+echo 'name: vllm' > "${BF}/eat/core/helm-charts/vllm/Chart.yaml"
+echo 'image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"' > "${BF}/eat/core/helm-charts/vllm/templates/deployment.yaml"
 cat > "${BF}/eat/deploy-agentic-stack.sh" <<'EOF'
 # EAT 0c726f5 deploy-agentic-stack.sh:195 runs this at source time; only its main()
 # reads deploy_guardrails from the config, and fresh-install.sh:419 gates on this one.
@@ -611,6 +633,10 @@ brownfield_deployment() {
     cd "${CORE_DIR}"
     ansible-playbook -i hosts playbooks/deploy-ingress-controller.yml --extra-vars "secret_name=api.example.com"
     ansible-playbook -i hosts playbooks/deploy-genai-gateway.yml --extra-vars "secret_name=api.example.com" --vault-password-file v
+    # fresh-install.sh:419 and guardrails-controller.sh:29-35 at 0c726f5.
+    if [[ "${DEPLOY_GUARDRAILS:-off}" == "on" ]]; then
+        ansible-playbook -i hosts playbooks/deploy-guardrails.yml --extra-vars "hugging_face_token=hf guardrail_model=Qwen/Qwen3Guard-Gen-0.6B" --vault-password-file v
+    fi
 }
 EOF
 cat > "${BF}/bin/sudo" <<'EOF'
@@ -631,7 +657,7 @@ EOF
 chmod +x "${BF}/bin/"*
 : > "${BF}/log"
 out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
-    EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+    EAT_KUBECONFIG="${WORK}/kubeconfig" EAT_VLLM_VALUES="${EAT}/vllm-values.yaml" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
 log=$(cat "${BF}/log")
 if [ "${rc}" -eq 0 ] && grep -qx 'answers 5 1 yes' <<< "${log}"; then ok "brownfield.sh stack: runs with the same menu answers"
 else fail "brownfield.sh stack rc=${rc}: ${out} ${log}"; fi
@@ -659,7 +685,7 @@ bf_guardrails() {
     printf '%s\n' 'cluster_url=api.example.com' "$@" > "${BF}/eat/core/inventory/agentic-config.cfg"
     : > "${BF}/log"
     out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
-        EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+        EAT_KUBECONFIG="${WORK}/kubeconfig" EAT_VLLM_VALUES="${EAT}/vllm-values.yaml" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
     got=$(sed -n 's/^guardrails //p' "${BF}/log")
     if [ "${rc}" -eq 0 ] && [ "${got}" = "${want}" ]; then ok "brownfield.sh guardrail ${want}: ${name}"
     else fail "brownfield.sh guardrail ${name}: rc=${rc}, DEPLOY_GUARDRAILS='${got}', want ${want}: ${out}"; fi
@@ -678,10 +704,99 @@ echo 'cluster_url=api.example.com' > "${BF}/eat/core/inventory/agentic-config.cf
 echo 'deploy_genai_gateway=on' >> "${BF}/eat/core/inventory/agentic-config.cfg"
 sed -i 's#playbooks/deploy-genai-gateway.yml#playbooks/deploy-genai-gateway-renamed.yaml#' "${BF}/eat/deploy-agentic-stack.sh"
 out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
-    EAT_KUBECONFIG="${WORK}/kubeconfig" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+    EAT_KUBECONFIG="${WORK}/kubeconfig" EAT_VLLM_VALUES="${EAT}/vllm-values.yaml" K3D_GPU_EAT_DIR="${EAT}" bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
 if [ "${rc}" -ne 0 ] && grep -q 'never ran through the pinning wrapper' <<< "${out}"; then
     ok "brownfield.sh stack: fails when the gateway playbook bypasses the pins"
 else fail "brownfield.sh stack: bypass not caught (rc=${rc}): ${out}"; fi
+sed -i 's#playbooks/deploy-genai-gateway-renamed.yaml#playbooks/deploy-genai-gateway.yml#' "${BF}/eat/deploy-agentic-stack.sh"
+
+# 7c. The guard's image by digest. deploy-guardrails.yml (0c726f5, lines 115 and 133-135)
+#     installs {{ remote_helm_charts_base }}/vllm with its guardrail-values.yaml, which
+#     names vllm/vllm-openai-cpu:v0.28.0 by tag only. brownfield.sh hands that playbook,
+#     and only it, a copy of EAT's charts whose guardrail-values.yaml carries the digest
+#     vllm-values.yaml pins for the same image, before anything deploys.
+GUARD_SRC="${BF}/eat/core/helm-charts/vllm/guardrail-values.yaml"
+cp "${GUARD_SRC}" "${WORK}/guardrail-values.orig.yaml"
+# bf_stack <config lines after cluster_url...>: one stack run; sets out, rc and log.
+bf_stack() {
+    printf '%s\n' 'cluster_url=api.example.com' "$@" > "${BF}/eat/core/inventory/agentic-config.cfg"
+    : > "${BF}/log"
+    out=$(env PATH="${BF}/bin:${PATH}" HOME="${BF}/home" STUB_LOG="${BF}/log" EAT_DIR="${BF}/eat" \
+        EAT_KUBECONFIG="${WORK}/kubeconfig" EAT_VLLM_VALUES="${VV:-${EAT}/vllm-values.yaml}" K3D_GPU_EAT_DIR="${EAT}" \
+        bash "${EAT}/brownfield.sh" 2>&1) && rc=0 || rc=$?
+    log=$(cat "${BF}/log")
+}
+pinned_tag=$(python3 -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))["image"]["tag"])' "${EAT}/vllm-values.yaml")
+rm -rf "${BF}/home/k3d-gpu-guard-charts"
+bf_stack 'deploy_guardrails=on'
+guard_call=$(grep '^ansible-playbook .*deploy-guardrails.yml' <<< "${log}" || true)
+copy="${BF}/home/k3d-gpu-guard-charts"
+if [ "${rc}" -eq 0 ] && grep -Eq -- "--extra-vars @${BF}/home/[^ ]+\.yml" <<< "${guard_call}" \
+   && grep -qx "remote_helm_charts_base: ${copy}" <<< "${log}"; then
+    ok "brownfield.sh guardrail on: deploy-guardrails.yml gets the chart copy as remote_helm_charts_base"
+else fail "brownfield.sh guardrail on (rc=${rc}): guard call '${guard_call}': ${out}"; sed 's/^/  | /' <<< "${log}"; fi
+if out2=$(python3 - "${copy}/vllm/guardrail-values.yaml" "${WORK}/guardrail-values.orig.yaml" "${pinned_tag}" 2>&1 <<'EOF'
+import sys, yaml
+got, orig, tag = yaml.safe_load(open(sys.argv[1])), yaml.safe_load(open(sys.argv[2])), sys.argv[3]
+assert tag.startswith("v0.28.0@sha256:"), tag
+assert got["image"] == {**orig["image"], "tag": tag}, got["image"]
+assert {k: v for k, v in got.items() if k != "image"} == {k: v for k, v in orig.items() if k != "image"}, got
+EOF
+); then ok "brownfield.sh guardrail on: the copy's guardrail-values.yaml names vllm-values.yaml's v0.28.0 digest, every other key as EAT ships it"
+else fail "brownfield.sh guardrail on: copied guardrail-values.yaml: ${out2}"; fi
+if cmp -s "${GUARD_SRC}" "${WORK}/guardrail-values.orig.yaml" && cmp -s "${BF}/eat/core/helm-charts/vllm/Chart.yaml" "${copy}/vllm/Chart.yaml" \
+   && cmp -s "${BF}/eat/core/helm-charts/vllm/templates/deployment.yaml" "${copy}/vllm/templates/deployment.yaml"; then
+    ok "brownfield.sh guardrail on: EAT's checkout is not edited, and the rest of the chart is copied as is"
+else fail "brownfield.sh guardrail on: EAT's guardrail-values.yaml or the chart copy differs"; fi
+if [ "$(grep -c '^remote_helm_charts_base: ' <<< "${log}")" -eq 1 ] \
+   && ! grep '^ansible-playbook ' <<< "${log}" | grep -v 'deploy-guardrails.yml' | grep -q 'guard'; then
+    ok "brownfield.sh guardrail on: no other playbook gets the guard's chart copy"
+else fail "brownfield.sh guardrail on: the guard vars reached another playbook"; sed 's/^/  | /' <<< "${log}"; fi
+rm -rf "${copy}"
+mapfile -t shipped < "${EAT}/agentic-config.cfg"
+bf_stack "${shipped[@]}"
+if [ "${rc}" -eq 0 ] && ! grep -q 'deploy-guardrails.yml' <<< "${log}" && [ ! -e "${copy}" ]; then
+    ok "brownfield.sh guardrail off (shipped config): no guard playbook and no chart copy"
+else fail "brownfield.sh guardrail off (rc=${rc}): ${out}"; fi
+# bf_guard_refuses <name> <expected text> <guardrail-values.yaml image tag line> [vllm values file]
+bf_guard_refuses() {
+    local name=$1 want=$2 line=$3
+    VV=${4:-}
+    sed "s#^  tag: \"v0.28.0\"\$#${line}#" "${WORK}/guardrail-values.orig.yaml" > "${GUARD_SRC}"
+    bf_stack 'deploy_guardrails=on'
+    if [ "${rc}" -ne 0 ] && grep -qF -- "${want}" <<< "${out}" && ! grep -q '^answers' <<< "${log}"; then
+        ok "brownfield.sh guardrail on: stops before deploying on ${name}"
+    else fail "brownfield.sh guardrail on, ${name} (rc=${rc}): ${out}"; sed 's/^/  | /' <<< "${log}"; fi
+    cp "${WORK}/guardrail-values.orig.yaml" "${GUARD_SRC}"
+    VV=
+}
+bf_guard_refuses "a guard tag other than vllm-values.yaml's" 'v0.29.0' '  tag: "v0.29.0"'
+bf_guard_refuses "a guard tag already carrying a digest" 'v0.28.0@sha256:0000' \
+    '  tag: "v0.28.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"'
+printf 'image:\n  repository: vllm/vllm-openai-xpu\n  tag: "%s"\n' "${pinned_tag}" > "${WORK}/vv-repo.yaml"
+bf_guard_refuses "vLLM values for another repository" 'vllm/vllm-openai-xpu' '  tag: "v0.28.0"' "${WORK}/vv-repo.yaml"
+printf 'image:\n  repository: vllm/vllm-openai-cpu\n  tag: "v0.28.0"\n' > "${WORK}/vv-tag.yaml"
+bf_guard_refuses "vLLM values with no digest" 'not <tag>@sha256:<digest>' '  tag: "v0.28.0"' "${WORK}/vv-tag.yaml"
+printf 'memory: 16Gi\n' > "${WORK}/vv-none.yaml"
+bf_guard_refuses "vLLM values with no image" 'no image' '  tag: "v0.28.0"' "${WORK}/vv-none.yaml"
+# A guard playbook the wrapper never sees (the guard on) fails the deploy.
+sed -i 's#playbooks/deploy-guardrails.yml#playbooks/deploy-guardrails-renamed.yaml#' "${BF}/eat/deploy-agentic-stack.sh"
+bf_stack 'deploy_guardrails=on'
+if [ "${rc}" -ne 0 ] && grep -qF 'deploy-guardrails.yml never ran through' <<< "${out}"; then
+    ok "brownfield.sh stack: fails when the guard playbook bypasses the pin"
+else fail "brownfield.sh stack: guard bypass not caught (rc=${rc}): ${out}"; fi
+sed -i 's#playbooks/deploy-guardrails-renamed.yaml#playbooks/deploy-guardrails.yml#' "${BF}/eat/deploy-agentic-stack.sh"
+bf_stack 'deploy_guardrails=off'
+if [ "${rc}" -eq 0 ] && ! grep -q 'deploy-guardrails' <<< "${log}"; then
+    ok "brownfield.sh stack: the guard pin check stays quiet with the guard off"
+else fail "brownfield.sh stack: guard off (rc=${rc}): ${out}"; fi
+# EAT calling the guard playbook although the guard was off when the copy was due.
+sed -i 's#if \[\[ "${DEPLOY_GUARDRAILS:-off}" == "on" \]\]; then#if true; then#' "${BF}/eat/deploy-agentic-stack.sh"
+bf_stack 'deploy_guardrails=off'
+if [ "${rc}" -ne 0 ] && grep -qF 'no pinned chart copy' <<< "${out}" && ! grep -q '^ansible-playbook .*deploy-guardrails.yml' <<< "${log}"; then
+    ok "brownfield.sh stack: a guard playbook call without the chart copy does not run"
+else fail "brownfield.sh stack: unexpected guard call (rc=${rc}): ${out}"; sed 's/^/  | /' <<< "${log}"; fi
+sed -i 's#if true; then#if [[ "${DEPLOY_GUARDRAILS:-off}" == "on" ]]; then#' "${BF}/eat/deploy-agentic-stack.sh"
 
 # 6. eat-opt.py: the model optimizer as values on EAT's own entry, printed against
 #    stock. EAT's playbook and values are reduced to the lines eat-opt.py reads

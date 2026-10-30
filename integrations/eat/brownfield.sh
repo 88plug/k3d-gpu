@@ -102,8 +102,24 @@ if [ "${mode}" = "stack" ]; then
     gateway_vars="${HOME}/k3d-gpu-gateway-vars.yml"
     printf 'helm_charts_base_genai: %s\nhelm_charts_base_genai_trace: %s\n' \
         "${charts}/genai-gateway" "${charts}/genai-gateway-trace" > "${gateway_vars}"
+    # Guardrail: deploy-guardrails.yml installs {{ remote_helm_charts_base }}/vllm with
+    # its guardrail-values.yaml (release-1.1.0 lines 115 and 133-135), which names the
+    # vLLM CPU image by tag only; nothing else in that play reads remote_helm_charts_base.
+    # That playbook alone gets a copy of EAT's charts whose guardrail-values.yaml carries
+    # the digest EAT_VLLM_VALUES pins for the same image (guard-values.py). The copy is
+    # made, and checked, before anything deploys.
+    guard_vars="${HOME}/k3d-gpu-guard-vars.yml"
+    guard_marker="${HOME}/k3d-gpu-guard-pinned"
+    rm -f "${guard_vars}" "${guard_marker}"
+    if [ "${DEPLOY_GUARDRAILS:-off}" = on ]; then
+        guard_charts="${HOME}/k3d-gpu-guard-charts"
+        rm -rf "${guard_charts}"
+        cp -a "${CORE_DIR}/helm-charts" "${guard_charts}"
+        python3 "${K3D_GPU_EAT_DIR}/guard-values.py" "${guard_charts}/vllm/guardrail-values.yaml" "${EAT_VLLM_VALUES}"
+        printf 'remote_helm_charts_base: %s\n' "${guard_charts}" > "${guard_vars}"
+    fi
     # EAT's functions run in this shell and call ansible-playbook by name. The
-    # marker file records that the gateway playbook got the copies.
+    # marker files record that the gateway and guard playbooks got the copies.
     gateway_marker="${HOME}/k3d-gpu-gateway-pinned"
     rm -f "${gateway_marker}"
     ansible-playbook() {
@@ -111,6 +127,10 @@ if [ "${mode}" = "stack" ]; then
             *"deploy-genai-gateway.yml "*)
                 : > "${gateway_marker}"
                 command ansible-playbook "$@" --extra-vars "@${gateway_vars}" ;;
+            *"deploy-guardrails.yml "*)
+                [ -f "${guard_vars}" ] || { echo "ERROR: deploy-guardrails.yml called with DEPLOY_GUARDRAILS=${DEPLOY_GUARDRAILS:-}, and no pinned chart copy" >&2; return 1; }
+                : > "${guard_marker}"
+                command ansible-playbook "$@" --extra-vars "@${guard_vars}" ;;
             *) command ansible-playbook "$@" ;;
         esac
     }
@@ -123,6 +143,10 @@ if [ "${mode}" = "stack" ]; then
     printf '5\n1\nyes\n' | brownfield_deployment
     if grep -Eq '^deploy_genai_gateway=on' "${EAT_DIR}/core/inventory/agentic-config.cfg" && [ ! -f "${gateway_marker}" ]; then
         echo "ERROR: deploy-genai-gateway.yml never ran through the pinning wrapper" >&2
+        exit 1
+    fi
+    if [ "${DEPLOY_GUARDRAILS:-off}" = on ] && [ ! -f "${guard_marker}" ]; then
+        echo "ERROR: deploy-guardrails.yml never ran through the wrapper that pins the guard's image" >&2
         exit 1
     fi
     exit
