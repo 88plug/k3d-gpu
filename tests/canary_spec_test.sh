@@ -292,6 +292,19 @@ assert "name: canary-result" in src
 assert not re.search(r"\b(v?\d+\.\d+\.\d+)\b", re.sub(r"#.*", "", src)), "a version literal in the workflow"
 PY
 
+# node.sh creates the cluster with the arguments the launcher's create passes on a host
+# without NVIDIA; each must still be one the launcher passes, word for word.
+node_args=$(sed -n 's/^NODE_ARGS=(\(.*\))$/\1/p' "${ROOT}/canary/node.sh")
+[ -n "${node_args}" ] && ok "node.sh: NODE_ARGS=(${node_args})" || fail "node.sh has no NODE_ARGS=(...) line"
+eval "set -- ${node_args}"
+launcher=$(tr -d '"' < "${ROOT}/scripts/k3d-gpu")  # its words, as the shell passes them
+for a in "$@"; do
+    grep -qF -- "${a}" <<< "${launcher}" && ok "node.sh: the launcher passes ${a}" \
+        || fail "node.sh passes ${a}, which scripts/k3d-gpu's cluster create no longer does"
+done
+[[ " ${node_args} " == *"nvidia.com/gpu.present=false"* ]] && ok "node.sh: the node is labelled as having no NVIDIA GPU" \
+    || fail "node.sh does not label the node nvidia.com/gpu.present=false"
+
 # The workflow runs the canary's scripts directly, so each must be executable.
 scripts=$(grep -oE '(^|[[:space:]])canary/[A-Za-z0-9_.-]+\.(sh|py)' "${ROOT}/.github/workflows/canary.yml" | tr -d ' ' | sort -u)
 [ -n "${scripts}" ] || fail "canary.yml runs no canary/ script"

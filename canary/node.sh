@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The node canary: build the node image from the root Dockerfile (Ubuntu 26.04, the
 # default variant), start a k3d cluster on it with the k3d release packaging/install.sh
-# pins (sha256-checked), and within CANARY_NODE_TIMEOUT seconds (default 300) see:
+# pins (sha256-checked) and the arguments the launcher's cluster create passes on a host
+# without NVIDIA (NODE_ARGS), and within CANARY_NODE_TIMEOUT seconds (default 300) see:
 #   - the node Ready;
 #   - every kube-system pod Running with its containers ready, or Succeeded (a device
 #     plugin's pod may be Pending: a hosted runner has no devices);
@@ -22,6 +23,12 @@ TIMEOUT=${CANARY_NODE_TIMEOUT:-300}
 CLUSTER=canary
 NODE=k3d-${CLUSTER}-server-0
 IMAGE_TAG=k3d-gpu-canary:node
+# scripts/k3d-gpu's cluster create on a host without NVIDIA, as a hosted runner is: no
+# load balancer, no traefik, and the node labelled nvidia.com/gpu.present=false, which
+# keeps the baked NVIDIA plugin off it (with no driver it crash-loops). Both Intel stacks
+# stay enabled, so every baked manifest is applied. tests/canary_spec_test.sh checks that
+# the launcher still passes each of these.
+NODE_ARGS=(--no-lb "--k3s-arg=--disable=traefik@server:0" "--k3s-node-label=nvidia.com/gpu.present=false@server:*;agent:*")
 mkdir -p "${OUT_DIR}"
 LOG=${OUT_DIR}/node.log
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/canary-node.XXXXXX")
@@ -74,8 +81,8 @@ echo "${sha}  ${K3D}" | sha256sum -c - >> "${LOG}" 2>&1 || { K3D=""; finish fail
 chmod +x "${K3D}"
 
 start=${SECONDS}
-say "k3d ${ver} cluster create ${CLUSTER} --image ${IMAGE_TAG} --wait"
-"${K3D}" cluster create "${CLUSTER}" --image "${IMAGE_TAG}" --wait --timeout "${TIMEOUT}s" \
+say "k3d ${ver} cluster create ${CLUSTER} --image ${IMAGE_TAG} --wait ${NODE_ARGS[*]}"
+"${K3D}" cluster create "${CLUSTER}" --image "${IMAGE_TAG}" --wait --timeout "${TIMEOUT}s" "${NODE_ARGS[@]}" \
     --kubeconfig-update-default=false >> "${LOG}" 2>&1 \
     || finish fail "k3d cluster create failed: $(tail -3 "${LOG}" | tr '\n' ' ')"
 created=$((SECONDS - start))
