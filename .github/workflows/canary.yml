@@ -40,6 +40,7 @@ on:
       - console/plan.py
       - console/model_opt.py
       - console/fit.py
+      - bench/h54/h54.py # sglang_args, the sglang flags the surface check reads
       - 'canary/**'
       - packaging/install.sh
       - integrations/eat/vllm-values.yaml

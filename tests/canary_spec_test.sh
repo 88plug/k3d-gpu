@@ -292,6 +292,30 @@ assert "name: canary-result" in src
 assert not re.search(r"\b(v?\d+\.\d+\.\d+)\b", re.sub(r"#.*", "", src)), "a version literal in the workflow"
 PY
 
+# A pull request runs the canary when it changes any file the plan reads (canary/plan.py's
+# BASE_PATHS, each engine's locator, derived and flags_source files, the node's paths), or
+# a change that selects an engine would merge without its canary.
+python3 - "${ROOT}" <<'PY' && ok "canary.yml: pull_request paths cover every file the plan reads" || fail "canary.yml: pull_request paths miss a file the plan reads"
+import fnmatch, importlib.util, os, sys, yaml
+root = sys.argv[1]
+spec = importlib.util.spec_from_file_location("plan", os.path.join(root, "canary/plan.py"))
+plan = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(plan)
+_, engines = plan.load(root)
+need = set(plan.BASE_PATHS)
+for e in engines.values():
+    need.add(e["locator"]["file"])
+    need.update(d["file"] for d in e.get("derived", []))
+    need.update(p.rstrip("/") for p in e.get("paths", []))
+    need.update(s.split(":", 1)[0] for s in e.get("flags_source", []))
+w = yaml.safe_load(open(os.path.join(root, plan.WORKFLOW)))
+pats = (w.get(True) or w.get("on"))["pull_request"]["paths"]
+# GitHub's ** matches across directories; a directory is covered when a file in it is.
+missing = sorted(p for p in need
+                 if not any(fnmatch.fnmatch(p + "/f" if os.path.isdir(os.path.join(root, p)) else p, pat) for pat in pats))
+assert not missing, "not in on.pull_request.paths: %s" % missing
+PY
+
 # node.sh creates the cluster with the arguments the launcher's create passes on a host
 # without NVIDIA; each must still be one the launcher passes, word for word.
 node_args=$(sed -n 's/^NODE_ARGS=(\(.*\))$/\1/p' "${ROOT}/canary/node.sh")
