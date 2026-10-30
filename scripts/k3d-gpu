@@ -11203,8 +11203,16 @@ agent_fit() {
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
     # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
-    # one GPU whatever it says.
-    [ -z "${K3D_GPU_AGENT_GPUS:-}" ] || [ "${AGENT_APP}" = ovms ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+    # one GPU whatever it says. OVMS serves the model when the backend is set to it or, with
+    # the backend unset (the fit picks the engine), when it is an OpenVINO IR: only OVMS
+    # serves one, and the fit picks vLLM or llama.cpp for any other weights.
+    if [ -n "${K3D_GPU_AGENT_GPUS:-}" ]; then
+        if [ -n "${AGENT_BACKEND_SET}" ]; then
+            [ "${AGENT_APP}" = ovms ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        else
+            [ "$(fit_dir_format "${dir}")" = openvino ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        fi
+    fi
     # agent up replaces the running server (the Deployment is Recreate, and a backend
     # switch deletes the other one): it is stopped before the probe, so the memory it holds
     # is measured as free, not as someone else's. A model that then does not fit gets the
@@ -11614,7 +11622,12 @@ agent_model_format() {
     local d
     command -v python3 >/dev/null 2>&1 || return 0
     d=$(fit_model_dir "$1" "${K3D_GPU_AGENT_REVISION:-main}" 2>/dev/null) || return 0
-    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "${d}/weights.json" 2>/dev/null || true
+    fit_dir_format "${d}"
+}
+
+# fit_dir_format <dir>: the weight format a fit metadata directory names, or nothing.
+fit_dir_format() {
+    python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "$1/weights.json" 2>/dev/null || true
 }
 
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.

@@ -387,6 +387,14 @@ if render setl2 "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_G
     && grep -A3 '^            limits:$' "${WORK}/setl2.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
     ok "K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_GPUS=2: the fit splits the GGUF over two B70s, -ts in layers"
 else fail "K3D_GPU_AGENT_GPUS=2 reaches the llama.cpp fit" "$(show setl2)"; fi
+# With the backend unset and no optimizer (K3D_GPU_AGENT_MODEL, not --model), the backend is
+# OVMS's until the fit picks llama.cpp for the GGUF, and K3D_GPU_AGENT_GPUS still reaches the
+# fit: only OVMS, which serves an OpenVINO IR alone, holds one GPU whatever it says.
+if render unset2 "${XEON_ENV[@]}" K3D_GPU_AGENT_GPUS=2 K3D_GPU_AGENT_MODEL="${GEMMA_GGUF}" -- && has unset2 '^  name: llamacpp$' \
+    && grep -q "fit: ${GEMMA_GGUF}:Q4_0 on 2 GPUs, layer split via llama.cpp" "${WORK}/unset2.err" \
+    && grep -A3 '^            limits:$' "${WORK}/unset2.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
+    ok "K3D_GPU_AGENT_BACKEND unset, K3D_GPU_AGENT_GPUS=2: the fit's llama.cpp pick splits the GGUF over two B70s"
+else fail "K3D_GPU_AGENT_GPUS=2 reaches the fit with the backend unset" "$(show unset2)"; fi
 
 # --- MTP on request ---------------------------------------------------------------------
 if render mtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \

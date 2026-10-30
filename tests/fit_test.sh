@@ -214,6 +214,16 @@ if render ovms2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.in
     ok "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2): --cache_size=${cache} fits one card's ${one_card} GiB budget"
 else fail "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2) sized for one card (cache ${cache:-?}, one card ${one_card})" \
     "$(cat "${WORK}/ovms2.err"; grep -E 'cache_size|agent-fit|gpu.intel.com/xe' "${WORK}/ovms2.yaml")"; fi
+# With K3D_GPU_AGENT_BACKEND unset the fit picks the engine, and K3D_GPU_AGENT_GPUS still
+# reaches it for a model OVMS does not serve: RedHatAI's INT4 checkpoint fits one B70, so
+# only the two GPUs asked put it on two (vLLM tensor parallel), as with the backend set.
+if render vllm2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_MODEL_OPT=off K3D_GPU_AGENT_GPUS=2 -- --model RedHatAI/Qwen3.8-27B-INT4 \
+    && grep -q 'fit: RedHatAI/Qwen3.8-27B-INT4 on 2 GPUs, tensor parallel via vllm' "${WORK}/vllm2.err" \
+    && has vllm2 '--tensor-parallel-size=2$' && has vllm2 '^              gpu.intel.com/xe: 2$'; then
+    ok "agent manifest (backend unset, K3D_GPU_AGENT_GPUS=2): the fit's vLLM pick shards over the two GPUs asked"
+else fail "agent manifest (backend unset, K3D_GPU_AGENT_GPUS=2) reaches the fit" \
+    "$(cat "${WORK}/vllm2.err"; grep -E 'tensor-parallel|agent-fit|gpu.intel.com/xe' "${WORK}/vllm2.yaml")"; fi
 
 # OVMS has no sliding-window cache: Gemma 4's 25 SWA layers hold the whole context, so the
 # static pool holds seqs x context x 225280 B (5 full + 25 SWA layers' K and V at 2 B).
