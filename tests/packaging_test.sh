@@ -90,7 +90,7 @@ check "formula points K3D_GPU_SHARE at pkgshare" grep -qF 'K3D_GPU_SHARE: "${K3D
 check "formula test asserts a user K3D_GPU_SHARE wins" \
     grep -qF 'assert_match "/x/nvidia-device-plugin.yml", shell_output("K3D_GPU_SHARE=/x #{bin}/k3d-gpu help")' "${FORMULA}"
 
-# Render bin/k3d-gpu the way Homebrew's Pathname#write_env_script does (brew 7.0.9,
+# Render bin/k3d-gpu the way Homebrew's Pathname#write_env_script does (brew 7.0.11,
 # Library/Homebrew/extend/pathname.rb: KEY="value" exec "target" "$@") and run it.
 share_value=$(sed -n 's/.*write_env_script libexec\/"k3d-gpu", K3D_GPU_SHARE: "\(.*\)"$/\1/p' "${FORMULA}")
 check "formula wrapper value found" test -n "${share_value}"

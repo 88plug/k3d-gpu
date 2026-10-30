@@ -1,0 +1,5 @@
+cpuset 0-15,17-31
+Cpus_allowed_list:	0-15,17-31
+avx512f 0 amx 0 nproc 31
+server threads by affinity:
+    234 0-15,17-31

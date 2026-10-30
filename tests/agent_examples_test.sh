@@ -10,8 +10,8 @@
 set -uo pipefail
 
 EXAMPLES_DIR="$(cd "$(dirname "$0")/../examples/agents" && pwd)"
-# python:3.13.16-slim-trixie (multi-arch index digest)
-IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.16-slim-trixie@sha256:cf50a4f6ac4f026458b08d5222023d700ac806410dff5e9ca8728fa44f2b850f}"
+# python:3.13.18-slim-trixie (multi-arch index digest)
+IMAGE="${K3D_GPU_EXAMPLES_IMAGE:-python:3.13.18-slim-trixie@sha256:76baad6037690d6e8c4397fbcaef17bca6f19eecef822b708fe8fa3417d30bb5}"
 
 if [ "$#" -gt 0 ]; then
     examples=("$@")
@@ -26,6 +26,13 @@ FAILS=()
 for ex in "${examples[@]}"; do
     [ -f "${EXAMPLES_DIR}/${ex}/requirements.txt" ] || { echo "no such example: ${ex}" >&2; FAILS+=("${ex}"); continue; }
     [ -f "${EXAMPLES_DIR}/${ex}/constraints.txt" ] || { echo "FAIL ${ex}: no constraints.txt" >&2; FAILS+=("${ex}"); continue; }
+    # README.md's table row names the example's direct pins: they must equal requirements.txt.
+    want=$(grep -v '^#' "${EXAMPLES_DIR}/${ex}/requirements.txt" | sed '/^[[:space:]]*$/d' | sort)
+    got=$(grep -F "| [\`${ex}/\`]" "${EXAMPLES_DIR}/README.md" | grep -o "\`[A-Za-z0-9._-]*==[^\`]*\`" | tr -d "\`" | sort)
+    if [ "${got}" != "${want}" ]; then
+        echo "FAIL ${ex}: README.md table names '${got//$'\n'/ }', requirements.txt pins '${want//$'\n'/ }'" >&2
+        FAILS+=("${ex}"); continue
+    fi
     echo "=== ${ex}"
     if docker run --rm \
         -v "${EXAMPLES_DIR}:/examples:ro" \

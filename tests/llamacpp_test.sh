@@ -92,15 +92,16 @@ pair() { server_args "$1" | awk -v o="$2" -v v="$3" 'p && $0 == v { f = 1 } { p 
 # llama-server's parser (llama.cpp v0.8.0 common/arg.cpp parse_cli_args, :827-865) takes an
 # option's value from the next argument, never from "--opt=value", and refuses a name it does
 # not define. llama_argv_ok <name>: the server args parse so, with the names and arities the
-# renderer uses (common/arg.cpp v0.8.0: -t :1528, -tb :1538, -c :1650, -ctk :2449, -ctv :2462,
-# -np :2556, --load-mode :2703, --cpu-moe :2772, --n-cpu-moe :2779, -ngl :2811, -ts :2853,
-# --alias :3033, --model-url :3066, --host :3343, --port :3359, --jinja :3727,
-# --reasoning :3746, --spec-draft-model :4322, --spec-type :4330, --model :3057).
+# renderer uses (common/arg.cpp v0.8.0: -t :1528, -tb :1538, -c :1650, -ctxcp :1709,
+# --cache-ram :1727, -ctk :2449, -ctv :2462, -np :2556, --load-mode :2703, --cpu-moe :2772,
+# --n-cpu-moe :2779, -ngl :2811, -ts :2853, --alias :3033, --model-url :3066, --host :3343,
+# --port :3359, --jinja :3727, --reasoning :3746, --spec-draft-model :4322, --spec-type :4330,
+# --model :3057).
 llama_argv_ok() {
     server_args "$1" | python3 -c 'import sys
 arity = {"--model": 1, "--model-url": 1, "--alias": 1, "--host": 1, "--port": 1, "--jinja": 0,
          "--reasoning": 1, "-c": 1, "-np": 1, "-ngl": 1, "-ts": 1, "--n-cpu-moe": 1, "--cpu-moe": 0,
-         "-ctk": 1, "-ctv": 1, "--threads": 1, "--threads-batch": 1, "--load-mode": 1,
+         "-ctk": 1, "-ctv": 1, "--threads": 1, "--threads-batch": 1, "--load-mode": 1, "--cache-ram": 1, "-ctxcp": 1,
          "--spec-type": 1, "--spec-draft-model": 1}
 argv = sys.stdin.read().split("\n")[:-1]
 i = 0
@@ -133,7 +134,7 @@ if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
     && pair gguf --model "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@${GREV}/gemma-4-26B_q4_0-it.gguf" \
     && pair gguf --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
     && pair gguf --alias 'gemma-4-26B-A4B-it-qat-q4_0-gguf' && arg gguf '--jinja' && pair gguf --reasoning 'off' \
-    && arg gguf '-c' && arg gguf '786432' && arg gguf '-np' && arg gguf '6' && arg gguf '-ngl' && arg gguf '999' \
+    && pair gguf -c 655360 && pair gguf -np 5 && pair gguf -ngl 999 && pair gguf --cache-ram 0 && pair gguf -ctxcp 4 \
     && pair gguf --port '8000' && server_args gguf | grep -A1 -x -- '--threads' | tail -n1 | grep -qE '^[0-9]+$' \
     && ! arg gguf '-ts' && ! has gguf 'spec-type' && ! has gguf 'kind: Job' && ! has gguf 'load-mode' && ! arg gguf '-hf' \
     && grep -A3 '^            limits:$' "${WORK}/gguf.yaml" | grep -q '^              gpu.intel.com/xe: 1$' \
@@ -189,7 +190,7 @@ FN=Qwen/Qwen3.8-Flash-Next
 FNREV=de4b8e4d43b917e7706784d8bb445c9af86a3540
 if render fn "${XEON_ENV[@]}" -- --model "${FN}" \
     && pair fn --model "/models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}/model.gguf" && ! has fn 'model-url' \
-    && arg fn '--n-cpu-moe' && arg fn '44' && arg fn '-ts' && arg fn '30,30' && arg fn '-np' && arg fn '4' \
+    && pair fn --n-cpu-moe 45 && pair fn -ts 39,11 && pair fn -np 4 && pair fn --cache-ram 0 && pair fn -ctxcp 4 \
     && grep -A3 '^            limits:$' "${WORK}/fn.yaml" | grep -q '^              gpu.intel.com/xe: 2$' \
     && has fn 'kind: Job' && has fn "image: ghcr.io/ggml-org/llama.cpp:full-b11960@${FULL}" \
     && has fn '^            - "Qwen/Qwen3.8-Flash-Next"$' && has fn "^            - \"${FNREV}\"\$" \
@@ -378,6 +379,22 @@ else fail "an explicit backend is kept" "$(show set)"; fi
 if render setl "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp -- --model "${GEMMA_GGUF}" && has setl '^  name: llamacpp$'; then
     ok "K3D_GPU_AGENT_BACKEND=llama.cpp serves the GGUF"
 else fail "K3D_GPU_AGENT_BACKEND=llama.cpp" "$(show setl)"; fi
+# K3D_GPU_AGENT_GPUS is the fit's --gpus for llama.cpp as for vLLM (an OVMS pod holds one
+# GPU): the QAT GGUF, one card's model, is split layer by layer over the two free B70s asked.
+if render setl2 "${XEON_ENV[@]}" K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_GPUS=2 -- --model "${GEMMA_GGUF}" \
+    && grep -q "fit: ${GEMMA_GGUF}:Q4_0 on 2 GPUs, layer split via llama.cpp" "${WORK}/setl2.err" \
+    && server_args setl2 | grep -A1 -x -- '-ts' | tail -n1 | grep -qE '^[0-9]+,[0-9]+$' \
+    && grep -A3 '^            limits:$' "${WORK}/setl2.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
+    ok "K3D_GPU_AGENT_BACKEND=llama.cpp K3D_GPU_AGENT_GPUS=2: the fit splits the GGUF over two B70s, -ts in layers"
+else fail "K3D_GPU_AGENT_GPUS=2 reaches the llama.cpp fit" "$(show setl2)"; fi
+# With the backend unset and no optimizer (K3D_GPU_AGENT_MODEL, not --model), the backend is
+# OVMS's until the fit picks llama.cpp for the GGUF, and K3D_GPU_AGENT_GPUS still reaches the
+# fit: only OVMS, which serves an OpenVINO IR alone, holds one GPU whatever it says.
+if render unset2 "${XEON_ENV[@]}" K3D_GPU_AGENT_GPUS=2 K3D_GPU_AGENT_MODEL="${GEMMA_GGUF}" -- && has unset2 '^  name: llamacpp$' \
+    && grep -q "fit: ${GEMMA_GGUF}:Q4_0 on 2 GPUs, layer split via llama.cpp" "${WORK}/unset2.err" \
+    && grep -A3 '^            limits:$' "${WORK}/unset2.yaml" | grep -q '^              gpu.intel.com/xe: 2$'; then
+    ok "K3D_GPU_AGENT_BACKEND unset, K3D_GPU_AGENT_GPUS=2: the fit's llama.cpp pick splits the GGUF over two B70s"
+else fail "K3D_GPU_AGENT_GPUS=2 reaches the fit with the backend unset" "$(show unset2)"; fi
 
 # --- MTP on request ---------------------------------------------------------------------
 if render mtp "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \

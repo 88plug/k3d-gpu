@@ -6,7 +6,7 @@
 # Needs: kubectl, helm 3.8+ (OCI charts), an Intel GPU on the xe or i915 driver.
 set -euo pipefail
 
-CERT_MANAGER_VERSION=v1.21.2   # supports Kubernetes 1.33-1.36
+CERT_MANAGER_VERSION=v1.21.3   # supports Kubernetes 1.33-1.36
 KSERVE_VERSION=v0.21.0
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SYSROOT="${K3D_GPU_SYSROOT:-}"

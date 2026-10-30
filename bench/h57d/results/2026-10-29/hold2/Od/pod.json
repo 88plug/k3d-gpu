@@ -1,0 +1,299 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "k3d-gpu.io/agent-device": "CPU",
+            "k3d-gpu.io/agent-fit": "cpu 7x131072"
+        },
+        "creationTimestamp": "2026-10-29T20:29:02Z",
+        "generateName": "ovms-6cbbfc69d7-",
+        "generation": 1,
+        "labels": {
+            "app": "ovms",
+            "pod-template-hash": "6cbbfc69d7"
+        },
+        "name": "ovms-6cbbfc69d7-pgs5g",
+        "namespace": "k3d-gpu-agent",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "ovms-6cbbfc69d7",
+                "uid": "593eac97-c761-45a0-8b55-9ff8b13cd285"
+            }
+        ],
+        "resourceVersion": "1494",
+        "uid": "85bfc123-fc46-492c-957d-ef3fee3cd1cd"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "--rest_port=8000",
+                    "--model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+                    "--model_name=gemma",
+                    "--cache_dir=/ov-cache",
+                    "--log_level=INFO"
+                ],
+                "image": "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "ovms",
+                "ports": [
+                    {
+                        "containerPort": 8000,
+                        "name": "http",
+                        "protocol": "TCP"
+                    }
+                ],
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/v2/health/ready",
+                        "port": "http",
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 5,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "39Gi"
+                    },
+                    "requests": {
+                        "cpu": "1",
+                        "memory": "39Gi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/ov-cache",
+                        "name": "ov-cache"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-44p65",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "k3d-k3dgpu-d-h57d-2-server-0",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "fsGroup": 5000,
+            "runAsGroup": 5000,
+            "runAsUser": 5000
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "hostPath": {
+                    "path": "/var/apb-models",
+                    "type": "Directory"
+                },
+                "name": "models"
+            },
+            {
+                "emptyDir": {},
+                "name": "ov-cache"
+            },
+            {
+                "name": "kube-api-access-44p65",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "cpu": "1",
+            "memory": "39Gi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-29T20:29:03Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-29T20:29:02Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-29T20:29:56Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-29T20:29:56Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-10-29T20:29:02Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "1",
+                    "memory": "39Gi"
+                },
+                "containerID": "containerd://d0c34cad67a639db179e4ea4e4203eb1893d5c8295a1631103e80dea2df9fdbe",
+                "image": "sha256:6348136997e05a7ee2c2b08e47bb15deb6e5096c62ab3fb821907ded7e2afd7c",
+                "imageID": "docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "lastState": {},
+                "name": "ovms",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "memory": "39Gi"
+                    },
+                    "requests": {
+                        "cpu": "1",
+                        "memory": "39Gi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-10-29T20:29:16Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 5000,
+                        "supplementalGroups": [
+                            39,
+                            44,
+                            5000
+                        ],
+                        "uid": 5000
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/ov-cache",
+                        "name": "ov-cache"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-44p65",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.20.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.20.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.42.0.12",
+        "podIPs": [
+            {
+                "ip": "10.42.0.12"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "39Gi"
+            },
+            "requests": {
+                "cpu": "975m",
+                "memory": "39Gi"
+            }
+        },
+        "startTime": "2026-10-29T20:29:02Z"
+    }
+}
