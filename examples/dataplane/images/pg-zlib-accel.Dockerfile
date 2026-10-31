@@ -10,7 +10,7 @@
 # Debian trixie packages qatlib 24.02.0, QATzip 1.3.1 (zlib-accel needs >= 1.3.0),
 # oneTBB 2022.1 and accel-config 4.1.8; QPL is not packaged, so it is built here.
 
-ARG PGVECTOR_IMAGE=pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0
+ARG PGVECTOR_IMAGE=pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2
 ARG QPL_TAG=v1.9.0
 ARG ZLIB_ACCEL_TAG=v1.1.0
 
