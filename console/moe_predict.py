@@ -66,7 +66,7 @@ ENGINES = [
     {"name": "vllm-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
      "formats": ("bf16", "fp16", "w4a16"), "images": ("vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",)},
     {"name": "sglang-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
-     "formats": ("bf16", "fp8", "w4a16"), "images": ("lmsysorg/sglang:v0.5.22-xeon@sha256:4e5c413ed9a31f38f74e18aa9b645d65a0b0a023d42f63edb4e2b412ea1a230f",)},
+     "formats": ("bf16", "fp8", "w4a16"), "images": ("lmsysorg/sglang:v0.5.23-xeon@sha256:f22c18d175270ad1aa63ff6298a4d5a79954520863d5eab6862f94728c2d18df",)},
     {"name": "llama.cpp", "container": "gguf", "devices": ("cpu", "gpu", "hybrid"), "tp": False,
      "formats": None, "images": ("ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
                 "ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700")},
