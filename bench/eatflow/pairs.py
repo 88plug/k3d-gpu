@@ -17,12 +17,16 @@ the level's full load. The arm-level check is amendment 27 (load.matched_a27) ov
 pairs' pre-windows. bg_cpu, package W and throttle during the attempt are reported, never
 gated.
 
-Load rule L3 (H50, H50o, H53; EXPERIMENTS.md "Crescent amendment A3"): the same
+Load rule L3 (H50, H50o, H53, H62; EXPERIMENTS.md "Crescent amendment A3"): the same
 pre-windows, no match filter. Every complete pair enters the statistic; a balance gate (a
 sign-flip test of arm on each pre covariate, p < 0.01 gates) replaces it; a two-regressor
 adjustment and L2's matched subset are reported, never gated. The arm order of pair j is drawn
 from the registered seed (order), and each pairs directory carries one registration.json
 (register). Python 3 standard library only.
+
+A pod cgroup is a local cgroup v2 directory, or "exec:<command line>" for a pod on another
+machine (H62, EXPERIMENTS.md "H62 pre-registration": each server runs in its own KVM guest):
+the command prints that pod's cpu.stat, and the idle-arm check reads it like a local one.
 """
 import glob
 import json
@@ -103,9 +107,30 @@ def total_jiffies(stat_text, cpus):
     return tot
 
 
+EXEC = "exec:"              # a pod cgroup read through a command (H62: a pod in a KVM guest)
+EXEC_TIMEOUT_S = 15.0
+
+
+def _exec_text(cmdline):
+    """stdout of a command line (shlex-split, no shell), or "" when it fails or times out."""
+    argv = shlex.split(cmdline)
+    if not argv:
+        return ""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=EXEC_TIMEOUT_S)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return p.stdout if p.returncode == 0 else ""
+
+
 def cgroup_usage_usec(path):
-    """cpu.stat usage_usec of a cgroup v2 directory (None when unreadable)."""
-    for line in _read(os.path.join(path, "cpu.stat")).splitlines():
+    """cpu.stat usage_usec of a cgroup v2 directory, or of "exec:<command line>", a command that
+    prints a pod's cpu.stat on another machine (None when unreadable)."""
+    if path.startswith(EXEC):
+        text = _exec_text(path[len(EXEC):])
+    else:
+        text = _read(os.path.join(path, "cpu.stat"))
+    for line in text.splitlines():
         k, _, v = line.partition(" ")
         if k == "usage_usec" and v.strip().isdigit():
             return int(v)
@@ -512,13 +537,14 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
 
 # Rule L3 rows: the seed of their arm order, fixed in the pre-registration (amendment A3).
 ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-20",
-               "H53": "H53-crescent-2026-10-20"}
+               "H53": "H53-crescent-2026-10-20", "H62": "H62-crescent-2026-10-29"}
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
-# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; block-level verdict, "H53 pre-registration").
+# H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; block-level verdict, "H53 pre-registration");
+# H62 H50's design with arm B5, Intel's EAS default, each server in a KVM guest ("H62 pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
-           "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3")}
+           "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3"), "H62": ("H49", "L3")}
 
 
 # The ledger a rule-L3 row must be pre-registered in before any of its holds runs.
@@ -814,13 +840,20 @@ INF = float("inf")
 if __name__ == "__main__":
     # `pairs.py design HYP`: "<design> <rule>" (live.sh reads the rule from here, DESIGNS only).
     # `pairs.py arm HYP N`: the arm solo hold N must run (solo-hold.sh checks it before the lock).
+    # `pairs.py usage SPEC...`: each pod cgroup's usage_usec, read once; exit 1 if one is unreadable
+    # (live.sh checks the H62 arms' exec: specs with it before a hold).
     try:
         if len(sys.argv) == 3 and sys.argv[1] == "design":
             print(*design(sys.argv[2]))
         elif len(sys.argv) == 4 and sys.argv[1] == "arm":
             design(sys.argv[2])
             print(expected_arm(sys.argv[2], int(sys.argv[3])))
+        elif len(sys.argv) >= 3 and sys.argv[1] == "usage":
+            got = [(spec, cgroup_usage_usec(spec)) for spec in sys.argv[2:]]
+            for spec, v in got:
+                print(f"usage_usec {v} {spec}")
+            sys.exit(1 if any(v is None for _, v in got) else 0)
         else:
-            raise SystemExit("usage: pairs.py design HYP | pairs.py arm HYP N")
+            raise SystemExit("usage: pairs.py design HYP | pairs.py arm HYP N | pairs.py usage SPEC...")
     except (ValueError, KeyError) as e:
         raise SystemExit(f"pairs.py: {e!r}")

@@ -888,6 +888,68 @@ class H53Test(unittest.TestCase):
         self.assertLess(i_hold, i_apply)
         self.assertLess(i_check, i_run)
 
+    def test_stage_path_is_defined_before_the_solo_path_calls_it(self):
+        # H53 amendment R1: stage_path lived inside the pairs branch, so the solo AG path called an
+        # undefined function (bash went on: no -e) and OVMS would have served an empty hostPath.
+        live = self.live()
+        self.assertEqual(live.count("stage_path() {"), 1)
+        i_def = live.index("\nstage_path() {")                       # top level, not inside a branch
+        i_solo = live.index('if [ "${MODE}" = solo ]; then')
+        self.assertLess(i_def, i_solo)
+        blk = live[i_solo:live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('stage_path "${TGT_DIR}" "${TGT}" 5000', blk)
+        # Run the definition as bash does, with stub nodes/docker: it copies into every node.
+        fn = live[i_def + 1:live.index("\n}\n", i_def) + 3]
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        script = ("set -u\nM=/m\nnodes() { echo n1 n2; }\ndocker() { echo \"docker $*\" >> " + tmp + "/calls; }\n"
+                  + fn + 'stage_path Qwen3.8-27B-int4-ov OpenVINO/Qwen3.8-27B-int4-ov 5000\n')
+        import subprocess
+        p = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        with open(os.path.join(tmp, "calls")) as f:
+            calls = f.read()
+        for n in ("n1", "n2"):
+            self.assertIn(f"docker cp -L /m/Qwen3.8-27B-int4-ov/. {n}:/var/apb-models/OpenVINO/Qwen3.8-27B-int4-ov/", calls)
+            self.assertIn(f"docker exec {n} chown -R 5000:5000 /var/apb-models/OpenVINO/Qwen3.8-27B-int4-ov", calls)
+
+    def test_a_smoke_can_set_the_solo_task_guard(self):
+        live = self.live()
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        self.assertIn('${LIVE_PAIRS_GUARD:+--guard-s "${LIVE_PAIRS_GUARD}"}', blk)
+        with open(os.path.join(HERE, "crescent", "solo-hold.sh")) as f:
+            self.assertNotIn("LIVE_PAIRS_GUARD", f.read())                  # holds keep agentbench's own guard
+
+    def test_h53_window_steps(self):
+        p = os.path.join(HERE, "results", "2026-10-20", "H53", "prehold", "prehold.sh")
+        with open(p) as f:
+            s = f.read()
+        # The four cards of both pairs (pre-registration "Cards and serving"), stop and start only.
+        self.assertIn('FREE="0000:12:00.0 0000:48:00.0 0000:7c:00.0 0000:96:00.0"', s)
+        self.assertIn('PAIRS="qwen38-a-hr qwen38-b-hr"', s)
+        self.assertNotIn("docker rm", s)
+        self.assertNotIn("docker stop", s)                                    # only through gpu-serving.sh
+        i_inspect, i_stop = s.index('docker inspect "${c}" > "${O}/inspect-${c}.before.json"'), s.index("gpu-serving.sh\" stop")
+        self.assertLess(i_inspect, i_stop)
+        # A smoke runs the warm-up only; holds run solo-hold.sh with the registered arm.
+        self.assertIn("LIVE_PAIRS_GUARD=99999", s)
+        self.assertIn('bash "${C}/crescent/solo-hold.sh" "${n}" "${arm}"', s)
+        self.assertIn('arm=$(python3 "${C}/pairs.py" arm H53 "${n}")', s)
+        # Holds 7 and 8 only when fewer than three blocks count after hold 6.
+        self.assertIn('[ "${k}" -ge 3 ] || { last=8;', s)
+        # Every card must be free before a smoke or a hold (polled, Prometheus scrapes every 15 s).
+        self.assertEqual(s.count("wait_cards ||"), 2)
+        self.assertIn("FREE_GIB=2", s)
+        # R1 item 5's futility stop reads solo.alive_blocks after every hold.
+        i_hold, i_alive = s.index('one_hold "${n}" "${rungs}" ||'), s.index("a=$(alive_blocks)")
+        self.assertLess(i_hold, i_alive)
+        self.assertIn('[ "$(wc -w <<< "${a}")" -lt 3 ]', s)
+        self.assertIn("solo.alive_blocks(rows,", s)
+        # E4: setup.sh runs from this checkout under the bench lock.
+        blk = s[s.index("\nsetup)"):s.index("\nverify)")]
+        self.assertIn("lock", blk)
+        self.assertIn('bash "${C}/crescent/setup.sh"', blk)
+
 
 class PrerunPinsTest(unittest.TestCase):
     """Crescent amendments E1 and E2 (EXPERIMENTS.md, 2026-10-29): every crescent agent-row
@@ -929,6 +991,84 @@ class PrerunPinsTest(unittest.TestCase):
         self.assertIn('LIVE_EAT_OVMS_CHART="${B}/eat-src/core/helm-charts/ovms"', self.read("crescent", "pairs-hold.sh"))
         # eat-pr21 is EAT PR #21's head, whose tree is release-1.1.0's (0c726f57).
         self.assertIn("EAT_PR21=c86c42b073ee533e9fb9e9b9330b9d1478e4bf47", self.read("crescent", "setup.sh"))
+
+
+class H62Test(unittest.TestCase):
+    """H62 (EXPERIMENTS.md "H62 pre-registration"): H50's design, statistic and rule (L3) with
+    arm B5, Intel's EAS default, and both servers in KVM guests. A pod cgroup can be read
+    through a command ("exec:"), so the idle-arm check reads the pod inside its guest."""
+
+    REG = {"hyp": "H62", "rule": "L3", "seed": "H62-crescent-2026-10-29"}
+
+    def read_live(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            return f.read()
+
+    def test_h62_is_h50s_design_and_rule_with_its_own_seed(self):
+        self.assertEqual(PR.design("H62"), ("H49", "L3"))
+        self.assertEqual(PR.ORDER_SEEDS["H62"], self.REG["seed"])
+        self.assertIn("H62", AB.PAIRS_HYPS)
+        at = [dict(r, arm="B5") if r["arm"] == "B1" else r for r in L2Test.h49_like(L2Test())]
+        res = PR.analyze(at, pairs_of(24), "H62", "A1", "B5", registration=self.REG)
+        ref = PR.analyze(L2Test.h49_like(L2Test()), pairs_of(24), "H50", "A1", "B1",
+                         registration={"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]})
+        self.assertEqual((res["rule"], res["arms"], res["verdict"]), ("L3", ["A1", "B5"], "SUPPORTED"))
+        self.assertEqual(res["paired_diff"], ref["paired_diff"])       # H50's statistic, unchanged
+        self.assertEqual(res["confidence"]["support_share"], ref["confidence"]["support_share"])
+        with self.assertRaises(ValueError):                           # H50's registration is not H62's
+            PR.analyze(at, pairs_of(24), "H62", "A1", "B5",
+                       registration={"hyp": "H50", "rule": "L3", "seed": PR.ORDER_SEEDS["H50"]})
+
+    def test_exec_cgroup_reads_a_command(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        fake = os.path.join(tmp, "arm.sh")
+        with open(fake, "w") as f:
+            f.write('#!/bin/sh\n[ "$1 $2 $3" = "A1 cpustat /sys/fs/cgroup/x" ] || exit 7\n'
+                    'printf "usage_usec 9001\\nuser_usec 5\\n"\n')
+        os.chmod(fake, 0o755)
+        self.assertEqual(PR.cgroup_usage_usec(f"exec:{fake} A1 cpustat /sys/fs/cgroup/x"), 9001)
+        self.assertIsNone(PR.cgroup_usage_usec(f"exec:{fake} A1 cpustat /elsewhere"))   # non-zero exit
+        self.assertIsNone(PR.cgroup_usage_usec(f"exec:{os.path.join(tmp, 'missing')}"))
+        self.assertIsNone(PR.cgroup_usage_usec("exec:"))
+        # A probe snapshot carries the remote reading like a local one; the window uses it.
+        probe = PR.Probe({"A1": f"exec:{fake} A1 cpustat /sys/fs/cgroup/x"}, [], rapl=False)
+        self.assertEqual(list(probe.snap()["pods"].values()), [9001])
+        # `pairs.py usage SPEC...` reads each spec once: what live.sh checks before a hold.
+        import subprocess
+        ok = subprocess.run([sys.executable, os.path.join(HERE, "pairs.py"), "usage",
+                             f"exec:{fake} A1 cpustat /sys/fs/cgroup/x"], capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn("9001", ok.stdout)
+        bad = subprocess.run([sys.executable, os.path.join(HERE, "pairs.py"), "usage",
+                              f"exec:{fake} A1 cpustat /sys/fs/cgroup/x", f"exec:{fake} B5 cpustat /y"],
+                             capture_output=True, text=True)
+        self.assertEqual(bad.returncode, 1)
+
+    def test_live_sh_runs_h62_against_remote_arms(self):
+        live = self.read_live()
+        self.assertIn('[ "${ARM}" = H62 ] && DESIGN=H62', live)
+        self.assertRegex(live, r"\n\s*H62\) A=A1 B=B5 ;;")
+        pairs = live[live.index('if [ "${MODE}" = pairs ]; then'):]
+        remote = pairs[pairs.index('if [ "${DESIGN}" = H62 ]; then'):pairs.index("\n    else\n")]
+        # Neither arm is deployed on this host: no cluster, no staging, no local port-forward.
+        for local in ("cluster_up", "stage_path", "kubectl ", "agent manifest", "helm template"):
+            self.assertNotIn(local, remote, local)
+        for step in ('"${RA}" restart "${left}"', '"${RB}" restart "${left}"', 'records "${OUT}/remote-a"',
+                     'records "${OUT}/remote-b"', '"${RA}" forward', '"${RB}" forward', 'P_SRV=$("${RA}" port)',
+                     'BPORT=$("${RB}" port)', 'cg_a=$("${RA}" cgroup)', 'cg_b=$("${RB}" cgroup)',
+                     'python3 "${HERE}/pairs.py" usage "${cg_a}" "${cg_b}"'):
+            self.assertIn(step, remote, step)
+        self.assertIn("left=$(( CAP - $(el) - 900 ))", remote)                # the 900 s readiness rule
+        self.assertIn("NOT DELIVERABLE: not ready with 900 s of the hold left", remote)
+        # The local arms run in the else branch unchanged, and the harness after it is shared.
+        local = pairs[pairs.index("\n    else\n"):pairs.index("    litellm() {")]
+        self.assertIn("    cluster_up\n", local)
+        self.assertIn("\n    fi\n", local[-40:])
+        # The guests' port-forwards stop with the hold.
+        clean = live[live.index("cleanup() {"):live.index("trap cleanup EXIT")]
+        self.assertIn('for r in "${REMOTE[@]}"; do "${r}" unforward >/dev/null 2>&1; done', clean)
+        self.assertIn("REMOTE=()", live[:live.index("cleanup() {")])
 
 
 class B3RecordsTest(unittest.TestCase):

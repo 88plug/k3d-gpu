@@ -1,0 +1,23 @@
+2026-10-30T00:14:50Z VRAM before the stop: 0000:12:00.0 16.14;0000:48:00.0 15.43;0000:7c:00.0 16.18;0000:96:00.0 15.47;
+2026-10-30T00:15:00Z qwen38-a-hr stopped
+2026-10-30T00:15:06Z qwen38-b-hr stopped
+2026-10-30T00:15:06Z window open; deadman pid 1548781
+2026-10-30T00:15:06Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.17;0000:96:00.0 0.0;
+2026-10-30T00:15:06Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.17;0000:96:00.0 0.0;
+2026-10-30T00:15:13Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:15:13Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:15:13Z smoke H53-smoke-AG start
+2026-10-30T00:20:14Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:20:14Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:20:14Z smoke H53-smoke-B2-a start
+2026-10-30T00:25:19Z smoke H53-smoke-B2-a early stop: setvars.sh missing, 2 restarts (R1 item 4); TERM to hold.sh pid 1565186
+2026-10-30T00:25:35Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:25:35Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:25:35Z smoke H53-smoke-B2-b start
+2026-10-30T00:36:21Z smoke H53-smoke-B2-b early stop: oneCCL init_device_fds opendir failed (/dev/dri/by-path absent in the k3d node and pod), the same error at 00:33:38Z and 00:35:27Z (R1 item 4); TERM to hold.sh pid 1578915
+2026-10-30T00:36:38Z B2 ladder: rung (b) fails with an error no further rung addresses ((c) --disable-log-requests is absent; (d) is for a KV-cache failure): B2 not deliverable, no hold runs (H53 pre-registration item 3, R1 item 4); restoring serving
+2026-10-30T00:37:45Z qwen38-a-hr running=true; qwen38-a-hr: health 200, model Qwen3.8-27B, reply: We need to respond to user: "Say OK". Need final likely just "
+2026-10-30T00:37:45Z qwen38-a-hr: image, command, env, devices, mounts and ports as before the stop
+2026-10-30T00:37:47Z qwen38-b-hr running=true; qwen38-b-hr: health 200, model Qwen3.8-27B, reply: We need to respond to user: "Say OK". Need final likely just "
+2026-10-30T00:37:47Z qwen38-b-hr: image, command, env, devices, mounts and ports as before the stop
+2026-10-30T00:38:03Z window closed (restore rc=0)
