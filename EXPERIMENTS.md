@@ -99,7 +99,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
-| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). Run 1 2026-10-21 ([H28x run 1](#h28x-run-1-xeon-6741p-2026-10-21)): failed in setup 16 s after the hold started (`WORK` did not exist, so the CSV and the scratch kubeconfig could not be written) and measured nothing; [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) counts it as the one pre-registered hold and registers one re-run (run 2), protocol unchanged; [amendment R2](#h28x-amendment-r2-run-2-keeps-the-registered-pod-image-2026-11-01) keeps run 2 on the registered pod image. | INCONCLUSIVE |
+| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). Run 1 2026-10-21 ([H28x run 1](#h28x-run-1-xeon-6741p-2026-10-21)): failed in setup 16 s after the hold started (`WORK` did not exist, so the CSV and the scratch kubeconfig could not be written) and measured nothing; [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) counts it as the one pre-registered hold and registers one re-run (run 2), protocol unchanged; [amendment R2](#h28x-amendment-r2-run-2-keeps-the-registered-pod-image-2026-11-01) keeps run 2 on the registered pod image. Run 2 2026-11-01 ([H28x run 2](#h28x-run-2-xeon-6741p-2026-11-01)): load MATCHED, no void round; T memory held (PSS 132.6 MiB per pod, model page cache 1.00x size against C's 9.00x), but the T/C round-median ready ratio read 0.714 (CI 0.697-0.723, above 0.5, with T faster in every round): REFUTED (time part), the outcome the row rated most likely. | REFUTED |
 | H7x | (Arms B and C superseded by [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29): EAT release-1.1.0's stock, vLLM CPU v0.28.0; H7's vLLM version is no longer kept.) H7's hypothesis on the Xeon 6741P, run to H7's full protocol: OVMS's decode lead over EAT's vLLM CPU engine comes from weight precision, not from the engine. One checkpoint (`Qwen/Qwen3-4B` @ `1cfa9a72`), OVMS 2026.4.1 on its 16-bit IR (`OpenVINO/Qwen3-4B-fp16-ov` @ `00298f1c`) and vLLM CPU v0.24.0 in bf16 with EAT's chart defaults decode within 15% of each other, and land within 15% in effective weight bandwidth. A replication: H7's models and versions are kept. | Written 2026-10-20, before any H7x measurement. On AMX both engines compute in bf16 and batch-1 decode reads the same 8.0 GB per token, so the engine gap shrinks: R = OVMS/vLLM decode 1.10 (0.85-1.40); SUPPORTED 0.45, REFUTED 0.30, INCONCLUSIVE 0.25. Reported, not scored: prefill TTFT on ~~\~1936~~ ~1850 tokens (corrected in the 2026-10-21T22:30Z revision to the prompt `h7x.sh` has always sent, 56 copies of one sentence; value unchanged; struck through 2026-10-29) vLLM/OVMS 1.5 (0.7-4; the i9 gap of 4.3x was outside H7's prediction), C/B decode (`--enforce-eager` dropped) 1.0-1.3, decode incremental J/token per arm. | `bench/apb/h7x.sh` (H7's `h7.sh` extended to the pre-registered protocol: H2's workloads and energy method, blocks A B B A A B B A A B, then one C block with `--enforce-eager` dropped), scored by `bench/apb/h7x.py`; decision rule, host changes and hold in [H7x pre-registration](#h7x-pre-registration-h7-to-its-full-protocol-on-the-xeon-6741p-2026-10-20). B and C are EAT release-1.1.0's stock (`0c726f57`, vLLM CPU v0.28.0), after a further setup smoke, per [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29). | PENDING |
 | H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). Not run. A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). | PENDING |
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. Stage 0 under amendment S0 (`lockwait.json`, 62fdf617): pooled share 0.9987 (16081 s of lock wait over 16102 s held, 21 holds, 4 logs), so stage 1 ran; smoke-W passed `h56.py gate` (slice-0 setup 225 s, 15 tasks in 120 s). Stage 1 run 2026-10-21, holds 1-8 in order, every rc 0, none gate-flagged ([H56 run](#h56-run-stage-1-xeon-6741p-2026-10-21)): `h56.py score` reads "4 VOID condition-holds > 2; position 2 missing; position 3 missing; position 6 missing; position 7 missing". Every W hold is VOID on one rule, slice 0's block window not inside the sibling's: a B24 block ends at its 24th task, not at its run budget, and took 178-190 s, so the sibling's block (1800 s budget) ended 27-32 s after slice 0's began and covered 0.15-0.17 of it. No time, success, completion, MHz or power statistic is scored. The 4 A holds are valid (22/24 passed in each). A VOID replacement cannot lift the verdict (4 VOID > 2) and would VOID by the same timing, so no further H56 hold is owed; crescent rows stay K=1 (adoption rule 1). | INCONCLUSIVE |
@@ -2389,6 +2389,132 @@ scorer, thresholds, H28's A1 and A2, rules X1-X7, amendment K1 and amendment R1 
 
 5. **Scoring.** `bench/zero-copy-models/score.py <CSV> typical/match.json`, unchanged, on the
    run's CSV and `load.py matched` output.
+
+### H28x run 2 (Xeon 6741P, 2026-11-01)
+
+Run 2 under [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) and
+[amendment R2](#h28x-amendment-r2-run-2-keeps-the-registered-pod-image-2026-11-01). It is one lock
+hold on one fresh cluster. The cluster was deleted, the load stopped and the model images removed
+before the lock was released. Only `typical` ran, as rule X6 says.
+
+```text
+# Reproduce
+date:            2026-11-01T15:33:32Z amendment R2 pushed (ae461889, branch claude/h28x-run), before any
+                 round; 15:34:28Z prep started, outside the lock; 15:41:48Z prep rc 0;
+                 15:41:49Z lock taken, no busy wait (wait_s 0), hold start; 15:45:08Z setup done (199 s);
+                 15:48:15Z locked part done (cluster deleted, load stopped, h28-model:r0-r6 removed);
+                 15:48:16Z rc=0, lock released; h28-model:r7-r12 (built by prep, never imported) removed after
+hypothesis:      H28x (H28 + A1 + A2; cross-host rules X1-X7; amendments K1, R1, R2)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 1 NUMA node, 503 GiB RAM, no swap
+host kernel:     7.0.0-31-generic, Docker 29.8.0 (containerd image store)
+k3d-gpu commit:  9e312187 (origin/main, clean detached checkout ~/k3dgpu-xhost/k3d-gpu, moved from 6d5cab69,
+                 which predates R1's runner fix); k3d v5.9.0 (sha256 06d8f25b...), kubectl v1.37.2
+                 (sha256 c0448752..., amendment K1)
+node image:      cryptoandcoffee/k3d-gpu:0.1.61 (sha256:8cd264aa...), k3s v1.37.1+k3s1, snapshotter overlayfs
+                 (read from the k3s containerd config); crescent C1 kubelet thresholds as --k3s-arg ...@server:*
+cluster:         k3dgpu-x-h28, scratch KUBECONFIG (not kept); node container `docker update --cpuset-cpus
+                 0-23,48-71`; every scored round's prime pod read Cpus_allowed_list 0-23,48-71
+pods:            python:3.13-slim@sha256:70729b46...8c2f (R2; `k3d image import` warned and skipped it, and
+                 the node pulled it), N = 8 per round, MIB = 1024, one unique model image per round
+                 (h28-model:rK, /dev/urandom)
+load:            bench/load/load.py `typical`, stress-ng 0.22.01 @sha256:2ea9a7c3...1cbe on 24-47,72-95
+                 (3 containers); 2 baseline windows of 10 s; before each scored round, after eviction,
+                 `load.py settle` (every gap settled after 5 s); 5 s during windows, busy over 24-47,72-95
+energy source:   RAPL intel-rapl:0 energy_uj through `sudo -n`, reads only
+command:         amendment R2 item 4: probe.sh prep, then XHOST_DISK_START=95 bench/xhost/hold.sh H28x-run2 1500
+                 env WORK=~/k3dgpu-xhost/runs/H28x-run2/work PYIMG=<R2> IMAGE=cryptoandcoffee/k3d-gpu:0.1.61
+                 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 LOCK=~/k3dgpu-xhost/inner.lock
+                 K3D_GPU_K3S_ARGS="$C1" bash bench/zero-copy-models/probe.sh run
+disk:            / at 32% at the start and 33% at the end (df -P), under the 95% start gate
+runs per arm:    typical: warm-up r0 (C, unscored), then C T T C C T: 3 rounds x 8 pods per arm
+scorer:          bench/zero-copy-models/score.py work/h28-20261101T154149Z.csv work/typical/match.json
+raw results:     bench/xhost/results/2026-11-01/H28x-run2/: hold/ (hold.log, prep.log, versions.txt, pre.txt,
+                 post.txt, rc, wait_s, serving.jsonl; work/h28-20261101T154149Z.csv sha256 f77a6ca1...,
+                 work/typical/baseline.jsonl, load.jsonl cf1a5ba1..., match.json, score.json),
+                 h28x-run2-chain.log, campaign.log (this hold's lines); copied from crescent
+                 ~/k3dgpu-xhost/runs/ without the scratch kubeconfig
+```
+
+Every round, the warm-up included, left 0 cold pages after eviction (no VOID-cold). All 8 pods
+were Ready well inside 240 s, and swap-out was 0 (the host has no swap). No round was void. The
+memory columns are the medians of a round's 8 pods.
+
+**`typical` (the ledger level).**
+
+| Round | Arm | ready ms (median, min-max) | PSS MiB | Shared_Clean MiB | model page cache (x size) | dCached (x size) | memcg `file` per pod MiB |
+|-------|-----|----------------------------|---------|------------------|---------------------------|------------------|--------------------------|
+| r0 (warm-up) | C | 6955.5 (6946-6974) | 1028.5 | 5.5 | 9.000 | 9.103 | 1124-1227 (sum 9218) |
+| r1 | C | 6503.5 (6502-6505) | 1028.5 | 5.5 | 9.000 | 9.079 | 1133-1187 (sum 9218) |
+| r2 | T | 4533 (4532-4533) | 132.6 | 1029.6 | 1.000 | 0.846 | 106-148 (sum 1025) |
+| r3 | T | 4609 (4609-4610) | 132.6 | 1029.6 | 1.000 | 1.172 | 105-147 (sum 1025) |
+| r4 | C | 6440.5 (6438-6444) | 1028.5 | 5.5 | 9.000 | 8.923 | 1088-1194 (sum 9218) |
+| r5 | C | 6455.5 (6452-6458) | 1028.5 | 5.5 | 9.000 | 9.138 | 1115-1230 (sum 9218) |
+| r6 | T | 4656 (4656-4657) | 132.6 | 1029.4 | 1.000 | 1.239 | 116-148 (sum 1024) |
+
+`score.py` output (`work/typical/score.json`): no void round in either arm, load MATCHED,
+round-median ready T 4609 ms and C 6455.5 ms, ratio **0.714**, separated, verdict **REFUTED**,
+row "time part: T/C ready > 0.5 or rounds overlap".
+
+Against the registered predictions (the row, H28's table and A1):
+- T memory, met: PSS 132.6 MiB per pod (bar <= 160), Shared_Clean 1029.4-1029.6 MiB (bar >= 0.9x
+  size = 921.6), model page cache 1.000x size (A1 bar <= 1.1x). dCached, secondary, read
+  0.85-1.24x.
+- C duplication, met, so the probe is not blind: PSS 1028.5 MiB (bar >= 921.6), model page cache
+  9.000x size (A1 bar >= 0.8 x (N+1) = 7.2x: the source plus 8 copies), dCached 8.9-9.1x.
+- Time, missed: the median of round medians is T 4609 ms against C 6455.5 ms, ratio **0.714**,
+  above the 0.5 bar. The bootstrap 95% CI is 0.697-0.723 (10 000 resamples of the rounds within
+  each arm, seed 28, as in H28), equal to the min-max of round medians. Each T round alone reads
+  0.70-0.72 of the C median. max(T) 4656 < min(C) 6440.5 is complete separation (exact one-sided
+  Mann-Whitney p = 1/C(6,3) = 0.05), so T is faster, but by less than half. The spread gate
+  passed: T 2.7% and C 1.0% of the median (bar <= 30%).
+- The row predicted ratio 0.55 (0.35-0.8). 0.714 lies inside that band, above its point. The
+  most likely pre-registered outcome was REFUTED (time part), at 0.5.
+- The pre-registration's reason for the uncertain time part was that the copy runs at memory
+  speed on this host. The copy did not get faster: C read 6455.5 ms here against 6333 ms on the
+  i9 (H28). T got slower: 4609 ms here against 2980 ms on the i9. So the T-C gap is 1846 ms here
+  against 3353 ms on the i9. What makes T slower on this host (the cold mmap read, pod start on
+  this node image, or the CPU) was not measured.
+- The node saves (N-1) x size = 7 GiB of page cache per 8 pods of a 1 GiB model, as on the i9.
+- Within a T round all 8 pods printed READY within 1 ms of each other, as on the i9.
+
+**Load, amendment 27 (`matched_a27`), `typical`.** Covariates (gating, `TOLERANCE`):
+
+| Phase | Metric | C | T | spread / limit |
+|-------|--------|---|---|----------------|
+| pre (n = 3 per arm) | load-CPU busy % | 37.57 | 37.53 | 0.05 / 5.0 ok |
+| pre | throttle/min | 0.0 | 0.0 | 0.0 / 10.0 ok |
+| pre | swap used MiB | 0 | 0 | 0 / 256 ok |
+| pre | swap growth MiB | 0 | 0 | 0 / 64 ok |
+| during (C 6, T 3 windows) | load-CPU busy % (24-47,72-95) | 37.75 | 37.96 | 0.21 / 5.0 ok |
+| during | swap used MiB | 0 | 0 | 0 / 256 ok |
+| during | swap growth MiB | 0 | 0 | 0 / 64 ok |
+
+Load matched: **yes**, no void. Every settle gap settled after 5 s. Outcomes during the round
+(reported, never gating): package W 207.0 C vs 208.7 T, throttle/min 0 vs 0, 1-min load 22.3
+vs 23.8. The serving covariate (`serving.py`, 39 windows of 10 s, reported, never gating) read
+the other tenants' containers at 2.24-2.41 CPU-s/s and 0 aiperf processes; `load1` ran 4.5-25.6,
+which includes this hold's own load and pods.
+
+**Recorded, not scored (A1 charge).** As on the i9, the memcg `file` charge of a T round was
+spread over the 8 pods that faulted at once, 105-148 MiB each and about 1x size in sum, and
+`memory.current` stayed 114-158 MiB per pod.
+
+**Derived confidence** (H28's rule: fraction of non-void rounds that agree with the outcome row
+x (1 - p)). All 3 C rounds show duplication. All 3 T rounds meet every memory bar, and each one
+reads above 0.5 of the C median. 6/6 x 0.95 = **0.95**.
+
+**Verdict: REFUTED (time part) at `typical`** (confidence 0.95). This replaces run 1's
+INCONCLUSIVE in the row. On the Xeon 6741P, 8 pods that mmap one model through an image volume
+share one page-cache copy, as H28 found on the i9: PSS 132.6 MiB each and 1.00x the size on the
+node, where per-pod copies cost 9x. They do not become ready in half the time of the copy arm.
+They take 0.71x of it. Under H28's outcome table, on this host the memory sharing may be claimed
+and the ready time may not. H28 (i9-13900T) stays SUPPORTED, and its time ratio stays scoped to
+that host.
+
+Limits: one hold on one host (Granite Rapids, 503 GiB RAM, no swap, NVMe), one snapshotter
+(overlayfs), N = 8, a 1 GiB random blob read in 4 KiB steps (not a real model load), CPU-resident
+weights only, `typical` load only. As in H28, the copy arm is a per-pod copy from the same local
+image, a lower bound on a per-pod download.
 
 ### H50-H52 pre-registration: the Xeon 6741P (2026-10-20)
 

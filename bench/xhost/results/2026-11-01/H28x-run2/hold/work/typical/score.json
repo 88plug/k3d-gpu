@@ -1,0 +1,196 @@
+{
+ "void_rounds": {
+  "T": 0,
+  "C": 0
+ },
+ "rounds": [
+  {
+   "arm": "C",
+   "round": 1,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 6503.5,
+   "pss_kB": 1053225.5,
+   "shared_clean_kB": 5676.0
+  },
+  {
+   "arm": "C",
+   "round": 4,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 6440.5,
+   "pss_kB": 1053224.0,
+   "shared_clean_kB": 5672.0
+  },
+  {
+   "arm": "C",
+   "round": 5,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 6455.5,
+   "pss_kB": 1053218.0,
+   "shared_clean_kB": 5678.0
+  },
+  {
+   "arm": "T",
+   "round": 2,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 4533.0,
+   "pss_kB": 135753.5,
+   "shared_clean_kB": 1054274.0
+  },
+  {
+   "arm": "T",
+   "round": 3,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 4609.0,
+   "pss_kB": 135752.5,
+   "shared_clean_kB": 1054272.0
+  },
+  {
+   "arm": "T",
+   "round": 6,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 4656.0,
+   "pss_kB": 135757.0,
+   "shared_clean_kB": 1054130.0
+  }
+ ],
+ "load": {
+  "matched": true,
+  "void": false,
+  "verdict": "MATCHED",
+  "rule": "amendment-27",
+  "checks": [
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "C": 37.573,
+     "T": 37.527
+    },
+    "spread": 0.047,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 10.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "C": 37.752,
+     "T": 37.963
+    },
+    "spread": 0.212,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "during"
+   }
+  ],
+  "outcomes": [
+   {
+    "metric": "pkg_w",
+    "arms": {
+     "C": 207.013,
+     "T": 208.723
+    },
+    "spread": 1.71
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0
+   },
+   {
+    "metric": "load1",
+    "arms": {
+     "C": 22.252,
+     "T": 23.75
+    },
+    "spread": 1.498
+   }
+  ],
+  "unsettled": {}
+ },
+ "median": {
+  "T": {
+   "ready_ms": 4609.0,
+   "pss_kB": 135753.5,
+   "shared_clean_kB": 1054272.0,
+   "resident_kB": 1048576.0
+  },
+  "C": {
+   "ready_ms": 6455.5,
+   "pss_kB": 1053224.0,
+   "shared_clean_kB": 5676.0,
+   "resident_kB": 9437184.0
+  }
+ },
+ "ready_spread": {
+  "T": 0.02668691690171404,
+  "C": 0.009759120130121602
+ },
+ "ready_ratio": 0.714,
+ "separated": true,
+ "verdict": "REFUTED",
+ "row": "time part: T/C ready > 0.5 or rounds overlap"
+}
