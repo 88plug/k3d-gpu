@@ -335,6 +335,20 @@ class EasEditTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             h62.set_autodeploy(CONFIG.replace("llm_services_autodeploy_models: [\"qwen", "#x: [\"qwen"), "gemma-4-26b")
 
+    def test_d2_reads_name_lines_with_an_inline_comment(self):
+        # Amendment V3: EI release-1.1's catalog opens with
+        # "  - name: qwen3-0-6b      # deploy name + the "model" id used in API requests".
+        commented = ('models:\n  - name: qwen3-0-6b                    # deploy name + the "model" id used in API requests\n'
+                     '    model_id: Qwen/Qwen3-0.6B\n\n' + MODELS)
+        out = h62.set_model_id(commented, "gemma-4-26b", "google/gemma-4-26B-A4B-it",
+                               "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized")
+        self.assertEqual(sum(1 for a, b in zip(commented.splitlines(), out.splitlines()) if a != b), 1)
+        self.assertIn("model_id: Qwen/Qwen3-0.6B\n", out)
+        self.assertIn("model_id: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized\n", out)
+        out2 = h62.set_model_id(commented.replace("- name: qwen3-0-6b ", "- name: gemma-4-26b "), "gemma-4-26b",
+                                "Qwen/Qwen3-0.6B", "x/y")                          # a commented entry matches by name
+        self.assertTrue(out2.split("\n\n")[0].endswith("model_id: x/y"))
+
     def test_d2_moves_only_gemma_4_26b_to_the_qat_weights(self):
         out = h62.set_model_id(MODELS, "gemma-4-26b", "google/gemma-4-26B-A4B-it",
                                "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized")

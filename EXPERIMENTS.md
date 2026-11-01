@@ -4634,6 +4634,45 @@ prediction, statistic, gate, threshold, cap or verdict rule changes.
 - **Then.** The run branch's new head is pushed, deployed to `~/k3dgpu-bench/k3d-gpu-h62` and
   recorded. `campaign.sh` runs again from setup, with both guests built from scratch.
 
+### H62 amendment V3: D2 reads the catalog's commented name lines (2026-11-01)
+
+Written 2026-11-01 after setup attempt 2 failed at guest-b's edit step, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It changes mechanics only. D2 is
+the same edit, on the same entry, to the same weights.
+
+- **Setup attempt 2** (`campaign.sh` at `a727d2ae`, 07:15:36Z to 07:31:36Z).
+  - The host gate and the guest gate passed again (`amx_tile` 96 of 96 and `nproc` 96 in both
+    guests).
+  - Amendment V2 worked: `configure` ran on its terminal and finished ("configure: done."), and
+    `init agent-toolkit` cloned EI at `170eb3a` and EAT at `036b662`.
+  - `guest-b.sh` stopped at 07:17:33Z in `h62.py eas-edit`, before any file was changed:
+    `AttributeError: 'NoneType' object has no attribute 'group'` in `set_model_id`.
+  - VM a was in its IR step. Its run was stopped at 07:31:30Z, `setup.sh` exited 1 (guest-a 255
+    from the stop, guest-b 1), no hold ran, and teardown removed both guests at 07:31:36Z.
+  - It is not a hold and counts against no cap. Its records come back under the run's
+    `setup-attempt2/`.
+- **Cause.** `init` seeds `env/local/models.yaml` from EI `release-1.1`'s
+  `model_manager/models.yaml` (init.log: "created: local/models.yaml (from
+  enterprise.ai-inference/model_manager/models.yaml)"). Its first entry carries an inline
+  comment: `- name: qwen3-0-6b   # deploy name + the "model" id used in API requests` (line 96).
+  `set_model_id` read every name line with a pattern that allowed nothing after the name, so the
+  first entry did not parse. The runner's test catalog had no comment on a name line.
+- **The change.** The name pattern allows a trailing `# comment`. Nothing else in D2 changes: the
+  entry is still found by its name, its one `model_id` line must still read the stock
+  `google/gemma-4-26B-A4B-it`, and only that line changes.
+- **Checked before pushing.** `h62.py eas-edit` on the real files (EI `170eb3a`
+  `model_manager/models.yaml` and EAT `036b662` `config.yaml`, as `init` seeds them) changes
+  exactly two lines: `llm_services_autodeploy_models: ["gemma-4-26b"]`, and gemma-4-26b's
+  `model_id: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized` (line 361). A regression test in
+  `EasEditTest` uses a commented name line.
+- **Also checked, from source.** `guest-b.sh` reads the cluster from `env/local/kubeconfig.yaml`,
+  which is where rc.1's installer writes it (`es_auto_installer.sh` lines 1272-1273). B5's
+  namespace `llm-inference` and Service `gemma-4-26b-kserve-workload-svc:8000` are EI
+  `release-1.1`'s (`roles/llm_services/defaults/main.yaml` line 34, `model_manager/core/routing.py`
+  line 44).
+- **Then.** The run branch's new head is pushed, deployed and recorded, and `campaign.sh` runs
+  again from setup with both guests built from scratch.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The

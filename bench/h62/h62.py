@@ -300,7 +300,8 @@ def set_model_id(text, name, old_id, new_id):
     lines = text.splitlines(True)
     heads = [i for i, ln in enumerate(lines) if re.match(r"\s*- name:\s*\S", ln)]
     for k, i in enumerate(heads):
-        if re.match(r"\s*- name:\s*(\S+)\s*$", lines[i]).group(1) != name:
+        # A name line may carry an inline comment (EI release-1.1's first entry does; amendment V3).
+        if re.match(r"\s*- name:\s*(\S+)\s*(#.*)?$", lines[i]).group(1) != name:
             continue
         end = heads[k + 1] if k + 1 < len(heads) else len(lines)
         ids = [j for j in range(i, end) if re.match(r"\s*model_id:", lines[j])]
