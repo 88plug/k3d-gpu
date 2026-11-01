@@ -1225,10 +1225,24 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
-    if [ "${rc}" -ne 0 ] && grep -q 'no longer takes MM_LITELLM_MASTER_KEY from _deploy_litellm_secret' <<< "${out}"; then
+    if [ "${rc}" -ne 0 ] && grep -q 'no longer takes the master key from _deploy_litellm_secret' <<< "${out}"; then
         ok "cli: eas.sh stops when EI's deploy takes the key from elsewhere"
     else
         fail "cli: EI deploy taking the key from elsewhere: rc=${rc} ${out}"
+    fi
+    cli_lacks  "cli: ...before install" "$(cat "${LOG}")" "installer install"
+    # The same under another variable name: the master key from a Secret read the
+    # overrides do not empty, handed over as MM_LITELLM_KEY.
+    command cp -f "${ROOT}/tests/fixtures/eas/argv/deploy-models.yml" "${DM}"
+    sed -i -e 's/register: _deploy_litellm_secret$/register: _mm_litellm_secret/' \
+        -e 's/^\( *\)MM_LITELLM_MASTER_KEY:.*/\1MM_LITELLM_KEY: "{{ _mm_litellm_secret.resources[0].data.master_key | b64decode }}"/' "${DM}"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'no longer takes the master key from _deploy_litellm_secret' <<< "${out}"; then
+        ok "cli: eas.sh stops when EI's deploy hands the key over under another variable name"
+    else
+        fail "cli: EI deploy handing the key over as MM_LITELLM_KEY: rc=${rc} ${out}"
     fi
     cli_lacks  "cli: ...before install" "$(cat "${LOG}")" "installer install"
     rm -f "${DM}"

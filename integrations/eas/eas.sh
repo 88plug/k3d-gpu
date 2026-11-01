@@ -150,10 +150,14 @@ key_argv_guard() {
     local f="${CHECKOUT}/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml"
     [ -d "${CHECKOUT}/ext/enterprise.ai-inference" ] || return 0
     [ -f "${f}" ] || err "EI has no roles/llm_services/tasks/deploy_models.yaml: check how it now hands model-manager the LiteLLM master key (eas-config.py argv_master_key)"
-    awk '/^[[:space:]]*MM_LITELLM_MASTER_KEY:/ { any = 1; if ($0 !~ /_deploy_litellm_secret/) bad = 1 }
+    # Every line naming the master key (MM_LITELLM_MASTER_KEY, the Secret's .data.master_key,
+    # litellm_master_key), under any variable name, must take it from _deploy_litellm_secret;
+    # a shell's $MM_LITELLM_MASTER_KEY reads the value that line sets.
+    awk '{ l = $0; gsub(/\$\{?MM_LITELLM_MASTER_KEY\}?/, "", l) }
+         tolower(l) ~ /master_key/ && l !~ /^[[:space:]]*#/ { any = 1; if (l !~ /_deploy_litellm_secret/) bad = 1 }
          /^[[:space:]]*register:[[:space:]]*_deploy_litellm_secret[[:space:]]*$/ { reg = 1 }
          END { exit (bad || (any && !reg)) ? 1 : 0 }' "${f}" \
-        || err "EI's deploy_models.yaml no longer takes MM_LITELLM_MASTER_KEY from _deploy_litellm_secret alone: k3d-gpu-overrides.yaml would not keep the master key off the deploy's command line (eas-config.py argv_master_key)"
+        || err "EI's deploy_models.yaml no longer takes the master key from _deploy_litellm_secret alone: k3d-gpu-overrides.yaml would not keep the master key off the deploy's command line (eas-config.py argv_master_key)"
 }
 
 cmd_up() {
