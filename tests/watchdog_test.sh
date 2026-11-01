@@ -95,6 +95,9 @@ PY
     jq -n --arg t "$(iso '-13 minutes')" '[{databaseId: 4200, conclusion: "success", status: "completed",
         createdAt: $t, url: "https://github.com/88plug/k3d-gpu/actions/runs/4200", headSha: "x",
         workflowName: "Watchdog", event: "schedule"}]' > "$C/wd_sched.json"
+    # The scheduled workflows the watchdog finds besides those two (Canary, Bot sweep)
+    # ran green 13 minutes ago.
+    jq '.[0].workflowName = "Scheduled"' "$C/wd_sched.json" > "$C/other_sched.json"
     jq -n --arg s "$HEAD_SHA" --arg t "$(iso '-1 hour')" \
         '{sha: $s, commit: {committer: {name: "88plug", date: $t}, message: "bench(wildct): smoke3"}}' > "$C/head.json"
     runs ci_head.json "push:completed:success:$HEAD_SHA:$(iso '-58 minutes')"
@@ -116,6 +119,7 @@ PY
     route '^api repos/88plug/k3d-gpu/actions/workflows' workflows.json
     route '^run list .*--workflow build-and-push\.yml .*--event schedule' bp_sched.json
     route '^run list .*--workflow watchdog\.yml .*--event schedule' wd_sched.json
+    route '^run list .*--workflow (canary|bot-sweep)\.yml .*--event schedule' other_sched.json
     route '^api repos/88plug/k3d-gpu/commits/main' head.json
     route '^run list .*--workflow ci\.yml .*--commit ' ci_head.json
     route '^run list .*--workflow ci\.yml .*--branch main' ci_main.json

@@ -62,6 +62,14 @@ LLAMA_CPU_IMAGE = "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987
 LLAMA_FULL_IMAGE = "ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf"
 
 
+def untagged(ref):
+    """repo@sha256:... for a digest-pinned ref, with any :tag dropped (the digest names the image)."""
+    name, at, digest = (ref or "").partition("@")
+    if at and ":" in name.rsplit("/", 1)[-1]:
+        name = name.rsplit(":", 1)[0]
+    return name + at + digest
+
+
 def slug(repo, rev):
     """`k3d-gpu`'s model-cache directory name for repo@rev (gguf_slug)."""
     return f"{repo.replace('/', '__')}@{rev}"
@@ -296,7 +304,7 @@ def check(arm, host, docs):
     if ann.get("k3d-gpu.io/agent-device") != "CPU":
         bad.append(f"agent device {ann.get('k3d-gpu.io/agent-device')!r}, not CPU")
     if arm == "O":
-        if c.get("image") != OVMS_IMAGE:
+        if untagged(c.get("image")) != untagged(OVMS_IMAGE):
             bad.append(f"image {c.get('image')}, not {OVMS_IMAGE}")
         pull = [x for x in ps.get("initContainers") or [] if x["name"] == "pull"]
         pa = args_of(pull[0]) if pull else []
@@ -309,7 +317,7 @@ def check(arm, host, docs):
         if f"--model_path=/models/{OVB}" not in a:
             bad.append(f"server does not serve /models/{OVB}")
     else:
-        if c.get("image") != LLAMA_CPU_IMAGE:
+        if untagged(c.get("image")) != untagged(LLAMA_CPU_IMAGE):
             bad.append(f"image {c.get('image')}, not {LLAMA_CPU_IMAGE}")
         for opt, v in (("--model", GGUF_PATH), ("--spec-draft-model", DRAFT_PATH), ("--spec-type", "draft-mtp"),
                        ("--alias", SERVED), ("--reasoning", "off")):
