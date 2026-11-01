@@ -740,6 +740,17 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn('LIVE_REMOTE_A="${HERE}/arm-A1"', sh)
         self.assertIn('LIVE_REMOTE_B="${HERE}/arm-B5"', sh)
 
+    def test_guest_b_records_the_cluster_when_the_install_fails(self):
+        # Amendment V4: records only, and the failed install still fails the script.
+        sh = read(HERE, "guest-b.sh")
+        i = sh.index('if ! ./es_auto_installer.sh install agent-toolkit > "${R}/install.log" 2>&1; then')
+        block = sh[i:sh.index("\nfi\n", i)]
+        for f in ("fail-nodes.txt", "fail-pods.txt", "fail-events.txt", "fail-describe.txt"):
+            self.assertIn(f, block)
+        self.assertTrue(block.rstrip().endswith("exit 1"))
+        self.assertIn("export KUBECONFIG=${E}/env/local/kubeconfig.yaml", block)    # set only after the install
+        self.assertNotIn("KUBECONFIG", sh[:i])
+
     def test_guest_b_is_intels_documented_path(self):
         sh = read(HERE, "guest-b.sh")
         steps = ['git clone -q -b "${TAG}" https://github.com/intel/enterprise-ai-solutions.git',

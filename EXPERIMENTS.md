@@ -4673,6 +4673,56 @@ the same edit, on the same entry, to the same weights.
 - **Then.** The run branch's new head is pushed, deployed and recorded, and `campaign.sh` runs
   again from setup with both guests built from scratch.
 
+### H62 amendment V4: the cluster's state is recorded when B5's install fails (2026-11-01)
+
+Written 2026-11-01 after setup attempt 3 ended with Intel's own install failing, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It adds records only. No arm,
+prediction, statistic, gate, threshold, cap or verdict rule changes.
+
+- **Setup attempt 3** (`campaign.sh` at `ba08b739`, 07:35:06Z to 08:24:36Z).
+  - The host gate and the guest gate passed again.
+  - VM a: A1 served after 34.6 min of its 45 min ceiling (IR step 07:36:20Z, `k3d-gpu up`
+    07:52:22Z, the IR copied into the node by 08:09:36Z, `deploy/ovms` rolled out and its pod
+    1/1 Running by 08:10:39Z). `guest-a.sh` exited 0. Reading the 18.1 GB IR over virtfs took
+    about 16 min twice (the check, then the copy); that is inside the ceiling and is reported.
+  - VM b: amendments V2 and V3 worked (`configure` done, `init` at `170eb3a` and `036b662`, the
+    edit and D2 exactly as registered). `install agent-toolkit` ran from 07:37:00Z. The
+    `gemma-4-26b` workload pod was 1/1 Running by about 08:09Z, the node carried
+    `cpu-cpuid.AMXBF16=true`, and the B5 selector, namespace and Service matched. Qwen3Guard
+    was Running too.
+  - The install then failed at 08:23:50Z, at 46.8 min, in EAT `036b662`'s
+    `agent_sandbox | Wait for sandbox-router to be ready`
+    (`roles/agent_sandbox/tasks/install.yaml` line 163): after 60 attempts the
+    `sandbox-router-deployment` had 0 ready replicas of 2 ("ProgressDeadlineExceeded",
+    "MinimumReplicasUnavailable"). Its image is EAT's default, the floating
+    `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main`
+    (`roles/agent_sandbox/defaults/main.yaml`).
+  - `guest-b.sh` exited 1, so `setup.sh` exited 1 and teardown removed both guests at
+    08:24:36Z before the pods could be read. Records come back under the run's
+    `setup-attempt3/`.
+- **What was ruled out from the host, about 2026-11-01T08:26Z.** The router image is not broken
+  on its own. `latest-main` now resolves to `sha256:47a63d94...`; #260 pinned `sha256:9cebf7d9...`
+  on an earlier date. Both, run on crescent's Docker as the Deployment runs
+  them (user 1000, the same env), start and answer `GET /healthz` with 200 within 12 s. Both
+  were built 2026-10-29T17:17:22Z. Why the pods were not Ready in VM b (scheduling, image pull
+  through the guest's network, the ambient mesh, or something else) is open.
+- **The change.** When `install agent-toolkit` fails, `guest-b.sh` now records, before it
+  exits 1: the nodes (`kubectl describe nodes`), every pod, the events, and the description and
+  last 50 log lines of every pod that is not Ready. These are `fail-*.txt` in the guest's records,
+  which `setup.sh` already copies back before teardown. The install's environment is unchanged:
+  `KUBECONFIG` is set only after it returns.
+- **The rule for attempt 4.** Setup runs once more at this amendment's commit. Setup is not a
+  hold, and the pre-registration bounds no setup attempts, so the bound is set here: this is the
+  last one.
+  - If B5's install fails again in a way the records trace to stock B5 itself (EAS's or EAT's
+    own sizing, images or defaults on this guest shape), B5 is not deliverable in its guest and
+    H62 is INCONCLUSIVE ("not deliverable"), as the pre-registration's INCONCLUSIVE case names.
+    The cause is reported.
+  - If the records trace it to this runner or this guest's plumbing (D3), it is reported as
+    such. H62 is then INCONCLUSIVE as well, with no further attempt in this row.
+  - If the install passes, setup goes on to its NFD and weight gates, and the campaign continues
+    as registered.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
