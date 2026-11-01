@@ -1,0 +1,10 @@
+NAMESPACE                NAME                                      READY   STATUS             RESTARTS      AGE     IP           NODE                        NOMINATED NODE   READINESS GATES
+default                  vllm-qwen38-27b-xpu-799dc85d7c-ng77g      0/1     CrashLoopBackOff   2 (11s ago)   2m13s   10.42.0.14   k3d-k3dgpu-e-h53-server-0   <none>           <none>
+kube-system              coredns-577d995dff-c89zz                  1/1     Running            0             4m48s   10.42.0.2    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-gfhvl        0/1     Completed          0             4m48s   10.42.0.4    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-hxvpb                    1/1     Running            0             4m48s   10.42.0.5    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-8t662   1/1     Running            0             4m48s   10.42.0.6    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-l4d4j           1/1     Running            0             4m48s   10.42.0.3    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-v5ns2                   1/1     Running            0             4m48s   10.42.0.8    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-m4whr               1/1     Running            0             4m48s   10.42.0.9    k3d-k3dgpu-e-h53-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-87d64                          1/1     Running            0             4m48s   10.42.0.7    k3d-k3dgpu-e-h53-server-0   <none>           <none>

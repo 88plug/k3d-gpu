@@ -1,0 +1,786 @@
+#!/usr/bin/env python3
+"""known-issues: the upstream bugs, changes and advisories k3d-gpu depends on,
+with the release that fixes each (pins/known-issues.toml).
+
+  hack/known-issues [--root DIR] check [--json]
+      Offline and deterministic (no clock, no network). Fails when:
+        - the registry breaks its schema (pins/known-issues.toml header);
+        - a `known-issue: <id>` / `known-issue-begin|end: <id>` marker names no
+          entry, sits in a file its entry's `workarounds` does not list, sits in a
+          ledger or historical file, or a begin has no end; or a listed workaround
+          file has no marker;
+        - a site regex matches nothing, or a matched version does not parse;
+        - an "ours" site's version is inside `affected` while `fixed_in` is set
+          ("bump <file> to >= <fixed_in>");
+        - workaround markers remain while every "ours" site is at or past
+          `fixed_in` and `retained` is empty.
+      Reports, without failing: "eat-stock" sites in range, "ours" sites in range
+      of an unfixed issue, and ledger_refs in range. --json prints the evaluation.
+
+  hack/known-issues [--root DIR] poll [--json] [--id ID]...
+      Network, read-only (gh api with GITHUB_TOKEN; writes no file). For each
+      entry: finds the fix commit (fix.sha, the pull request's merge commit, or
+      the commit that closed the issue, from its timeline), walks the fix repo's
+      stable releases in version order from the lowest site version, and takes
+      the first whose compare/<tag>...<sha> reads "behind" or "identical". A
+      fix of the form {repo, path, contains} takes the first release whose file
+      contains the string; {ecosystem, package} reads the GitHub advisory
+      database for the lowest site version and takes the first stable patched
+      version above it outside every advisory's range, reading each
+      candidate's own advisories too until one has none. With an `image`
+      template the image tag of the fixing release must resolve
+      (scripts/images-lock digest). Prints
+      {id, state, fixed_in, tag, release_url, published_at, recorded, mismatch}
+      per entry; exit 1 when an entry could not be read.
+
+Site and marker classes come from pins/classes (`<glob> <class> ...`, first match
+wins) when it exists, then from the defaults below: EAT's stock paths are
+"eat-stock", bench/ is "ledger", oracle/seed/ and console/matrix.v1.json are
+"historical", everything else is "ours". Sites and markers may only be in "ours"
+or "eat-stock" files, never under bench/ or oracle/seed/ or in EXPERIMENTS.md.
+
+Python standard library only (tomllib: Python 3.11+).
+"""
+
+import argparse
+import base64
+import fnmatch
+import functools
+import importlib.machinery
+import importlib.util
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tomllib
+import urllib.parse
+
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import pinver  # noqa: E402
+
+REGISTRY = "pins/known-issues.toml"
+CLASSES = "pins/classes"
+MARKER_RE = re.compile(r"known-issue(-begin|-end)?:[ \t]*([a-z0-9][a-z0-9.-]*[a-z0-9])")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*[a-z0-9]$")
+UPSTREAM_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[1-9][0-9]*$")
+REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+ROW_RE = re.compile(r"^H\d+[a-z]{0,2}$")
+GHSA_RE = re.compile(r"^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$")
+KINDS = ("bug", "change", "advisory")
+ADOPT = ("review", "auto")
+
+# The registry, the tools and their tests hold marker text as data.
+SELF = {REGISTRY, "hack/known-issues", "hack/ledger-freshness", "hack/pinver.py",
+        "tests/known_issues_test.py", "tests/ledger_freshness_test.py", "tests/pinver_test.py"}
+DEFAULT_CLASSES = [
+    ("integrations/eat/*", "eat-stock"), ("examples/kuberay/*", "eat-stock"),
+    ("examples/agents/litellm-gateway/*", "eat-stock"), ("contrib/eat/*", "eat-stock"),
+    ("bench/*", "ledger"), ("oracle/seed/*", "historical"), ("console/matrix.v1.json", "historical"),
+]
+NEVER = ("bench/", "oracle/seed/")
+NEVER_FILES = ("EXPERIMENTS.md", "console/matrix.v1.json")
+
+REQUIRED = {"id": str, "title": str, "kind": str, "upstream": str, "component": str, "scheme": str,
+            "affected": str, "fixed_in": str, "adopt": str, "sites": list, "workarounds": list, "notes": str}
+OPTIONAL = {"fix": dict, "retained": dict, "ledger_refs": list, "advisories": list, "image": str, "test": str}
+
+
+class ApiError(Exception):
+    def __init__(self, status, detail):
+        super().__init__("HTTP %s: %s" % (status, detail))
+        self.status = status
+
+
+# --- loading -------------------------------------------------------------------
+
+def load(root, registry=None):
+    """The [[issue]] entries of the registry, in file order."""
+    path = pathlib.Path(registry) if registry else pathlib.Path(root) / REGISTRY
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    extra = sorted(set(data) - {"issue"})
+    if extra:
+        raise ValueError("%s: unknown top-level key(s) %s" % (REGISTRY, ", ".join(extra)))
+    issues = data.get("issue", [])
+    if not isinstance(issues, list):
+        raise ValueError("%s: issue must be an array of tables ([[issue]])" % REGISTRY)
+    return issues
+
+
+def load_classes(root):
+    """[(glob, class)]: pins/classes lines first (first match wins), then the defaults."""
+    out = []
+    p = pathlib.Path(root) / CLASSES
+    if p.is_file():
+        for line in p.read_text().splitlines():
+            parts = line.split()
+            if not parts or parts[0].startswith("#") or parts[0] == "historical-ref" or len(parts) < 2:
+                continue
+            out.append((parts[0], parts[1]))
+    return out + DEFAULT_CLASSES
+
+
+def path_class(classes, rel):
+    for glob, cls in classes:
+        if fnmatch.fnmatchcase(rel, glob):
+            return cls
+    return "ours"
+
+
+def forbidden(classes, rel):
+    """Why a site or marker may not live in rel, or None."""
+    if rel.startswith(NEVER) or rel in NEVER_FILES:
+        return "a ledger or historical file"
+    cls = path_class(classes, rel)
+    if cls not in ("ours", "eat-stock"):
+        return "a %s file" % cls
+    return None
+
+
+def ledger_rows(root):
+    """{row: verdict} of the target tree's EXPERIMENTS.md via tests/ledger_drift_check.py, or None."""
+    if not (pathlib.Path(root) / "EXPERIMENTS.md").is_file():
+        return None
+    src = HERE.parent / "tests" / "ledger_drift_check.py"
+    loader = importlib.machinery.SourceFileLoader("ledger_drift_check", str(src))
+    spec = importlib.util.spec_from_loader("ledger_drift_check", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod.ledger(pathlib.Path(root))
+
+
+def list_files(root):
+    """Repo-relative paths: git's tracked and unignored files when root is a work tree, else a walk."""
+    root = pathlib.Path(root)
+    try:
+        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+        if pathlib.Path(top).resolve() == root.resolve():
+            out = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+                                  "--exclude-standard"], capture_output=True, check=True).stdout
+            return sorted({p for p in out.decode().split("\0") if p and (root / p).is_file()})
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    found = []
+    for d, dirs, files in os.walk(root):
+        dirs[:] = sorted(x for x in dirs if x != ".git")
+        found += [os.path.relpath(os.path.join(d, f), root) for f in files]
+    return sorted(found)
+
+
+# --- sites and markers ---------------------------------------------------------
+
+def matches(root, rel, regex, scheme):
+    """(versions, error) of a {file, regex} pair."""
+    p = pathlib.Path(root) / rel
+    if not p.is_file():
+        return None, "%s: no such file" % rel
+    try:
+        rx = re.compile(regex, re.M)
+    except re.error as e:
+        return None, "regex %r does not compile (%s)" % (regex, e)
+    if "v" not in rx.groupindex:
+        return None, "regex %r has no named group v" % regex
+    found = []
+    for m in rx.finditer(p.read_text(errors="replace")):
+        if m.group("v") not in found:
+            found.append(m.group("v"))
+    if not found:
+        return None, "regex %r matches nothing in %s" % (regex, rel)
+    for v in found:
+        try:
+            pinver.parse(scheme, v)
+        except ValueError as e:
+            return None, "%s: %s" % (rel, e)
+    return found, None
+
+
+def scan_markers(root, files):
+    out = []
+    for rel in files:
+        if rel in SELF:
+            continue
+        try:
+            data = (pathlib.Path(root) / rel).read_bytes()
+        except OSError:
+            continue
+        if b"known-issue" not in data:
+            continue
+        for n, line in enumerate(data.decode("utf-8", errors="replace").splitlines(), 1):
+            for m in MARKER_RE.finditer(line):
+                out.append({"file": rel, "line": n, "kind": (m.group(1) or "-marker")[1:], "id": m.group(2)})
+    return out
+
+
+# --- validation ----------------------------------------------------------------
+
+def _str_list(v):
+    return isinstance(v, list) and all(isinstance(x, str) and x for x in v)
+
+
+def validate_fix(fix, kind):
+    if not fix:
+        return []
+    keys = set(fix)
+    errs = []
+    if "repo" in keys and keys <= {"repo", "sha", "pr"} and keys & {"sha", "pr"}:
+        if not (isinstance(fix["repo"], str) and REPO_RE.match(fix["repo"])):
+            errs.append("fix.repo must be owner/name")
+        if "sha" in fix and not (isinstance(fix["sha"], str) and re.match(r"^[0-9a-f]{40}$", fix["sha"])):
+            errs.append("fix.sha must be a full 40-hex commit")
+        if "pr" in fix and not (isinstance(fix["pr"], int) and not isinstance(fix["pr"], bool) and fix["pr"] > 0):
+            errs.append("fix.pr must be a positive integer")
+    elif keys == {"repo", "path", "contains"}:
+        if not (isinstance(fix["repo"], str) and REPO_RE.match(fix["repo"])):
+            errs.append("fix.repo must be owner/name")
+        if not all(isinstance(fix[k], str) and fix[k] for k in ("path", "contains")):
+            errs.append("fix.path and fix.contains must be non-empty strings")
+    elif keys == {"ecosystem", "package"}:
+        if kind != "advisory":
+            errs.append("fix {ecosystem, package} is for kind advisory")
+        if not all(isinstance(fix[k], str) and fix[k] for k in keys):
+            errs.append("fix.ecosystem and fix.package must be non-empty strings")
+    else:
+        errs.append("fix must be {}, {repo, sha and/or pr}, {repo, path, contains} or {ecosystem, package}")
+    return errs
+
+
+def validate(root, issues, classes, rows):
+    """Schema errors, as 'pins/known-issues.toml: <id>: <problem>' lines; and the ids that passed."""
+    errors, ok, seen = [], set(), set()
+    for i, e in enumerate(issues):
+        ident = e.get("id") if isinstance(e, dict) and isinstance(e.get("id"), str) else "issue %d" % (i + 1)
+        errs = []
+
+        def err(msg, errs=errs):
+            errs.append(msg)
+
+        if not isinstance(e, dict):
+            errors.append("%s: %s: not a table" % (REGISTRY, ident))
+            continue
+        for k in sorted(set(e) - set(REQUIRED) - set(OPTIONAL)):
+            err("unknown field %s" % k)
+        for k, t in REQUIRED.items():
+            if k not in e:
+                err("missing field %s" % k)
+            elif not isinstance(e[k], t):
+                err("%s must be a %s" % (k, t.__name__))
+        for k, t in OPTIONAL.items():
+            if k in e and not isinstance(e[k], t):
+                err("%s must be a %s" % (k, t.__name__))
+        if errs:
+            errors += ["%s: %s: %s" % (REGISTRY, ident, m) for m in errs]
+            continue
+        if not ID_RE.match(e["id"]):
+            err("id must be lowercase letters, digits, '.' and '-'")
+        if e["id"] in seen:
+            err("duplicate id %s" % e["id"])
+        seen.add(e["id"])
+        if e["kind"] not in KINDS:
+            err("kind %r is not one of %s" % (e["kind"], ", ".join(KINDS)))
+        if e["adopt"] not in ADOPT:
+            err("adopt %r is not one of %s" % (e["adopt"], ", ".join(ADOPT)))
+        if e["upstream"] and not UPSTREAM_RE.match(e["upstream"]):
+            err("upstream %r is not owner/repo#n" % e["upstream"])
+        if not e["title"].strip():
+            err("title is empty")
+        errs += validate_fix(e.get("fix", {}), e["kind"])
+        scheme = e["scheme"]
+        if scheme not in pinver.SCHEMES:
+            err("scheme %r is not one of %s" % (scheme, ", ".join(pinver.SCHEMES)))
+            errors += ["%s: %s: %s" % (REGISTRY, ident, m) for m in errs]
+            continue
+        try:
+            pinver.check_range(scheme, e["affected"])
+        except ValueError as x:
+            err("affected: %s" % x)
+        if e["fixed_in"]:
+            try:
+                if pinver.is_prerelease(scheme, e["fixed_in"]):
+                    err("fixed_in %s is a prerelease" % e["fixed_in"])
+                if pinver.in_range(scheme, e["fixed_in"], e["affected"]):
+                    err("fixed_in %s is inside affected %s; narrow affected" % (e["fixed_in"], e["affected"]))
+            except ValueError as x:
+                err("fixed_in: %s" % x)
+        for s in e["sites"]:
+            if not (isinstance(s, dict) and set(s) == {"file", "regex"} and all(isinstance(s[k], str) for k in s)):
+                err("each site is {file, regex}")
+                continue
+            why = forbidden(classes, s["file"])
+            if why:
+                err("site %s is in %s; sites are ours or eat-stock files" % (s["file"], why))
+            _, problem = matches(root, s["file"], s["regex"], scheme)
+            if problem:
+                err("site %s" % problem)
+        if not _str_list(e["workarounds"]) or len(set(e["workarounds"])) != len(e["workarounds"]):
+            err("workarounds must be a list of distinct file paths")
+        else:
+            for w in e["workarounds"]:
+                why = forbidden(classes, w)
+                if why:
+                    err("workaround %s is in %s" % (w, why))
+                elif not (pathlib.Path(root) / w).is_file():
+                    err("workaround %s: no such file" % w)
+        retained = e.get("retained", {})
+        if retained and not (set(retained) == {"reason", "pr"} and isinstance(retained["reason"], str)
+                             and retained["reason"].strip() and isinstance(retained["pr"], (str, int))):
+            err("retained must be {} or {reason, pr} with a reason")
+        for r in e.get("ledger_refs", []):
+            if not (isinstance(r, dict) and {"row", "path"} <= set(r) <= {"row", "path", "regex"}
+                    and all(isinstance(r[k], str) for k in r)):
+                err("each ledger_ref is {row, path, regex?}")
+                continue
+            if not ROW_RE.match(r["row"]):
+                err("ledger_ref row %r is not a ledger id" % r["row"])
+            elif rows is not None and r["row"] not in rows:
+                err("ledger_ref row %s is not in the EXPERIMENTS.md hypothesis table" % r["row"])
+            if not (pathlib.Path(root) / r["path"]).is_file():
+                err("ledger_ref %s: no such file" % r["path"])
+            elif "regex" in r:
+                _, problem = matches(root, r["path"], r["regex"], scheme)
+                if problem:
+                    err("ledger_ref %s" % problem)
+        if "advisories" in e:
+            if e["kind"] != "advisory":
+                err("advisories is for kind advisory")
+            elif not _str_list(e["advisories"]) or not all(GHSA_RE.match(a) for a in e["advisories"]):
+                err("advisories must be GHSA ids")
+        if "image" in e and "{tag}" not in e["image"] and "{version}" not in e["image"]:
+            err("image must hold {tag} or {version}")
+        test = e.get("test", "")
+        if test and not test.startswith("canary:") and not (pathlib.Path(root) / test).is_file():
+            err("test %s: no such file" % test)
+        errors += ["%s: %s: %s" % (REGISTRY, ident, m) for m in errs]
+        if not errs:
+            ok.add(e["id"])
+    return errors, ok
+
+
+def check_markers(issues, markers, classes):
+    errors = []
+    by_id = {e["id"]: e for e in issues if isinstance(e, dict) and isinstance(e.get("id"), str)}
+    open_blocks = {}
+    for m in markers:
+        where = "%s:%d" % (m["file"], m["line"])
+        tag = "known-issue%s: %s" % ("" if m["kind"] == "marker" else "-" + m["kind"], m["id"])
+        why = forbidden(classes, m["file"])
+        if why:
+            errors.append("%s: %s is in %s; markers go in ours or eat-stock files only" % (where, tag, why))
+        e = by_id.get(m["id"])
+        if e is None:
+            errors.append("%s: %s names no entry in %s" % (where, tag, REGISTRY))
+        elif m["file"] not in e.get("workarounds", []):
+            errors.append("%s: %s, but %s's workarounds do not list %s" % (where, tag, m["id"], m["file"]))
+        key = (m["file"], m["id"])
+        if m["kind"] == "begin":
+            open_blocks.setdefault(key, []).append(m["line"])
+        elif m["kind"] == "end":
+            if not open_blocks.get(key):
+                errors.append("%s: %s has no known-issue-begin: %s before it" % (where, tag, m["id"]))
+            else:
+                open_blocks[key].pop()
+    for (f, i), lines in sorted(open_blocks.items()):
+        for n in lines:
+            errors.append("%s:%d: known-issue-begin: %s has no known-issue-end: %s" % (f, n, i, i))
+    have = {(m["file"], m["id"]) for m in markers}
+    for e in by_id.values():
+        for w in e.get("workarounds", []) if isinstance(e.get("workarounds"), list) else []:
+            if isinstance(w, str) and (w, e["id"]) not in have:
+                errors.append("%s: %s: %s has no known-issue marker for %s" % (REGISTRY, e["id"], w, e["id"]))
+    return errors
+
+
+# --- check ---------------------------------------------------------------------
+
+def at_or_past(scheme, v, fixed):
+    try:
+        return pinver.in_range(scheme, v, ">=" + fixed)
+    except ValueError:
+        return False
+
+
+def evaluate(root, e, classes, markers):
+    """(record, failures, reports) for one valid entry."""
+    scheme, aff, fixed, ident = e["scheme"], e["affected"], e["fixed_in"], e["id"]
+    failures, reports, sites = [], [], []
+    tail = ", fixed in %s" % fixed if fixed else ", no fixed release known"
+    for s in e["sites"]:
+        versions, _ = matches(root, s["file"], s["regex"], scheme)
+        cls = path_class(classes, s["file"])
+        inside = [v for v in versions if pinver.in_range(scheme, v, aff)]
+        sites.append({"file": s["file"], "class": cls, "versions": versions, "in_affected": bool(inside)})
+        for v in inside:
+            what = "%s %s is inside %s's affected range %s%s" % (e["component"], v, ident, aff, tail)
+            if cls == "ours" and fixed:
+                failures.append("%s: %s; bump %s to >= %s" % (s["file"], what, s["file"], fixed))
+            else:
+                reports.append("%s %s: %s" % (cls, s["file"], what))
+    refs = []
+    for r in e.get("ledger_refs", []):
+        versions = matches(root, r["path"], r["regex"], scheme)[0] if "regex" in r else []
+        inside = [v for v in versions if pinver.in_range(scheme, v, aff)]
+        refs.append({"row": r["row"], "path": r["path"], "versions": versions, "in_affected": bool(inside)})
+        for v in inside:
+            reports.append("ledger %s %s: %s %s is inside %s's affected range %s%s (informational; the ledger "
+                           "changes only by amendment)" % (r["row"], r["path"], e["component"], v, ident, aff, tail))
+    mine = [m for m in markers if m["id"] == ident]
+    governing = [s for s in sites if s["class"] == "ours"] or sites
+    past = bool(fixed) and bool(governing) and all(
+        at_or_past(scheme, v, fixed) for s in governing for v in s["versions"])
+    if any(s["class"] == "ours" and s["in_affected"] for s in sites) and fixed:
+        status = "needs-bump"
+    elif not fixed:
+        status = "open"
+    elif past and mine and not e.get("retained"):
+        status = "stale-workaround"
+        files = sorted({m["file"] for m in mine})
+        failures.append("%s: workaround markers remain in %s though every ours site is at or past %s; remove "
+                        "them (known-issue-begin/end blocks) or set retained" % (ident, ", ".join(files), fixed))
+    elif mine and e.get("retained"):
+        status = "retained"
+    else:
+        status = "fixed"
+    record = {"id": ident, "kind": e["kind"], "component": e["component"], "scheme": scheme, "affected": aff,
+              "fixed_in": fixed, "upstream": e["upstream"], "adopt": e["adopt"], "status": status, "sites": sites,
+              "ledger_refs": refs, "workarounds": e["workarounds"],
+              "markers": [{k: m[k] for k in ("file", "line", "kind")} for m in mine]}
+    return record, failures, reports
+
+
+def check(root, registry=None):
+    root = pathlib.Path(root)
+    try:
+        issues = load(root, registry)
+    except (OSError, ValueError, tomllib.TOMLDecodeError) as x:
+        return {"ok": False, "errors": ["%s: %s" % (REGISTRY, x)], "reports": [], "issues": []}
+    classes = load_classes(root)
+    errors, valid = validate(root, issues, classes, ledger_rows(root))
+    markers = scan_markers(root, list_files(root))
+    errors += check_markers(issues, markers, classes)
+    reports, records = [], []
+    for e in issues:
+        if isinstance(e, dict) and e.get("id") in valid:
+            record, failures, rep = evaluate(root, e, classes, markers)
+            records.append(record)
+            errors += failures
+            reports += rep
+    return {"ok": not errors, "errors": errors, "reports": reports, "issues": records}
+
+
+def print_check(result):
+    sites = sum(len(i["sites"]) for i in result["issues"])
+    marks = sum(len(i["markers"]) for i in result["issues"])
+    print("known-issues: %d issue(s), %d site(s), %d marker(s)" % (len(result["issues"]), sites, marks))
+    for r in result["reports"]:
+        print("report %s" % r)
+    for x in result["errors"]:
+        print("FAIL %s" % x)
+    if result["ok"]:
+        print("known-issues: ok")
+    else:
+        print("known-issues: %d problem(s)" % len(result["errors"]))
+
+
+# --- poll ----------------------------------------------------------------------
+
+def gh_api(path):
+    p = subprocess.run(["gh", "api", "-H", "Accept: application/vnd.github+json", path],
+                       capture_output=True, text=True)
+    if p.returncode != 0:
+        m = re.search(r"HTTP (\d{3})", p.stderr)
+        raise ApiError(int(m.group(1)) if m else 0, "%s: %s" % (path, p.stderr.strip()[:300]))
+    return json.loads(p.stdout) if p.stdout.strip() else None
+
+
+def images_lock_digest(ref):
+    p = subprocess.run([sys.executable, str(HERE.parent / "scripts" / "images-lock"), "digest", ref],
+                       capture_output=True, text=True)
+    if p.returncode != 0 or not p.stdout.strip().startswith("sha256:"):
+        raise ValueError("%s does not resolve: %s" % (ref, (p.stderr or p.stdout).strip()[:300]))
+    return p.stdout.strip()
+
+
+def norm(tag):
+    return tag[1:] if re.match(r"^v\d", tag) else tag
+
+
+def site_floor(root, e):
+    """The lowest site version (a pinver.Version), or None."""
+    found = []
+    for s in e["sites"]:
+        versions, _ = matches(root, s["file"], s["regex"], e["scheme"])
+        found += [pinver.parse(e["scheme"], v) for v in versions or []]
+    found = [v for v in found if pinver.comparable(e["scheme"], v, found[0])] if found else []
+    return min(found, key=functools.cmp_to_key(lambda a, b: pinver.compare(e["scheme"], a, b))) if found else None
+
+
+def stable_releases(api, repo, scheme, floor):
+    """[(Version, tag, release)] ascending: published, not prerelease, parseable, of floor's flavour."""
+    out = []
+    for page in range(1, 11):
+        batch = api("repos/%s/releases?per_page=100&page=%d" % (repo, page)) or []
+        for r in batch:
+            if r.get("draft") or r.get("prerelease"):
+                continue
+            try:
+                v = pinver.parse(scheme, r["tag_name"])
+            except ValueError:
+                continue
+            if v.pre or (floor is not None and not pinver.comparable(scheme, v, floor)):
+                continue
+            out.append((v, r["tag_name"], r))
+        if len(batch) < 100:
+            break
+    if floor is None and out:
+        out = [t for t in out if pinver.comparable(scheme, t[0], out[0][0])]
+    out.sort(key=functools.cmp_to_key(lambda a, b: pinver.compare(scheme, a[0], b[0])))
+    return out
+
+
+def first_containing(tags, floor, scheme, contains, budget=60):
+    """Index of the first release that contains the fix, walking from the floor's release, or None."""
+    if not tags:
+        return None
+    start = 0
+    if floor is not None:
+        start = next((i for i, t in enumerate(tags) if pinver.compare(scheme, t[0], floor) >= 0), len(tags) - 1)
+    calls = [0]
+
+    def has(i):
+        calls[0] += 1
+        if calls[0] > budget:
+            raise ValueError("more than %d release checks; narrow the sites or the fix" % budget)
+        return contains(tags[i][1])
+
+    if has(start):
+        i = start
+        while i > 0 and has(i - 1):
+            i -= 1
+        return i
+    for i in range(start + 1, len(tags)):
+        if has(i):
+            return i
+    return None
+
+
+def pr_commit(api, repo, n):
+    pr = api("repos/%s/pulls/%s" % (repo, n)) or {}
+    if pr.get("merged") or pr.get("merged_at"):
+        return "merged", repo, pr.get("merge_commit_sha")
+    return ("open" if pr.get("state") == "open" else "closed-unmerged"), None, None
+
+
+def fix_commit(api, e):
+    """(state, repo, sha or None) of an entry's fix."""
+    fix = e.get("fix") or {}
+    if fix.get("sha"):
+        return "merged", fix["repo"], fix["sha"]
+    if fix.get("pr"):
+        return pr_commit(api, fix["repo"], fix["pr"])
+    if not e["upstream"]:
+        return "untracked", None, None
+    repo, n = e["upstream"].split("#")
+    issue = api("repos/%s/issues/%s" % (repo, n)) or {}
+    if issue.get("pull_request"):
+        return pr_commit(api, repo, n)
+    if issue.get("state") == "open":
+        return "open", None, None
+    if issue.get("state_reason") == "not_planned":
+        return "closed-not-planned", None, None
+    closing = None
+    for page in range(1, 11):
+        events = api("repos/%s/issues/%s/timeline?per_page=100&page=%d" % (repo, n, page)) or []
+        for ev in events:
+            if ev.get("event") == "closed" and ev.get("commit_id"):
+                m = re.search(r"/repos/([^/]+/[^/]+)/commits/", ev.get("commit_url") or "")
+                closing = (m.group(1) if m else repo, ev["commit_id"])
+        if len(events) < 100:
+            break
+    if closing:
+        return "closed", closing[0], closing[1]
+    return "closed-no-commit", None, None
+
+
+def gh_range(text):
+    """A GitHub advisory range ('>= 1.65.5, < 1.85.0') as a pinver spec."""
+    parts = []
+    for p in text.split(","):
+        m = re.match(r"^\s*(<=|>=|<|>|=)\s*(\S+)\s*$", p)
+        if not m:
+            raise ValueError("advisory range %r" % text)
+        parts.append(("==" if m.group(1) == "=" else m.group(1)) + m.group(2))
+    return ",".join(parts)
+
+
+def poll_advisory(api, root, e, out, rounds=10):
+    """The first stable patched version above the lowest site version that no advisory affects:
+    the advisories of the site version, then of each candidate, until a candidate has none."""
+    fix, scheme = e["fix"], e["scheme"]
+    floor = site_floor(root, e)
+    if floor is None:
+        raise ValueError("no site version to query the advisory database with")
+    ranges, patched, affected = {}, set(), set()
+
+    def read(version):
+        """Add the advisories that affect version; True when there is one."""
+        q = urllib.parse.quote("%s@%s" % (fix["package"], version))
+        hit = False
+        for a in api("advisories?ecosystem=%s&affects=%s&per_page=100" % (fix["ecosystem"], q)) or []:
+            spec = []
+            for vul in a.get("vulnerabilities") or []:
+                pkg = vul.get("package") or {}
+                if (pkg.get("name") or "").lower() != fix["package"].lower():
+                    continue
+                spec.append(gh_range(vul.get("vulnerable_version_range") or ""))
+                if vul.get("first_patched_version"):
+                    patched.add(vul["first_patched_version"])
+            if spec:
+                ranges.setdefault(a["ghsa_id"], " || ".join(spec))
+                hit = True
+        return hit
+
+    def clear(p):
+        try:
+            return (p not in affected and not pinver.is_prerelease(scheme, p)
+                    and pinver.compare(scheme, p, floor) > 0
+                    and not any(pinver.in_range(scheme, p, r) for r in ranges.values()))
+        except ValueError:
+            return False
+
+    read(floor.raw)
+    for _ in range(rounds):
+        cands = [p for p in patched if clear(p)]
+        best = min(cands, key=functools.cmp_to_key(lambda a, b: pinver.compare(scheme, a, b))) if cands else ""
+        if not best or not read(best):
+            break
+        affected.add(best)
+    else:
+        raise ValueError("every patched version had advisories of its own after %d reads" % rounds)
+    out.update(state="advisory", fixed_in=best, advisories=sorted(ranges),
+               new_advisories=sorted(set(ranges) - set(e.get("advisories", []))))
+    if best and fix["ecosystem"] == "pip":
+        out["release_url"] = "https://pypi.org/project/%s/%s/" % (fix["package"], best)
+
+
+def poll_entry(api, digest, root, e):
+    out = {"id": e["id"], "state": "", "fixed_in": "", "tag": "", "release_url": "", "published_at": "",
+           "recorded": e.get("fixed_in", ""), "mismatch": False}
+    fix = e.get("fix") or {}
+    try:
+        if fix.get("ecosystem"):
+            poll_advisory(api, root, e, out)
+        else:
+            if fix.get("path"):
+                repo = fix["repo"]
+
+                def contains(ref=None):
+                    path = "repos/%s/contents/%s" % (repo, fix["path"]) + ("?ref=%s" % ref if ref else "")
+                    try:
+                        body = api(path) or {}
+                    except ApiError as x:
+                        if x.status == 404:
+                            return False
+                        raise
+                    if body.get("encoding") != "base64":
+                        raise ValueError("%s: no base64 content (file too large for the contents API?)" % path)
+                    return fix["contains"] in base64.b64decode(body["content"]).decode("utf-8", errors="replace")
+            else:
+                state, repo, sha = fix_commit(api, e)
+                if not sha:
+                    out["state"] = state
+                    return finish(out)
+
+                def contains(ref=None):
+                    try:
+                        status = (api("repos/%s/compare/%s...%s" % (repo, ref, sha)) or {}).get("status")
+                    except ApiError as x:
+                        if x.status == 404:
+                            return False
+                        raise
+                    return status in ("behind", "identical")
+            floor = site_floor(pathlib.Path(root), e)
+            tags = stable_releases(api, repo, e["scheme"], floor)
+            i = first_containing(tags, floor, e["scheme"], contains)
+            if i is None:
+                out["state"] = "not-shipped" if fix.get("path") and not contains() else "merged-unreleased"
+            else:
+                _, tag, rel = tags[i]
+                out.update(state="released", fixed_in=norm(tag), tag=tag, release_url=rel.get("html_url", ""),
+                           published_at=rel.get("published_at", ""))
+                if e.get("image"):
+                    out["image"] = e["image"].format(tag=tag, version=norm(tag))
+                    out["image_digest"] = digest(out["image"])
+    except (ApiError, ValueError, KeyError, TypeError) as x:
+        out["error"] = str(x)
+        return out
+    return finish(out, e["scheme"])
+
+
+def finish(out, scheme=None):
+    if out["state"] == "untracked" or "error" in out:
+        return out
+    a, b = out["fixed_in"], out["recorded"]
+    same = a == b
+    if a and b and not same and scheme:
+        try:
+            same = pinver.compare(scheme, a, b) == 0
+        except ValueError:
+            pass
+    out["mismatch"] = not same
+    return out
+
+
+def poll(issues, root, api=gh_api, digest=images_lock_digest, ids=None):
+    return [poll_entry(api, digest, root, e) for e in issues
+            if isinstance(e, dict) and (not ids or e.get("id") in ids)]
+
+
+def print_poll(rows):
+    for r in rows:
+        line = "%s: %s" % (r["id"], r.get("error") and "error: " + r["error"] or r["state"])
+        if r["fixed_in"] or r["recorded"]:
+            line += " fixed_in=%s (recorded %s)%s" % (r["fixed_in"] or "-", r["recorded"] or "-",
+                                                      " MISMATCH" if r["mismatch"] else "")
+        if r.get("new_advisories"):
+            line += " new advisories: %s" % ", ".join(r["new_advisories"])
+        if r["release_url"]:
+            line += " %s" % r["release_url"]
+        print(line)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="known-issues", description="Known upstream issues and their fixed-in releases.")
+    ap.add_argument("--root", default=str(HERE.parent), help="repo root (default: this repo)")
+    ap.add_argument("--registry", help="registry file (default: ROOT/%s)" % REGISTRY)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("check", help="offline: schema, markers, sites, fixed-in rules")
+    c.add_argument("--json", action="store_true")
+    p = sub.add_parser("poll", help="network, read-only: find each entry's first fixed release")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--id", action="append", default=[], help="poll only this entry (repeatable)")
+    args = ap.parse_args(argv)
+    if args.cmd == "check":
+        result = check(args.root, args.registry)
+        if args.json:
+            print(json.dumps(result, indent=1, sort_keys=True))
+        else:
+            print_check(result)
+        return 0 if result["ok"] else 1
+    try:
+        issues = load(args.root, args.registry)
+    except (OSError, ValueError, tomllib.TOMLDecodeError) as x:
+        print("known-issues: %s" % x, file=sys.stderr)
+        return 2
+    rows = poll(issues, pathlib.Path(args.root), ids=set(args.id))
+    if args.json:
+        print(json.dumps(rows, indent=1, sort_keys=True))
+    else:
+        print_poll(rows)
+    return 1 if any("error" in r for r in rows) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
