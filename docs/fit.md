@@ -134,6 +134,8 @@ the fit set without them):
   `ne[1] % 8 == 0` goes to `CPU_REPACK` (`ggml/src/ggml-cpu/repack.cpp:4979-5110`), and on an
   AMX CPU the 2-D weights of the AMX types go to the AMX buffer first
   (`ggml/src/ggml-cpu/amx/amx.cpp:145-187`). For Gemma 4's QAT Q4_0 GGUF that is 12.8 GiB.
+  The AMX buffer holds the packed size, larger than the file's for Q8_0 (38/34), Q4_K, Q5_K and
+  IQ4_XS (`ggml/src/ggml-cpu/amx/mmq.cpp` `get_row_size`), and the fit counts it.
   `fit.py fetch` records each GGUF tensor's type and shape (`gguf_mm` in weights.json); a
   weights.json without them counts every matmul weight (an upper bound).
 - `--load-mode mmap+mlock` grows the lock from the mapping's start to the end of each mapped

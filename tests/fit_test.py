@@ -1131,6 +1131,24 @@ class LlamaHostBuffers(unittest.TestCase):
         # AMX takes the 2-D Q4_0 weights and the Q6_K tied output; the 3-D experts go to CPU_REPACK.
         self.assertEqual(fit.llama_cpu_copies(m, dict(avx2, amx=True, avx512=True))[0], QAT_Q4_0_REPACKED + QAT_EMBED)
 
+    def test_amx_buffers_hold_the_packed_size(self):
+        # The AMX buffer allocates the packed size (ggml/src/ggml-cpu/amx/mmq.cpp get_row_size):
+        # Q8_0 blocks carry a 4 B compensation term (34 -> 38 B), Q4_K and Q5_K 4 B more per
+        # 256-value block (144 -> 148, 176 -> 180), IQ4_XS 2 B (136 -> 138). Q4_0 and Q6_K pack
+        # at their file size, and CPU_REPACK allocates ggml_nbytes (repack.cpp get_alloc_size).
+        rows = 4096
+        m = {"gguf_mm": [["other", "Q8_0", 2, 32, 256, 34 * rows], ["other", "Q4_K", 2, 32, 256, 144 * rows],
+                         ["other", "Q5_K", 2, 32, 256, 176 * rows], ["other", "IQ4_XS", 2, 32, 256, 136 * rows],
+                         ["other", "Q4_0", 2, 32, 256, 18 * rows], ["experts", "Q4_K", 3, 32, 256, 144 * rows]],
+             "bytes": {"embed": 0, "lm_head": 1}}
+        amx = {"amx": True, "avx512": True, "avx2": True}
+        self.assertEqual(fit.llama_cpu_copies(m, amx)[0], (38 + 148 + 180 + 138 + 18 + 144) * rows)
+        # A Q8_0 conversion on an AMX host: the bound covers the packed size.
+        q8 = dict(fit.model_profile(config("Qwen__Qwen3.8-Flash-Next-FP8"), weights("Qwen__Qwen3.8-Flash-Next-FP8")),
+                  gguf_conv="Q8_0")
+        n2d = q8["serve_bytes"] - q8["lookup_bytes"] - q8["bytes"]["experts"] + fit.llama_output_copy(q8)
+        self.assertGreaterEqual(fit.llama_cpu_copies(q8, amx)[0], n2d * 38 // 34)
+
     def test_converted_weights_copied_by_their_gguf_type(self):
         # A safetensors model llama.cpp serves after the agent's conversion: no header to read,
         # so the conversion's output type decides. BF16 has no x86 extra buffer type; the FP8

@@ -118,6 +118,11 @@ GGML_TYPES = {0: "F32", 1: "F16", 2: "Q4_0", 3: "Q4_1", 6: "Q5_0", 7: "Q5_1", 8:
 # (ggml/src/ggml-cpu/amx/amx.cpp:145-187). CPU_REPACK: 2-D and 3-D (MUL_MAT_ID: the experts)
 # weights with ne[1] % 8 (ggml/src/ggml-cpu/repack.cpp:4979-5110, :5196-5222).
 LLAMA_AMX_TYPES = {"Q4_0": 32, "Q4_1": 32, "Q8_0": 32, "Q4_K": 256, "Q5_K": 256, "Q6_K": 256, "IQ4_XS": 256, "F16": 16}
+# An AMX buffer holds the packed size (ggml/src/ggml-cpu/amx/mmq.cpp get_row_size): per block a
+# 4 B compensation term for Q8_0 (34 -> 38 B), 4 B more for Q4_K and Q5_K (144 -> 148, 176 -> 180)
+# and 2 B for IQ4_XS (136 -> 138); every other type at its file size. CPU_REPACK allocates
+# ggml_nbytes (repack.cpp get_alloc_size).
+LLAMA_AMX_PACKED = {"Q8_0": 38 / 34, "Q4_K": 148 / 144, "Q5_K": 180 / 176, "IQ4_XS": 138 / 136}
 LLAMA_REPACK_TYPES = {"Q4_0": "avx2", "Q4_K": "avx2", "IQ4_NL": "avx2", "MXFP4": "avx2", "Q2_K": "avx512"}
 # Fixed runtime per GPU process (device context, allocator pools, collective
 # buffers) and per pod on the host (Python, torch or the server binary). Estimates.
@@ -1254,9 +1259,10 @@ def llama_cpu_copies(m, cpu):
     amx, has = cpu.get("amx"), {"avx2": cpu.get("avx2"), "avx512": cpu.get("avx512")}
 
     def copied(t, nd, a1, a0):
+        """The factor of the file bytes a weight takes in an extra buffer, 0 when it stays mapped."""
         if amx and nd == 2 and t in LLAMA_AMX_TYPES and a1 >= 32 and a0 >= LLAMA_AMX_TYPES[t]:
-            return True
-        return t in LLAMA_REPACK_TYPES and bool(has[LLAMA_REPACK_TYPES[t]]) and a1 >= 8
+            return LLAMA_AMX_PACKED.get(t, 1)
+        return 1 if t in LLAMA_REPACK_TYPES and has[LLAMA_REPACK_TYPES[t]] and a1 >= 8 else 0
 
     mm = m.get("gguf_mm")
     conv = m.get("gguf_conv")
@@ -1266,16 +1272,17 @@ def llama_cpu_copies(m, cpu):
         if not (amx and conv in LLAMA_AMX_TYPES):
             return 0, "none: the conversion's %s weights stay mapped on this CPU" % conv
         n = m["serve_bytes"] - m["lookup_bytes"] - m["bytes"]["experts"] + llama_output_copy(m)
-        return n, "the conversion's 2-D %s weights into AMX buffers, an upper bound" % conv
+        return int(n * LLAMA_AMX_PACKED.get(conv, 1)), "the conversion's 2-D %s weights into AMX buffers, an upper bound" % conv
     if mm is None:
         if not (amx or has["avx2"]):
             return 0, "none: neither AVX2 nor AMX"
         n = m["serve_bytes"] - m["lookup_bytes"] + (llama_output_copy(m) if amx else 0)
+        n = int(n * max(LLAMA_AMX_PACKED.values())) if amx else n
         return n, "every matmul weight, an upper bound: the weights document has no tensor types (fit.py fetch records them)"
-    n = sum(b for c, t, nd, a1, a0, b in mm if c not in LOOKUP_CLASSES and copied(t, nd, a1, a0))
+    n = int(sum(b * copied(t, nd, a1, a0) for c, t, nd, a1, a0, b in mm if c not in LOOKUP_CLASSES))
     emb = [(t, nd, a1, a0) for c, t, nd, a1, a0, b in mm if c == "embed"]
     if llama_output_copy(m) and emb and copied(*emb[0]):
-        n += llama_output_copy(m)
+        n += int(llama_output_copy(m) * copied(*emb[0]))
     kinds = sorted({t for c, t, nd, a1, a0, b in mm if c not in LOOKUP_CLASSES and copied(t, nd, a1, a0)})
     return n, ("%s weights into %s" % ("/".join(kinds) or "no", "AMX and CPU_REPACK buffers" if amx else "CPU_REPACK buffers")
                if n else "none on this CPU")
