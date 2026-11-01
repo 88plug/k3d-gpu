@@ -1,0 +1,4 @@
+[32m==>[0m model optimizer: reading the Hugging Face metadata of google/gemma-4-26B-A4B-it and its variants (cached for a day in /home/devcloud/.cache/k3d-gpu/hf)
+[32m==>[0m Detected Intel(R) Xeon(R) 6741P; picked OpenVINO/gemma-4-26b-a4b-it-int4-ov on OVMS (CPU), no drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain
+[32m==>[0m fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AMX) via ovms, context 262144 x 5 seqs, host 291.3 GiB (pod limit 321Gi), host reserve 50.3 GiB
+[32m==>[0m agent: OpenVINO/gemma-4-26b-a4b-it-int4-ov as 'gemma' on CPU (AMX node), 48 CPU(s)

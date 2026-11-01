@@ -1,0 +1,33 @@
+downloads 2026-11-01T11:21:44Z; / free 2387 GB
+/home/devcloud/k3dgpu-h59/models/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files: 100%|██████████| 22/22 [00:00<00:00, 896.77it/s]
+/home/devcloud/k3dgpu-h59/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+# google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be9cf3c8a514acf63b8761f4b41935842e -> d1c082be9cf3c8a514acf63b8761f4b41935842e
+skipped google/gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B-it-mmproj.gguf (not downloaded on purpose)
+ok 3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d 14439363584 google/gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+# OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3f03844f5887982def09708bdc9f53f7a -> 4e5885c3f03844f5887982def09708bdc9f53f7a
+ok size=1570 OpenVINO/gemma-4-26b-a4b-it-int4-ov/.gitattributes
+ok size=3647 OpenVINO/gemma-4-26b-a4b-it-int4-ov/README.md
+ok size=18683 OpenVINO/gemma-4-26b-a4b-it-int4-ov/chat_template.jinja
+ok size=3809 OpenVINO/gemma-4-26b-a4b-it-int4-ov/config.json
+ok size=203 OpenVINO/gemma-4-26b-a4b-it-int4-ov/generation_config.json
+ok size=1505 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_config.json
+ok 461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13 4413547 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_detokenizer.bin
+ok size=30008 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_detokenizer.xml
+ok 0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe 13961486336 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin
+ok size=5420103 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_language_model.xml
+ok 2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb 738721800 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin
+ok size=7119 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.xml
+ok 57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b 20 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin
+ok size=4808 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.xml
+ok 72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361 17270350 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_tokenizer.bin
+ok size=46977 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_tokenizer.xml
+ok 13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382 573967772 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin
+ok size=3053620 OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.xml
+ok size=403 OpenVINO/gemma-4-26b-a4b-it-int4-ov/preprocessor_config.json
+ok size=1689 OpenVINO/gemma-4-26b-a4b-it-int4-ov/processor_config.json
+ok cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f 32169626 OpenVINO/gemma-4-26b-a4b-it-int4-ov/tokenizer.json
+ok size=3699 OpenVINO/gemma-4-26b-a4b-it-int4-ov/tokenizer_config.json
+VERIFY ok
+drafter: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 Q4_0 f6f80c368d692c9e78ed673c6785827ca21c332e8cdab0263ce4dcdf0b184018 321145312
+done 2026-11-01T11:22:58Z; / free 2387 GB

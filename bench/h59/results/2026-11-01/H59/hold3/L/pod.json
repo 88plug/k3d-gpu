@@ -1,0 +1,315 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "k3d-gpu.io/agent-backend": "llama.cpp",
+            "k3d-gpu.io/agent-device": "CPU",
+            "k3d-gpu.io/agent-fit": "cpu 48x262144"
+        },
+        "creationTimestamp": "2026-11-01T12:19:43Z",
+        "generateName": "llamacpp-65987d698f-",
+        "generation": 1,
+        "labels": {
+            "app": "llamacpp",
+            "pod-template-hash": "65987d698f"
+        },
+        "name": "llamacpp-65987d698f-nxnwd",
+        "namespace": "k3d-gpu-agent",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "llamacpp-65987d698f",
+                "uid": "17b7b338-0cfa-4642-926c-1e9599b04dc7"
+            }
+        ],
+        "resourceVersion": "1185",
+        "uid": "a70ce98f-869d-438c-8328-3447569bd2d4"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "--model",
+                    "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf",
+                    "--alias",
+                    "gemma",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "8000",
+                    "--jinja",
+                    "--reasoning",
+                    "off",
+                    "-c",
+                    "12582912",
+                    "-np",
+                    "48",
+                    "-ngl",
+                    "0",
+                    "--cache-ram",
+                    "0",
+                    "-ctxcp",
+                    "4",
+                    "--threads",
+                    "24",
+                    "--threads-batch",
+                    "48",
+                    "--load-mode",
+                    "mmap+mlock",
+                    "--spec-draft-model",
+                    "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf",
+                    "--spec-type",
+                    "draft-mtp"
+                ],
+                "image": "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "llamacpp",
+                "ports": [
+                    {
+                        "containerPort": 8000,
+                        "name": "http",
+                        "protocol": "TCP"
+                    }
+                ],
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/health",
+                        "port": "http",
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 5,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "358Gi"
+                    },
+                    "requests": {
+                        "cpu": "48",
+                        "memory": "358Gi"
+                    }
+                },
+                "securityContext": {
+                    "capabilities": {
+                        "add": [
+                            "IPC_LOCK"
+                        ]
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-xghr4",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "k3d-k3dgpu-g-h59-3-server-0",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {},
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "hostPath": {
+                    "path": "/var/apb-models",
+                    "type": "Directory"
+                },
+                "name": "models"
+            },
+            {
+                "name": "kube-api-access-xghr4",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "cpu": "48",
+            "memory": "358Gi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-01T12:19:44Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-01T12:19:43Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-01T12:22:35Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-01T12:22:35Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-01T12:19:43Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "48",
+                    "memory": "358Gi"
+                },
+                "containerID": "containerd://0276787e876e144f8171d4fef0796a8967560f636e628e31179a49c39ac25650",
+                "image": "sha256:04682a04b291cbf84c1c73ddc7cb68aaeabd6272493b9a239fa48ee9837c5ebf",
+                "imageID": "ghcr.io/ggml-org/llama.cpp@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
+                "lastState": {},
+                "name": "llamacpp",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "memory": "358Gi"
+                    },
+                    "requests": {
+                        "cpu": "48",
+                        "memory": "358Gi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-11-01T12:19:57Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-xghr4",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.19.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.19.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.42.0.10",
+        "podIPs": [
+            {
+                "ip": "10.42.0.10"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "358Gi"
+            },
+            "requests": {
+                "cpu": "47981m",
+                "memory": "358Gi"
+            }
+        },
+        "startTime": "2026-11-01T12:19:43Z"
+    }
+}

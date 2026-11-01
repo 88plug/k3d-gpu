@@ -1,0 +1,6 @@
+2026-11-01T11:23:38Z O start perf (2340 s of the hold left)
+2026-11-01T11:24:14Z O ready after 34 s
+2026-11-01T11:24:17Z O status smoke: ready; wiring checks in smoke-*.json
+2026-11-01T11:24:38Z L start perf (2280 s of the hold left)
+2026-11-01T11:27:33Z L ready after 174 s
+2026-11-01T11:27:34Z L status smoke: ready; wiring checks in smoke-*.json
