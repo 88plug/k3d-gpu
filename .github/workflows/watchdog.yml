@@ -24,6 +24,8 @@ on:
       - 'Release packages (deb, rpm, Homebrew)'
       - 'AUR Deploy'
       - 'Docs'
+      - 'Canary'
+      - 'Bot sweep'
     types: [completed]
     branches: [main]
   workflow_dispatch:

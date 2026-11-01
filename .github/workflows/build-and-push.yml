@@ -373,7 +373,7 @@ jobs:
         run: |
           tags=$(.ci-main/hack/release-tags "$RELEASE" "$K3S")
           printf '%s\n' "$tags"
-          for v in 26.04 24.04; do
+          for v in $(awk '$2 == "versioned" { print $1 }' <<< "$tags" | sort -u); do
             echo "v${v/./}<<TAGS_EOF"
             awk -v v="$v" '$1 == v && $2 == "versioned" { print $3 }' <<< "$tags"
             echo TAGS_EOF
