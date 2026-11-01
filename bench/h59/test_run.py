@@ -795,6 +795,48 @@ class EndToEnd(unittest.TestCase):
             box.close()
 
 
+# OVB's files at 4e5885c3 as prep.sh's snapshot leaves them (crescent's weights.sha256, 2026-11-01).
+OVB_FILES = (".gitattributes", "README.md", "chat_template.jinja", "config.json", "generation_config.json",
+             "openvino_config.json", "openvino_detokenizer.bin", "openvino_detokenizer.xml",
+             "openvino_language_model.bin", "openvino_language_model.xml", "openvino_text_embeddings_model.bin",
+             "openvino_text_embeddings_model.xml", "openvino_text_embeddings_per_layer_model.bin",
+             "openvino_text_embeddings_per_layer_model.xml", "openvino_tokenizer.bin", "openvino_tokenizer.xml",
+             "openvino_vision_embeddings_model.bin", "openvino_vision_embeddings_model.xml",
+             "preprocessor_config.json", "processor_config.json", "tokenizer.json", "tokenizer_config.json")
+
+
+class ModelFiles(unittest.TestCase):
+    """run.py models reads the files prep.sh leaves (amendment R3): OVB's snapshot, which has a
+    language model and no openvino_model.*, the GGUF and the drafter."""
+
+    def setUp(self):
+        self.g = tempfile.mkdtemp()
+        m = os.path.join(self.g, "models")
+        for f in OVB_FILES:
+            put(os.path.join(m, run.OVB, f), "x")
+        for p in (os.path.join(m, run.GGUF_PATH[len("/models/"):]),
+                  *(os.path.join(m, run.DRAFT_DIR, f) for f in ("model.gguf", "manifest.json", "prep-job.json"))):
+            put(p, "x")
+
+    def tearDown(self):
+        shutil.rmtree(self.g)
+
+    def test_prep_layout_is_ready(self):
+        self.assertEqual(run.models_ready(self.g), [])
+        r = subprocess.run([sys.executable, os.path.join(HERE, "run.py"), "models", self.g], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_each_language_model_file_is_needed(self):
+        for f in run.OVB_LM:
+            p = os.path.join(self.g, "models", run.OVB, f)
+            os.rename(p, p + ".away")
+            self.assertEqual(run.models_ready(self.g), [p])
+            os.rename(p + ".away", p)
+
+    def test_reads_only_files_the_snapshot_has(self):
+        self.assertTrue(set(run.OVB_LM) <= set(OVB_FILES))
+
+
 class HoldGuards(unittest.TestCase):
     """hold.sh refuses, before the lock, what would spend a hold on the wrong thing."""
 
