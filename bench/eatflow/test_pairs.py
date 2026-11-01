@@ -850,7 +850,8 @@ class H53Test(unittest.TestCase):
     def test_live_sh_solo_mode(self):
         live = self.live()
         blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
-        self.assertIn('[ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ]', blk)
+        self.assertIn('H53:AG|H53:B2|H58:Z) ;;', blk)
+        self.assertIn('[ "${RULE:-}" = L3 ] || { echo "solo: ${ARM} is not a rule-L3 row"; exit 2; }', blk)
         self.assertIn("case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;;", blk)
         self.assertIn("TP=${LIVE_B2_TP:-4}", blk)
         # AG: k3d-gpu's own choice (auto device, default draft), and it must be on the GPU.
@@ -874,6 +875,26 @@ class H53Test(unittest.TestCase):
         body = {"temperature": 0, "top_p": 1, "messages": []}
         proxy.pin_sampling(body, AB.sampling_set("agent_qwen38"))
         self.assertEqual((body["chat_template_kwargs"], body["temperature"]), ({"enable_thinking": False}, 0.7))
+
+    def test_live_sh_solo_z_uses_the_running_agent(self):
+        # H58 amendment R1: arm Z is the server `k3d-gpu agent up --model` started; live.sh deploys
+        # nothing for it, refuses one that asks for an accelerator, and then runs H53's solo path.
+        live = self.live()
+        blk = live[live.index('if [ "${MODE}" = solo ]; then'):live.index('if [ "${MODE}" = pairs ]; then')]
+        z = blk[blk.index('if [ "${SOLO}" = Z ]; then'):blk.index("    else\n    export K3D_GPU_NODE_LABELS")]
+        self.assertNotIn("kubectl apply", z)
+        self.assertNotIn("cluster_up", z)
+        self.assertIn('cp "${LIVE_Z_KUBECONFIG:?H58 needs LIVE_Z_KUBECONFIG}" "${KUBECONFIG}"', z)
+        self.assertIn('need=0 free=""', z)
+        self.assertIn("NS=k3d-gpu-agent DEP=${LIVE_Z_DEP:?H58 needs LIVE_Z_DEP}", z)
+        self.assertIn('echo "NOT DELIVERABLE: ${DEP} asks for an accelerator"; exit 3', z)
+        # The apply belongs to AG and B2 only; the readiness wait and the solo run follow for all.
+        rest = blk[blk.index("    else\n    export K3D_GPU_NODE_LABELS"):]
+        self.assertLess(rest.index('kubectl apply -f "${OUT}/deploy.yaml" > /dev/null\n    fi\n    stamp wait-ready'),
+                        rest.index('${AB} solo --hyp "${ARM}"'))
+        self.assertEqual(PR.design("H58"), ("H49", "L3"))
+        self.assertEqual(PR.expected_arm("H58", 1), "Z")
+        self.assertEqual(PR.ORDER_SEEDS["H58"], "H58-crescent-2026-11-01")
 
     def test_live_sh_keeps_the_arm_off_the_serving_cards(self):
         live = self.live()

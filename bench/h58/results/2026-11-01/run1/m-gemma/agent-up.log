@@ -1,0 +1,18 @@
+[32m==>[0m model optimizer: reading the Hugging Face metadata of google/gemma-4-26B-A4B-it and its variants (cached for a day in /home/devcloud/.cache/k3d-gpu/hf)
+[32m==>[0m Detected Intel(R) Xeon(R) 6741P; picked OpenVINO/gemma-4-26b-a4b-it-int4-ov on OVMS (CPU), no drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain
+[32m==>[0m fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AMX) via ovms, context 262144 x 5 seqs, host 291.3 GiB (pod limit 321Gi), host reserve 50.3 GiB
+[32m==>[0m agent: OpenVINO/gemma-4-26b-a4b-it-int4-ov as 'gemma-4-26B-A4B-it' on CPU (AMX node), 48 CPU(s)
+namespace/k3d-gpu-agent created
+persistentvolumeclaim/ovms-models created
+deployment.apps/ovms created
+service/ovms created
+[32m==>[0m Waiting for the model to download and load (first run fetches it into the PVC; up to 1800s)...
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+[32m==>[0m warm-up reply (2s): I am a large language model, trained by Google.
+[32m==>[0m model OpenVINO/gemma-4-26b-a4b-it-int4-ov at commit 4e5885c3f03844f5887982def09708bdc9f53f7a (OVMS pulls the default branch; compare with 'k3d-gpu agent status' later)
+[32m==>[0m OpenAI API ready, model 'gemma-4-26B-A4B-it':
+       KUBECONFIG=/home/devcloud/.local/state/k3d-gpu/kubeconfig-gpu kubectl -n k3d-gpu-agent port-forward svc/ovms 8000:8000
+       curl http://localhost:8000/v3/chat/completions -H 'Content-Type: application/json' \
+         -d '{"model":"gemma-4-26B-A4B-it","messages":[{"role":"user","content":"hi"}]}'
+[32m==>[0m agent guard started (pid 2229527, log /home/devcloud/.local/state/k3d-gpu/agent-guard.log): it steps the fit down under memory pressure

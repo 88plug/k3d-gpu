@@ -1,0 +1,17 @@
+{
+ "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound": {
+  "equal": true,
+  "pin": "4c67bf686b7f7fd386bae6b07ab59e8ff1d5b897",
+  "sha": "4c67bf686b7f7fd386bae6b07ab59e8ff1d5b897"
+ },
+ "Qwen/Qwen3.8-27B": {
+  "equal": true,
+  "pin": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "sha": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+ },
+ "google/gemma-4-26B-A4B-it": {
+  "equal": true,
+  "pin": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
+  "sha": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52"
+ }
+}

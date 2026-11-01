@@ -91,6 +91,7 @@ bench/h57d/**                           ledger H57da,H57dm,H57db,H57dp,H57de,H57
 bench/h59/**                            ledger H59,H59d,H59w amend=H59  H59's scorer
 bench/h62/**                            ledger H62 amend=H62  H62's runner (the EAS and EAT 2.0 VM pairs on crescent)
 bench/flashnext/**                      ledger H60 amend=H60  H60's runner
+bench/h58/**                            ledger H58 amend=H58  H58's runner (the zero-touch thesis on crescent, amendment R1)
 bench/admission/**                      ledger H55 amend=H55  H55's SLO-gated admission harness
 bench/models/**                         ledger H50,H50o,H57da,H57dm,H57db,H57dp,H57de amend=Crescent,H57d  the Gemma 4 QAT export and grid (crescent amendment M1, H57d)
 bench/wildct/**                         ledger H18w,H25w,H28w,H34w,H52w,H57wa,H57wm,H57wb,H59w amend=Wildct  the wildct client host's runner

@@ -24,7 +24,9 @@
 #   LIVE_EAT_XPU_CHART EAT core/helm-charts/vllm at PR #21 c86c42b                   (H53 B2)
 #   LIVE_GPU_FREE   PCI addresses of the Intel GPUs the H53 arms may use               (H53)
 #   LIVE_B2_TP      B2's tensor_parallel_size, cards (default 4, #21's own value)            (H53)
-#   LIVE_SOLO       solo mode: the one arm of this hold, AG or B2                           (H53)
+#   LIVE_SOLO       solo mode: the one arm of this hold, AG or B2 (H53), or Z (H58)
+#   LIVE_Z_KUBECONFIG, LIVE_Z_DEP  H58's Z: the kubeconfig of the cluster `k3d-gpu up` made and
+#                   the agent Deployment `k3d-gpu agent up --model` started there         (H58)
 #   LIVE_B2_LADDER  H53 B2 boot ladder steps the smoke found needed (b, c, d; default none) (H53)
 #   LIVE_MODEL_SET  qwen3-4b (default) or gemma4 (crescent amendment M1): every arm's model
 #   LIVE_SAMPLING   the proxy's pinned sampling profile (default: the model set's; agent.lock)
@@ -41,6 +43,7 @@
 #                   bfcl: H41, BFCL S100 server-fc at LIVE_LEVEL, no agent (amendment 23);
 #                   h44: B24's first 12 tasks in blocks none/heavy/none/heavy (amendment 24);
 #                   solo: ARM = H53, one arm (LIVE_SOLO) per hold on the Arc Pro B70s (bench/eatflow/solo.py);
+#                   ARM = H58, arm Z: the zero-touch agent's server, already running (bench/h58/run.sh);
 #                   pairs: ARM = H47, H49, H47b, H49b, H50 or H50o, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
 #                   ARM = H62: both servers in KVM guests, driven by LIVE_REMOTE_A and LIVE_REMOTE_B (bench/h62);
@@ -334,14 +337,39 @@ if [ "${MODE}" = solo ]; then
     # addresses of the cards the hold may use; every other card is held by a placeholder pod.
     # LIVE_PAIRS_GUARD: the task-start guard, s (unset: agentbench solo's own; a wiring smoke
     # sets it past the hold, so only the warm-up runs; H53 amendment R1).
-    PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?} SOLO=${LIVE_SOLO:?LIVE_SOLO is AG or B2}
+    PD=${LIVE_PAIRS_DIR:?} HOLD=${LIVE_HOLD:?} SOLO=${LIVE_SOLO:?LIVE_SOLO is AG, B2 or Z}
     read -r FAMILY RULE <<< "$(python3 "${HERE}/pairs.py" design "${ARM}")"
-    [ "${ARM}" = H53 ] && [ "${RULE:-}" = L3 ] || { echo "solo: ARM must be H53 (a rule-L3 row)"; exit 2; }
+    case "${ARM}:${SOLO}" in
+        H53:AG|H53:B2|H58:Z) ;;
+        *) echo "solo: H53 runs AG or B2 and H58 runs Z, not ${ARM} ${SOLO}"; exit 2 ;;
+    esac
+    [ "${RULE:-}" = L3 ] || { echo "solo: ${ARM} is not a rule-L3 row"; exit 2; }
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
+    if [ "${SOLO}" = Z ]; then
+        # H58 (amendment R1): the server is the one `k3d-gpu agent up --model` started in the
+        # user's own cluster, and nothing is deployed or staged here. LIVE_Z_KUBECONFIG: that
+        # cluster's kubeconfig; LIVE_Z_DEP: the agent's Deployment in k3d-gpu-agent (ovms, vllm
+        # or llamacpp, its container named the same). It may ask for no accelerator: on crescent
+        # every card is held by the serving pairs, so no card is free (need 0).
+        cp "${LIVE_Z_KUBECONFIG:?H58 needs LIVE_Z_KUBECONFIG}" "${KUBECONFIG}"
+        chmod 600 "${KUBECONFIG}"
+        need=0 free=""
+        NS=k3d-gpu-agent DEP=${LIVE_Z_DEP:?H58 needs LIVE_Z_DEP} SVC=${LIVE_Z_DEP} SPORT=8000 CTR=${LIVE_Z_DEP}
+        kubectl -n "${NS}" get "deploy/${DEP}" -o json > "${OUT}/deploy.json" \
+            || { echo "NOT DELIVERABLE: no deployment/${DEP} in ${NS}"; exit 3; }
+        python3 -c '
+import json, re, sys
+spec = json.load(open(sys.argv[1]))["spec"]["template"]["spec"]
+keys = [k for c in spec.get("containers", []) + spec.get("initContainers", [])
+        for part in ("limits", "requests") for k in ((c.get("resources") or {}).get(part) or {})
+        if re.match(r"(gpu\.intel\.com|nvidia\.com|habana\.ai|npu\.intel\.com|amd\.com)/", k)]
+sys.exit(1 if keys or spec.get("resourceClaims") else 0)' "${OUT}/deploy.json" \
+            || { echo "NOT DELIVERABLE: ${DEP} asks for an accelerator"; exit 3; }
+    else
     export K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true
     TP=${LIVE_B2_TP:-4}
-    case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;; *) echo "LIVE_SOLO must be AG or B2"; exit 2 ;; esac
+    case ${SOLO} in AG) need=1 ;; B2) need=${TP} ;; esac
     cluster_up
     # Hold every card outside LIVE_GPU_FREE with a placeholder pod (one card each), then free
     # the placeholders on the cards this hold may use.
@@ -384,6 +412,7 @@ if [ "${MODE}" = solo ]; then
         NS=default DEP=${B_REL} SVC=${B_REL}-service SPORT=80 CTR=vllm
     fi
     kubectl apply -f "${OUT}/deploy.yaml" > /dev/null
+    fi
     stamp wait-ready
     left=$(( CAP - $(el) - 900 ))
     if [ "${left}" -le 0 ] || ! kubectl -n "${NS}" rollout status "deploy/${DEP}" --timeout="${left}s"; then
