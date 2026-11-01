@@ -76,6 +76,9 @@ def slug(repo, rev):
 
 
 GGUF_PATH = f"/models/gguf/{slug(GGUF_REPO, GGUF_REV)}/{GGUF_FILE}"
+# OVB at OVB_REV is OpenVINO's image-text export: its language model is openvino_language_model.*
+# (beside the text and vision embedding models); it has no openvino_model.* (H59 amendment R3).
+OVB_LM = ("openvino_language_model.xml", "openvino_language_model.bin")
 DRAFT_DIR = f"gguf/{slug(DRAFT_REPO, DRAFT_REV)}"
 DRAFT_PATH = f"/models/{DRAFT_DIR}/model.gguf"
 
@@ -202,7 +205,7 @@ def models_ready(g):
     m = os.path.join(g, "models")
     want = [os.path.join(m, GGUF_PATH[len("/models/"):]), os.path.join(m, DRAFT_DIR, "model.gguf"),
             os.path.join(m, DRAFT_DIR, "manifest.json"), os.path.join(m, DRAFT_DIR, "prep-job.json"),
-            os.path.join(m, OVB, "openvino_model.xml"), os.path.join(m, OVB, "openvino_model.bin")]
+            *(os.path.join(m, OVB, f) for f in OVB_LM)]
     return [p for p in want if not os.path.exists(p)]
 
 

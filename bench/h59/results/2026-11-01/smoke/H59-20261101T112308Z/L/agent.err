@@ -1,0 +1,7 @@
+[32m==>[0m model optimizer: google/gemma-4-26B-A4B-it-qat-q4_0-gguf is GGUF, which llama.cpp serves (K3D_GPU_AGENT_BACKEND is unset)
+[32m==>[0m model optimizer: reading the Hugging Face metadata of google/gemma-4-26B-A4B-it-qat-q4_0-gguf and its variants (cached for a day in /home/devcloud/.cache/k3d-gpu/hf)
+[32m==>[0m Detected Intel(R) Xeon(R) 6741P; picked google/gemma-4-26B-A4B-it-qat-q4_0-gguf on llama.cpp (CPU), no drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf --explain
+[32m==>[0m fit: google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 on CPU (AMX) via llama.cpp, context 262144 x 48 seqs, host 324.8 GiB (pod limit 358Gi), host reserve 50.3 GiB
+[32m==>[0m agent: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 is converted to GGUF once (Job gguf-convert-b459c9c78d78: convert_hf_to_gguf.py --outtype bf16, llama-quantize Q4_0)
+[32m==>[0m agent: MTP speculative decoding (google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166)
+[32m==>[0m agent: llama.cpp serving google/gemma-4-26B-A4B-it-qat-q4_0-gguf as 'gemma' on CPU, placement cpu, 48 CPU(s), 24 threads

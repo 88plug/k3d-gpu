@@ -1,0 +1,97 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-11-01T11:27:33Z",
+  "config": {
+    "base_url": "http://127.0.0.1:19347/v1",
+    "model": "gemma",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 16,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 1,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 600.0,
+    "label": null,
+    "out": "/home/devcloud/k3dgpu-h59/smoke/H59-20261101T112308Z/L/smoke-load.json",
+    "run_id": "cf47e51f"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 1,
+      "ok": 1,
+      "errors": 0,
+      "wall_s": 0.5381375779397786,
+      "output_tokens_total": 16,
+      "aggregate_tokens_per_s": 29.732173808145607,
+      "requests_per_s": 1.8582608630091004,
+      "stats": {
+        "first_chunk_s": {
+          "n": 1,
+          "median": 0.208585100248456,
+          "p90": 0.208585100248456,
+          "min": 0.208585100248456,
+          "max": 0.208585100248456
+        },
+        "ttft_s": {
+          "n": 1,
+          "median": 0.2086494448594749,
+          "p90": 0.2086494448594749,
+          "min": 0.2086494448594749,
+          "max": 0.2086494448594749
+        },
+        "latency_s": {
+          "n": 1,
+          "median": 0.5368580161593854,
+          "p90": 0.5368580161593854,
+          "min": 0.5368580161593854,
+          "max": 0.5368580161593854
+        },
+        "output_tokens": {
+          "n": 1,
+          "median": 16,
+          "p90": 16,
+          "min": 16,
+          "max": 16
+        },
+        "tokens_per_s": {
+          "n": 1,
+          "median": 29.80303826784963,
+          "p90": 29.80303826784963,
+          "min": 29.80303826784963,
+          "max": 29.80303826784963
+        },
+        "decode_tokens_per_s": {
+          "n": 1,
+          "median": 45.70264554819714,
+          "p90": 45.70264554819714,
+          "min": 45.70264554819714,
+          "max": 45.70264554819714
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 19,
+          "content_chunks": 16,
+          "text_chars": 86,
+          "finish_reason": "length",
+          "first_chunk_s": 0.208585100248456,
+          "ttft_s": 0.2086494448594749,
+          "latency_s": 0.5368580161593854,
+          "output_tokens": 16,
+          "tokens_per_s": 29.80303826784963,
+          "decode_tokens_per_s": 45.70264554819714,
+          "prompt_tokens": 46,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

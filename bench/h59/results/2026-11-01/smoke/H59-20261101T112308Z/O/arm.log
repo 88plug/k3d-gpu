@@ -1,0 +1,4 @@
+2026-11-01T11:23:38Z O start perf (2340 s of the hold left)
+2026-11-01T11:24:14Z O ready after 34 s
+concurrency=1 ok=1/1 ttft_median=0.641s ttft_p90=0.641s latency_median=1.263s tok/s_median=12.7 aggregate_tok/s=12.7
+2026-11-01T11:24:17Z O status smoke: ready; wiring checks in smoke-*.json
