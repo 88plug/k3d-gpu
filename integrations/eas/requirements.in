@@ -1,0 +1,5 @@
+# enterprise-ai-solutions@97f6157d6a72f7173c698c474d4e51d2c79f1fd6 requirements.txt
+ansible>=10.0,<13.0
+kubernetes>=29.0,<36.0
+jsonpatch>=1.33,<2.0
+jmespath>=1.0,<2.0

@@ -14,6 +14,7 @@ no node with AMXBF16 -> VLLM_CPU_SGL_KERNEL: as shipped (vLLM v0.28.0 checks for
 no --cluster-cidr in k3s.io/node-args -> kubernetes_cluster_cidr: 10.42.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:137-141]
 no --service-cidr in k3s.io/node-args -> kubernetes_service_cidr: 10.43.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:142-146]
 bring-your-own cluster -> kata_containers_enabled: false [intel/enterprise-ai-solutions@97f6157 roles/kata_containers/tasks/install.yaml:9-22]
+EI's model deploy passes the LiteLLM master key through ansible environment: (a /bin/sh -c argument while each model deploys) -> _deploy_litellm_secret: "" (model-manager reads Secret litellm/litellm-master-key itself) [intel/enterprise-inference@3e8a244 roles/llm_services/tasks/deploy_models.yaml:240]
 no accelerator resources -> kubernetes_accelerator: cpu [intel/enterprise-ai-solutions@97f6157 configs/defaults/global_config.yaml:106]
 no agent-sandbox CRD -> agent_sandbox_enabled: true (EAT installs agent-sandbox v0.5.0) [intel/enterprise-agent-toolkit@036b662 config.yaml:56]
 node memory 30 GiB; qwen2-5-coder-14b needs 131 GiB; qwen2-5-coder-7b needs 99 GiB; llama-3-1-8b needs 99 GiB -> llm_services_autodeploy_models: [] (deploy one later with ./model-manager deploy <name>) [intel/enterprise-agent-toolkit@036b662 config.yaml:32-35]

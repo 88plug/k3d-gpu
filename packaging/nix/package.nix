@@ -43,6 +43,9 @@ stdenvNoCC.mkDerivation {
       (root + "/images.lock")
       (root + "/bench/vs.py")
       (root + "/bench/competitors.lock")
+      (root + "/integrations/eas")
+      (root + "/integrations/eat/upstream/patches")
+      (root + "/integrations/eat/eat-check.sh")
       (root + "/README.md")
       (root + "/LICENSE.md")
     ];
@@ -69,6 +72,11 @@ stdenvNoCC.mkDerivation {
     install -Dm644 -t "$out/share/k3d-gpu/bench/apb" bench/apb/apb.py bench/apb/capacity.py
     install -Dm644 -t "$out/share/k3d-gpu/oracle" oracle/bundle.py oracle/project.py oracle/validate.py oracle/share.py
     install -Dm644 -t "$out/share/k3d-gpu/oracle/schema" oracle/schema/bundle-v1.json
+    # k3d-gpu eas, its overlay's patch drafts and eat-check.sh, in the repo's integrations/ layout.
+    mkdir -p "$out/share/k3d-gpu/integrations"
+    cp -r integrations/eas "$out/share/k3d-gpu/integrations/eas"
+    install -Dm644 -t "$out/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch
+    install -Dm755 integrations/eat/eat-check.sh "$out/share/k3d-gpu/integrations/eat/eat-check.sh"
     install -Dm644 README.md "$out/share/doc/k3d-gpu/README.md"
     install -Dm644 LICENSE.md "$out/share/licenses/k3d-gpu/LICENSE.md"
     runHook postInstall
