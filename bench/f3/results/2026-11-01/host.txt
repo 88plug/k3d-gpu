@@ -1,0 +1,16 @@
+# start 2026-11-01T03:59:53-08:00
+uptime:  03:59:53 up 39 days, 16:47,  1 user,  load average: 4.04, 3.13, 3.70
+MemTotal:       131521428 kB
+MemAvailable:   64617580 kB
+SwapTotal:      196607996 kB
+SwapFree:       67800572 kB
+running containers: 53
+oom_kill: 9
+# end 2026-11-01T04:50:37-08:00
+uptime:  04:50:37 up 39 days, 17:38,  1 user,  load average: 7.10, 9.65, 9.20
+MemTotal:       131521428 kB
+MemAvailable:   67516020 kB
+SwapTotal:      196607996 kB
+SwapFree:       64359156 kB
+running containers: 53
+oom_kill: 9

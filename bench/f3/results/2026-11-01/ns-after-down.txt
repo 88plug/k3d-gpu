@@ -1,0 +1,9 @@
+NAME                     STATUS        AGE
+cert-manager             Terminating   49m
+default                  Active        50m
+habana-system            Active        50m
+istio-system             Terminating   48m
+kube-node-lease          Active        50m
+kube-public              Active        50m
+kube-system              Active        50m
+node-feature-discovery   Active        50m

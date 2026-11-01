@@ -1431,8 +1431,11 @@ EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer ins
 bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
 k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
 layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
-layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. It has
-not run end to end yet: F3 in [EXPERIMENTS.md](EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. F3 ran
+it once end to end on the i9-13900T and is REFUTED
+([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check` and the
+teardown passed, but enterprise-inference's Keycloak step put the Keycloak admin password on a
+process command line, where the run's secret scan found it.
 See [docs/intel/eas.md](docs/intel/eas.md).
 
 ### Experimental features (auto-adapting)

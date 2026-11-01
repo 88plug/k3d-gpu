@@ -1,0 +1,37 @@
+[32m==>[0m Accelerators: nvidia intel hybrid
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-f3-eas' with image k3d-gpu-f3node:48e1da90...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-f3-eas'          
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-f3-eas-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-f3-eas-tools'      
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-f3-eas-server-0'   
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.20.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-f3-eas'             
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-f3-eas-server-0'   
+[36mINFO[0m[0005] All agents already running.                  
+[36mINFO[0m[0005] All helpers already running.                 
+[36mINFO[0m[0005] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0007] Cluster 'k3dgpu-f3-eas' created successfully! 
+[36mINFO[0m[0007] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0007] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-f3-eas)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/andrew/.cache/k3dgpu-f3/f3-scored/out/state/kubeconfig-k3dgpu-f3-eas
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-f3-eas-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+node/k3d-k3dgpu-f3-eas-server-0 annotated
+[32m==>[0m nvidia device plugin auto-deployed by k3s.
+[32m==>[0m intel device plugin auto-deployed by k3s.
+[32m==>[0m hybrid device plugin auto-deployed by k3s.
+[32m==>[0m Configuring intel GPU device plugin: -shared-dev-num=8 -allocation-policy=balanced
+balloonspolicy.config.nri/default patched
+[32m==>[0m Verifying accelerators are schedulable...
+daemon set "nvidia-device-plugin-daemonset" successfully rolled out
+daemon set "intel-gpu-plugin" successfully rolled out
+daemon set "nri-resource-policy-balloons" successfully rolled out
+[32m==>[0m Accelerators schedulable: nvidia=2 intel=8 hybrid=1. Try: k3d-gpu test
