@@ -1521,7 +1521,28 @@ That is placement, not isolation: package power, LLC and DRAM bandwidth stay sha
 and E-core load still slowed CPU-served prefill on the P-cores [ledger:H3].
 `up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
 `Cpus_allowed_list` and fails if it is not inside the host's E-cores.
-`k3d-gpu sandbox down` removes it all.
+`k3d-gpu sandbox down` removes the profile, then the namespace `agent-sandbox-system`,
+the agent-sandbox CRDs and the controller, unless something else uses them.
+
+Other installers put agent-sandbox in the same namespace: Intel's Enterprise Agent
+Toolkit installs v0.5.0 into `agent-sandbox-system` with its own warm pool and router.
+k3d-gpu counts the controller as its own when the Deployment carries
+`app.kubernetes.io/managed-by=k3d-gpu` (`up` labels the Deployment, the namespace and
+the CRDs after it installs them) or runs the controller image k3d-gpu pins, with no
+other installer's `managed-by` label or Helm release on it.
+
+- `up` stops before applying anything when another installer's controller is there,
+  or a CRD carries another installer's `managed-by` label or Helm release, and names
+  the image or the CRDs.
+- `up --adopt` keeps that controller and applies only the E-core profile. The
+  SandboxTemplate and SandboxWarmPool CRDs must serve `extensions.agents.x-k8s.io/v1beta1`;
+  v0.5.0's do.
+- `down` keeps the namespace, the CRDs and the controller when the controller is
+  another installer's, when a CRD carries another installer's label or Helm release,
+  when a Sandbox, SandboxClaim, SandboxTemplate or SandboxWarmPool exists outside
+  namespace `agent-sandbox`, or when a pod other than the controller's runs in
+  `agent-sandbox-system`. It prints what it kept and why, and exits 0. Deleting a CRD
+  deletes every object of that kind in every namespace.
 
 ```bash
 k3d-gpu sandbox up
