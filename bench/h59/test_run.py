@@ -255,11 +255,12 @@ class Tables(unittest.TestCase):
 
     def test_host_rules(self):
         c, d, w = run.PROFILES["crescent"], run.PROFILES["desktop"], run.PROFILES["wildct"]
-        # N=16 on crescent only; H54's void rule there, H57d's load gate on the two clients.
+        # N=16 on crescent only; H54's void rule there, H57d's load gate over each arm's idle
+        # window on the two clients (amendment R2).
         self.assertIn("n16", c["phases"].split(","))
         self.assertNotIn("n16", d["phases"].split(","))
         self.assertNotIn("n16", w["phases"].split(","))
-        self.assertEqual((c["load_rule"], d["load_rule"], w["load_rule"]), ("h54-void", "h57d", "h57d"))
+        self.assertEqual((c["load_rule"], d["load_rule"], w["load_rule"]), ("h54-void", "h57d-idle", "h57d-idle"))
         # Hold-start load1: H54's 12, H57d's 24, wildct's 12; caps: H54's 2400 s, H57d's 4500 s.
         self.assertEqual((c["load1_max"], d["load1_max"], w["load1_max"]), (12, 24, 12))
         self.assertEqual((c["cap_s"], d["cap_s"], w["cap_s"]), (2400, 4500, 4500))
@@ -493,6 +494,94 @@ class Gate(unittest.TestCase):
         self.assertFalse(run.gate(self.d)["matched"])
 
 
+class IdleGate(unittest.TestCase):
+    """H59d's and H59w's load gate (amendment R2): H57d's gate over each arm's mean foreign
+    P-core load in its 60 s idle windows; the N=4 reading is recorded beside it, not gated."""
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def hold(self, k, idle, n4, status=None):
+        """idle, n4: {arm: foreign P-core CPU-s/s} for the hold; each arm's idle window then its
+        N=4 phase, one after the other, with H57d's sampler records over both."""
+        hd = os.path.join(self.d, f"hold{k}")
+        samples, t = [], 1000.0
+        for a in ("O", "L"):
+            ad = os.path.join(hd, a)
+            put(os.path.join(ad, "status.json"), json.dumps({"status": (status or {}).get(a, "measured")}))
+            with open(os.path.join(ad, "phases.jsonl"), "w") as f:
+                for ph, load in (("idle", idle[a]), ("n4", n4[a])):
+                    f.write(phases_line(phase=ph, t0=t, t1=t + 60))
+                    samples += [{"ts": t + s, "seconds": 5, "pcore_busy": 8.0 + load, "node_cpu": 8.0}
+                                for s in range(5, 61, 5)]
+                    t += 70
+        put(os.path.join(hd, "load.jsonl"), "".join(json.dumps(s) + "\n" for s in samples))
+
+    def test_idle_windows_gate_and_n4_is_recorded_only(self):
+        for k in (1, 2, 3):   # idle alike, N=4 apart (the H57d pattern): matched
+            self.hold(k, {"O": 5.0, "L": 6.0}, {"O": 2.9, "L": 5.6})
+        g = run.idle_gate(self.d)
+        self.assertTrue(g["matched"], g)
+        self.assertAlmostEqual(g["spread"], 1.0)
+        self.assertEqual(g["means"], {"L": 6.0, "O": 5.0})
+        self.assertIn("idle window", g["rule"])
+        self.assertFalse(g["n4"]["matched"])
+        self.assertAlmostEqual(g["n4"]["spread"], 2.7)
+        self.assertFalse(g["n4"]["gates"])
+
+    def test_idle_windows_apart_is_unmatched_even_when_n4_matches(self):
+        for k in (1, 2, 3):
+            self.hold(k, {"O": 1.0, "L": 4.5}, {"O": 3.0, "L": 3.0})
+        g = run.idle_gate(self.d)
+        self.assertFalse(g["matched"])
+        self.assertIn("3.50 > 2.00", g["reason"])
+        self.assertTrue(g["n4"]["matched"])
+
+    def test_spare_stands_in_unmeasured_skipped_missing_window_unmatched(self):
+        for k in (1, 2, 3):
+            self.hold(k, {"O": 5.0, "L": 5.0}, {"O": 5.0, "L": 5.0})
+        self.hold(2, {"O": 1.0, "L": 9.0}, {"O": 5.0, "L": 5.0})
+        self.hold(5, {"O": 5.0, "L": 5.5}, {"O": 5.0, "L": 5.0})
+        put(os.path.join(self.d, "hold5", "repeats"), "2\n")
+        self.assertTrue(run.idle_gate(self.d)["matched"])
+        self.hold(3, {"O": 5.0, "L": 20.0}, {"O": 5.0, "L": 5.0}, status={"L": "failed"})
+        self.assertTrue(run.idle_gate(self.d)["matched"])
+        for k in (1, 2, 3, 5):   # no idle window recorded for L: no reading, unmatched
+            p = os.path.join(self.d, f"hold{k}", "L", "phases.jsonl")
+            put(p, "".join(x + "\n" for x in rd(p).splitlines() if json.loads(x)["phase"] != "idle"))
+        g = run.idle_gate(self.d)
+        self.assertFalse(g["matched"])
+        self.assertIsNone(g["means"]["L"])
+
+    def test_arm_names_and_the_cli(self):
+        for k in (1, 2, 3):
+            self.hold(k, {"O": 5.0, "L": 6.0}, {"O": 2.9, "L": 5.6})
+        out = subprocess.run([sys.executable, os.path.join(HERE, "run.py"), "idle-gate", self.d],
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertTrue(json.loads(out.stdout)["matched"])
+        g = run.idle_gate(self.d, {"L": "L", "O": "O"})
+        self.assertEqual(sorted(g["means"]), ["L", "O"])
+
+    def test_the_desktop_records_the_amendment_cites(self):
+        """H57d (2026-10-21, Ld-mtp and Od, H59's pair): idle spread 1.46, N=4 spread 2.61.
+        H57dp (2026-10-29, three arms): idle spread 0.21, N=4 spread 2.70. Limit 2.00."""
+        res = os.path.join(ROOT, "bench", "h57d", "results")
+        g = run.idle_gate(os.path.join(res, "2026-10-21"), {"L": "Ld-mtp", "O": "Od"})
+        self.assertTrue(g["matched"], g)
+        self.assertEqual((round(g["spread"], 2), g["tolerance"]), (1.46, 2.0))
+        self.assertFalse(g["n4"]["matched"])
+        self.assertEqual(round(g["n4"]["spread"], 2), 2.61)
+        g = run.idle_gate(os.path.join(res, "2026-10-29"), {"a": "Ld-mtp", "b": "Ld-mtp-u", "c": "Od"})
+        self.assertTrue(g["matched"], g)
+        self.assertEqual(round(g["spread"], 2), 0.21)
+        self.assertFalse(g["n4"]["matched"])
+        self.assertEqual(round(g["n4"]["spread"], 2), 2.70)
+
+
 class Prefix(unittest.TestCase):
     def test_six_agents_one_shared_prefix(self):
         srv = serve({"v1": 0.0, "v3": 0.0})
@@ -569,14 +658,21 @@ class EndToEnd(unittest.TestCase):
             q = jl(os.path.join(res, "hold4", "O", "quality.json"))
             self.assertEqual((q["n"], q["errors"]), (50, 0))
             self.registered_requests(res, srv.bodies)
-            rep = h59.score(res, "h57d")
+            # The desktop's load gate reads each arm's idle window (amendment R2).
+            rep = h59.score(res, run.idle_gate(res))
             self.assertEqual(rep["verdict"], "SUPPORTED", json.dumps({k: v for k, v in rep.items() if k != "arms"}))
             self.assertEqual([rep["arms"][a]["n4_requests"] for a in ("L", "O")], [48, 48])
             self.assertGreater(rep["ci"][0], 1.2)
             self.assertTrue(rep["all_holds_faster"])
             self.assertTrue(rep["load_gate"]["matched"])
-            # The scorer's CLI on the same records.
-            cli = subprocess.run([sys.executable, os.path.join(HERE, "h59.py"), "score", res, "--load", "h57d"],
+            self.assertIn("idle window", rep["load_gate"]["rule"])
+            # The CLIs on the same records: run.py idle-gate writes GATE.json, h59.py reads it.
+            g = subprocess.run([sys.executable, os.path.join(HERE, "run.py"), "idle-gate", res],
+                               capture_output=True, text=True)
+            self.assertEqual(g.returncode, 0, g.stderr)
+            gate = os.path.join(res, "gate.json")
+            put(gate, g.stdout)
+            cli = subprocess.run([sys.executable, os.path.join(HERE, "h59.py"), "score", res, "--load", gate],
                                  capture_output=True, text=True)
             self.assertEqual(json.loads(cli.stdout)["verdict"], "SUPPORTED")
         finally:

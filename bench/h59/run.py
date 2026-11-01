@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """run.py: the H59, H59d and H59w runner's tables and steps (EXPERIMENTS.md "H59
-pre-registration" and "H59 amendment R1"). The verdict is h59.py's; this file serves the shell
+pre-registration", "H59 amendment R1" and "H59 amendment R2"). The verdict is h59.py's; this file serves the shell
 runner (hold.sh, hold-run.sh, arm.sh, prep.sh).
 
   run.py profile HOST                 the host profile as KEY=value lines (crescent, desktop, wildct)
@@ -24,6 +24,9 @@ runner (hold.sh, hold-run.sh, arm.sh, prep.sh).
                                       (prep.sh runs it once per host; holds then skip the Job)
   run.py gate RESULTS                 crescent's load verdict for `h59.py score --load GATE.json`:
                                       H54's void rule over the N=4 phases of the performance holds
+  run.py idle-gate RESULTS            the desktop's and wildct's (amendment R2), for the same flag:
+                                      H57d's load gate over each arm's 60 s idle windows; the N=4
+                                      reading is recorded beside it and does not gate
   run.py prefix URL MODEL SEED OUT    the prefix-reuse phase: 6 agents in sequence on one shared
                                       prefix (H25's shape, bench/shared-prefix/probe.py)
 
@@ -40,6 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 import h59  # noqa: E402  (hold_dirs, status: the scorer's own reading of the records)
+import h57d  # noqa: E402  (on the path h59 adds: the P-core foreign-load reading and the load gate)
 
 MODELS = "/var/apb-models"   # the node path the k3d shim binds the campaign's G/models to
 NS = "k3d-gpu-agent"
@@ -96,7 +100,8 @@ W3 = "--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,im
 
 # Host profiles. Each host keeps its own shared lock, start rule, floors, hold length and load
 # rule (H59 pre-registration: H54's on crescent, H57d's on the desktop, the wildct
-# pre-registration's on wildct). cpu: the model number /proc/cpuinfo must name (the row's CPU
+# pre-registration's on wildct; amendment R2: on the desktop and wildct, H57d's gate reads each
+# arm's idle window, `run.py idle-gate`). cpu: the model number /proc/cpuinfo must name (the row's CPU
 # class); pcores: the P-core balloon's CPUs the render must request (0: no hybrid balloon).
 PROFILES = {
     "crescent": {"row": "H59", "cpu": "6741P", "g": "~/k3dgpu-h59", "prefix": "k3dgpu-g-h59-",
@@ -107,11 +112,11 @@ PROFILES = {
     "desktop": {"row": "H59d", "cpu": "i9-13900T", "g": "~/k3dgpu-h59", "prefix": "k3dgpu-d-h59-",
                 "lock": "", "load1_max": 24, "aiperf": 0, "disk": "free15", "mem_gib": 20,
                 "cap_s": 4500, "arms_end_s": 4470, "vendors": "hybrid", "k3s_args": C1,
-                "sampler": "pcore", "load_rule": "h57d", "phases": "n1,n4,ttft,prefix", "pcores": 16},
+                "sampler": "pcore", "load_rule": "h57d-idle", "phases": "n1,n4,ttft,prefix", "pcores": 16},
     "wildct": {"row": "H59w", "cpu": "i7-13700", "g": "~/k3dgpu-bench-wildct/h59", "prefix": "k3dgpu-w-h59-",
                "lock": "", "load1_max": 12, "aiperf": 0, "disk": "free15", "mem_gib": 20,
                "cap_s": 4500, "arms_end_s": 4470, "vendors": "auto,-nvidia,-intel", "k3s_args": W3,
-               "sampler": "pcore", "load_rule": "h57d", "phases": "n1,n4,ttft,prefix", "pcores": 16},
+               "sampler": "pcore", "load_rule": "h57d-idle", "phases": "n1,n4,ttft,prefix", "pcores": 16},
 }
 # Phases: (name, requests, concurrency, max_tokens) for bench/llm_load.py, H54's requests.
 LOAD_PHASES = {"warmup": (3, 1, 256), "n1": (8, 1, 256), "n4": (16, 4, 256), "n16": (32, 16, 256),
@@ -518,6 +523,36 @@ def gate(results):
             "rule": "H54's void rule over the N=4 phases", "checked": checked}
 
 
+# ---- the desktop's and wildct's load rule ----------------------------------------------------------
+
+def idle_gate(results, arms=None):
+    """H59d's and H59w's load gate (amendment R2): H57d's load gate over each arm's mean foreign
+    P-core load in its 60 s idle windows (server up, no request) of the performance holds, a spare
+    standing in for the hold it repeats. arms: {role: record directory name}, default L and O.
+    Amendment S1's reading over the N=4 phases is recorded beside it (n4) and does not gate."""
+    names = list((arms or {"L": "L", "O": "O"}).values())
+    hd = h59.hold_dirs(results)
+    means = {}
+    for a in names:
+        f = []
+        for k in h59.PERF_HOLDS:
+            ph, sp = os.path.join(hd[k], a, "phases.jsonl"), os.path.join(hd[k], "load.jsonl")
+            if h59.status(os.path.join(hd[k], a)) != "measured" or not (os.path.exists(ph) and os.path.exists(sp)):
+                continue
+            with open(sp) as fh:
+                samples = [json.loads(x) for x in fh if x.strip()]
+            with open(ph) as fh:
+                for r in (json.loads(x) for x in fh if x.strip()):
+                    if r.get("phase") == "idle":
+                        v = h57d.foreign(samples, r["t0"], r["t1"])
+                        if v is not None:
+                            f.append(v)
+        means[a] = statistics.mean(f) if f else None
+    return dict(h57d.load_gate(means), means=means,
+                rule="H57d's load gate over each arm's 60 s idle window (H59 amendment R2)",
+                n4=dict(h59.h57d_load(results, names), gates=False))
+
+
 # ---- the prefix-reuse phase ----------------------------------------------------------------------
 
 def _probe():
@@ -590,6 +625,8 @@ def main(argv):
         print("\n".join(docker_argv(jload(a[0]), a[1], a[2])))
     elif cmd == "gate":
         print(json.dumps(gate(a[0]), indent=1))
+    elif cmd == "idle-gate":
+        print(json.dumps(idle_gate(a[0]), indent=1))
     elif cmd == "prefix":
         rec = prefix(a[0], a[1], int(a[2]), a[3])
         print(json.dumps({"added_ttft_median_s": rec["added_ttft_median_s"], "first_ttft_s": rec["first_ttft_s"]}))
