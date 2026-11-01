@@ -1,0 +1,404 @@
+OpenVINO Model Server
+Usage:
+  /ovms/bin/ovms [OPTION...]
+
+  -h, --help                    Show this help message and exit
+      --version                 Show binary version
+      --port PORT               gRPC server port (default: 0)
+      --grpc_bind_address GRPC_BIND_ADDRESS
+                                Network interface address to bind to for 
+                                the gRPC API (default: 0.0.0.0)
+      --rest_port REST_PORT     REST server port, the REST server will not 
+                                be started if rest_port is blank or set to 
+                                0 (default: 0)
+      --rest_bind_address REST_BIND_ADDRESS
+                                Network interface address to bind to for 
+                                the REST API (default: 0.0.0.0)
+      --grpc_workers GRPC_WORKERS
+                                Number of gRPC servers. Default 1. Increase 
+                                for multi client, high throughput scenarios 
+                                (default: 1)
+      --grpc_max_threads GRPC_MAX_THREADS
+                                Maximum number of threads which can be used 
+                                by the gRPC server. Default value depends 
+                                on number of CPUs.
+      --grpc_memory_quota GRPC_MEMORY_QUOTA
+                                GRPC server buffer memory quota. Default 
+                                value set to 2147483648 (2GB).
+      --rest_workers REST_WORKERS
+                                Number of worker threads in REST server - 
+                                has no effect if rest_port is not set. 
+                                Default value depends on number of CPUs. 
+      --log_level LOG_LEVEL     serving log level - one of TRACE, DEBUG, 
+                                INFO, WARNING, ERROR (default: INFO)
+      --log_path LOG_PATH       Optional path to the log file
+      --verbose_response        When enabled, responses include an extra 
+                                "__verbose" object with additional debug 
+                                information.
+      --disable_input_count_validation
+                                When enabled, OVMS allows inference 
+                                requests to include additional, 
+                                unrecognized inputs beyond the 
+                                model/pipeline signature (extra inputs are 
+                                ignored). Required inputs must still be 
+                                present, and shape/precision validation is 
+                                still performed for recognized inputs. 
+                                Default: false (extra inputs cause the 
+                                request to be rejected).
+      --grpc_channel_arguments GRPC_CHANNEL_ARGUMENTS
+                                A comma separated list of arguments to be 
+                                passed to the gRPC server. (e.g. 
+                                grpc.max_connection_age_ms=2000)
+      --file_system_poll_wait_seconds FILE_SYSTEM_POLL_WAIT_SECONDS
+                                Time interval between config and model 
+                                versions changes detection. Default is 1. 
+                                Zero or negative value disables changes 
+                                monitoring. (default: 1)
+      --idle_unload_timeout_seconds IDLE_UNLOAD_TIMEOUT_SECONDS
+                                Idle timeout in seconds for model group 
+                                unloading. When > 0, models not in the 
+                                'permanent' group are loaded on demand and 
+                                unloaded after this idle period. Only 
+                                effective with config.json multi-model 
+                                setup. Default is 0 (disabled). (default: 
+                                0)
+      --custom_node_resources_cleaner_interval_seconds CUSTOM_NODE_RESOURCES_CLEANER_INTERVAL_SECONDS
+                                Time interval between two consecutive 
+                                resources cleanup scans. Default is 300. 
+                                Zero value disables resources cleaner. 
+                                (default: 300)
+      --cache_dir CACHE_DIR     Overrides model cache directory. By default 
+                                cache files are saved into/opt/cache if the 
+                                directory is present. When enabled, first 
+                                model load will produce cache files.
+      --metrics_enable          Flag enabling metrics endpoint on 
+                                rest_port.
+      --metrics_list METRICS_LIST
+                                Comma separated list of metrics. If unset, 
+                                only default metrics will be enabled. 
+                                Default metrics: ovms_requests_success, 
+                                ovms_requests_fail, ovms_request_time_us, 
+                                ovms_streams, ovms_inference_time_us, 
+                                ovms_wait_for_infer_req_time_us. When set, 
+                                only the listed metrics will be enabled. 
+                                Optional metrics: 
+                                ovms_infer_req_queue_size, 
+                                ovms_infer_req_active. (default: "")
+      --cpu_extension CPU_EXTENSION
+                                A path to shared library containing custom 
+                                CPU layer implementation. Default: empty. 
+                                (default: "")
+      --allowed_media_domains ALLOWED_MEDIA_DOMAINS
+                                Comma separated list of media domains from 
+                                which URLs can be used as input for LLMs. 
+                                Set to "all" to disable this restriction.
+      --allowed_local_media_path ALLOWED_LOCAL_MEDIA_PATH
+                                Path to directory that contains multimedia 
+                                files that can be used as input for LLMs.
+      --allow_credentials       Flag enabling credentials on the API.
+      --allowed_origins ALLOWED_ORIGINS
+                                Comma separated list of origins that are 
+                                allowed to access the API. Default: *. 
+                                (default: *)
+      --allowed_methods ALLOWED_METHODS
+                                Comma separated list of methods that are 
+                                allowed to access the API. Default: *. 
+                                (default: *)
+      --allowed_headers ALLOWED_HEADERS
+                                Comma separated list of headers that are 
+                                allowed to access the API. Default: *. 
+                                (default: *)
+      --api_key_file API_KEY    path to the text file containing API key 
+                                for authentication for generative 
+                                endpoints. If not set, authentication is 
+                                disabled. (default: "")
+
+ multi model options:
+      --config_path CONFIG_PATH
+                                Absolute path to json configuration file
+
+ single model options:
+      --model_name MODEL_NAME   Name of the model
+      --model_path MODEL_PATH   Folder with AI model versions or with 
+                                mediapipe graph
+      --batch_size BATCH_SIZE   Resets models batchsize, int value or auto. 
+                                This parameter will be ignored if shape is 
+                                set
+      --shape SHAPE             Resets models shape (model must support 
+                                reshaping). If set, batch_size parameter is 
+                                ignored
+      --layout LAYOUT           Resets model layout. It should be in format 
+                                <TARGET_LAYOUT>:<SOURCE_LAYOUT> e.g. 
+                                NCHW:NHWC
+      --mean MEAN               Resets model mean.
+      --scale SCALE             Resets model scale.
+      --color_format COLOR_FORMAT
+                                Resets model color format. It should be in 
+                                format 
+                                <TARGET_COLOR_FORMAT>:<SOURCE_COLOR_FORMAT> 
+                                e.g. BGR:RGB
+      --precision PRECISION     Resets model precision.
+      --model_version_policy MODEL_VERSION_POLICY
+                                Model version policy
+      --nireq NIREQ             Size of inference request queue for model 
+                                executions. Recommended to be >= parallel 
+                                executions. Default value calculated by 
+                                OpenVINO based on available resources. 
+                                Request for 0 is treated as request for 
+                                default value
+      --target_device TARGET_DEVICE
+                                Target device to run the inference. 
+                                Default: auto-detected based on available 
+                                devices. (default: "")
+      --plugin_config PLUGIN_CONFIG
+                                A dictionary of plugin configuration keys 
+                                and their values, eg "{\"NUM_STREAMS\": 
+                                \"1\"}". Default number of streams is 
+                                optimized to optimal latency with low 
+                                concurrency.
+
+ pull hf model options:
+      --pull                    Pull model from HF. Uses optional 
+                                environment variables: HF_TOKEN - when set 
+                                used for authentication, HF_ENDPOINT - when 
+                                set replaces huggingface.co for model 
+                                download.
+      --source_model HF_SOURCE  HF source model path
+      --source_loras SOURCE_LORAS
+                                LoRA adapters for image generation. Format: 
+                                alias1=org1/repo1,alias2=org2/repo2@file.saf
+                                etensors,alias3=https://url/file.safetensors
+                                ,alias4=/local/path/file.safetensors
+      --gguf_filename GGUF_FILENAME
+                                Name of the GGUF file
+      --overwrite_models        Overwrite the model if it already exists in 
+                                the models repository
+      --model_repository_path MODEL_REPOSITORY_PATH
+                                HF model destination download path 
+                                (default: "")
+      --weight-format WEIGHT_FORMAT
+                                Model precision used in optimum-cli export 
+                                with conversion (default: int8)
+      --extra_quantization_params EXTRA_QUANTIZATION_PARAMS
+                                Model quantization parameters used in 
+                                optimum-cli export with conversion for text 
+                                generation models
+
+ generative task (applies to: pull hf model, configure, single model) options:
+      --task TASK  Specifies the generative task for the local model. It 
+                   should be followed by task specific parameters. 
+                   Supported tasks: text_generation, embeddings, rerank, 
+                   image_generation, text2speech, speech2text. It creates 
+                   the pipeline graph in memory based on the provided 
+                   task-specific options. If not provided, default task 
+                   value is inferred from model config.
+      --configure  Create or update graph.pbtxt for the model specified by 
+                   --model_path and --task. Does not start the server.
+
+configure mode (create or update graph.pbtxt for a local model):
+  ovms --configure --model_path <MODEL_PATH> --task <TASK> [TASK OPTIONS ...]
+
+config management commands:
+Usage:
+  ovms --add_to_config --config_path <CONFIG_PATH> --model_name <MODEL_NAME> --model_repository_path <MODEL_REPO_PATH> 
+  ovms --add_to_config --config_path <CONFIG_PATH> --model_path <MODEL_PATH> --model_name <MODEL_NAME> --group_name <GROUP> 
+  ovms --remove_from_config --config_path <CONFIG_PATH> --model_name <MODEL_NAME>
+
+ config management options:
+      --list_models             Directive to show available servables in 
+                                models repository
+      --add_to_config           Directive to add a model to configuration 
+                                file. This parameter should be executed 
+                                with --model_name, --config_path and either 
+                                with --model_path or 
+                                --model_repository_path.
+      --remove_from_config      Directive to remove a model from 
+                                configuration file. This parameter should 
+                                be executed with --config_path and 
+                                --model_name to specify which model to 
+                                remove.
+      --model_repository_path MODEL_REPOSITORY_PATH
+                                Absolute or relative path from the config 
+                                directory to the model repository (default: 
+                                "")
+      --model_path MODEL_PATH   Absolute or relative path from the config 
+                                directory to the model. By default is a 
+                                combination of the model_repository_path 
+                                and model_name.
+      --model_name MODEL_NAME   Name of the model
+      --group_name GROUP_NAME   Optional group name for idle model group 
+                                management
+      --config_path CONFIG_PATH
+                                Path to json configuration file (default: 
+                                "")
+
+--task text_generation options
+Usage:
+  ovms --pull --task text_generation [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task text_generation [OPTIONS...] [OPTION...]
+
+ text generation options:
+      --max_num_seqs MAX_NUM_SEQS
+                                The maximum number of sequences that can be 
+                                processed together. Default 256. (default: 
+                                256)
+      --pipeline_type PIPELINE_TYPE
+                                Type of the pipeline to be used: Choices 
+                                LM, LM_CB, VLM, VLM_CB, AUTO. AUTO is used 
+                                by default.
+      --enable_prefix_caching ENABLE_PREFIX_CACHING
+                                This algorithm is used to cache the prompt 
+                                tokens. (default: true)
+      --max_num_batched_tokens MAX_NUM_BATCHED_TOKENS
+                                empty or integer. The maximum number of 
+                                tokens that can be batched together.
+      --cache_size CACHE_SIZE   KV cache size in GB, default is 0 which 
+                                mean dynamic allocation. (default: 0)
+      --draft_source_model DRAFT_SOURCE_MODEL
+                                HF model name or path to the local folder 
+                                with PyTorch or OpenVINO draft model.
+      --draft_model_path DRAFT_MODEL_PATH
+                                Absolute path to an already-exported 
+                                OpenVINO draft model directory (use instead 
+                                of --draft_source_model for local models).
+      --draft_device DRAFT_DEVICE
+                                Device to run the draft model on. Defaults 
+                                to the same device as the main model.
+      --draft_eagle3_mode       [Deprecated] Draft model strategy is now 
+                                auto-detected from model artifacts; this 
+                                flag is accepted but ignored.
+      --dynamic_split_fuse DYNAMIC_SPLIT_FUSE
+                                Dynamic split fuse algorithm enabled. 
+                                Default true. (default: true)
+      --reasoning_parser REASONING_PARSER
+                                Reasoning parser
+      --tool_parser TOOL_PARSER
+                                Tool parser
+      --enable_tool_guided_generation ENABLE_TOOL_GUIDED_GENERATION
+                                Enables enforcing tool schema during 
+                                generation. Requires setting tool parser. 
+                                Default: false. (default: false)
+      --cache_interval_multiplier CACHE_INTERVAL_MULTIPLIER
+                                Multiplier for the KV cache block interval. 
+                                Controls the granularity of cache 
+                                allocation. Default: unset.
+
+ plugin config options:
+      --max_prompt_len MAX_PROMPT_LEN
+                                Sets NPU specific property for maximum 
+                                number of tokens in the prompt.
+      --kv_cache_precision KV_CACHE_PRECISION
+                                u8 or empty (model default). Reduced kv 
+                                cache precision to u8 lowers the cache size 
+                                consumption. (default: "")
+      --model_distribution_policy MODEL_DISTRIBUTION_POLICY
+                                TENSOR_PARALLEL, PIPELINE_PARALLEL or empty 
+                                (model default). Sets model distribution 
+                                policy for inference with multiple 
+                                sockets/devices.
+
+--task rerank options
+Usage:
+  ovms --pull --task rerank [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task rerank [OPTIONS...] [OPTION...]
+
+ rerank options:
+      --num_streams NUM_STREAMS
+                                The number of parallel execution streams to 
+                                use for the model. Use at least 2 on 2 
+                                socket CPU systems. (default: 1)
+      --max_allowed_chunks MAX_ALLOWED_CHUNKS
+                                Maximum allowed chunks. (default: 10000)
+
+--task embeddings options
+Usage:
+  ovms --pull --task embeddings [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task embeddings [OPTIONS...] [OPTION...]
+
+ embeddings options:
+      --num_streams NUM_STREAMS
+                                The number of parallel execution streams to 
+                                use for the model. Use at least 2 on 2 
+                                socket CPU systems. (default: 1)
+      --normalize NORMALIZE     Normalize the embeddings. (default: true)
+      --truncate truncate       Truncate input when it exceeds model 
+                                context length. (default: false)
+      --pooling POOLING         Pooling option. One of: CLS, LAST, MEAN. If 
+                                omitted, OVMS will detect pooling 
+                                automatically.
+      --max_length MAX_LENGTH   Maximum input length in tokens. If omitted, 
+                                OVMS will detect it from the model's 
+                                config.json.
+
+--task image_generation options
+Usage:
+  ovms --pull --task image_generation [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task image_generation [OPTIONS...] [OPTION...]
+
+ image_generation options:
+      --resolution RESOLUTION   Allowed resolutions in a format list of 
+                                WxH; W=width H=height - space separated. If 
+                                not specified, inherited from model. If one 
+                                is specified, the pipeline will be reshaped 
+                                to static.
+      --max_resolution MAX_RESOLUTION
+                                Max allowed resolution in a format of WxH; 
+                                W=width H=height. If not specified, 
+                                inherited from model.
+      --default_resolution DEFAULT_RESOLUTION
+                                Default resolution when not specified by 
+                                client in a format of WxH; W=width 
+                                H=height. If not specified, inherited from 
+                                model.
+      --num_images_per_prompt NUM_IMAGES_PER_PROMPT
+                                Number of images client is allowed to 
+                                request. Can only be used when resolution 
+                                parameter is specified and static. By 
+                                default, inherited from GenAI (1).
+      --guidance_scale GUIDANCE_SCALE
+                                Guidance scale used for static pipeline 
+                                reshape. Can only be used when resolution 
+                                parameter is specified and static. By 
+                                default, inherited from GenAI (7.5).
+      --max_num_images_per_prompt MAX_NUM_IMAGES_PER_PROMPT
+                                Max allowed number of images client is 
+                                allowed to request for a given prompt.
+      --default_num_inference_steps DEFAULT_NUM_INFERENCE_STEPS
+                                Default number of inference steps when not 
+                                specified by client.
+      --max_num_inference_steps MAX_NUM_INFERENCE_STEPS
+                                Max allowed number of inference steps 
+                                client is allowed to request for a given 
+                                prompt.
+      --num_streams NUM_STREAMS
+                                The number of parallel execution streams to 
+                                use for the image generation models. Use at 
+                                least 2 on 2 socket CPU systems.
+
+--task text2speech options
+Usage:
+  ovms --pull --task text2speech [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task text2speech [OPTIONS...] [OPTION...]
+
+ TextToSpeech options:
+      --num_streams NUM_STREAMS
+                                The number of parallel execution streams to 
+                                use for the model. Use at least 2 on 2 
+                                socket CPU systems. (default: 1)
+      --model_type MODEL_TYPE   Type of the source TTS model: speecht5 
+                                (default) or kokoro. (default: speecht5)
+      --vocoder VOCODER         The vocoder model to use for text2speech. 
+                                For example microsoft/speecht5_hifigan, 
+                                used only with export via optimum-cli.
+
+--task speech2text options
+Usage:
+  ovms --pull --task speech2text [OPTIONS...]
+  ovms --configure --model_path <MODEL_PATH> --task speech2text [OPTIONS...] [OPTION...]
+
+ SpeechToText options:
+      --num_streams NUM_STREAMS
+                                The number of parallel execution streams to 
+                                use for the model. Use at least 2 on 2 
+                                socket CPU systems. (default: 1)
+
