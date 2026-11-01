@@ -1,0 +1,65 @@
+facts: sha256:3006c64384bdc2ed62c50b62d5914cc402bf3c451c3354686c7cba92a3f97489
+targets:
+  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable
+  gpu:0000:12:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:48:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:7c:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:96:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: model=Qwen/Qwen3.8-27B
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: Qwen/Qwen3.8-27B on ovms (GPU), metadata from huggingface
+  dense qwen3_5, 27781427952 params -> no MoE adjustment [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
+  1 openvino-ir candidate(s); top: OpenVINO/Qwen3.8-27B-int4-ov [official] (default, asym) -> serve OpenVINO/Qwen3.8-27B-int4-ov@d15f4d91eccd [https://huggingface.co/OpenVINO/Qwen3.8-27B-int4-ov/blob/d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e/openvino_config.json]
+  model family qwen3_5 -> tool parser qwen3coder, reasoning parser qwen3 [https://recipes.vllm.ai/Qwen/Qwen3.8-27B (--tool-call-parser qwen3_coder --reasoning-parser qwen3); https://github.com/openvinotoolkit/model_server/blob/main/docs/llm/reference.md (qwen3coder + qwen3)]
+  chat template thinks on by default -> OVMS has no server-side default: agents send chat_template_kwargs {"enable_thinking": false, "reasoning_effort": "medium"} per request (k3d-gpu's own warm-up request sends enable_thinking false) [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/docs/model_server_rest_api_chat.md (L223)]
+  card: non-thinking sampling min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8 -> ovms reads generation_config.json (the thinking-mode values) and has no server override: clients send these with thinking off [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md (L253)]
+  vision tower in the IR -> loaded as a VLM pipeline: OVMS refuses LM on a VLM directory [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/src/llm/servable_initializer.cpp (L588-641)]
+  OpenVINO/Qwen3.8-27B-int4-ov bundles openvino_mtp_model.xml; OVMS MTP needs prefix caching off and forces greedy -> MTP off: prefix caching stays on (EXPERIMENTS.md H25 SUPPORTED: added-agent TTFT 9.4x faster with it); MTP (1.78x at n=2 in OpenVINO's notebook, greedy only, max_tokens required) is unmeasured on agent turns here. K3D_GPU_AGENT_DRAFT=mtp turns it on [https://github.com/openvinotoolkit/model_server/blob/v2026.4.1/demos/continuous_batching/speculative_decoding/README.md (L30); EXPERIMENTS.md H25]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. OpenVINO/Qwen3.8-27B-int4-ov [official], MTP head
+    excluded: Intel/Qwen3.8-27B-bpw2.8-AutoRound (safetensors, ovms serves openvino-ir)
+    excluded: Intel/Qwen3.8-27B-q2ks-AutoRound (gguf, ovms serves openvino-ir)
+    excluded: Intel/Qwen3.8-27B-q4km-AutoRound (gguf, ovms serves openvino-ir)
+    excluded: OpenVINO/Qwen3.8-27B-int8-ov (int8, the ovms target is int4)
+    excluded: Qwen/Qwen3.8-27B (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B-INT4 (safetensors, ovms serves openvino-ir)
+    excluded: RedHatAI/Qwen3.8-27B-MXFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: RedHatAI/Qwen3.8-27B-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+  note: OpenVINO/Qwen3.8-27B-int4-ov's tokenizer_config.json caps model_max_length at 131072, below the model's 262144-token context
+  note: thinking is on by default for this model and OVMS cannot change that server-side: agents send chat_template_kwargs {"enable_thinking": false, "reasoning_effort": "medium"}
+  note: thinking off: the card recommends min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8; send them per request
+  engine args: (none)
+summary: Detected Intel(R) Xeon(R) 6741P (AMX) + 4x Battlemage 0xe223 (XMX); picked OpenVINO/Qwen3.8-27B-int4-ov on OVMS (GPU), no drafter; thinking off for agents; why -> plan --model Qwen/Qwen3.8-27B --explain
+fit:
+  model OpenVINO/Qwen3.8-27B-int4-ov: openvino (qwen3_5) weights, 14.6 GiB to serve
+    embed    1.2 GiB (lookup table)
+    vision   0.4 GiB
+    mtp      0.2 GiB (not loaded: speculative decoding off)
+    other    13.0 GiB
+  context cap: 131072 (tokenizer_config model_max_length)
+  host RAM: MemTotal 503.3 GiB, MemAvailable 392.2 GiB (others already hold 111.1 GiB)
+  host reserve = max(10% x MemTotal, 4.0 GiB) = 50.3 GiB
+  host budget = 392.2 GiB - 50.3 GiB = 341.9 GiB
+  GPUs:
+    card1 (0000:12:00.0): VRAM 31.9 GiB, in use 16.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.2 GiB; BUSY (others hold >= 50%), not used
+    card2 (0000:48:00.0): VRAM 31.9 GiB, in use 15.4 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.9 GiB
+    card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 15.8 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.5 GiB
+    card4 (0000:96:00.0): VRAM 31.9 GiB, in use 15.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 15.2 GiB
+  CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)
+  engine ovms: OpenVINO 2026.4 release notes: Qwen3.8 27B on CPU and GPU
+    KV cache (2 B per element):
+      full attention: 16 layers x 2 (K, V) x 4 kv heads x 256 head dim x 2 B = 65536 B/token
+      linear attention state: 48 layers x (48 v heads x 128 x 128 x 4 B + conv (4-1) x 10240 ch x 2 B) = 146.8 MiB per sequence, any length
+  placements, target: 4 seqs at >= 32768 tokens:
+    ovms/gpu: no: weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB
+      card4: budget 15.2 GiB - weights 14.6 GiB - overhead 1 x runtime 1.0 GiB + activations 512 tok x 34816 wide x 2 x 2 B + logits 4 seqs x 248320 vocab x 4 B = 1.1 GiB (estimate) = 0.0 GiB for KV
+  placements, fallback: down to 1 seq at 4096 tokens:
+    ovms/gpu: no: weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB
+      card4: budget 15.2 GiB - weights 14.6 GiB - overhead 1 x runtime 1.0 GiB + activations 512 tok x 34816 wide x 2 x 2 B + logits 4 seqs x 248320 vocab x 4 B = 1.1 GiB (estimate) = 0.0 GiB for KV
+  fit: OpenVINO/Qwen3.8-27B-int4-ov does not fit this host: weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB

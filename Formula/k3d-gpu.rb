@@ -5,8 +5,8 @@
 class K3dGpu < Formula
   desc "Bootstrap GPU-ready k3d clusters on Docker"
   homepage "https://github.com/88plug/k3d-gpu"
-  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.83.tar.gz"
-  sha256 "5aaff4324acc9664356855aaee8faa8fafb03140449c3dda75e57f17a17379e6"
+  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.84.tar.gz"
+  sha256 "6848d62e4d4ff60008bfe2fcf67ba42de1557f535a9746e43db9d841a170c8f2"
   license "FSL-1.1-ALv2"
 
   depends_on :linux
@@ -21,6 +21,10 @@ class K3dGpu < Formula
     (pkgshare/"bench/apb").install "bench/apb/apb.py", "bench/apb/capacity.py"
     (pkgshare/"oracle").install "oracle/bundle.py", "oracle/project.py", "oracle/validate.py", "oracle/share.py"
     (pkgshare/"oracle/schema").install "oracle/schema/bundle-v1.json"
+    # k3d-gpu eas, its overlay's patch drafts and eat-check.sh, in the repo's integrations/ layout.
+    (pkgshare/"integrations/eas").install Dir["integrations/eas/*"]
+    (pkgshare/"integrations/eat/upstream/patches").install Dir["integrations/eat/upstream/patches/*.patch"]
+    (pkgshare/"integrations/eat").install "integrations/eat/eat-check.sh"
     # The launcher reads its manifests from K3D_GPU_SHARE (default /usr/share/k3d-gpu);
     # k3d-gpu-mcp runs the launcher next to it in libexec and passes its environment on.
     (bin/"k3d-gpu").write_env_script libexec/"k3d-gpu", K3D_GPU_SHARE: "${K3D_GPU_SHARE:-#{pkgshare}}"

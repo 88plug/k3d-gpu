@@ -1,0 +1,1 @@
+{"accel": [], "blocked": true, "device": null, "fit": null, "fit_summary": "fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AMX) via ovms, context 262144 x 5 seqs", "landed": false, "placement": null, "rc": 0, "served": null, "why": null}

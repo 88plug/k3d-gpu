@@ -1,0 +1,3 @@
+[32m==>[0m model optimizer: reading the Hugging Face metadata of Qwen/Qwen3.8-27B and its variants (cached for a day in /home/devcloud/.cache/k3d-gpu/hf)
+[32m==>[0m Detected Intel(R) Xeon(R) 6741P + 3x gpu.intel.com/xe (Battlemage); picked OpenVINO/Qwen3.8-27B-int4-ov on OVMS (GPU), no drafter; thinking off for agents; why -> plan --model Qwen/Qwen3.8-27B --explain
+[31mERROR:[0m fit: OpenVINO/Qwen3.8-27B-int4-ov does not fit this host: weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB; not starting a server that cannot fit (k3d-gpu fit --model OpenVINO/Qwen3.8-27B-int4-ov --explain shows the arithmetic)

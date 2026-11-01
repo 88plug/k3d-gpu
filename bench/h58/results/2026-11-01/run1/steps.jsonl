@@ -1,0 +1,7 @@
+{"cmd": ["k3d-gpu", "up"], "env_k3d_gpu": [], "kind": "user", "log": "up.log", "rc": 0, "t0": 1793528041.1410122, "t1": 1793528284.1623693}
+{"cmd": ["k3d-gpu", "detect"], "env_k3d_gpu": [], "kind": "user", "log": "detect.txt", "rc": 0, "t0": 1793528354.6550279, "t1": 1793528359.8658054}
+{"cmd": ["k3d-gpu", "detect", "--json"], "env_k3d_gpu": [], "kind": "record", "log": "detect.json", "rc": 0, "t0": 1793528359.9197204, "t1": 1793528398.261535}
+{"cmd": ["k3d-gpu", "plan", "--model", "google/gemma-4-26B-A4B-it", "--explain"], "env_k3d_gpu": [], "kind": "record", "log": "m-gemma/plan.txt", "rc": 0, "t0": 1793528398.3228674, "t1": 1793528440.7676363}
+{"cmd": ["k3d-gpu", "agent", "up", "--model", "google/gemma-4-26B-A4B-it"], "env_k3d_gpu": [], "kind": "user", "log": "m-gemma/agent-up.log", "rc": 0, "t0": 1793528440.829367, "t1": 1793528618.1946442}
+{"cmd": ["k3d-gpu", "agent", "down"], "env_k3d_gpu": [], "kind": "teardown", "log": "agent-down.log", "rc": 0, "t0": 1793528662.3667955, "t1": 1793528662.773621}
+{"cmd": ["k3d-gpu", "down"], "env_k3d_gpu": [], "kind": "teardown", "log": "down.log", "rc": 0, "t0": 1793528662.8302577, "t1": 1793528665.9411345}
