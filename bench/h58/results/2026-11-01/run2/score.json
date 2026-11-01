@@ -1,0 +1,67 @@
+{
+ "a": {
+  "flags": []
+ },
+ "b": {
+  "stops": [
+   "k3d-gpu agent up --model google/gemma-4-26B-A4B-it exited 1"
+  ]
+ },
+ "baseline": {
+  "arm": "A1",
+  "attempts": 24,
+  "decode_tok_s": 20.496002220065527,
+  "passed": 19,
+  "source": "bench/eatflow/results/2026-10-20/H50/pairs",
+  "success": 0.7916666666666666,
+  "turns": 54
+ },
+ "c": {
+  "measured": {
+   "attempts": 0,
+   "decode_tok_s": null,
+   "passed": 0
+  },
+  "why": "agent up --model google/gemma-4-26B-A4B-it did not serve (refused)"
+ },
+ "clauses": {
+  "a": "holds",
+  "b": "fails",
+  "c": "fails",
+  "d": "fails",
+  "e": "fails",
+  "f_guard": "inconclusive",
+  "f_kills": "inconclusive"
+ },
+ "d": {
+  "missing": [
+   "Arc Pro B70: gpu.intel.com/xe 3 of 4",
+   "DSA: no dsa.intel.com work queue advertised"
+  ],
+  "read": {
+   "dsa": 0,
+   "xe": 3
+  }
+ },
+ "e": {
+  "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound": {
+   "verdict": "fails",
+   "why": "placement refused, served Intel/Qwen3.8-Flash-Next-W4A16-AutoRound, fit None; did not land: DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)"
+  },
+  "Qwen/Qwen3.8-27B": {
+   "verdict": "fails",
+   "why": "placement refused, served OpenVINO/Qwen3.8-27B-int4-ov, fit None; did not land: weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB"
+  },
+  "google/gemma-4-26B-A4B-it": {
+   "verdict": "fails",
+   "why": "placement refused, served OpenVINO/gemma-4-26b-a4b-it-int4-ov, fit None; did not land: weights + overhead 15.3 GiB exceed the GPU budget 15.2 GiB"
+  }
+ },
+ "f": {
+  "detail": "no agent of this run holds its model"
+ },
+ "hypothesis": "H58",
+ "invalid_why": [],
+ "valid": true,
+ "verdict": "REFUTED"
+}

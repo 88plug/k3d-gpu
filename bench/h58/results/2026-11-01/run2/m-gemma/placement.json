@@ -1,0 +1,1 @@
+{"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "OpenVINO/gemma-4-26b-a4b-it-int4-ov", "why": "weights + overhead 15.3 GiB exceed the GPU budget 15.2 GiB"}

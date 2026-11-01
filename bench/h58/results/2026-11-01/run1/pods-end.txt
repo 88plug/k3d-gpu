@@ -1,0 +1,10 @@
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS     AGE     IP            NODE               NOMINATED NODE   READINESS GATES
+k3d-gpu-agent            ovms-594dcb77dd-j2nv8                     1/1     Running     0            3m39s   10.42.0.154   k3d-gpu-server-0   <none>           <none>
+kube-system              coredns-577d995dff-q48n2                  1/1     Running     0            9m59s   10.42.0.21    k3d-gpu-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-bz84w        0/1     Completed   0            9m59s   10.42.0.18    k3d-gpu-server-0   <none>           <none>
+kube-system              intel-gpu-plugin-vpxgk                    0/1     Error       1 (3s ago)   5s      10.42.0.254   k3d-gpu-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-lpclz   1/1     Running     0            9m59s   10.42.0.31    k3d-gpu-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-jf67b           1/1     Running     0            9m59s   10.42.0.22    k3d-gpu-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-8d4595cbc-dfwv2                    1/1     Running     0            9m59s   10.42.0.27    k3d-gpu-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b44b767d-bxlsh               1/1     Running     0            9m59s   10.42.0.26    k3d-gpu-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-pskzk                          1/1     Running     0            10m     10.42.0.28    k3d-gpu-server-0   <none>           <none>

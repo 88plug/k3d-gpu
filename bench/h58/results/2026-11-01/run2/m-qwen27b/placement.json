@@ -1,0 +1,1 @@
+{"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "OpenVINO/Qwen3.8-27B-int4-ov", "why": "weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB"}

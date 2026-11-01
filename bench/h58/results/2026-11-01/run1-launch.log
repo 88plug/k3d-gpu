@@ -1,0 +1,9 @@
+== H58-run1 waiting for the lock 2026-11-01T10:13:40Z
+== H58-run1 lock taken 2026-11-01T10:13:40Z
+== H58-run1 start: bash /home/devcloud/k3dgpu-bench/k3d-gpu-h58/bench/h58/run.sh /home/devcloud/k3dgpu-bench/results/H58/run1 2026-11-01T10:13:40Z
+bench/eatflow/crescent/hold.sh: line 151: 1810602 Killed                     ( while kill -0 "${cp}" 2> /dev/null; do
+    sleep 30; if [ "$(disk)" -gt 97 ]; then
+        echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "$$"; break;
+    fi;
+done ) 7>&- 8>&- 9>&-
+== H58-run1 rc=143; clusters deleted: none; containers removed: none; now:   2026-11-01T10:24:43Z
