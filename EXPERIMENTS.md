@@ -1916,8 +1916,9 @@ runs per arm:    blocks A B B A A B B A A B, then C: 5 A, 5 B, 1 C; per block 1+
                  decode 5 x 256 (c=1), prefill 5 x 16 on a 1867-1871-token prompt (c=1), conc4 8 x 128 (c=4)
 raw results:     bench/xhost/results/2026-11-01/H7x/hold/ (h7x-20261101-143724/: b<i>-<E>-{decode,prefill,conc4}.json
                  and their -energy.json, b<i>-<E>-idle-energy.json, restarts.txt, cpus.txt, image.txt, fit.json,
-                 rendered manifests, verdict.json; hold.log, chain.log, pre/post snapshots, serving.jsonl);
-                 render-precheck/ (H7X_RENDER_ONLY=1 at 14:30Z); smoke 7: bench/xhost/results/2026-10-21/H7x-smokes/smoke7/
+                 rendered manifests, verdict.json, up.log, energy.log; hold.log, chain.log, pre/post snapshots,
+                 serving.jsonl); campaign.log (the bench lock's campaign log); render-precheck/ (H7X_RENDER_ONLY=1
+                 at 14:30Z); smoke 7: bench/xhost/results/2026-10-21/H7x-smokes/smoke7/ (hold.log, chain.log, up.log)
 ```
 
 **Setup smoke 7** (amendment V1 item 5; `H7X_SMOKE=1`, order B C, the run's settings, no request
@@ -1979,8 +1980,10 @@ Scope and disclosures:
   H7's i9 verdict (INCONCLUSIVE, vLLM v0.24.0) is not re-graded. Under amendment V1 item 4, B's
   dense projections run on oneDNN in v0.28.0, not the SGL AMX kernel EAT's
   `VLLM_CPU_SGL_KERNEL=1` selected in v0.24.0; this row measures the engine EAT ships now.
-- Background: the two SGLang serving pairs used 2.10-2.38 CPUs (`serving.jsonl`, median 2.24, 268
-  samples), aiperf stayed idle, and load1 had a median of 9.98 with the run's own 16 CPUs in it.
+- Background: the host's serving stack (`serving_cpu` in `serving.jsonl`, the sum over every
+  listed container) used 2.10-2.38 CPUs (median 2.24, 268 samples), of which the two SGLang
+  serving pairs (qwen38-a-hr plus qwen38-b-hr) used 1.86-2.12 (median 1.99). aiperf stayed idle,
+  and load1 had a median of 9.98 with the run's own 16 CPUs in it.
   The idle W of every block lies within 0.6 W, so the background was steady across both arms.
 - main's launcher printed "No accelerators requested". The run kept no pod listing, so whether
   the node image's baked `intel-gpu-plugin` ran (smokes 2-5 showed it did on the older launcher)

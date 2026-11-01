@@ -1,0 +1,12 @@
+== render 2026-11-01T14:31:13Z (+0s)
+vLLM memory limit 22Gi from k3d-gpu fit
+== up 2026-11-01T14:31:14Z (+1s)
+node cpuset 0-7,48-55
+== stage 2026-11-01T14:31:43Z (+30s)
+== block 1 engine B start 2026-11-01T14:32:29Z (+76s)
+== block 1 engine B ready 2026-11-01T14:34:24Z (+191s)
+== block 2 engine C start 2026-11-01T14:34:24Z (+191s)
+== block 2 engine C ready 2026-11-01T14:36:30Z (+317s)
+== finished 2026-11-01T14:36:30Z (+317s)
+== cleanup 2026-11-01T14:36:30Z (+317s)
+== deleted 2026-11-01T14:36:33Z (+320s)
