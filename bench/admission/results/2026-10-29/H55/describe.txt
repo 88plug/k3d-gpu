@@ -1,0 +1,35 @@
+Q median 6.733 s, p90 8.411 s; Q spread 1.885 s (28.0% of the Q median); drift 0.518 s; NB spread 15.2%
+| Arm | Requests | TTFT median / p90 s | Run medians s (rounds 1-5) | Penalty median / p90 | Neighbour bogo-ops/s (loss) | Tool proxy s (x N0) | Decode tok/s (x N0) | Package W | Throttle |
+|---|---|---|---|---|---|---|---|---|---|
+| Q | 544 | 6.73 / 8.41 | 6.81, 7.26, 6.16, 8.05, 6.27 | - | - | 0.95 (0.56) | 11.11 (1.05) | 108.3 | 25862 |
+| N0 | 348 | 10.41 / 16.58 | 16.84, 9.31, 12.01, 10.66, 9.76 | +54.6% / +97.1% | 18612 (0.0%) | 1.71 (1.00) | 10.56 (1.00) | 115.9 | 1095 |
+| K50 | 438 | 8.36 / 11.50 | 11.17, 7.63, 9.52, 8.67, 7.70 | +24.1% / +36.8% | 10612 (43.0%) | 1.13 (0.66) | 10.98 (1.04) | 114.3 | 16792 |
+| K25 | 474 | 7.88 / 9.76 | 8.08, 7.50, 9.94, 8.13, 6.99 | +17.0% / +16.0% | 5515 (70.4%) | 0.97 (0.57) | 11.01 (1.04) | 112.7 | 25243 |
+| A_slo | 456 | 8.30 / 9.84 | 8.10, 8.17, 9.55, 7.52, 8.21 | +23.2% / +17.0% | 5979 (67.9%) | 1.08 (0.63) | 10.87 (1.03) | 113.6 | 20100 |
+
+r1-p1-Q: requests 109 failed 0 median 6.810 s REF 6.182 bogo-ops/s None load1 9.6 temp 86.0 C W 111.35 throttle 3495 tool 1.034 decode 9.99 cpufreq_ok True
+r1-p2-N0: requests 46 failed 0 median 16.845 s REF 6.182 bogo-ops/s 16382.47 load1 16.66 temp 91.0 C W 116.89 throttle 739 tool 1.898 decode 5.87 cpufreq_ok True
+r1-p3-K50: requests 71 failed 0 median 11.172 s REF 6.182 bogo-ops/s 10462.02 load1 23.91 temp 93.0 C W 115.08 throttle 3642 tool 1.312 decode 7.97 cpufreq_ok True
+r1-p4-K25: requests 96 failed 0 median 8.077 s REF 6.182 bogo-ops/s 5453.08 load1 22.73 temp 85.0 C W 112.68 throttle 24123 tool 0.975 decode 11.01 cpufreq_ok True
+r1-p5-A_slo: requests 97 failed 0 median 8.099 s REF 6.182 bogo-ops/s 5968.98 load1 9.42 temp 86.0 C W 112.08 throttle 33677 tool 1.297 decode 11.18 cpufreq_ok True level mean 25.0 end 25.0 max 25.0 window medians [7.08, 8.222, 8.285, 8.302]
+r2-p1-N0: requests 84 failed 0 median 9.307 s REF 6.0525 bogo-ops/s 19215.43 load1 7.25 temp 86.0 C W 115.41 throttle 1095 tool 1.71 decode 10.73 cpufreq_ok True
+r2-p2-K50: requests 102 failed 0 median 7.633 s REF 6.0525 bogo-ops/s 10576.03 load1 10.88 temp 81.0 C W 114.29 throttle 17159 tool 1.028 decode 11.28 cpufreq_ok True
+r2-p3-K25: requests 100 failed 0 median 7.497 s REF 6.0525 bogo-ops/s 5514.85 load1 8.37 temp 81.0 C W 112.33 throttle 29122 tool 1.309 decode 11.02 cpufreq_ok True
+r2-p4-A_slo: requests 96 failed 0 median 8.166 s REF 6.0525 bogo-ops/s 6035.2 load1 7.25 temp 88.0 C W 112.18 throttle 32480 tool 1.027 decode 10.96 cpufreq_ok True level mean 25.0 end 25.0 max 25.0 window medians [8.129, 7.674, 8.177, 8.346]
+r2-p5-Q: requests 107 failed 0 median 7.257 s REF 6.0525 bogo-ops/s None load1 7.97 temp 93.0 C W 106.56 throttle 33234 tool 0.96 decode 11.70 cpufreq_ok True
+r3-p1-K50: requests 76 failed 0 median 9.516 s REF 7.9526 bogo-ops/s 10647.78 load1 6.84 temp 91.0 C W 114.83 throttle 10506 tool 1.132 decode 4.96 cpufreq_ok True
+r3-p2-K25: requests 75 failed 0 median 9.941 s REF 7.9526 bogo-ops/s 5564.28 load1 35.5 temp 89.0 C W 114.51 throttle 5980 tool 1.121 decode 10.10 cpufreq_ok True
+r3-p3-A_slo: requests 78 failed 0 median 9.551 s REF 7.9526 bogo-ops/s 5964.01 load1 16.3 temp 90.0 C W 114.24 throttle 9519 tool 1.08 decode 10.56 cpufreq_ok True level mean 25.0 end 25.0 max 25.0 window medians [9.626, 9.595, 10.461]
+r3-p4-Q: requests 119 failed 0 median 6.161 s REF 7.9526 bogo-ops/s None load1 13.63 temp 83.0 C W 109.78 throttle 6217 tool 0.951 decode 10.59 cpufreq_ok True
+r3-p5-N0: requests 64 failed 0 median 12.012 s REF 7.9526 bogo-ops/s 17990.05 load1 10.91 temp 87.0 C W 116.62 throttle 279 tool 1.145 decode 6.04 cpufreq_ok True
+r4-p1-K25: requests 95 failed 0 median 8.132 s REF 6.2142 bogo-ops/s 5514.9 load1 8.45 temp 81.0 C W 112.65 throttle 29749 tool 0.962 decode 10.79 cpufreq_ok True
+r4-p2-A_slo: requests 91 failed 0 median 7.523 s REF 6.2142 bogo-ops/s 5978.63 load1 7.38 temp 93.0 C W 113.61 throttle 20100 tool 1.026 decode 10.35 cpufreq_ok True level mean 25.0 end 25.0 max 25.0 window medians [7.018, 7.317, 7.454, 10.217]
+r4-p3-Q: requests 97 failed 0 median 8.045 s REF 6.2142 bogo-ops/s None load1 30.93 temp 93.0 C W 106.6 throttle 40393 tool 0.734 decode 11.86 cpufreq_ok True
+r4-p4-N0: requests 74 failed 0 median 10.657 s REF 6.2142 bogo-ops/s 18611.93 load1 7.3 temp 94.0 C W 115.91 throttle 1533 tool 1.972 decode 10.56 cpufreq_ok True
+r4-p5-K50: requests 90 failed 0 median 8.669 s REF 6.2142 bogo-ops/s 10611.82 load1 13.82 temp 96.0 C W 113.91 throttle 22949 tool 1.137 decode 10.98 cpufreq_ok True
+r5-p1-A_slo: requests 94 failed 0 median 8.205 s REF 8.1711 bogo-ops/s 10002.31 load1 13.36 temp 86.0 C W 114.1 throttle 16926 tool 1.229 decode 10.87 cpufreq_ok True level mean 44.0 end 62.5 max 62.5 window medians [7.861, 7.702, 8.681, 8.129]
+r5-p2-Q: requests 112 failed 0 median 6.268 s REF 8.1711 bogo-ops/s None load1 8.97 temp 83.0 C W 108.31 throttle 25862 tool 0.891 decode 11.11 cpufreq_ok True
+r5-p3-N0: requests 80 failed 0 median 9.761 s REF 8.1711 bogo-ops/s 19020.12 load1 7.16 temp 85.0 C W 115.64 throttle 1118 tool 1.565 decode 10.59 cpufreq_ok True
+r5-p4-K50: requests 99 failed 0 median 7.698 s REF 8.1711 bogo-ops/s 10642.08 load1 11.45 temp 96.0 C W 114.19 throttle 16792 tool 1.066 decode 11.06 cpufreq_ok True
+r5-p5-K25: requests 108 failed 0 median 6.991 s REF 8.1711 bogo-ops/s 5528.01 load1 8.87 temp 83.0 C W 113.63 throttle 25243 tool 0.938 decode 11.43 cpufreq_ok True
+load1 at run start 6.84-35.5 (median 9.6); package temperature 81-96 C

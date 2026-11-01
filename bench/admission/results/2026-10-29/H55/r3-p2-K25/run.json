@@ -1,0 +1,33 @@
+{
+ "arm": "K25",
+ "round": 3,
+ "position": 2,
+ "ref_s": 7.9526,
+ "window_start": 1793319139.5981405,
+ "window_end": 1793320039.5981405,
+ "cpumax_set": "375000 100000",
+ "cpumax_reads": [
+  "375000 100000",
+  "375000 100000"
+ ],
+ "pkg_temp_start_c": 89.0,
+ "load1_start": 35.5,
+ "package_throttle_delta": 5980,
+ "rapl_energy_j": 104046.374,
+ "measure_s": 908.593,
+ "package_w": 114.51,
+ "neighbour_running_at_window_end": true,
+ "ctl_alive_at_window_end": false,
+ "neighbour": {
+  "bogo_ops": 5341741,
+  "real_s": 960.01,
+  "bogo_ops_per_s_real": 5564.28
+ },
+ "tool_proxy_s": 1.121,
+ "exit_codes_load_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_matches_snapshot": true
+}
