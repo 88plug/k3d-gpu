@@ -341,6 +341,33 @@ does not change the hardware prerequisites.
 Refs intel/enterprise-ai-solutions#<issue>.
 ```
 
+## EI issue draft: a guardrail block is HTTP 200 on LiteLLM v1.105.1 (unsent)
+
+Drafted 2026-11-01 from one live run on k3d-gpu (EAS `97f6157`, EI `3e8a244`, EAT `036b662`). Not sent. `k3d-gpu eas check` had read EI's docs and treated an HTTP 200 as "not screened"; it now accepts either block shape (k3d-gpu #261), so nothing on our side waits on this issue.
+
+**Title:** docs: content-safety guardrail blocks come back as HTTP 200 `content_filter` on LiteLLM v1.105.1, not HTTP 500
+
+**Versions:** intel/enterprise-inference `3e8a244`, which pins `litellm_version: "v1.105.1"` (`roles/litellm/defaults/main.yaml:22`). The docs describe LiteLLM `v1.83.14-stable.patch.2`, the pin before.
+
+**What the docs say:** `docs/customize/guardrails.md:25-27`, `:57-58`, `:356-361` and `:462-463`, and `docs/reference/request_flow.md:161`, say that a blocked request gets HTTP 500 with the reason in `error.message`. The end-to-end test reads `jq '.error.message'`.
+
+**What v1.105.1 does:** a `block()` from a `pre_call` `custom_code` guardrail raises `ModifyResponseException` (`custom_code_guardrail.py:417-419`, `raise_passthrough_exception`). `chat_completion` turns that into HTTP 200 (`proxy_server.py:12025-12038`): `finish_reason: "content_filter"`, and the reason as the assistant message. A fail-closed block (guard unreachable) has the same shape.
+
+**Repro:** the docs' "Test Safety Filtering End to End" request, through the public gateway with a virtual key:
+
+```
+HTTP 200
+{"finish_reason": "content_filter",
+ "content": "Blocked by the content-safety guardrail: unsafe content (categories: Non-violent Illegal Acts).",
+ "error": null}
+```
+
+The docs' `jq '.error.message'` prints `null`.
+
+**Evidence that the guardrail did run** (same run): the guard model's `vllm:request_success_total` went up by one for each probe. The probes were a virtual key as-is, a virtual key with `"guardrails": ["content_safety"]`, and the master key. LiteLLM at `LITELLM_LOG=DEBUG` logged `should_run_guardrail ... requested_guardrails= [] self.default_on= True`, then `Custom code guardrail 'content_safety': Blocking request`. The guardrail row reads `guardrail: custom_code`, `mode: pre_call`, `default_on: true`. It was still loaded from the DB after the Langfuse role restarted LiteLLM. A benign prompt got `finish_reason: stop`.
+
+**Suggested fix:** in those docs lines, describe a block as HTTP 200 with `finish_reason: "content_filter"` and the reason in `choices[0].message.content`. Have the end-to-end test print `{finish_reason: .choices[0].finish_reason, content: .choices[0].message.content}`. Mention that clients which look only at the status code will treat a block as an answer.
+
 ## What this draft does not claim
 
 - That the toolkit is supported on any Intel client CPU. The data points are three runs on one i9-13900T: H1 INCONCLUSIVE [ledger:H1] and one SUPPORTED run, n=1 [ledger:H1b].
