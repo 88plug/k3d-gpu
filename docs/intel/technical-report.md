@@ -166,3 +166,4 @@ IMAGE=k3d-gpu:local; docker build -t "$IMAGE" . && IMAGE=$IMAGE OUT=$(mktemp -d)
 | See what each family is detected as | [platforms.md](../platforms.md) |
 | Check novelty and prior art | [provenance.md](../provenance.md) |
 | See the upstream contribution draft | [upstream-eat.md](upstream-eat.md) |
+| Read the November 2026 partner update: what is new, what we can hand over, what is open | [partner-update-2026-11.md](partner-update-2026-11.md) |

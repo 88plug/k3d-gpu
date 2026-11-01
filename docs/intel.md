@@ -171,6 +171,13 @@ machine. There are two paths, one per EAT generation:
   REFUTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install,
   `eas check` and the teardown passed, but enterprise-inference's Keycloak step put the
   Keycloak admin password on a process command line, where the run's secret scan found it.
+  The four commands are `k3d-gpu eas up` (`--agent-toolkit` adds EAT 2.0; `--dry-run`
+  and `--explain` print every choice and patch decision first), `eas status`, `eas check`
+  (chat, tool call, guardrail block and sandbox through the EAS gateway with a minted,
+  then deleted, LiteLLM key) and `eas down`.
+
+What the EAS, enterprise-inference and EAT 1.1.x runs found upstream, and the drafts we
+can hand over, are listed under [Upstream findings](#upstream-findings).
 
 Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
@@ -220,7 +227,7 @@ and installs through EAS.
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
 | EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F3 is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
-| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores; vLLM XPU (`v0.31.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
+| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's QAT Q4_0 GGUF and QAT MTP drafter [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
@@ -231,15 +238,32 @@ Arc out ("Not in this release: ... Intel® Arc™ (XPU) deployment",
 [README.md#L36](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/README.md#L36)).
 On k3d-gpu an Arc card is served by `k3d-gpu agent up`.
 
-**In progress.** A campaign on one Xeon 6741P (Granite Rapids, AMX) host
-with 4x Arc Pro B70 checks four things: that `detect` and `up` pick up the Xeon and the
-B70s with no flags (H52 REFUTED, H52b REFUTED; see the [capability matrix](#capability-matrix)); EAT stock against k3d-gpu on the Xeon CPU, with EAT's own OVMS chart
-as a third arm; EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s; and agents
-per box. Rows land in [EXPERIMENTS.md](../EXPERIMENTS.md) before anything here quotes them.
+**The Xeon 6741P campaign (closed 2026-11-01).** One Xeon 6741P (Granite Rapids, AMX)
+host with 4x Arc Pro B70 ran every pre-registered row of the campaign: detection with no
+flags, EAT stock against k3d-gpu on the Xeon CPU (with EAT's own OVMS chart as a third
+arm), EAT's #21 XPU path against k3d-gpu's `agent up` on the B70s, agents per box, Intel's
+new EAS default, the zero-touch thesis, engine choice and DRAM-resident serving. Each row is
+stated as the ledger graded it; only the SUPPORTED rows back a claim.
+
+| Row | What it asked, and what happened | Verdict |
+|----|-------------|--------|
+| [ledger:H59] | Engine choice on the CPU at four concurrent agents: llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter against OVMS with OpenVINO's base-model int4 IR, Gemma 4 26B-A4B. llama.cpp decoded faster in each of 3 holds and passed the GSM8K quality gate, so with no backend set `agent up` now serves llama.cpp on this CPU class ([run](../EXPERIMENTS.md#h59-run-xeon-6741p-2026-11-01)) | SUPPORTED |
+| [ledger:H60] | Qwen3.8-Flash-Next (125B MoE) served entirely from host DRAM by llama.cpp reads the same share of the DRAM bandwidth ceiling as a same-hold Gemma 4 QAT control, inside the pre-registered band ([run](../EXPERIMENTS.md#h60-run-xeon-6741p-2026-11-01)) | SUPPORTED |
+| H7x | Whether OVMS's decode lead over EAT's vLLM CPU engine is only weight precision. At matched 16-bit weights OVMS 2026.4.1 still decoded ahead of EAT 1.1.0's vLLM CPU v0.28.0, so it is not only precision; vLLM prefilled the long prompt faster ([run](../EXPERIMENTS.md#h7x-run-xeon-6741p-2026-11-01)) | REFUTED |
+| H28x | H28 on the Xeon: 8 pods that mmap one model through an image volume shared one page-cache copy, as on the i9, but were not ready in half the copy arm's time; the memory part replicated, the time part did not ([run](../EXPERIMENTS.md#h28x-run-2-xeon-6741p-2026-11-01)) | REFUTED |
+| H58 | The zero-touch thesis: with no flag, `agent up` refused all three models (two int4 IRs missed the best B70's free-memory budget, Flash-Next had no cached DRAM bandwidth), and `up` advertised three of four B70s and no DSA device ([run](../EXPERIMENTS.md#h58-run-xeon-6741p-2026-11-01)) | REFUTED |
+| H62 | k3d-gpu's CPU stack against Intel's new default (EAS v1.2.0-rc.1 installing EAT 2.0), each in its own KVM guest. Intel's install did not finish in its guest: enterprise-inference's `cpu: auto` gave the Gemma 4 pod 76 of 95.4 allocatable CPUs, and EAT's sandbox router could not be scheduled. No hold ran ([run](../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)) | INCONCLUSIVE |
+| H53 | EAT's banking flow on the B70s, k3d-gpu's one-card OVMS pick against EAT 1.1.0's four-card vLLM XPU path. The EAT arm did not start in a k3d-gpu cluster: oneCCL needs `/dev/dri/by-path`, which the k3d node lacks (a k3d-gpu gap). No hold ran ([run](../EXPERIMENTS.md#h53-run-arc-pro-b70-2026-10-30)) | INCONCLUSIVE |
+| H50o | k3d-gpu's CPU stack against EAT's own OVMS chart: the chart's OVMS 2025.4 crashed on loading Gemma 4 26B-A4B, so no pair ran ([run](../EXPERIMENTS.md#h50o-run-xeon-6741p-2026-10-29)) | INCONCLUSIVE |
+| H50 | Inside EAT's banking flow, EAT 1.1.0's stock vLLM CPU arm delivered at least as many tasks within the turn budget as k3d-gpu's CPU stack ([run](../EXPERIMENTS.md#h50-run-xeon-6741p-2026-10-29)) | REFUTED |
+| H51 | Graded agents per box: neither CPU stack served one graded agent within the 10 s SLO ([run](../EXPERIMENTS.md#h51-run-xeon-6741p-2026-10-29)) | REFUTED |
+
+Detection (H52 REFUTED, H52b REFUTED) is in the [capability matrix](#capability-matrix).
+H54d and H54q are in the table below.
 
 H54 rows on that host: Gemma 4 26B-A4B (QAT weights) on the Xeon CPU, and split with a B70
-in H54c; Qwen3.8-27B on the B70s in H54b. None is SUPPORTED, so this table states direction
-only; the numbers, protocol and reproduce block are in the ledger. H54b and H54c ran with a
+in H54c; Qwen3.8-27B on the B70s in H54b. None is SUPPORTED (H59 later settled the CPU engine
+question these rows left open), so this table states direction only; the numbers, protocol and reproduce block are in the ledger. H54b and H54c ran with a
 placement failure (their "one card" pods used all four B70s), so neither says anything about
 one B70.
 
@@ -288,6 +312,24 @@ and reproduce block are in [EXPERIMENTS.md](../EXPERIMENTS.md) and nowhere else.
 
 None of these is a speed claim about EAT. The [technical report](intel/technical-report.md)
 reads each verdict and its scope.
+
+### Upstream findings
+
+Found while running EAS, enterprise-inference (EI) and EAT on k3d-gpu, each at a pinned
+commit. A finding is a fact about upstream code, with what `k3d-gpu` does about it. The issue
+drafts are unsent, ready to hand over, and live in
+[upstream-eat.md](intel/upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent).
+
+| Upstream | Finding | What k3d-gpu does |
+|---|---|---|
+| EI docs | A content-safety guardrail block comes back as HTTP 200 with `finish_reason: "content_filter"` on LiteLLM v1.105.1, EI's pin; EI's guardrail docs still describe the HTTP 500 of the pin before | `eas check` accepts either shape (#261) |
+| EI model deploy | The LiteLLM master key reaches model-manager through ansible `environment:`, which puts it in the deploy's `/bin/sh -c` command line for the whole deploy ([deploy_models.yaml#L240](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L240)) | Fixed by override: `eas up` writes `_deploy_litellm_secret: ""`, so model-manager reads the Secret itself, and stops the install if EI hands the key over any other way |
+| EI Keycloak | `keycloak_config` runs `kcadm.sh config credentials ... --password <value>` in the Keycloak pod ([install.yaml#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175); still there on EI `main` `40bd169`, read 2026-11-01). `no_log` keeps it out of logs, not out of `ps` | No patch. It is why F3 is REFUTED with every functional step passing ([F3 run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)) |
+| EI `cpu: auto` | A TP 1 `cpu: auto` model is sized to one NUMA node's free balloon CPUs, and pods outside the balloons are not subtracted ([nri_policy.py#L569](https://github.com/intel/enterprise-inference/blob/170eb3a/model_manager/core/nri_policy.py#L569), `release-1.1`). In H62's one-NUMA guest the Gemma 4 pod got 76 of 95.4 allocatable CPUs, and EAT 2.0's sandbox router, installed after the models, could not be scheduled ([H62 run](../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)) | `k3d-gpu eas` does not override it. In F3 the router was scheduled and the sandbox step passed |
+| EAT 1.1.0 vLLM CPU | `release-1.1.0` moves the vLLM CPU image from `v0.24.0` to `v0.28.0`, past the CPU attention hang fixed in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)) that stalled EAT 1.0.3's stock arm in H54a. Inside EAT's banking flow the 1.1.0 stock arm then did at least as well as k3d-gpu's CPU stack (H50 REFUTED) | `eat-up.sh` pins `v0.28.0` by digest |
+| EAT 1.1.0 OVMS chart | The chart ships `openvino/model_server` `2025.4` ([values.yaml#L18-L20](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/ovms/values.yaml#L18-L20)), which exits 139 (SIGSEGV) loading Gemma 4 26B-A4B, inside k3d and outside it (H50o INCONCLUSIVE). OVMS 2026.4.1 serves that model | `agent up` uses OVMS 2026.4.1 |
+| EAT 1.1.0 XPU path | `xpu-values.yaml` sources `/opt/intel/oneapi/setvars.sh` before vLLM ([#L26](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/vllm/xpu-values.yaml#L26)), and `vllm/vllm-openai-xpu:v0.28.0` has no such file, so the container exits at once on any host (H53, rung a) | Not deployed by `eat-up.sh`, which runs the CPU path. The next failure, oneCCL's `/dev/dri/by-path`, is a k3d-gpu gap |
+| EAT 2.0 sandbox router | The router image is the floating staging tag `sandbox-router:latest-main` | `eas up` pins it by digest |
 
 ---
 
@@ -443,7 +485,14 @@ Shipped since this roadmap was first written:
 
 - **Agent endpoint.** `k3d-gpu agent up`: an OpenAI-compatible server that picks vLLM on
   a Gaudi, OVMS on an XMX Intel GPU, else OVMS on the P-cores, from what the node
-  advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)).
+  advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)). On a CPU
+  class where an engine-choice row is SUPPORTED, llama.cpp with the QAT GGUF and MTP
+  drafter takes the CPU instead: the Xeon 6741P class since 2026-11-01 [ledger:H59].
+- **EAS and EAT 2.0.** `k3d-gpu eas up`, `status`, `check` and `down` drive Intel's EAS
+  installer in its bring-your-own-cluster mode, with every k3d setting and patch chosen
+  from the cluster ([intel/eas.md](intel/eas.md)). F3 ran it end to end once; it is
+  REFUTED on the Keycloak admin password in a command line, with every functional step
+  passing.
 - **EAT on one node.** `K3D_GPU_NODE_LABELS` sets the `ei-*-eligible` labels and
   `K3D_GPU_BALLOONS=external` leaves the balloons policy to EAT [ledger:H14];
   [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path
@@ -483,11 +532,14 @@ Planned, not shipped. Each item lands with its own test and, where it touches
 hardware, a recorded run.
 
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
-  verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. In progress: the campaign on
-  a Xeon 6741P with 4x Arc Pro B70 [above](#eat-by-default-vs-with-k3d-gpu). Its detection
-  runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and the CPU
-  ISA labels their first recorded live node, and both ledger rows are
-  REFUTED [ledger:H52] [ledger:H52b]; the first Gemma 4 rows are recorded, none SUPPORTED yet.
+  verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. The campaign on a Xeon 6741P
+  with 4x Arc Pro B70 closed on 2026-11-01 ([above](#eat-by-default-vs-with-k3d-gpu)). Its
+  detection runs gave the `xe`, DSA, IAA, QAT and AMX rows their first hardware results and
+  the CPU ISA labels their first recorded live node; both detection rows are REFUTED
+  (H52, H52b), and so is the zero-touch row (H58). Two of its rows are SUPPORTED: the
+  CPU engine choice [ledger:H59] and DRAM-resident serving of Qwen3.8-Flash-Next
+  [ledger:H60]. Next: the engine-choice replications on the i9-13900T (H59d) and the
+  i7-13700 (H59w), both PENDING, and the B70 rows that `/dev/dri/by-path` blocked (H53).
 - **EAT 1.1.0 run.** `eat-up.sh` deploys `release-1.1.0` since 2026-10-29, with the
   guardrail off and the vLLM CPU image re-pinned to `v0.28.0`
   ([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). The recorded

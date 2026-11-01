@@ -368,6 +368,92 @@ The docs' `jq '.error.message'` prints `null`.
 
 **Suggested fix:** in those docs lines, describe a block as HTTP 200 with `finish_reason: "content_filter"` and the reason in `choices[0].message.content`. Have the end-to-end test print `{finish_reason: .choices[0].finish_reason, content: .choices[0].message.content}`. Mention that clients which look only at the status code will treat a block as an answer.
 
+## Issue drafts from the 2026-11-01 runs (unsent)
+
+Drafted 2026-11-01 from F3 (EAS `97f6157`, EI `3e8a244`, EAT `036b662`, on the i9-13900T),
+H62 (EAS `v1.2.0-rc.1` `5c27fb3`, EI `release-1.1` `170eb3a`, EAT `036b662`, on the Xeon
+6741P) and the crescent rows on EAT `release-1.1.0` (`0c726f5`). None is sent. Each is
+written to help the toolkit install cleanly; none depends on k3d-gpu, and none carries a
+performance number. The guardrail-docs draft is the section above.
+
+### EI: the Keycloak admin password is a `kcadm.sh` argument
+
+**Where:** `roles/keycloak_config/tasks/install.yaml`, the task "kcadm — authenticate (writes
+in-pod config)" ([#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175);
+line 174 on `main` `40bd169`, read 2026-11-01).
+
+**What happens:** the task runs `/opt/keycloak/bin/kcadm.sh config credentials --server ...
+--realm master --user <username> --password <password>` through `kubernetes.core.k8s_exec`.
+`no_log` keeps the value out of Ansible's output, but it is still an argument of the JVM.
+On any node, `ps` in the host's PID view lists it while `kcadm.sh` runs. F3's secret scan
+caught it in one 2 s `ps` sample ([F3 run](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01));
+every log it read counted 0.
+
+**Suggested fix:** leave `--password` out and set `KC_CLI_PASSWORD` inside the exec'd shell
+from a variable or file the pod already holds, so the value itself is never an argument. Keycloak's admin CLI guide reads it when the option is absent and
+recommends not passing passwords as arguments
+([admin-cli.adoc#L129](https://github.com/keycloak/keycloak/blob/main/docs/documentation/server_admin/topics/admin-cli.adoc#L129)).
+
+### EI: the LiteLLM master key is in the model deploy's command line
+
+**Where:** `roles/llm_services/tasks/deploy_models.yaml`, `MM_LITELLM_MASTER_KEY` in the
+deploy task's `environment:` ([#L240](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L240);
+line 223 on `main` `40bd169`).
+
+**What happens:** Ansible writes a task's `environment:` into the `/bin/sh -c` command line it
+runs the module under, so the master key is in that process's argv while each model deploys.
+model-manager can read the Secret `litellm/litellm-master-key` itself when the variable is
+empty.
+
+**Suggested fix:** leave the key out of `environment:` and let model-manager read the Secret.
+`k3d-gpu eas up` does this today with one extra var, `_deploy_litellm_secret: ""`, and a check
+that stops the install if the key arrives any other way; the install, `eas check` and the
+teardown passed with it in F3.
+
+### EI: `cpu: auto` can leave no CPU for components installed after the models
+
+**Where:** `model_manager/core/nri_policy.py` `auto_cpu`
+([`release-1.1` `170eb3a` #L569](https://github.com/intel/enterprise-inference/blob/170eb3a/model_manager/core/nri_policy.py#L569)).
+
+**What happens:** a TP 1 `cpu: auto` model is sized to one NUMA node's capacity, minus the
+reserved CPUs and the CPUs balloon pods already use. Pods outside the balloons (the platform,
+the gateway, Langfuse, KServe) are not subtracted. In H62, Intel's documented single-node
+install (EAS `v1.2.0-rc.1` with Kubespray in a 96-vCPU, one-NUMA KVM guest) gave
+`gemma-4-26b` 76 of 95.4 allocatable CPUs and Qwen3Guard 8; the rest of the stack requested
+about 11.2. EAT 2.0's sandbox router, applied after the models, then stayed Pending with
+`Insufficient cpu`, in two of two attempts
+([H62 run](../../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)).
+
+**Suggested fix:** subtract the CPU already requested on the node by non-balloon pods, and
+keep back the requests of the layers the installer has still to apply (the agent toolkit's
+router asks for 2 x 250m), or install the router before the models.
+
+### EAT `release-1.1.0`: the OVMS chart's `2025.4` image cannot load Gemma 4 26B-A4B
+
+**Where:** `core/helm-charts/ovms/values.yaml`, `tag: "2025.4"`
+([#L18-L20](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/ovms/values.yaml#L18-L20)).
+
+**What happens:** with `OpenVINO/gemma-4-26b-a4b-it-int4-ov` as its model source, the server
+exits 139 (SIGSEGV) about one second after its first log line, every start, inside a k3d
+cluster and outside it ([H50o run](../../EXPERIMENTS.md#h50o-run-xeon-6741p-2026-10-29)).
+OVMS 2026.4.1 serves the same IR.
+
+**Suggested fix:** move the chart's default tag to a release that loads Gemma 4, and pin it
+by digest.
+
+### EAT `release-1.1.0`: the XPU command sources a file the v0.28.0 XPU image lacks
+
+**Where:** `core/helm-charts/vllm/xpu-values.yaml`
+([#L23-L26](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/vllm/xpu-values.yaml#L23-L26)): image
+`vllm/vllm-openai-xpu:v0.28.0`, command `source /opt/intel/oneapi/setvars.sh --force && ...`.
+
+**What happens:** that image has no `/opt/intel/oneapi/setvars.sh`, so the container exits at
+once with `No such file or directory`, on any host (read from the image, then seen in
+[H53's wiring smoke](../../EXPERIMENTS.md#h53-run-arc-pro-b70-2026-10-30)). The image ships its
+own Level Zero and oneAPI runtime.
+
+**Suggested fix:** drop the `source`, or guard it (`[ -f ... ] && source ...`).
+
 ## What this draft does not claim
 
 - That the toolkit is supported on any Intel client CPU. The data points are three runs on one i9-13900T: H1 INCONCLUSIVE [ledger:H1] and one SUPPORTED run, n=1 [ledger:H1b].
@@ -381,4 +467,5 @@ The docs' `jq '.error.message'` prints `null`.
 | See the patch pack and its static checks | [integrations/eat/upstream/README.md](../../integrations/eat/upstream/README.md) |
 | Install EAS (EAT 2.0) on k3d-gpu with these patches as an overlay | [eas.md](eas.md) |
 | See what was measured and how | [technical-report.md](technical-report.md) |
+| See what we can hand over, in one list | [partner-update-2026-11.md](partner-update-2026-11.md) |
 | See EAT on k3d-gpu today | [docs/intel.md](../intel.md) |
