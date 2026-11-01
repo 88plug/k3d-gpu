@@ -107,6 +107,7 @@ SOURCES = {
     "cluster_cidr": _K3S + "pkg/cli/cmds/server.go#L137-L141",
     "service_cidr": _K3S + "pkg/cli/cmds/server.go#L142-L146",
     "kata": _EAS + "roles/kata_containers/tasks/install.yaml#L9-L22",
+    "argv_master_key": _EI + "roles/llm_services/tasks/deploy_models.yaml#L240",
     "accel_cpu": _EAS + "configs/defaults/global_config.yaml#L106",
     "accel_xpu": _EAT + "README.md#L36",
     "sandbox": _EAT + "config.yaml#L56",
@@ -431,6 +432,16 @@ def plan(facts, layer, pins, model_flag):
 
     p.choose("bring-your-own cluster", "kata_containers_enabled: false", "kata")
     p.set("kata_containers_enabled", False)
+
+    # EI's model deploy task hands model-manager the LiteLLM master key in its ansible
+    # environment:, which ansible writes into the /bin/sh -c command line it runs the
+    # deploy under, readable in `ps` for the whole deploy. An empty Secret read leaves
+    # MM_LITELLM_MASTER_KEY empty, and model-manager then reads the Secret itself.
+    p.choose("EI's model deploy passes the LiteLLM master key through ansible environment: "
+             "(a /bin/sh -c argument while each model deploys)",
+             "_deploy_litellm_secret: \"\" (model-manager reads Secret litellm/litellm-master-key itself)",
+             "argv_master_key")
+    p.set("_deploy_litellm_secret", "")
 
     devices = []
     for n in nodes:
