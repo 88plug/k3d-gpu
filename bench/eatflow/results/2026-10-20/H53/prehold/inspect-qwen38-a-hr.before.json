@@ -1,0 +1,491 @@
+[
+    {
+        "Id": "e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127",
+        "Created": "2026-10-19T07:43:07.036551199Z",
+        "Path": "bash",
+        "Args": [
+            "/entry.sh"
+        ],
+        "State": {
+            "Status": "running",
+            "Running": true,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 3898329,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-19T07:43:07.057267648Z",
+            "FinishedAt": "0001-01-01T00:00:00Z"
+        },
+        "Image": "sha256:feb7b9130eff2fa26dfa09ab1a8b9a8423db013ad7d18f804f8b55a57cb2c175",
+        "ResolvConfPath": "/var/lib/docker/containers/e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127/hostname",
+        "HostsPath": "/var/lib/docker/containers/e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127/hosts",
+        "LogPath": "/var/lib/docker/containers/e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127/e4e0a92af9b8ba16bd3c139e9e3d04e074af2dff3a545a7ea5245b6c94c17127-json.log",
+        "Name": "/qwen38-a-hr",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "docker-default",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": [
+                "/home/devcloud/launchers/hicache-mha.py:/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/mha.py:ro",
+                "/home/devcloud/launchers/empty-pycache:/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/__pycache__:ro",
+                "/dev/dri:/dev/dri",
+                "/home/devcloud/launchers/qwen38-pair-entry-hicache.sh:/entry.sh:ro",
+                "/home/devcloud/hicache-shared:/hicache",
+                "/home/devcloud/launchers/hicache-common.py:/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/common.py:ro",
+                "/home/devcloud/launchers/hicache-mph.py:/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/memory_pool_host.py:ro",
+                "/home/devcloud/launchers/empty-memcache-pyc:/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/__pycache__:ro",
+                "/home/devcloud/models/Qwen3.8-27B-AWQ-INT4:/model:ro"
+            ],
+            "ContainerIDFile": "",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {}
+            },
+            "NetworkMode": "bridge",
+            "PortBindings": {
+                "30000/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "30000"
+                    }
+                ],
+                "5557/tcp": [
+                    {
+                        "HostIp": "",
+                        "HostPort": "5557"
+                    }
+                ]
+            },
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": null,
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "host",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": false,
+            "SecurityOpt": [
+                "label=disable"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 34359738368,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 0,
+            "NanoCpus": 0,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [
+                {
+                    "PathOnHost": "/dev/dri",
+                    "PathInContainer": "/dev/dri",
+                    "CgroupPermissions": "rwm"
+                }
+            ],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 0,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware",
+                "/sys/devices/system/cpu/cpu0/thermal_throttle",
+                "/sys/devices/system/cpu/cpu1/thermal_throttle",
+                "/sys/devices/system/cpu/cpu2/thermal_throttle",
+                "/sys/devices/system/cpu/cpu3/thermal_throttle",
+                "/sys/devices/system/cpu/cpu4/thermal_throttle",
+                "/sys/devices/system/cpu/cpu5/thermal_throttle",
+                "/sys/devices/system/cpu/cpu6/thermal_throttle",
+                "/sys/devices/system/cpu/cpu7/thermal_throttle",
+                "/sys/devices/system/cpu/cpu8/thermal_throttle",
+                "/sys/devices/system/cpu/cpu9/thermal_throttle",
+                "/sys/devices/system/cpu/cpu10/thermal_throttle",
+                "/sys/devices/system/cpu/cpu11/thermal_throttle",
+                "/sys/devices/system/cpu/cpu12/thermal_throttle",
+                "/sys/devices/system/cpu/cpu13/thermal_throttle",
+                "/sys/devices/system/cpu/cpu14/thermal_throttle",
+                "/sys/devices/system/cpu/cpu15/thermal_throttle",
+                "/sys/devices/system/cpu/cpu16/thermal_throttle",
+                "/sys/devices/system/cpu/cpu17/thermal_throttle",
+                "/sys/devices/system/cpu/cpu18/thermal_throttle",
+                "/sys/devices/system/cpu/cpu19/thermal_throttle",
+                "/sys/devices/system/cpu/cpu20/thermal_throttle",
+                "/sys/devices/system/cpu/cpu21/thermal_throttle",
+                "/sys/devices/system/cpu/cpu22/thermal_throttle",
+                "/sys/devices/system/cpu/cpu23/thermal_throttle",
+                "/sys/devices/system/cpu/cpu24/thermal_throttle",
+                "/sys/devices/system/cpu/cpu25/thermal_throttle",
+                "/sys/devices/system/cpu/cpu26/thermal_throttle",
+                "/sys/devices/system/cpu/cpu27/thermal_throttle",
+                "/sys/devices/system/cpu/cpu28/thermal_throttle",
+                "/sys/devices/system/cpu/cpu29/thermal_throttle",
+                "/sys/devices/system/cpu/cpu30/thermal_throttle",
+                "/sys/devices/system/cpu/cpu31/thermal_throttle",
+                "/sys/devices/system/cpu/cpu32/thermal_throttle",
+                "/sys/devices/system/cpu/cpu33/thermal_throttle",
+                "/sys/devices/system/cpu/cpu34/thermal_throttle",
+                "/sys/devices/system/cpu/cpu35/thermal_throttle",
+                "/sys/devices/system/cpu/cpu36/thermal_throttle",
+                "/sys/devices/system/cpu/cpu37/thermal_throttle",
+                "/sys/devices/system/cpu/cpu38/thermal_throttle",
+                "/sys/devices/system/cpu/cpu39/thermal_throttle",
+                "/sys/devices/system/cpu/cpu40/thermal_throttle",
+                "/sys/devices/system/cpu/cpu41/thermal_throttle",
+                "/sys/devices/system/cpu/cpu42/thermal_throttle",
+                "/sys/devices/system/cpu/cpu43/thermal_throttle",
+                "/sys/devices/system/cpu/cpu44/thermal_throttle",
+                "/sys/devices/system/cpu/cpu45/thermal_throttle",
+                "/sys/devices/system/cpu/cpu46/thermal_throttle",
+                "/sys/devices/system/cpu/cpu47/thermal_throttle",
+                "/sys/devices/system/cpu/cpu48/thermal_throttle",
+                "/sys/devices/system/cpu/cpu49/thermal_throttle",
+                "/sys/devices/system/cpu/cpu50/thermal_throttle",
+                "/sys/devices/system/cpu/cpu51/thermal_throttle",
+                "/sys/devices/system/cpu/cpu52/thermal_throttle",
+                "/sys/devices/system/cpu/cpu53/thermal_throttle",
+                "/sys/devices/system/cpu/cpu54/thermal_throttle",
+                "/sys/devices/system/cpu/cpu55/thermal_throttle",
+                "/sys/devices/system/cpu/cpu56/thermal_throttle",
+                "/sys/devices/system/cpu/cpu57/thermal_throttle",
+                "/sys/devices/system/cpu/cpu58/thermal_throttle",
+                "/sys/devices/system/cpu/cpu59/thermal_throttle",
+                "/sys/devices/system/cpu/cpu60/thermal_throttle",
+                "/sys/devices/system/cpu/cpu61/thermal_throttle",
+                "/sys/devices/system/cpu/cpu62/thermal_throttle",
+                "/sys/devices/system/cpu/cpu63/thermal_throttle",
+                "/sys/devices/system/cpu/cpu64/thermal_throttle",
+                "/sys/devices/system/cpu/cpu65/thermal_throttle",
+                "/sys/devices/system/cpu/cpu66/thermal_throttle",
+                "/sys/devices/system/cpu/cpu67/thermal_throttle",
+                "/sys/devices/system/cpu/cpu68/thermal_throttle",
+                "/sys/devices/system/cpu/cpu69/thermal_throttle",
+                "/sys/devices/system/cpu/cpu70/thermal_throttle",
+                "/sys/devices/system/cpu/cpu71/thermal_throttle",
+                "/sys/devices/system/cpu/cpu72/thermal_throttle",
+                "/sys/devices/system/cpu/cpu73/thermal_throttle",
+                "/sys/devices/system/cpu/cpu74/thermal_throttle",
+                "/sys/devices/system/cpu/cpu75/thermal_throttle",
+                "/sys/devices/system/cpu/cpu76/thermal_throttle",
+                "/sys/devices/system/cpu/cpu77/thermal_throttle",
+                "/sys/devices/system/cpu/cpu78/thermal_throttle",
+                "/sys/devices/system/cpu/cpu79/thermal_throttle",
+                "/sys/devices/system/cpu/cpu80/thermal_throttle",
+                "/sys/devices/system/cpu/cpu81/thermal_throttle",
+                "/sys/devices/system/cpu/cpu82/thermal_throttle",
+                "/sys/devices/system/cpu/cpu83/thermal_throttle",
+                "/sys/devices/system/cpu/cpu84/thermal_throttle",
+                "/sys/devices/system/cpu/cpu85/thermal_throttle",
+                "/sys/devices/system/cpu/cpu86/thermal_throttle",
+                "/sys/devices/system/cpu/cpu87/thermal_throttle",
+                "/sys/devices/system/cpu/cpu88/thermal_throttle",
+                "/sys/devices/system/cpu/cpu89/thermal_throttle",
+                "/sys/devices/system/cpu/cpu90/thermal_throttle",
+                "/sys/devices/system/cpu/cpu91/thermal_throttle",
+                "/sys/devices/system/cpu/cpu92/thermal_throttle",
+                "/sys/devices/system/cpu/cpu93/thermal_throttle",
+                "/sys/devices/system/cpu/cpu94/thermal_throttle",
+                "/sys/devices/system/cpu/cpu95/thermal_throttle"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/qwen38-pair-entry-hicache.sh",
+                "Destination": "/entry.sh",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/hicache-shared",
+                "Destination": "/hicache",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/models/Qwen3.8-27B-AWQ-INT4",
+                "Destination": "/model",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/dev/dri",
+                "Destination": "/dev/dri",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/empty-memcache-pyc",
+                "Destination": "/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/__pycache__",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/hicache-mph.py",
+                "Destination": "/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/memory_pool_host.py",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/empty-pycache",
+                "Destination": "/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/__pycache__",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/hicache-common.py",
+                "Destination": "/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/common.py",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/devcloud/launchers/hicache-mha.py",
+                "Destination": "/opt/venv/lib/python3.12/site-packages/sglang/srt/mem_cache/pool_host/mha.py",
+                "Mode": "ro",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "e4e0a92af9b8",
+            "Domainname": "",
+            "User": "root",
+            "AttachStdin": false,
+            "AttachStdout": false,
+            "AttachStderr": false,
+            "ExposedPorts": {
+                "30000/tcp": {},
+                "5557/tcp": {}
+            },
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "XPU_SYMM_AR=1",
+                "KV_PORT=5557",
+                "TP_SIZE=2",
+                "SGLANG_HICACHE_FILE_BACKEND_STORAGE_DIR=/hicache",
+                "XPU_MAMBA_PAGED=1",
+                "XPU_DENSE_INT8_MAX_M=8",
+                "XPU_SYMM_AR_MAX_BYTES=131072",
+                "XPU_UNROLL_SPEC_VERIFY=1",
+                "PORT=30000",
+                "CTX=8192",
+                "XPU_DENSE_INT8=1",
+                "ZE_AFFINITY_MASK=0,1",
+                "ONEAPI_DEVICE_SELECTOR=level_zero:gpu",
+                "XPU_GDN_DECODE_BV=16",
+                "XPU_MOE_ALIGN_SKIP=1",
+                "PATH=/opt/venv/bin:/root/.local/bin:/opt/intel/oneapi/mpi/2021.18/bin:/opt/intel/oneapi/mkl/2026.1/bin:/opt/intel/oneapi/dev-utilities/2026.0/bin:/opt/intel/oneapi/debugger/2026.1/opt/debugger/bin:/opt/intel/oneapi/compiler/2026.1/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LANG=C.UTF-8",
+                "CCL_CONFIGURATION=cpu_gpu_dpcpp",
+                "CCL_CONFIGURATION_PATH=",
+                "CCL_ROOT=/opt/intel/oneapi/ccl/2022.1",
+                "CLASSPATH=/opt/intel/oneapi/mpi/2021.18/share/java/mpi.jar",
+                "CMAKE_PREFIX_PATH=/opt/intel/oneapi/tbb/2023.1/env/..:/opt/intel/oneapi/pti/1.0/lib/cmake/pti:/opt/intel/oneapi/mkl/2026.1/lib/cmake:/opt/intel/oneapi/dpl/2022.13/lib/cmake/oneDPL:/opt/intel/oneapi/compiler/2026.1:/opt/intel/oneapi/ccl/2022.1/lib/cmake/oneCCL",
+                "CMPLR_ROOT=/opt/intel/oneapi/compiler/2026.1",
+                "CPATH=/opt/intel/oneapi/umf/1.1/include:/opt/intel/oneapi/dev-utilities/2026.0/include:/opt/intel/oneapi/ccl/2022.1/include",
+                "CPLUS_INCLUDE_PATH=/opt/intel/oneapi/umf/1.1/include:/opt/intel/oneapi/tbb/2023.1/env/../include:/opt/intel/oneapi/pti/1.0/include:/opt/intel/oneapi/mpi/2021.18/include:/opt/intel/oneapi/mkl/2026.1/include:/opt/intel/oneapi/dpl/2022.13/include",
+                "C_INCLUDE_PATH=/opt/intel/oneapi/umf/1.1/include:/opt/intel/oneapi/tbb/2023.1/env/../include:/opt/intel/oneapi/pti/1.0/include:/opt/intel/oneapi/mpi/2021.18/include:/opt/intel/oneapi/mkl/2026.1/include",
+                "DIAGUTIL_PATH=/opt/intel/oneapi/compiler/2026.1/etc/compiler/sys_check/sys_check.sh",
+                "DPLROOT=/opt/intel/oneapi/dpl/2022.13",
+                "DPL_ROOT=/opt/intel/oneapi/dpl/2022.13",
+                "FI_PROVIDER_PATH=/opt/intel/oneapi/mpi/2021.18/opt/mpi/libfabric/lib/prov:/usr/lib/x86_64-linux-gnu/libfabric",
+                "GDB_INFO=/opt/intel/oneapi/debugger/2026.1/share/info/",
+                "INFOPATH=/opt/intel/oneapi/debugger/2026.1/share/info",
+                "INTEL_PYTHONHOME=/opt/intel/oneapi/debugger/2026.1/opt/debugger",
+                "I_MPI_ROOT=/opt/intel/oneapi/mpi/2021.18",
+                "LD_LIBRARY_PATH=/opt/intel/oneapi/tcm/1.5/lib:/opt/intel/oneapi/umf/1.1/lib:/opt/intel/oneapi/tcm/1.5/env/../lib:/opt/intel/oneapi/tbb/2023.1/env/../lib/intel64/gcc4.8:/opt/intel/oneapi/pti/1.0/lib:/opt/intel/oneapi/mpi/2021.18/opt/mpi/libfabric/lib:/opt/intel/oneapi/mpi/2021.18/lib:/opt/intel/oneapi/mkl/2026.1/lib:/opt/intel/oneapi/debugger/2026.1/opt/debugger/lib:/opt/intel/oneapi/compiler/2026.1/opt/compiler/lib:/opt/intel/oneapi/compiler/2026.1/lib:/opt/intel/oneapi/ccl/2022.1/lib/",
+                "LIBRARY_PATH=/opt/intel/oneapi/tcm/1.5/lib:/opt/intel/oneapi/umf/1.1/lib:/opt/intel/oneapi/tbb/2023.1/env/../lib/intel64/gcc4.8:/opt/intel/oneapi/pti/1.0/lib:/opt/intel/oneapi/mpi/2021.18/lib:/opt/intel/oneapi/mkl/2026.1/lib:/opt/intel/oneapi/compiler/2026.1/lib:/opt/intel/oneapi/ccl/2022.1/lib/",
+                "MANPATH=/opt/intel/oneapi/mpi/2021.18/share/man:/opt/intel/oneapi/debugger/2026.1/share/man:/opt/intel/oneapi/compiler/2026.1/share/man:",
+                "MKLROOT=/opt/intel/oneapi/mkl/2026.1",
+                "NLSPATH=/opt/intel/oneapi/compiler/2026.1/lib/compiler/locale/%l_%t/%N",
+                "OCL_ICD_FILENAMES=/opt/intel/oneapi/compiler/2026.1/lib/libintelocl.so",
+                "ONEAPI_ROOT=/opt/intel/oneapi",
+                "PKG_CONFIG_PATH=/opt/intel/oneapi/tbb/2023.1/env/../lib/pkgconfig:/opt/intel/oneapi/mpi/2021.18/lib/pkgconfig:/opt/intel/oneapi/mkl/2026.1/lib/pkgconfig:/opt/intel/oneapi/dpl/2022.13/lib/pkgconfig:/opt/intel/oneapi/compiler/2026.1/lib/pkgconfig:/opt/intel/oneapi/ccl/2022.1/lib/pkgconfig/",
+                "Pti_DIR=/opt/intel/oneapi/pti/1.0/lib/cmake/pti",
+                "SETVARS_COMPLETED=1",
+                "TBBROOT=/opt/intel/oneapi/tbb/2023.1/env/..",
+                "TCMROOT=/opt/intel/oneapi/tcm/1.5/env/..",
+                "TCM_ROOT=/opt/intel/oneapi/tcm/1.5",
+                "UMF_ROOT=/opt/intel/oneapi/umf/1.1",
+                "DEBIAN_FRONTEND=noninteractive",
+                "VIRTUAL_ENV=/opt/venv",
+                "UV_PYTHON_INSTALL_DIR=/opt/uv/python",
+                "XPU_TOPK_BUILD=/opt/xpu/build",
+                "XPU_MOE_BUILD=/opt/xpu/build-gemv",
+                "XPU_REPO=/opt/xpu",
+                "SGLANG_MOE_CONFIG_DIR=/opt/xpu/moe-tuned",
+                "XPU_KERNELS=topk,gemv",
+                "SGLANG_TP_SIZE=2",
+                "SGLANG_HTTP_PORT=30000",
+                "SGLANG_CONTEXT_LEN=262144",
+                "SGLANG_MEM_FRACTION=0.85",
+                "SGLANG_CHUNKED_PREFILL=4096",
+                "SGLANG_MAX_RUNNING=64",
+                "SGLANG_PAGE_SIZE=64",
+                "SGLANG_MODEL=/model",
+                "SGLANG_DFLASH_DISABLE_DRAFT_GRAPH=0",
+                "SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1"
+            ],
+            "Cmd": [
+                "/entry.sh"
+            ],
+            "Image": "rahulunair/sglang-xpu@sha256:feb7b9130eff2fa26dfa09ab1a8b9a8423db013ad7d18f804f8b55a57cb2c175",
+            "Volumes": null,
+            "WorkingDir": "/sgl-workspace/sglang",
+            "Entrypoint": [
+                "bash"
+            ],
+            "Labels": {
+                "org.opencontainers.image.description": "SGLang serving Qwen3.8-27B AWQ-INT4 or FP8 on four Intel Arc Pro B70 GPUs, with MTP and DFlash2 speculative decoding through the checkpoint's native 262,144-token context.",
+                "org.opencontainers.image.title": "Qwen3.8-27B on Intel Arc Pro",
+                "org.opencontainers.image.version": "24.04",
+                "xpu.qwen38.base": "rahulunair/sglang-xpu:qwen3.8-27b-20260819",
+                "xpu.qwen38.built": "20260820",
+                "xpu.qwen38.dflash2_source": "e5a3e4d30fa7abda95bafd2d697f9f9c48566114"
+            }
+        },
+        "NetworkSettings": {
+            "SandboxID": "0a87eb278cbd20310832479bc36cefc9c3ff495719de11a71f74bf1a2d2b212d",
+            "SandboxKey": "/var/run/docker/netns/0a87eb278cbd",
+            "Ports": {
+                "30000/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "30000"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "30000"
+                    }
+                ],
+                "5557/tcp": [
+                    {
+                        "HostIp": "0.0.0.0",
+                        "HostPort": "5557"
+                    },
+                    {
+                        "HostIp": "::",
+                        "HostPort": "5557"
+                    }
+                ]
+            },
+            "Networks": {
+                "bridge": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "079840671febd9bc1caa55e83e63558724adbe92299b1abb5777fe9fa72b5975",
+                    "EndpointID": "2633a049bbcd307089aa4f67b15ce5962783ed209543218d550d6c1e760462fd",
+                    "Gateway": "172.17.0.1",
+                    "IPAddress": "172.17.0.2",
+                    "MacAddress": "6a:23:3b:de:2a:39",
+                    "IPPrefixLen": 16,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:70aab3fb164f7941db3ec1b45be934bad70ff720f4013fd5b4429b3d90668e5a",
+            "size": 5653,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

@@ -1,0 +1,219 @@
+# Known upstream issues k3d-gpu depends on: bugs, behaviour changes and security
+# advisories, each with the release that fixes it. hack/known-issues reads this
+# file (Python tomllib); `hack/known-issues check` runs in CI, offline.
+#
+# Fields of each [[issue]]:
+#   id           lowercase id; markers name it
+#   title        one line
+#   kind         bug | change | advisory
+#   upstream     "owner/repo#n" (an issue or a pull request), or ""
+#   fix          {} when unknown, or one of:
+#                  {repo, sha and/or pr}        the commit or pull request that fixes it
+#                  {repo, path, contains}       fixed in the first release whose file
+#                                               `path` contains `contains`
+#                  {ecosystem, package}         GitHub advisory database (kind advisory)
+#   component    what the sites pin (vllm-openai-cpu, kserve, litellm, ...)
+#   scheme       a hack/pinver.py scheme for the site versions and the fields below
+#   affected     a pinver range of affected versions ("*" until the fix is known)
+#   fixed_in     the first release with the fix; "" until known. Must lie outside
+#                `affected` (narrow `affected` when setting it).
+#   adopt        review | auto. auto is owner consent to take a patch or minor fix
+#                without review; a major always needs review.
+#   sites        [{file, regex}]: where k3d-gpu pins the component. Each regex
+#                (Python re, MULTILINE) has a named group `v` and must match at
+#                least once. Files are "ours" or "eat-stock" only (pins/classes).
+#   workarounds  files carrying `known-issue: <id>` markers (or a
+#                `known-issue-begin: <id>` .. `known-issue-end: <id>` block) for
+#                code or docs that exist because of the issue. Never in bench/,
+#                oracle/seed/, console/matrix.v1.json or EXPERIMENTS.md.
+#   retained     {} or {reason, pr}: the workarounds stay after the fix, and why
+#   ledger_refs  [{row, path, regex?}]: ledger rows whose recorded versions the
+#                issue touches. Informational: reported, never failed, never edited.
+#   advisories   kind advisory: the GHSA ids this entry covers
+#   image        optional image reference template ({tag} = release tag,
+#                {version} = tag without a leading v); poll checks it resolves
+#   test         optional: a test path or canary:<id>
+#   notes        free text
+#
+# A check fails when an "ours" site's version is inside `affected` while `fixed_in`
+# is set (bump it), or when workarounds remain after every "ours" site reached
+# `fixed_in` and `retained` is empty (remove them, or say why they stay).
+# `hack/known-issues poll` (network, read-only) finds fixed_in for open entries.
+
+[[issue]]
+id = "vllm-45844"
+title = "vLLM CPU attention sizes its split-KV scratchpad too small (Gemma 4 global layers stall, EngineDeadError)"
+kind = "bug"
+upstream = "vllm-project/vllm#45844"
+fix = {repo = "vllm-project/vllm", sha = "26eb87204d58d9d8a25c378fbaec9da23db3fb85", pr = 45844}
+component = "vllm-openai-cpu"
+scheme = "zerover"
+affected = "<0.25.0"
+fixed_in = "0.25.0"
+adopt = "review"
+image = "vllm/vllm-openai-cpu:{tag}"
+sites = [
+  {file = "scripts/k3d-gpu", regex = '^AMX_TEST_IMAGE="\$\{K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v(?P<v>\d+\.\d+\.\d+)@sha256:'},
+  {file = "console/moe_predict.py", regex = '"vllm/vllm-openai-cpu:v(?P<v>\d+\.\d+\.\d+)@sha256:'},
+  {file = "integrations/eat/vllm-values.yaml", regex = 'repository: vllm/vllm-openai-cpu\n\s+tag: "v(?P<v>\d+\.\d+\.\d+)@sha256:'},
+]
+workarounds = []
+ledger_refs = [
+  {row = "H54a", path = "bench/h54/h54.py", regex = '"vllm024": "vllm/vllm-openai-cpu:v(?P<v>\d+\.\d+\.\d+)@'},
+  {row = "H53", path = "bench/eatflow/live.sh", regex = 'B1_TAG=\$\{LIVE_EAT_B1_TAG:-v(?P<v>\d+\.\d+\.\d+)@'},
+]
+notes = """The B1g stall (EXPERIMENTS.md, H54 note N2). Merged 2026-07-04 as 26eb8720; GitHub's \
+compare puts it in v0.25.0 (behind 106, ahead 0) and not in v0.24.0 (diverged). EAT \
+release-1.0.3-hotfix pins v0.24.0; EAT release-1.1.0 moves to v0.28.0. The ledger arms stay \
+on v0.24.0: changing them takes a dated amendment."""
+
+[[issue]]
+id = "vllm-50801"
+title = "vLLM no longer reads VLLM_CPU_SGL_KERNEL (CPU kernel dispatch refined)"
+kind = "change"
+upstream = "vllm-project/vllm#50801"
+fix = {repo = "vllm-project/vllm", sha = "c8602c79062440074a018c1d5f875a5571eb6881", pr = 50801}
+component = "vllm-openai-cpu"
+scheme = "zerover"
+affected = "<0.28.0"
+fixed_in = "0.28.0"
+adopt = "review"
+sites = [
+  {file = "integrations/eat/vllm-values.yaml", regex = 'repository: vllm/vllm-openai-cpu\n\s+tag: "v(?P<v>\d+\.\d+\.\d+)@sha256:'},
+]
+workarounds = []
+notes = """EAT's xeon-values.yaml sets VLLM_CPU_SGL_KERNEL=1 (integrations/eat/README.md); from \
+v0.28.0 on it is a no-op, so an EAT image at or past v0.28.0 runs without the SGL kernels it \
+asks for. k3d-gpu's own vLLM CPU path does not set it."""
+
+[[issue]]
+id = "vllm-pr-51493"
+title = "vLLM's V1 model runner fails Gemma 4 MoE MTP drafting (pre_projection shape mismatch); VLLM_USE_V2_MODEL_RUNNER=1 works around it"
+kind = "bug"
+upstream = "vllm-project/vllm#51493"
+fix = {repo = "vllm-project/vllm", pr = 51493}
+component = "vllm"
+scheme = "zerover"
+affected = "*"
+fixed_in = ""
+adopt = "review"
+sites = [
+  {file = "console/model_opt.py", regex = 'o\.get\("vllm_version"\) or "(?P<v>\d+\.\d+\.\d+)"'},
+]
+workarounds = ["console/model_opt.py"]
+notes = """The optimizer's MoE drafter note points at VLLM_USE_V2_MODEL_RUNNER=1 until the pull \
+request is merged and released."""
+
+[[issue]]
+id = "linux-npu-driver-56"
+title = "Intel's Linux NPU driver has no WSL2 support"
+kind = "bug"
+upstream = "intel/linux-npu-driver#56"
+fix = {}
+component = "linux-npu-driver"
+scheme = "semver"
+affected = "*"
+fixed_in = ""
+adopt = "review"
+sites = [
+  {file = "scripts/k3d-gpu", regex = '^HS_NPU_REL=v(?P<v>\d+\.\d+\.\d+)$'},
+]
+workarounds = ["scripts/k3d-gpu", "docs/first-run.md", "docs/quickstart.md"]
+notes = """quickstart's WSL2 guidance and the WSL2 docs say the NPU is unavailable there."""
+
+[[issue]]
+id = "kserve-4592"
+title = "KServe's kserve-openvino ClusterServingRuntime is in the source tree but in no release's runtimes chart"
+kind = "bug"
+upstream = "kserve/kserve#4592"
+fix = {repo = "kserve/kserve", path = "charts/kserve-runtime-configs/files/runtimes/resources.yaml", contains = "name: kserve-openvino"}
+component = "kserve"
+scheme = "semver"
+affected = "*"
+fixed_in = ""
+adopt = "review"
+image = "ghcr.io/kserve/charts/kserve-resources:{tag}"
+sites = [
+  {file = "examples/kserve/install.sh", regex = '^KSERVE_VERSION=v(?P<v>\d+\.\d+\.\d+)$'},
+]
+workarounds = ["examples/kserve/openvino-runtime.yaml", "examples/kserve/install.sh"]
+notes = """kserve#4592 (merged 2026-01-16) added config/runtimes/kserve-openvino.yaml, and every \
+release since contains that commit, but neither config/runtimes/kustomization.yaml nor the \
+kserve-runtime-configs chart lists the runtime (v0.21.0 and master, read 2026-10-29). Fixed in \
+the first release whose runtimes chart names kserve-openvino; until then the example vendors \
+the runtime."""
+
+[[issue]]
+id = "eat-9"
+title = "EAT's vLLM chart default (apisix.enabled: false) serves with no authentication"
+kind = "bug"
+upstream = "intel/enterprise-agent-toolkit#9"
+fix = {}
+component = "enterprise-agent-toolkit"
+scheme = "eat"
+affected = "*"
+fixed_in = ""
+adopt = "review"
+sites = [
+  {file = "integrations/eat/eat-up.sh", regex = '^EAT_TAG="(?P<v>release-[^"]+)"$'},
+]
+workarounds = ["console/audit.py"]
+notes = """`k3d-gpu audit` fails any unauthenticated listener off loopback, the EAT#9 class. The \
+rule is general; when EAT ships the fix, keep it with `retained`."""
+
+[[issue]]
+id = "litellm-1.83.14-advisories"
+title = "LiteLLM 1.83.14 is affected by published security advisories"
+kind = "advisory"
+upstream = ""
+fix = {ecosystem = "pip", package = "litellm"}
+component = "litellm"
+scheme = "pep440"
+affected = "<1.100.4 || >=1.101.0,<1.101.3 || >=1.102.0,<1.102.2 || >=1.103.0,<1.103.1 || >=1.104.0rc1,<1.104.0rc2"
+fixed_in = "1.100.4"
+adopt = "review"
+advisories = [
+  "GHSA-4xpc-pv4p-pm3w",
+  "GHSA-4jcj-7x88-m979",
+  "GHSA-7488-6r32-c95q",
+  "GHSA-3cv6-jpf6-8222",
+  "GHSA-hhww-mrg2-969h",
+  "GHSA-g5ff-637f-6q2m",
+  "GHSA-7hp6-4w63-5g45",
+]
+sites = [
+  {file = "integrations/eat/gateway-values.yaml", regex = 'repository: docker\.litellm\.ai/berriai/litellm\n\s+tag: "v(?P<v>\d+\.\d+\.\d+)-'},
+  {file = "examples/agents/litellm-gateway/requirements.txt", regex = '^litellm==(?P<v>\S+)$'},
+  {file = "examples/agents/litellm-gateway/constraints.txt", regex = '^litellm==(?P<v>\S+)$'},
+]
+workarounds = []
+notes = """Read from the GitHub advisory database 2026-10-29: fixed in 1.84.0 (GHSA-4xpc, -4jcj, \
+-7488), 1.85.0 (GHSA-hhww), 1.88.6 with backports up to 1.96.2 (GHSA-3cv6), 1.95.0 (GHSA-g5ff) \
+and 1.100.4 with backports 1.101.3, 1.102.2 and 1.103.1 (GHSA-7hp6, high, published 2026-10-27; \
+it affects 1.91.0 through 1.100.3, so not 1.83.14 itself, but 1.95.1 and 1.96.2). 1.100.4 is the \
+first release outside every range, and the advisory database lists none for it. Both sites are \
+EAT's stock gateway, so the check reports and does not fail."""
+
+[[issue]]
+id = "vllm-0.32-num-spec-tokens"
+title = "vLLM v0.32.0 compares num_speculative_tokens before defaulting it (gemma4_mtp drafter with no length exits with a TypeError)"
+kind = "bug"
+upstream = ""
+fix = {}
+component = "vllm"
+scheme = "zerover"
+affected = ">=0.32.0"
+fixed_in = ""
+adopt = "review"
+sites = [
+  {file = "console/model_opt.py", regex = 'o\.get\("vllm_version"\) or "(?P<v>\d+\.\d+\.\d+)"'},
+]
+workarounds = []
+ledger_refs = [
+  {row = "H54q", path = "bench/h54/h54.py"},
+]
+notes = """File upstream: config/speculative.py rewrites a gemma4_assistant drafter to gemma4_mtp \
+with n_predict 1, then reaches the MTP branch's num_speculative_tokens > 1 check before the line \
+that defaults num_speculative_tokens to n_predict ("TypeError: '>' not supported between \
+instances of 'NoneType' and 'int'"). H54 amendment R2 names the length (1). The optimizer always \
+names num_speculative_tokens, so its plans do not hit it."""

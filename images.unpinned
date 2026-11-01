@@ -29,3 +29,4 @@ tests/image_test.sh                   *                                     node
 tests/model_share_test.sh             localhost:5000/agent                  checks a registry port is not read as a tag
 tests/image_pins_test.sh              *                                     the pin gate's own unpinned inputs
 tests/eat_test.sh                     *                                     stubs of EAT's gateway chart files, the input gateway-charts.py pins
+tests/ledger_freshness_test.py        cryptoandcoffee/k3d-gpu:0.1.70        a fixture ledger row's node image the re-measure queue parses, never pulled

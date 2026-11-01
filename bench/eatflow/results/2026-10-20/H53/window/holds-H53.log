@@ -1,0 +1,6 @@
+{"ev": "start", "host": "905a08313800", "name": "H53-smoke-AG", "t": 1793319313.776, "tag": "H53-smoke-AG:1549024:380698146"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "0", "reap_residue": "0", "stale_reaped": "0", "t": 1793319605.845, "tag": "H53-smoke-AG:1549024:380698146"}
+{"ev": "start", "host": "905a08313800", "name": "H53-smoke-B2-a", "t": 1793319614.615, "tag": "H53-smoke-B2-a:1565186:380728230"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "143", "reap_residue": "0", "stale_reaped": "0", "t": 1793319926.825, "tag": "H53-smoke-B2-a:1565186:380728230"}
+{"ev": "start", "host": "905a08313800", "name": "H53-smoke-B2-b", "t": 1793319935.15, "tag": "H53-smoke-B2-b:1578915:380760283"}
+{"ev": "end", "host": "905a08313800", "orphans_killed": "0", "rc": "143", "reap_residue": "0", "stale_reaped": "0", "t": 1793320588.769, "tag": "H53-smoke-B2-b:1578915:380760283"}

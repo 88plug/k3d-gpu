@@ -69,6 +69,31 @@ if [ "${rc}" -eq 0 ] && python3 -c 'import json, sys; d = json.loads(sys.argv[1]
     ok "fit --json: a fit/v1 document, from a local model directory"
 else fail "fit --json: a fit/v1 document" "${out}"; fi
 
+# llama-server keeps a host prompt cache (8192 MiB by default) and context checkpoints per
+# slot (32 by default, each the slot's SWA cache): the fit turns the first off, bounds the
+# second, and counts the checkpoints in the host bytes and the pod limit.
+out=$(bash "${K3D_GPU}" fit --host "${DESK}" --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf --json 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+f = d["flags"]
+assert d["placement"] == "cpu" and f[f.index("--cache-ram") + 1] == "0", f
+k = int(f[f.index("-ctxcp") + 1])
+ckpt = 25 * 2 * 8 * 256 * 2 * 1536  # 25 SWA layers K and V at 2 B over 1536 cells
+assert d["ckpt_bytes"] >= d["seqs"] * k * ckpt > 0, (d["ckpt_bytes"], d["seqs"], k)
+assert int(d["k8s"]["memory_limit"][:-2]) * 2 ** 30 >= d["host_bytes"] >= d["kv_bytes"] + d["ckpt_bytes"]
+' "${out}"; then
+    ok "fit (llama.cpp, Gemma QAT on the desktop CPU): --cache-ram 0, -ctxcp K, checkpoints in the pod limit"
+else fail "fit (llama.cpp host caches) on the desktop (rc ${rc})" "${out}"; fi
+
+# Gemma 4 ties its embeddings: llama.cpp loads token_embd again as the output tensor, on the
+# output layer's device, so one card holds that copy beside the layers.
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf --explain 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && grep -q 'llama.cpp/gpu: FITS' <<< "${out}" \
+    && grep -q 'weights include the output tensor: a 0.6 GiB copy of the tied token embedding' <<< "${out}"; then
+    ok "fit (llama.cpp, Gemma 4 on one card): the tied embedding's output copy counts as GPU bytes"
+else fail "fit (llama.cpp, tied output copy) on the Xeon (rc ${rc})" "$(grep -E 'llama.cpp/|weights' <<< "${out}")"; fi
+
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model not/in-cache-offline 2>&1 </dev/null); rc=$?
 if [ "${rc}" -ne 0 ] && grep -q 'no metadata for not/in-cache-offline' <<< "${out}"; then
     ok "fit: a model with no metadata is an error, not a guess"
@@ -92,6 +117,28 @@ out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" 2>&1); rc=$?
 if [ "${rc}" -eq 0 ] && grep -q "^fit: ${FLASH}:IQ4_NL on 2 GPU(s) + experts and lookup tables in DRAM" <<< "${out}"; then
     ok "fit: a multi-GGUF repo needs no flag (IQ4_NL picked, split shards summed)"
 else fail "fit: multi-GGUF repo auto-pick (rc ${rc})" "${out}"; fi
+# Its two-card plan sizes each card the way llama.cpp assigns layers: -ts is integer layer
+# counts (48 layers + the output layer), and no card's own bytes pass its budget. The plan
+# this replaces, -ts 30,30 --n-cpu-moe 28, put 43.5 GiB on the second 32 GiB card.
+out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --json 2>&1); rc=$?
+if [ "${rc}" -eq 0 ] && ts=$(python3 -c '
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import fit
+d = json.loads(sys.argv[2])
+f = d["flags"]
+ts = [int(x) for x in f[f.index("-ts") + 1].split(",")]
+budget = min(c["budget"] for c in fit.gpu_budget(json.load(open(sys.argv[3])))[0][:d["gpus"]])
+assert d["placement"] == "moe-offload" and len(ts) == d["gpus"] == 2 and sum(ts) == 49, (ts, d["gpus"])
+assert ts != [30, 30] and "--n-cpu-moe" in f, f
+assert len(d["card_bytes"]) == 2 and max(d["card_bytes"]) <= budget, (d["card_bytes"], budget)
+# context checkpoints (here the recurrent state) stay in host RAM on a split too
+k = int(f[f.index("-ctxcp") + 1])
+assert f[f.index("--cache-ram") + 1] == "0" and 0 < d["seqs"] * k <= d["ckpt_bytes"] < d["host_bytes"], (k, d["ckpt_bytes"])
+print(f[f.index("-ts") + 1])
+' "${ROOT}/console" "${out}" "${XEON}"); then
+    ok "fit: Flash-Next IQ4_NL on two cards, -ts ${ts} layers, every card within its budget, checkpoints on the host"
+else fail "fit: Flash-Next IQ4_NL per-card split (rc ${rc})" "$(grep -E '"-ts"|card_bytes' -A3 <<< "${out}")"; fi
 out=$(bash "${K3D_GPU}" fit --host "${XEON}" --model "${FLASH}" --file Qwen3.8-Flash-Next-Q8_0-00002-of-00002.gguf --explain 2>&1); rc=$?
 if [ "${rc}" -eq 0 ] && grep -q ':Q8_0 on' <<< "${out}" && grep -q -- "-hf ${FLASH}:Q8_0" <<< "${out}"; then
     ok "fit --file: a shard name picks its whole split model"
@@ -155,6 +202,39 @@ if render ovms STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_MODE
     && grep -A1 '^            limits:$' "${WORK}/ovms.yaml" | grep -qE '^              memory: [0-9]+Gi$'; then
     ok "agent manifest (ovms, CPU): static KV pool, seqs and pod memory limit from the fit"
 else fail "agent manifest (ovms, CPU) from the fit" "$(cat "${WORK}/ovms.err" "${WORK}/ovms.yaml" 2>/dev/null | head -60)"; fi
+
+# OVMS serves one GPU: K3D_GPU_AGENT_GPUS=2 is a vLLM knob, so the OVMS pod (one
+# gpu.intel.com/xe) gets a KV pool that fits one card, not two cards' worth.
+one_card=$(python3 -c 'import json, sys; sys.path.insert(0, sys.argv[1]); import fit
+print(max(c["budget"] for c in fit.gpu_budget(json.load(open(sys.argv[2])))[0]) // fit.GIB)' "${ROOT}/console" "${XEON}")
+if render ovms2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov K3D_GPU_AGENT_GPUS=2 -- \
+    && cache=$(sed -n 's/^ *- --cache_size=\([0-9]*\)$/\1/p' "${WORK}/ovms2.yaml") && [ -n "${cache}" ] \
+    && [ "${cache}" -le "${one_card}" ] && has ovms2 '^              gpu.intel.com/xe: 1$' && ! has ovms2 'gpu-split'; then
+    ok "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2): --cache_size=${cache} fits one card's ${one_card} GiB budget"
+else fail "agent manifest (ovms, K3D_GPU_AGENT_GPUS=2) sized for one card (cache ${cache:-?}, one card ${one_card})" \
+    "$(cat "${WORK}/ovms2.err"; grep -E 'cache_size|agent-fit|gpu.intel.com/xe' "${WORK}/ovms2.yaml")"; fi
+# With K3D_GPU_AGENT_BACKEND unset the fit picks the engine, and K3D_GPU_AGENT_GPUS still
+# reaches it for a model OVMS does not serve: RedHatAI's INT4 checkpoint fits one B70, so
+# only the two GPUs asked put it on two (vLLM tensor parallel), as with the backend set.
+if render vllm2 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_MODEL_OPT=off K3D_GPU_AGENT_GPUS=2 -- --model RedHatAI/Qwen3.8-27B-INT4 \
+    && grep -q 'fit: RedHatAI/Qwen3.8-27B-INT4 on 2 GPUs, tensor parallel via vllm' "${WORK}/vllm2.err" \
+    && has vllm2 '--tensor-parallel-size=2$' && has vllm2 '^              gpu.intel.com/xe: 2$'; then
+    ok "agent manifest (backend unset, K3D_GPU_AGENT_GPUS=2): the fit's vLLM pick shards over the two GPUs asked"
+else fail "agent manifest (backend unset, K3D_GPU_AGENT_GPUS=2) reaches the fit" \
+    "$(cat "${WORK}/vllm2.err"; grep -E 'tensor-parallel|agent-fit|gpu.intel.com/xe' "${WORK}/vllm2.yaml")"; fi
+
+# OVMS has no sliding-window cache: Gemma 4's 25 SWA layers hold the whole context, so the
+# static pool holds seqs x context x 225280 B (5 full + 25 SWA layers' K and V at 2 B).
+if render ovms-swa STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 4' STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_FIT_HOST="${XEON}" \
+        K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov -- \
+    && cache=$(sed -n 's/^ *- --cache_size=\([0-9]*\)$/\1/p' "${WORK}/ovms-swa.yaml") \
+    && sc=$(sed -n 's/^ *k3d-gpu.io\/agent-fit: "gpu \([0-9]*x[0-9]*\)"$/\1/p' "${WORK}/ovms-swa.yaml") \
+    && [ -n "${cache}" ] && [ -n "${sc}" ] && [ $(( cache * 1073741824 )) -ge $(( ${sc%x*} * ${sc#*x} * 225280 )) ]; then
+    ok "agent manifest (ovms, Gemma 4 on a GPU): --cache_size=${cache} holds ${sc} tokens at 225280 B each"
+else fail "agent manifest (ovms, Gemma 4): --cache_size holds seqs x context at 225280 B/token (cache ${cache:-?}, ${sc:-?})" \
+    "$(cat "${WORK}/ovms-swa.err"; grep -E 'cache_size|agent-fit' "${WORK}/ovms-swa.yaml")"; fi
 
 if render tier STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${LAPTOP}" K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3.8-27B-int8-ov \
         K3D_GPU_AGENT_MODEL_TIER=1 -- && ! has tier 'agent-fit'; then

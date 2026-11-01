@@ -291,6 +291,7 @@ jobs:
       - run: python3 bench/h54gpu/test_h54gpu.py
       - run: python3 bench/h57d/test_h57d.py
       - run: python3 bench/h59/test_h59.py
+      - run: python3 bench/h62/test_h62.py
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
       - run: bash bench/admission/test_run.sh
@@ -514,3 +515,23 @@ jobs:
       - run: tests/ci_alarm_test.sh
       - run: tests/watchdog_test.sh
       - run: tests/release_tags_test.sh
+
+  # --- Freshness: known issues ---------------------------------------------------
+  # pins/known-issues.toml lists the upstream bugs, behaviour changes and advisories
+  # k3d-gpu depends on, each with the release that fixes it. Offline: fails when an
+  # "ours" pin is inside a fixed issue's affected range, when a workaround marker
+  # outlives its fix, or when markers and entries disagree. `hack/known-issues poll`
+  # (network) finds fixed-in releases; hack/ledger-freshness lists SUPPORTED ledger
+  # rows measured on versions older than today's pins.
+  known-issues:
+    name: Known issues (fixed-in rules, markers), version schemes, ledger re-measure queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 tests/pinver_test.py
+      - run: python3 tests/known_issues_test.py
+      - run: python3 tests/ledger_freshness_test.py
+      - run: hack/known-issues check
