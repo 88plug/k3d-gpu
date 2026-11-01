@@ -1,0 +1,437 @@
+#!/usr/bin/env python3
+"""The pin registry (pins/registry.toml): check it, find what is behind, judge a diff.
+
+  hack/pins check                   offline (CI job `pins`): the registry's schema;
+                                    every site resolves to its span(s) in the tree;
+                                    derived values equal their parents; holds are
+                                    not past review_by; one owner per pin (no two
+                                    entries share a span, no Dependabot ecosystem
+                                    beside github-actions); known-issue sites are
+                                    registry sites; coverage: every pinned image, ==
+                                    requirements pin and Hugging Face revision in an
+                                    ours or eat-stock file has an owner
+  hack/pins outdated [--json] [--group G]... [--id ID]...
+                                    network, read-only: each pin's newest stable
+                                    upstream version; prints the pins behind
+  hack/pins changed <base> <head>   the pins whose values differ between two commits
+  hack/pins policy <base> <head>    the verdict for a bump diff, as JSON: {verdict:
+                                    auto|review, reasons, group, update_type, urgent,
+                                    canary}; from the diff, the registry,
+                                    pins/known-issues.toml and hack/ledger-freshness
+                                    only (never from labels)
+  hack/pins report [--outdated FILE] [--prs FILE] [--alarms FILE]
+                                    the Freshness dashboard issue body (markdown)
+  hack/pins propose-amendment <row> [--date D] [--open-prs FILE] [--write]
+                                    network: move a PENDING ledger row's runner
+                                    image pins (its pins/classes ledger paths) to
+                                    their newest same-shape tags under a dated
+                                    amendment stub; prints the stub, and with
+                                    --write edits the files and EXPERIMENTS.md.
+                                    Refuses (exit 3) a row that is not PENDING, has
+                                    a `### <row or alias> run` heading, or that an
+                                    open PR touches or adds a run section for
+  hack/pins plan --outdated FILE [--group G]
+                                    the Freshness matrix as a JSON list: [G] (G must
+                                    be a registry group), else every group with a
+                                    pin behind, plus digests
+  hack/pins issue-groups <poll.json>
+                                    "<issue> <group>" for each issue `hack/known-issues
+                                    poll --json` found newly fixed: the groups of the
+                                    ours pins whose sites the issue reads
+
+Options: --root DIR (default: this checkout). Python standard library only.
+"""
+
+import argparse
+import concurrent.futures
+import datetime
+import fnmatch
+import json
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from pinlib import classes, ledgerinfo, oci, policy, registry, report, sources  # noqa: E402
+from pinlib import versions as V  # noqa: E402
+
+HF_REV_RES = (
+    re.compile(r"(?<![\w/.-])(?P<model>[A-Za-z0-9][\w.-]*/[\w.-]+)@(?P<rev>[0-9a-f]{40})(?![0-9a-f])"),
+    re.compile(r"""(?i)\brev(?:ision)?["']?\s*[:=]\s*["']?(?P<rev>[0-9a-f]{40})(?![0-9a-f])"""),
+)
+# an image reference written name[:tag]@sha256:<digest> (a Helm values tag: "<tag>@sha256" too)
+IMAGE_DIGEST_RE = re.compile(r"(?P<ref>[a-z0-9][a-z0-9._/-]*?(?::(?P<tag>[A-Za-z0-9_][A-Za-z0-9._-]*))?)"
+                             r"@(?P<digest>sha256:[0-9a-f]{64})(?![0-9a-f])")
+REQ_PIN_RE = re.compile(r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?\s*==\s*(?P<v>[^\s;#\\]+)", re.M)
+
+
+def today():
+    return datetime.date.today()
+
+
+# ---- check ---------------------------------------------------------------------
+
+def owned_offsets(spans_by):
+    owned = {}
+    for pid, spans in spans_by.items():
+        for s in spans:
+            for i in range(s.start, s.end):
+                owned.setdefault((s.file, i), pid)
+    return owned
+
+
+def check(root):
+    reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+    problems = registry.validate(reg)
+    if problems:
+        return problems
+    tree = registry.Tree(root)
+    try:
+        explicit, generated, spans_by = registry.all_pins(tree, reg)
+    except registry.RegistryError as e:
+        return [str(e)]
+    pins = explicit + generated
+    # values readable, derived in sync, current versions parse
+    for p in pins:
+        spans = spans_by[p["id"]]
+        try:
+            vals = registry.current(p, spans)
+        except registry.RegistryError as e:
+            problems.append(str(e))
+            continue
+        problems += registry.check_derived(p, spans, vals)
+        if "v" in vals and not V.word_tag(p["scheme"], vals["v"]):
+            try:
+                V.parse(p["scheme"], vals["v"])
+            except ValueError as e:
+                problems.append("%s: %s" % (p["id"], e))
+        hold = p.get("hold")
+        if hold:
+            try:
+                due = datetime.date.fromisoformat(hold["review_by"])
+            except ValueError:
+                problems.append("%s: hold review_by %r is not YYYY-MM-DD" % (p["id"], hold["review_by"]))
+            else:
+                if due < today():
+                    problems.append("%s: hold (%s) expired on %s: review it, then move review_by or drop the hold"
+                                    % (p["id"], hold["reason"], hold["review_by"]))
+    # one owner: no two pins share a span
+    seen = {}
+    for pid, spans in spans_by.items():
+        for s in spans:
+            for i in range(s.start, s.end):
+                other = seen.setdefault((s.file, i), pid)
+                if other != pid:
+                    problems.append("%s and %s both own %s:%d" % (other, pid, s.file, s.line(tree)))
+                    break
+    problems = list(dict.fromkeys(problems))
+    # one updater per pin: Dependabot keeps only github-actions
+    dep = tree.read(".github/dependabot.yml") or ""
+    for eco in re.findall(r"package-ecosystem:\s*([\w-]+)", dep):
+        if eco != "github-actions":
+            problems.append(".github/dependabot.yml: ecosystem %s overlaps the registry (keep only github-actions)" % eco)
+    # every site file is writable by a bumper
+    for p in pins:
+        for s in p.get("sites", []) + p.get("derived", []):
+            cls = classes.effective(root, s["file"])
+            if cls not in ("ours", "eat-stock"):
+                problems.append("%s: site %s is class %s; a bumper writes only ours and eat-stock files"
+                                % (p["id"], s["file"], cls))
+            elif cls != p["class"] and not p.get("generated") and "from" not in s:
+                # (a derived value may restate an eat-stock pin in an ours file's prose)
+                problems.append("%s: class %s, but its site %s is %s" % (p["id"], p["class"], s["file"], cls))
+    problems += known_issue_sites(reg, tree, spans_by)
+    problems += coverage(root, reg, tree, spans_by)
+    return problems
+
+
+def known_issue_sites(reg, tree, spans_by):
+    """Every version a pins/known-issues.toml site reads lies inside a registry site
+    (or in a file a group's hook writes): the bumper moves what an issue watches."""
+    try:
+        issues = policy.known_issues(tree.read("pins/known-issues.toml"))
+    except ValueError as e:
+        return ["pins/known-issues.toml: %s" % e]
+    owned = owned_offsets(spans_by)
+    outputs = [g for conf in reg.get("groups", {}).values() for g in conf.get("outputs", [])]
+    out = []
+    for e in issues:
+        for f, a, b, v in policy.site_values(tree, e):
+            if any(fnmatch.fnmatchcase(f, g) for g in outputs):
+                continue
+            if not all((f, i) in owned for i in range(a, b)):
+                out.append("pins/known-issues.toml %s: %s:%d reads %s outside every registry site"
+                           % (e.get("id", "?"), f, tree.read(f).count("\n", 0, a) + 1, v))
+    return out
+
+
+def coverage(root, reg, tree, spans_by):
+    """Pinned images, requirements pins and HF revisions with no owner."""
+    owned = owned_offsets(spans_by)
+    outputs = [g for conf in reg.get("groups", {}).values() for g in conf.get("outputs", [])]
+    il = oci.images_lock()
+    allow = il.read_allow(root)
+    problems = []
+    for path in tree.files():
+        if path.startswith(".github/") or classes.effective(root, path) not in ("ours", "eat-stock"):
+            continue
+        if any(fnmatch.fnmatchcase(path, g) for g in outputs) and path not in ("scripts/k3d-gpu", "README.md"):
+            continue
+        text = tree.read(path)
+        if text is None:
+            continue
+        test_input = path.startswith("tests/") or re.search(r"(^|/)(test_[^/]*|[^/]*_test\.[a-z]+)$", path)
+        for m in IMAGE_DIGEST_RE.finditer(text):
+            if test_input or (path, m.start("digest")) in owned:
+                continue
+            if m.group("tag") == "latest" and il.allowed(allow, path, m.group(0)):
+                continue  # a rolling tag (images.unpinned): the digests group moves it
+            problems.append("%s:%d: pinned image %s@%s… has no owner in pins/registry.toml"
+                            % (path, text.count("\n", 0, m.start()) + 1, m.group("ref"), m.group("digest")[:19]))
+        if re.search(r"(^|/)requirements[^/]*\.(txt|in)$", path):
+            for m in REQ_PIN_RE.finditer(text):
+                if (path, m.start("v")) not in owned:
+                    problems.append("%s:%d: %s==%s has no owner in pins/registry.toml"
+                                    % (path, text.count("\n", 0, m.start()) + 1, m.group("name"), m.group("v")))
+        if path.startswith(("tests/", "canary/")):
+            continue  # test inputs; the canary's models are its instrument: canary/goldens hold their outputs
+        for rx in HF_REV_RES:
+            for m in rx.finditer(text):
+                if "model" in rx.groupindex and not _hf_like(m.group("model")):
+                    continue
+                if "model" not in rx.groupindex and not _model_before(text, m.start()):
+                    continue  # a `rev` with no model id beside it: a git commit, not a Hub revision
+                if (path, m.start("rev")) not in owned:
+                    problems.append("%s:%d: Hugging Face revision %s has no owner in pins/registry.toml"
+                                    % (path, text.count("\n", 0, m.start()) + 1, m.group("rev")[:12]))
+    return problems
+
+
+MODEL_ID = re.compile(r"""(?<![\w/.:-])(?P<model>[A-Za-z0-9][\w.-]*/[\w.-]+)(?![\w/])""")
+
+
+def _model_before(text, at, lines=3):
+    """Whether an org/name model id stands on the line of offset `at` or the `lines`
+    lines before it (a revision's model: "Qwen/Qwen3-4B" then its revision)."""
+    start = at
+    for _ in range(lines + 1):
+        start = text.rfind("\n", 0, start - 1) if start > 0 else -1
+        if start < 0:
+            start = 0
+            break
+    return any(_hf_like(m.group("model")) for m in MODEL_ID.finditer(text, start, at))
+
+
+def _hf_like(model):
+    org = model.split("/")[0]
+    return not org.startswith(("http", "github", "www")) and "." not in org
+
+
+# ---- outdated -------------------------------------------------------------------
+
+def outdated(root, groups=(), ids=(), workers=8):
+    reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+    tree = registry.Tree(root)
+    explicit, generated, spans_by = registry.all_pins(tree, reg)
+    pins = [p for p in explicit + generated
+            if (not groups or p["group"] in groups) and (not ids or p["id"] in ids)]
+
+    def one(p):
+        vals = registry.current(p, spans_by[p["id"]])
+        row = {"id": p["id"], "group": p["group"], "class": p["class"], "family": p["family"],
+               "scheme": p["scheme"], "current": vals.get("v"), "generated": bool(p.get("generated")),
+               "hold": p.get("hold")}
+        try:
+            r = sources.resolve(p, vals.get("v"))
+        except Exception as e:  # noqa: BLE001  (one pin failing is reported, the rest still resolve)
+            row["error"] = str(e)
+            return row
+        row.update(latest=r.v, published_at=r.published_at, url=r.url, note=r.note,
+                   unconfirmed=bool(r.values.get("unconfirmed")))
+        row["behind"] = r.v != vals.get("v") and not row["unconfirmed"]
+        try:
+            row["update_type"] = V.update_type(p["scheme"], vals.get("v"), r.v)
+        except ValueError:
+            row["update_type"] = "line"
+        return row
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        rows = list(ex.map(one, pins))
+    return sorted(rows, key=lambda r: (r["group"], r["id"]))
+
+
+# ---- changed --------------------------------------------------------------------
+
+def changed(root, base, head):
+    try:
+        return policy.changes(root, base, head)
+    except registry.RegistryError as err:
+        raise SystemExit("hack/pins: %s" % err)
+
+
+# ---- plan -----------------------------------------------------------------------------
+
+def plan_groups(reg, rows, group=None):
+    """The Freshness matrix: [group] when one was asked for (it must exist), else the
+    groups with a pin behind (confirmed, no error) plus digests (same-tag respins
+    are invisible to `outdated`), sorted."""
+    groups = reg.get("groups", {})
+    if group:
+        if group not in groups:
+            raise SystemExit("hack/pins: no group %r in pins/registry.toml" % group)
+        return [group]
+    out = {r["group"] for r in rows if r.get("behind") and not r.get("error") and not r.get("unconfirmed")}
+    if "digests" in groups:
+        out.add("digests")
+    return sorted(out)
+
+
+# ---- propose-amendment ----------------------------------------------------------------
+
+def newest_tag(name, tag):
+    """(newest stable tag of name shaped like tag, its digest), or None (network)."""
+    pin = {"id": "%s:%s" % (name, tag), "scheme": "docker-suffix", "source": {"kind": "oci", "image": name}}
+    try:
+        r = sources.resolve(pin, tag)
+    except (sources.SourceError, ValueError) as e:
+        sys.stderr.write("hack/pins: %s:%s: %s\n" % (name, tag, e))
+        return None
+    return r.values["tag"], r.values["digest"]
+
+
+# ---- issue-groups -------------------------------------------------------------------
+
+def issue_groups(root, poll_rows):
+    """[(issue id, group)] for each issue `hack/known-issues poll --json` found newly
+    fixed (state released, or advisory with a patched version; fixed_in found, none
+    recorded): the groups of the ours pins
+    whose sites hold a version the issue reads."""
+    tree = registry.Tree(root)
+    reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+    explicit, generated, spans_by = registry.all_pins(tree, reg)
+    pins = {p["id"]: p for p in explicit + generated}
+    issues = {e["id"]: e for e in policy.known_issues(tree.read("pins/known-issues.toml"))}
+    out = []
+    for row in poll_rows:
+        e = issues.get(row.get("id"))
+        if (not e or row.get("error") or row.get("state") not in ("released", "advisory")
+                or not row.get("fixed_in") or row.get("recorded")):
+            continue
+        groups = set()
+        for f, a, b, _ in policy.site_values(tree, e):
+            for pid, spans in spans_by.items():
+                if pins[pid]["class"] == "ours" and any(s.file == f and s.start < b and a < s.end for s in spans):
+                    groups.add(pins[pid]["group"])
+        out += [(e["id"], g) for g in sorted(groups)]
+    return out
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="pins", description=__doc__.split("\n")[0])
+    ap.add_argument("--root", default=registry.ROOT)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("check")
+    o = sub.add_parser("outdated")
+    o.add_argument("--json", action="store_true")
+    o.add_argument("--all", action="store_true", help="also list pins that are current")
+    o.add_argument("--group", action="append", default=[])
+    o.add_argument("--id", action="append", default=[])
+    c = sub.add_parser("changed")
+    c.add_argument("base")
+    c.add_argument("head")
+    pp = sub.add_parser("policy")
+    pp.add_argument("base")
+    pp.add_argument("head")
+    r = sub.add_parser("report")
+    r.add_argument("--outdated", help="hack/pins outdated --json output (default: run it)")
+    r.add_argument("--prs", help="JSON list of open autobump PRs {number,title,headRefName,labels,verdict,blocking}")
+    r.add_argument("--alarms", help="hack/ci_alarm list output")
+    r.add_argument("--lag-alarms", help="write the blind-spot alarm keys and bodies here (JSON)")
+    a = sub.add_parser("propose-amendment")
+    a.add_argument("row")
+    a.add_argument("--date", default=today().isoformat())
+    a.add_argument("--open-prs", help="JSON [{number, files, added_headings}] of the open PRs")
+    a.add_argument("--write", action="store_true", help="edit the runner files and EXPERIMENTS.md")
+    ig = sub.add_parser("issue-groups")
+    ig.add_argument("poll", help="hack/known-issues poll --json output")
+    pl = sub.add_parser("plan")
+    pl.add_argument("--outdated", required=True, help="hack/pins outdated --json output")
+    pl.add_argument("--group", default="", help="the one group asked for (a dispatch)")
+    args = ap.parse_args(argv[1:])
+    root = os.path.abspath(args.root)
+
+    if args.cmd == "check":
+        problems = check(root)
+        for p in problems:
+            print("FAIL " + p)
+        if problems:
+            return 1
+        reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+        print("ok   pins/registry.toml: %d pins, every site resolves, derived values match, every pin owned"
+              % len(reg.get("pin", [])))
+        return 0
+    if args.cmd == "outdated":
+        rows = outdated(root, args.group, args.id)
+        shown = rows if args.all else [r for r in rows if r.get("behind") or r.get("error") or r.get("unconfirmed")]
+        if args.json:
+            json.dump(shown, sys.stdout, indent=1, sort_keys=True)
+            sys.stdout.write("\n")
+        else:
+            for r in shown:
+                if r.get("error"):
+                    print("ERROR %-16s %-44s %s" % (r["group"], r["id"], r["error"]))
+                elif r.get("unconfirmed"):
+                    print("UNCONF %-15s %-44s %s -> %s (%s)" % (r["group"], r["id"], r["current"], r["latest"], r.get("note")))
+                else:
+                    print("%-6s %-16s %-44s %s -> %s%s" % (r["update_type"], r["group"], r["id"], r["current"], r["latest"],
+                                                         "  [%s]" % r["published_at"][:10] if r.get("published_at") else ""))
+        return 0
+    if args.cmd == "changed":
+        json.dump(changed(root, args.base, args.head), sys.stdout, indent=1, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
+    if args.cmd == "policy":
+        json.dump(policy.judge(root, args.base, args.head, changed(root, args.base, args.head)),
+                  sys.stdout, indent=1, sort_keys=True)
+        sys.stdout.write("\n")
+        return 0
+    if args.cmd == "report":
+        rows = json.load(open(args.outdated)) if args.outdated else outdated(root)
+        prs = json.load(open(args.prs)) if args.prs else []
+        alarms = open(args.alarms).read() if args.alarms else ""
+        md, lag = report.render(root, rows, prs, alarms)
+        sys.stdout.write(md)
+        if args.lag_alarms:
+            with open(args.lag_alarms, "w") as f:
+                json.dump(lag, f, indent=1)
+        return 0
+    if args.cmd == "propose-amendment":
+        prs = []
+        if args.open_prs:
+            with open(args.open_prs, encoding="utf-8") as f:
+                prs = json.load(f)
+        try:
+            stub, _ = ledgerinfo.propose_amendment(root, args.row, args.date, newest_tag, prs, args.write)
+        except ledgerinfo.Refused as e:
+            sys.stderr.write("hack/pins: refused: %s\n" % e)
+            return 3
+        print(stub, end="")
+        return 0
+    if args.cmd == "plan":
+        with open(args.outdated, encoding="utf-8") as f:
+            rows = json.load(f)
+        reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+        print(json.dumps(plan_groups(reg, rows, args.group or None)))
+        return 0
+    if args.cmd == "issue-groups":
+        with open(args.poll, encoding="utf-8") as f:
+            rows = json.load(f)
+        for kid, group in issue_groups(root, rows if isinstance(rows, list) else []):
+            print("%s %s" % (kid, group))
+        return 0
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

@@ -1,0 +1,609 @@
+#!/usr/bin/env python3
+"""Move one group of pins (pins/registry.toml) to their newest stable upstream versions.
+
+  hack/bump <group> [--reason R] [--fixed-in V] [--dry-run] [--resolved FILE]
+            [--body FILE] [--summary FILE] [--no-tests] [--root DIR]
+  hack/bump --remove-workaround <id> [--body FILE] [--root DIR]
+
+1. Resolve each pin of the group (hack/pinlib sources; never backwards; holds and
+   `confirm` honoured: an unconfirmed pin is skipped with a note).
+2. Rewrite the sites and derived values of every pin that moved (a hook-written
+   pin is moved by its group's hook and checked after it).
+3. Hooks, in the group's order: lock (images.lock), readme-history, render-latest,
+   ppa-write, convert-pins, ledger-rules, constraints, docs-lock, flake-update,
+   repin (the digests group); ledger-rules also runs whenever console/ changed.
+4. hack/substitute-goldens: each exact old pin string becomes its new one in
+   tests/** only.
+5. The group's tests (skipped by --dry-run and --no-tests).
+6. The policy verdict (hack/pins policy) of the resulting diff, and a PR body.
+
+The bump writes the working tree it runs in (--dry-run too: run that in a scratch
+clone); it never commits, and never writes .github/.
+
+--reason known-issue:<id> also records the fix on that entry of
+pins/known-issues.toml: fixed_in (--fixed-in, else `hack/known-issues poll`),
+`affected` narrowed below it when it was "*", and, while the entry lists
+workarounds, `retained` naming branch autobump/ki-<id>. The summary's `followup`
+is then <id>: `hack/bump --remove-workaround <id>` on top of this bump cuts the
+marked workarounds out for that separate PR (labelled needs-review and
+changes-defaults).
+--resolved FILE: {pin id: {values}} used instead of the network (tests).
+--summary FILE: JSON {group, branch, title, moved, verdict, labels, notes, tests,
+followup, changed}; `changed` says whether the tree differs from HEAD.
+Exit: 0 moved (or nothing to move: "moved": []), 1 a failure.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import tomllib
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from pinlib import goldens, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
+
+HOOKS = ("lock", "readme-history", "render-latest", "ppa-write", "convert-pins", "ledger-rules", "constraints",
+         "docs-lock", "flake-update", "repin")
+
+
+class BumpError(Exception):
+    pass
+
+
+def sh(root, *cmd, **kw):
+    return subprocess.run(list(cmd), cwd=root, check=True, text=True, capture_output=kw.pop("capture", True), **kw)
+
+
+def vcs(root, *args):
+    return sh(root, "git", *args).stdout
+
+
+# ---- resolve ---------------------------------------------------------------------
+
+def plan(root, reg, group, resolved=None):
+    """[(pin, spans, current values, Resolved)] for the pins of group that move,
+    and notes for the ones skipped."""
+    tree = registry.Tree(root)
+    explicit, generated, spans_by = registry.all_pins(tree, reg)
+    moves, notes = [], []
+    for p in [p for p in explicit + generated if p["group"] == group]:
+        spans = spans_by[p["id"]]
+        cur = registry.current(p, spans)
+        if resolved is not None:
+            if p["id"] not in resolved:
+                continue
+            r = sources.Resolved(dict(resolved[p["id"]]))
+        else:
+            try:
+                r = sources.resolve(p, cur.get("v"))
+            except Exception as e:  # noqa: BLE001  (one pin failing leaves the rest of the group)
+                notes.append("%s: not resolved: %s" % (p["id"], e))
+                continue
+        if r.values.get("unconfirmed"):
+            notes.append("%s: skipped, %s" % (p["id"], r.note))
+            continue
+        if r.v == cur.get("v") and not _digest_moves(p, spans, r):
+            continue
+        moves.append((p, spans, cur, r))
+    return tree, moves, notes
+
+
+def _digest_moves(pin, spans, r):
+    """A same-version pin moves only for a word tag (trixie-slim) whose digest a
+    registry re-pointed; every other respin is the digests group's."""
+    return pin.get("generated") and pin["scheme"] == "docker-suffix" and r.values.get("digest") and any(
+        s.key == "digest" and s.text != r.values["digest"] for s in spans) and not re.match(r"^v?\d", r.v)
+
+
+# ---- rewrite ----------------------------------------------------------------------
+
+def _digest_for(span, values):
+    tmpl = span.site.get("digest_tag") if span.site.get("digest_only") else span.tag_tmpl
+    tag = sources.fmt(tmpl, values)
+    name = oci.normalize(span.image + ":" + tag)[0]
+    return oci.digest(name, tag)
+
+
+def edits_for(pin, spans, cur, r):
+    """[(span, new text)] for a moving pin."""
+    vals = dict(cur)
+    vals.update(r.values)
+    out = []
+    for s in spans:
+        if s.derived is not None:
+            new = s.derived.format(**registry.helpers(vals))
+        elif s.key == "digest" and s.image is not None:
+            new = _digest_for(s, vals)
+        elif s.key in vals:
+            new = str(vals[s.key])
+        else:
+            raise BumpError("%s: the source gives no %s for %s" % (pin["id"], s.key, s.file))
+        if new != s.text:
+            out.append((s, new))
+    return out
+
+
+def apply_edits(root, tree, edits):
+    """Write every edit; returns {path: [(old match text, new match text)]} for goldens."""
+    by_file = {}
+    for s, new in edits:
+        by_file.setdefault(s.file, []).append((s, new))
+    pairs = []
+    for path, es in sorted(by_file.items()):
+        if not path_writable(root, path):
+            raise BumpError("%s is not a file a bumper may write" % path)
+        text = tree.read(path)
+        es.sort(key=lambda e: e[0].start)
+        for a, b in zip(es, es[1:]):
+            if a[0].end > b[0].start and (a[0].start, a[0].end) != (b[0].start, b[0].end):
+                raise BumpError("%s: overlapping edits at offset %d" % (path, b[0].start))
+        seen, uniq = set(), []
+        for s, new in es:
+            if (s.start, s.end) in seen:
+                continue
+            seen.add((s.start, s.end))
+            uniq.append((s, new))
+        out = text
+        for s, new in sorted(uniq, key=lambda e: -e[0].start):
+            out = out[:s.start] + new + out[s.end:]
+        # golden pairs: each whole site match, before and after
+        for (ms, me) in sorted({s.match for s, _ in uniq if s.match}):
+            inner = sorted([e for e in uniq if ms <= e[0].start and e[0].end <= me], key=lambda e: -e[0].start)
+            seg = text[ms:me]
+            for s, new in inner:
+                seg = seg[:s.start - ms] + new + seg[s.end - ms:]
+            pairs.append((text[ms:me], seg))
+        for s, new in uniq:
+            if len(s.text) >= 10 or re.match(r"^(sha256:)?[0-9a-f]{40,64}$", s.text) or "-" in s.text:
+                pairs.append((s.text, new))
+        full = os.path.join(root, path)
+        with open(full + ".tmp", "w", encoding="utf-8") as f:
+            f.write(out)
+        os.chmod(full + ".tmp", os.stat(full).st_mode)
+        os.replace(full + ".tmp", full)
+        tree.set(path, out)
+    return pairs
+
+
+def path_writable(root, path):
+    from pinlib import classes
+    return not path.startswith(".github/") and classes.writable(root, path)
+
+
+# ---- hooks ------------------------------------------------------------------------
+
+def hook_lock(root, ctx):
+    lockfile.refresh(root, ctx["touched"])
+
+
+def hook_readme_history(root, ctx):
+    """A Release History row in README.md when k3s or a baked plugin moved."""
+    def grab(path, rx):
+        with open(os.path.join(root, path), encoding="utf-8") as f:
+            m = re.search(rx, f.read(), re.M)
+        return m.group(1) if m else "—"
+    k3s = grab("Dockerfile", r'^ARG K3S_TAG="([^"]+)"')
+    nv = grab("share/nvidia-device-plugin.yml", r"k8s-device-plugin:(v[0-9.]+)")
+    intel = grab("share/intel-gpu-plugin.yml", r"intel-gpu-plugin:([0-9.]+)")
+    gaudi = grab("share/gaudi-device-plugin.yml", r"gaudi-device-plugin:([0-9.]+-[0-9]+)")
+    row = "| %s | %s | %s | v%s | %s |" % (datetime.date.today().isoformat(), k3s, nv, intel, gaudi)
+    path = os.path.join(root, "README.md")
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("## Release History"):
+            sep = next(j for j in range(i, len(lines)) if lines[j].startswith("|----------"))
+            top = lines[sep + 1] if sep + 1 < len(lines) else ""
+            if top.split("|")[2:] == row.split("|")[2:]:
+                return
+            lines.insert(sep + 1, row)
+            break
+    else:
+        raise BumpError("README.md has no ## Release History table")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+
+def hook_render_latest(root, ctx):
+    names = sorted({os.path.basename(os.path.dirname(s["file"])) for p in ctx["pins"] for s in p.get("sites", [])
+                    if s["file"].startswith("hack/components/")})
+    sh(root, os.path.join(root, "hack", "render-component"), "--latest", *names, capture=False,
+       env=dict(os.environ, RENDER_ROOT=root))
+
+
+def hook_ppa_write(root, ctx):
+    sh(root, os.path.join(root, "hack", "ppa-pins"), "--write", "scripts/k3d-gpu", "README.md", capture=False)
+
+
+def hook_convert_pins(root, ctx):
+    sh(root, sys.executable, os.path.join(root, "hack", "bump-convert-pins"), capture=False)
+
+
+def hook_ledger_rules(root, ctx):
+    sh(root, sys.executable, "console/model_opt.py", "ledger-rules", "--ledger", "EXPERIMENTS.md",
+       "--out", "console/ledger-rules.json", capture=False)
+
+
+def _examples_image(root):
+    with open(os.path.join(root, "tests", "agent_examples_test.sh"), encoding="utf-8") as f:
+        m = re.search(r'^IMAGE="\$\{K3D_GPU_EXAMPLES_IMAGE:-([^}]+)\}"', f.read(), re.M)
+    if not m:
+        raise BumpError("tests/agent_examples_test.sh names no examples IMAGE")
+    return m.group(1)
+
+
+def hook_constraints(root, ctx):
+    """Re-freeze constraints.txt of every example whose requirements.txt or image moved."""
+    image = _examples_image(root)
+    tag = image.split("@")[0].split(":", 1)[1]
+    whole = any(s.file == "tests/agent_examples_test.sh" for s, _ in ctx["edits"])
+    for ex in sorted(os.listdir(os.path.join(root, "examples", "agents"))):
+        d = os.path.join(root, "examples", "agents", ex)
+        if not os.path.isfile(os.path.join(d, "requirements.txt")):
+            continue
+        if not whole and "examples/agents/%s/requirements.txt" % ex not in ctx["touched"]:
+            continue
+        out = sh(root, "docker", "run", "--rm", "-v", "%s:/ex:ro" % d, image, "sh", "-c",
+                 "pip install -q --root-user-action=ignore --disable-pip-version-check -r /ex/requirements.txt "
+                 ">/dev/null && pip freeze --all --exclude pip").stdout
+        pkgs = sorted((ln for ln in out.splitlines() if ln.strip()), key=str.lower)
+        with open(os.path.join(d, "constraints.txt"), "w", encoding="utf-8") as f:
+            f.write("# Full pinned set for requirements.txt, transitive dependencies included:\n"
+                    "# pip freeze --all --exclude pip after installing it in python:%s.\n"
+                    "#   pip install -r requirements.txt -c constraints.txt\n" % tag)
+            f.write("\n".join(pkgs) + "\n")
+
+
+def hook_docs_lock(root, ctx):
+    sh(root, os.path.join(root, "docs-build", "lock.sh"), capture=False)
+
+
+def hook_flake_update(root, ctx):
+    with open(os.path.join(root, "packaging", "check.sh"), encoding="utf-8") as f:
+        m = re.search(r'^NIX_IMAGE="\$\{NIX_IMAGE:-([^}]+)\}"', f.read(), re.M)
+    if not m:
+        raise BumpError("packaging/check.sh names no NIX_IMAGE")
+    sh(root, "docker", "run", "--rm", "-v", "%s:/w" % root, "-w", "/w", m.group(1), "sh", "-c",
+       "nix --extra-experimental-features 'nix-command flakes' flake update nixpkgs && chown %d:%d flake.lock"
+       % (os.getuid(), os.getgid()), capture=False)
+
+
+def hook_repin(root, ctx):
+    """The digests group: every same-tag respin in an ours file (eat-stock images move
+    with an EAT release; ledger and historical files never move)."""
+    from pinlib import classes
+    il = oci.images_lock()
+    files = [p for p in il.scanned_files(root) if path_writable(root, p) and not registry.is_test_input(p)
+             and classes.effective(root, p) == "ours"]
+    changes = il.repin(root, files)
+    ctx["notes"] += ["repin: %s" % c for c in changes]
+    ctx["touched"].update(c.split(":", 1)[0] for c in changes)
+
+
+HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,
+            "ppa-write": hook_ppa_write, "convert-pins": hook_convert_pins, "ledger-rules": hook_ledger_rules,
+            "constraints": hook_constraints, "docs-lock": hook_docs_lock, "flake-update": hook_flake_update,
+            "repin": hook_repin}
+
+
+# ---- known issues -------------------------------------------------------------------
+
+KI = "pins/known-issues.toml"
+
+
+def _ki_edit(root, kid, values):
+    """Set single-line keys of [[issue]] kid in pins/known-issues.toml (a text edit:
+    comments and layout stay); values {key: TOML literal}. Returns the entry as
+    tomllib reads it afterwards."""
+    path = os.path.join(root, KI)
+    if not os.path.exists(path):
+        raise BumpError("%s does not exist" % KI)
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    blocks = re.split(r"(?m)^(?=\[\[issue\]\]\s*$)", text)
+    for i, b in enumerate(blocks):
+        if not re.search(r'^id\s*=\s*"%s"\s*$' % re.escape(kid), b, re.M):
+            continue
+        for key, lit in values.items():
+            line = "%s = %s" % (key, lit)
+            if re.search(r"^%s\s*=" % re.escape(key), b, re.M):
+                b = re.sub(r"^%s\s*=.*$" % re.escape(key), lambda _m, s=line: s, b, count=1, flags=re.M)
+            else:  # a new key goes right after the id line
+                b = re.sub(r'^(id\s*=\s*"%s"\s*)$' % re.escape(kid), lambda m, s=line: m.group(1) + "\n" + s, b,
+                           count=1, flags=re.M)
+        blocks[i] = b
+        break
+    else:
+        raise BumpError("%s has no issue %s" % (KI, kid))
+    out = "".join(blocks)
+    try:
+        entry = next(e for e in tomllib.loads(out).get("issue", []) if e.get("id") == kid)
+    except (tomllib.TOMLDecodeError, StopIteration) as e:
+        raise BumpError("%s: editing %s broke the file (%s)" % (KI, kid, e)) from None
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(out)
+    return entry
+
+
+def known_issue(root, kid):
+    with open(os.path.join(root, KI), "rb") as f:
+        for e in tomllib.load(f).get("issue", []):
+            if e.get("id") == kid:
+                return e
+    raise BumpError("%s has no issue %s" % (KI, kid))
+
+
+def polled_fixed_in(root, kid):
+    """fixed_in of issue kid from `hack/known-issues poll --json --id kid` (network)."""
+    out = subprocess.run([os.path.join(root, "hack", "known-issues"), "--root", root, "poll", "--json", "--id", kid],
+                         cwd=root, capture_output=True, text=True)
+    try:
+        row = next(r for r in json.loads(out.stdout) if r.get("id") == kid)
+    except (ValueError, StopIteration):
+        raise BumpError("hack/known-issues poll %s: %s" % (kid, (out.stderr or out.stdout).strip()[-300:])) from None
+    if row.get("error") or not row.get("fixed_in"):
+        raise BumpError("hack/known-issues poll %s: no fixed_in (%s)" % (kid, row.get("error") or row.get("state")))
+    return row["fixed_in"]
+
+
+def mark_known_issue(root, kid, fixed_in):
+    """Record the release that fixes issue kid: fixed_in, `affected` narrowed to
+    below it when it was "*", and, while the issue still has workarounds, `retained`
+    naming the follow-up branch that removes them (hack/known-issues check fails on
+    a workaround past fixed_in with no retained). Returns whether a follow-up is due."""
+    e = known_issue(root, kid)
+    values = {"fixed_in": json.dumps(fixed_in)}
+    if (e.get("affected") or "*").strip() == "*":
+        values["affected"] = json.dumps("<" + fixed_in)
+    follow = bool(e.get("workarounds"))
+    if follow:
+        values["retained"] = "{reason = %s, pr = %s}" % (
+            json.dumps("the workaround goes in a separate, reviewed PR"), json.dumps("autobump/ki-%s" % kid))
+    _ki_edit(root, kid, values)
+    return follow
+
+
+def remove_workaround(root, kid):
+    """Cut issue kid's `known-issue: <kid>` lines and `known-issue-begin/-end: <kid>`
+    blocks out of the files its entry lists, then empty its workarounds and
+    retained. Returns the paths changed."""
+    e = known_issue(root, kid)
+    changed = []
+    for p in e.get("workarounds", []):
+        if not path_writable(root, p):
+            raise BumpError("%s: workaround file %s is not a file a bumper may write" % (kid, p))
+        with open(os.path.join(root, p), encoding="utf-8") as f:
+            text = f.read()
+        out, skip = [], False
+        for line in text.splitlines(keepends=True):
+            if re.search(r"known-issue-begin:\s*%s(?![\w.-])" % re.escape(kid), line):
+                skip = True
+                continue
+            if re.search(r"known-issue-end:\s*%s(?![\w.-])" % re.escape(kid), line):
+                skip = False
+                continue
+            if skip or re.search(r"known-issue:\s*%s(?![\w.-])" % re.escape(kid), line):
+                continue
+            out.append(line)
+        if skip:
+            raise BumpError("%s: known-issue-begin: %s has no known-issue-end" % (p, kid))
+        new = "".join(out)
+        if new != text:
+            with open(os.path.join(root, p), "w", encoding="utf-8") as f:
+                f.write(new)
+            changed.append(p)
+    _ki_edit(root, kid, {"workarounds": "[]", "retained": "{}"})
+    return changed + [KI]
+
+
+# ---- verdict and body -------------------------------------------------------------
+
+def temp_commit(root):
+    """A commit of the working tree (all tracked and new files) without touching HEAD,
+    the index or any ref."""
+    with tempfile.TemporaryDirectory() as d:
+        env = dict(os.environ, GIT_INDEX_FILE=os.path.join(d, "index"))
+        shutil.copy(os.path.join(vcs(root, "rev-parse", "--absolute-git-dir").strip(), "index"), env["GIT_INDEX_FILE"])
+        sh(root, "git", "add", "-A", "--", ".", ":(exclude).github", env=env)
+        tree = sh(root, "git", "write-tree", env=env).stdout.strip()
+    ident = dict(os.environ, GIT_AUTHOR_NAME="bump", GIT_AUTHOR_EMAIL="bump@localhost",
+                 GIT_COMMITTER_NAME="bump", GIT_COMMITTER_EMAIL="bump@localhost")
+    return sh(root, "git", "commit-tree", tree, "-p", "HEAD", "-m", "bump", env=ident).stdout.strip()
+
+
+def body(group, moves, verdict, notes, tests, reason, remeasure):
+    lines = ["Moves the `%s` pin group to its newest stable upstream releases (`hack/bump %s`%s)." % (
+        group, group, ", reason `%s`" % reason if reason else ""), "",
+        "| Pin | From | To | Released | Notes |", "|---|---|---|---|---|"]
+    for p, _, cur, r in moves:
+        lines.append("| `%s` | `%s` | `%s` | %s | %s |" % (
+            p["id"], cur.get("v"), r.v, (r.published_at or "?")[:10], "[release](%s)" % r.url if r.url else ""))
+    lines += ["", "## Policy: %s" % verdict["verdict"], ""]
+    lines += ["- %s" % x for x in verdict["reasons"]] or ["- (none)"]
+    lines += ["", "Computed by `hack/pins policy` from this diff alone; labels do not count. "
+              "`review` needs a human approval at the head commit; `auto` still needs green CI at the head%s." % (
+                  " and the canary below" if verdict.get("canary") else "")]
+    if verdict.get("fixes"):
+        lines += ["", "## Known issues fixed", ""] + [
+            "- `%s` (pins/known-issues.toml): this moves its sites to the fixing release" % k for k in verdict["fixes"]]
+    lines += ["", "## Evidence", "",
+              "- CI: the ci.yml run `hack/bot-ci-dispatch` starts on branch `autobump/%s` at the head "
+              "(`gh run list -w ci.yml -e workflow_dispatch -b autobump/%s`); this PR's own pull_request runs "
+              "wait for approval (a GITHUB_TOKEN PR)." % (group, group)]
+    if verdict.get("canary"):
+        lines.append("- Canary: %s, from the canary.yml run on the branch (`engines=auto`); each must be a pass "
+                     "with hard and exact true." % ", ".join("`%s`" % c for c in verdict["canary"]))
+    if remeasure:
+        lines += ["", "## Ledger re-measure", "",
+                  "SUPPORTED rows that drive optimizer defaults measured an older version (re-measuring is a "
+                  "new pre-registered row):", ""] + ["- %s" % x for x in remeasure]
+    if tests:
+        lines += ["", "## Group tests in the bump job", ""] + ["- `%s`: %s" % t for t in tests]
+    pin_notes = ["`%s`: %s" % (p["id"], p["notes"]) for p, _, _, _ in moves if p.get("notes")]
+    if notes or pin_notes:
+        lines += ["", "## Notes", ""] + ["- %s" % n for n in notes + pin_notes]
+    return "\n".join(lines) + "\n"
+
+
+def workaround_body(root, kid, changed):
+    e = known_issue(root, kid)
+    return "\n".join([
+        "Removes the workaround for known issue `%s` (%s), fixed in %s." % (kid, e.get("title", ""), e.get("fixed_in")),
+        "",
+        "The pins moved to the fixing release in the `autobump/` PR that set `fixed_in`; this PR, cut from it, "
+        "deletes every `known-issue: %s` marker line and `known-issue-begin/end: %s` block in the files the entry "
+        "lists, and empties its `workarounds` and `retained`." % (kid, kid),
+        "",
+        "Files: %s" % ", ".join("`%s`" % p for p in changed),
+        "",
+        "Policy: review (changes-defaults). Check that the code the markers wrapped is really obsolete at the "
+        "fixed release before approving.",
+    ]) + "\n"
+
+
+def remeasure_items(root, moves):
+    measured = ledgerinfo.measured(root)
+    if measured is ledgerinfo.UNKNOWN:
+        return []
+    out = []
+    for p, _, cur, r in moves:
+        comp = p.get("component")
+        for row, comps in sorted(measured.items()):
+            if comp and comp in comps:
+                out.append("%s measured %s %s; this moves it to %s" % (row, comp, comps[comp], r.v))
+    return out
+
+
+# ---- main -------------------------------------------------------------------------
+
+def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True, fixed_in=None):
+    reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+    if group not in reg.get("groups", {}):
+        raise BumpError("no group %r in pins/registry.toml" % group)
+    conf = reg["groups"][group]
+    base = vcs(root, "rev-parse", "HEAD").strip()
+    tree, moves, notes = plan(root, reg, group, resolved)
+    hooks = list(conf.get("hooks", []))
+    kid = reason.split(":", 1)[1] if reason and reason.startswith("known-issue:") else None
+    if not moves and "repin" not in hooks and not kid:
+        return {"group": group, "moved": [], "notes": notes}
+    edits = []
+    for p, spans, cur, r in moves:
+        if p.get("writer") == "hook":
+            continue
+        edits += edits_for(p, spans, cur, r)
+    pairs = apply_edits(root, tree, edits)
+    ctx = {"touched": {s.file for s, _ in edits}, "edits": edits, "pins": [m[0] for m in moves], "notes": notes}
+    for h in hooks:
+        if h not in HOOK_FNS:
+            raise BumpError("group %s: unknown hook %r" % (group, h))
+        HOOK_FNS[h](root, ctx)
+    changed = set(vcs(root, "diff", "--name-only").split())
+    if any(p.startswith("console/") and p.endswith(".py") for p in changed) and "ledger-rules" not in hooks:
+        hook_ledger_rules(root, ctx)
+    # hook-written pins: the hook must have landed the resolved version
+    check_tree = registry.Tree(root)
+    for p, _, cur, r in moves:
+        if p.get("writer") != "hook":
+            continue
+        now = registry.current(p, registry.locate(check_tree, p)).get("v")
+        if now != r.v:
+            if p["scheme"] == "hf-sha" and now != cur.get("v"):
+                notes.append("%s: the hook moved it to %s (upstream moved again since %s)" % (p["id"], now, r.v))
+            else:
+                raise BumpError("%s: hook left %s, resolved %s" % (p["id"], now, r.v))
+    followup = None
+    if kid:
+        if mark_known_issue(root, kid, fixed_in or polled_fixed_in(root, kid)):
+            followup = kid
+    golden = goldens.substitute(root, pairs)
+    if golden:
+        notes.append("golden substitution: %s" % ", ".join(golden))
+    if vcs(root, "status", "--porcelain", "--", ".github").strip():
+        raise BumpError("the bump changed .github/: a bumper never writes a workflow")
+    tests = []
+    if run_tests and not dry_run:
+        for t in conf.get("tests", []):
+            rc = subprocess.run(["bash", t] if t.endswith(".sh") else [sys.executable, t], cwd=root,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+            tests.append((t, "passed" if rc == 0 else "FAILED (exit %d)" % rc))
+    head = temp_commit(root)
+    # the verdict hack/pins policy gives this diff (and hack/bot-merge recomputes)
+    # (the group's tests are reported in the body, not judged: the CI run dispatched on
+    # the PR is the evidence hack/bot-merge reads)
+    verdict = policy.judge(root, base, head, policy.changes(root, base, head, reg), reg)
+    title = "chore(%s): %s" % (group, ", ".join("%s %s" % (p["id"], r.v) for p, _, _, r in moves[:3])
+                               + (" and %d more" % (len(moves) - 3) if len(moves) > 3 else "")
+                               if moves else "move the digests the registries re-pointed")
+    return {"group": group, "branch": "autobump/%s" % group, "title": title, "followup": followup,
+            "moved": [{"id": p["id"], "from": cur.get("v"), "to": r.v} for p, _, cur, r in moves],
+            "verdict": verdict, "labels": policy.labels(verdict), "notes": notes, "tests": tests,
+            "body": body(group, moves, verdict, notes, tests, reason, remeasure_items(root, moves)),
+            "diff_stat": vcs(root, "diff", "--stat"), "diff": vcs(root, "diff") if dry_run else ""}
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="bump", description=__doc__.split("\n")[0])
+    ap.add_argument("group", nargs="?")
+    ap.add_argument("--reason")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-tests", action="store_true")
+    ap.add_argument("--resolved", help="JSON {pin id: values} instead of the network")
+    ap.add_argument("--body", help="write the PR body here")
+    ap.add_argument("--summary", help="write the JSON summary here")
+    ap.add_argument("--fixed-in", help="with --reason known-issue:<id>: the release that fixes it "
+                                       "(default: hack/known-issues poll)")
+    ap.add_argument("--remove-workaround", metavar="ID",
+                    help="instead: cut known issue ID's marked workarounds out (the follow-up PR)")
+    ap.add_argument("--root", default=registry.ROOT)
+    a = ap.parse_args(argv[1:])
+    root = os.path.abspath(a.root)
+    try:
+        if a.remove_workaround:
+            changed = remove_workaround(root, a.remove_workaround)
+            print("\n".join(changed))
+            if a.body:
+                with open(a.body, "w", encoding="utf-8") as f:
+                    f.write(workaround_body(root, a.remove_workaround, changed))
+            return 0
+        if not a.group:
+            ap.error("a group is required")
+        resolved = None
+        if a.resolved:
+            with open(a.resolved, encoding="utf-8") as f:
+                resolved = json.load(f)
+        out = bump(root, a.group, a.reason, a.dry_run, resolved, not a.no_tests, a.fixed_in)
+    except (BumpError, registry.RegistryError, sources.SourceError, subprocess.CalledProcessError, RuntimeError) as e:
+        sys.stderr.write("hack/bump: %s\n" % e)
+        return 1
+    if a.body and out.get("body"):
+        with open(a.body, "w", encoding="utf-8") as f:
+            f.write(out["body"])
+    if a.summary:
+        out["changed"] = bool(vcs(root, "status", "--porcelain").strip())
+        with open(a.summary, "w", encoding="utf-8") as f:
+            json.dump({k: v for k, v in out.items() if k not in ("body", "diff")}, f, indent=1, sort_keys=True)
+    if not out["moved"] and out["group"] != "digests":
+        print("%s: nothing to move" % a.group)
+    else:
+        print("%s: %s" % (a.group, ", ".join("%s %s -> %s" % (m["id"], m["from"], m["to"]) for m in out["moved"])
+                          or "digests"))
+        print("verdict: %s" % out["verdict"]["verdict"])
+        for r in out["verdict"]["reasons"]:
+            print("  - %s" % r)
+    for n in out.get("notes", []):
+        print("note: %s" % n)
+    if a.dry_run and out.get("diff_stat"):
+        print(out["diff_stat"], end="")
+        print(out["diff"], end="")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
