@@ -179,7 +179,7 @@ check "PKGBUILD installs the overlay's patch drafts" \
     grep -qF 'install -Dm644 -t "$pkgdir/usr/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch' "${PKGBUILD}"
 check "PKGBUILD installs eat-check.sh" grep -qF 'install -Dm755 integrations/eat/eat-check.sh "$pkgdir/usr/share/k3d-gpu/integrations/eat/eat-check.sh"' "${PKGBUILD}"
 check "packaging/check.sh compares the installed integrations/ with the source" \
-    grep -qF 'for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eat/upstream/patches/*.patch; do' "${ROOT}/packaging/check.sh"
+    grep -qF 'for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eas/patches/ei/* /src/integrations/eat/upstream/patches/*.patch; do' "${ROOT}/packaging/check.sh"
 check "README Install names integrations/ in the shared payload" \
     grep -qF '`console/`, `bench/`, `oracle/`, `integrations/` (for `k3d-gpu eas`) and `images.lock`' "${ROOT}/README.md"
 # The launcher finds the packaged copy: with no checkout next to it, eas_dir is
