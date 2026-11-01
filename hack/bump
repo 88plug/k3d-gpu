@@ -269,7 +269,10 @@ def hook_flake_update(root, ctx):
         m = re.search(r'^NIX_IMAGE="\$\{NIX_IMAGE:-([^}]+)\}"', f.read(), re.M)
     if not m:
         raise BumpError("packaging/check.sh names no NIX_IMAGE")
+    # The checkout belongs to the runner's user, not the container's root: nix's
+    # libgit2 refuses a repository another user owns unless safe.directory names it.
     sh(root, "docker", "run", "--rm", "-v", "%s:/w" % root, "-w", "/w", m.group(1), "sh", "-c",
+       "printf '[safe]\\n\\tdirectory = /w\\n' >> \"${HOME:-/root}/.gitconfig\" && "
        "nix --extra-experimental-features 'nix-command flakes' flake update nixpkgs && chown %d:%d flake.lock"
        % (os.getuid(), os.getgid()), capture=False)
 
