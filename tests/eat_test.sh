@@ -9,6 +9,9 @@
 #        both for a router that shlex.splits the command (agent-sandbox v0.5.0
 #        python-runtime-sandbox) and for one that runs it under /bin/sh -c
 #      - the check fails when the sandbox prints anything but 385
+#      - the router port-forward takes a local port the kernel picks, read from kubectl's
+#        own output, and the endpoint must answer /healthz as the router before the code
+#        and the token go to it
 #      - no key reaches curl's argument list (headers and bodies go as files / stdin)
 #   2b. eat-check.sh EAT_MODE=eas (k3d-gpu eas check) against stubs: the gateway is
 #      eg-gateway's LoadBalancer IP with Host litellm.<domain>; the requests carry a
@@ -65,7 +68,14 @@ case "$*" in
     *"-n litellm get secret litellm-master-key"*"master_key"*) printf 'sk-master-stub' | base64 ;;
     *"get pods -o name"*) printf 'pod/sandbox-router-1\npod/python-pool-abcde\n' ;;
     *"get secret sandbox-router-auth"*) printf 'tok' | base64 ;;
-    *port-forward*) exec sleep 60 ;;
+    *port-forward*)
+        # kubectl's own report of the local port it bound (STUB_PF_PORT: the one the
+        # kernel picked); STUB_PF_DEAD: kubectl exits without binding.
+        printf 'pf %s\n' "$*" >> "${STUB_LOG}"
+        if [ -n "${STUB_PF_DEAD:-}" ]; then echo "error: unable to listen on any of the requested ports" >&2; exit 1; fi
+        printf 'Forwarding from 127.0.0.1:%s -> 8080\nForwarding from [::1]:%s -> 8080\n' \
+            "${STUB_PF_PORT:-40123}" "${STUB_PF_PORT:-40123}"
+        exec sleep 60 ;;
     *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
 esac
 EOF
@@ -137,12 +147,21 @@ elif url.endswith("/v1/chat/completions"):
         msg("<think>\n\n</think>\n\n```python\n" + os.environ["STUB_CODE"] + "\n```")
     else:
         msg("<think>\n\n</think>\n\nKubernetes runs containers.")
-elif url.endswith("/execute"):
-    cmd = json.loads(body)["command"]
-    argv = shlex.split(cmd) if os.environ["STUB_ROUTER"] == "shlex" else ["/bin/sh", "-c", cmd]
-    p = subprocess.run(argv, capture_output=True, text=True)
-    print(json.dumps({"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}))
-# anything else (the router readiness probe) succeeds with no output
+elif "127.0.0.1:" in url:
+    # The local end of the router port-forward: only the port kubectl reported is the
+    # router (STUB_ROUTER_FOREIGN: another local service answers there instead).
+    hostport, _, path = url.split("://", 1)[-1].partition("/")
+    with open(os.environ["STUB_LOG"], "a") as f:
+        f.write("router %s /%s\n" % (hostport, path))
+    if hostport != "127.0.0.1:" + os.environ.get("STUB_PF_PORT", "40123") or os.environ.get("STUB_ROUTER_FOREIGN"):
+        print(json.dumps({"object": "error", "message": "Not Found"}))
+    elif path == "healthz":
+        print(json.dumps({"status": "ok"}))
+    elif path == "execute":
+        cmd = json.loads(body)["command"]
+        argv = shlex.split(cmd) if os.environ["STUB_ROUTER"] == "shlex" else ["/bin/sh", "-c", cmd]
+        p = subprocess.run(argv, capture_output=True, text=True)
+        print(json.dumps({"stdout": p.stdout, "stderr": p.stderr, "exit_code": p.returncode}))
 EOF
 # jq: the real one, with each argv logged (a key must not reach any argument list).
 REAL_JQ=$(command -v jq)
@@ -187,6 +206,26 @@ check_says "eat-check defaults: 200 tokens, temperature 0" 0 'request max_tokens
 check_says "eat-check for a shared remote endpoint: sampled and short" 0 'request max_tokens=64 temperature=0.6$' \
     EAT_TEMPERATURE=0.6 EAT_MAX_TOKENS=64
 check_says "eat-check refuses a non-numeric temperature" fail 'EAT_TEMPERATURE must be a number' EAT_TEMPERATURE=hot
+# The router port-forward: a local port the kernel picks, read from kubectl's own output,
+# and the endpoint confirmed as the sandbox router before /execute (a fixed 18080 reached
+# whatever local service held it).
+check_says "the router port-forward asks kubectl for a kernel-picked local port" 0 \
+    '^pf -n agent-sandbox-system port-forward svc/sandbox-router-svc :8080$'
+check_says "/execute goes to the port kubectl reported" 0 '^router 127.0.0.1:43211 /execute$' STUB_PF_PORT=43211
+check_says "the router's /healthz is read on that port before /execute" 0 '^router 127.0.0.1:43211 /healthz$' STUB_PF_PORT=43211
+if grep '^router ' "${WORK}/log" | grep -qv '^router 127.0.0.1:43211 '; then
+    fail "a router request went to a port kubectl did not report: $(grep '^router ' "${WORK}/log" | grep -v '127.0.0.1:43211' | head -1)"
+else
+    ok "every router request goes to the port kubectl reported"
+fi
+check_says "a port-forward that reports no port stops the check" fail 'port-forward to svc/sandbox-router-svc exited' STUB_PF_DEAD=1
+check_says "an endpoint that is not the sandbox router stops the check" fail 'does not answer as the sandbox router' \
+    STUB_ROUTER_FOREIGN=1
+if grep -q '^router .* /execute$' "${WORK}/log"; then
+    fail "the code went to an endpoint that is not the sandbox router"
+else
+    ok "nothing is sent to an endpoint that is not the sandbox router"
+fi
 check_says "eat mode: the master key from vault.yml authorizes the chat" 0 'auth v1/chat/completions sk-stub$'
 check_says "eat mode: the router token authorizes /execute" 0 'auth execute tok$'
 check_says "eat mode: no key on any curl argv" 0 'EAT check passed'
