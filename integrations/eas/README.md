@@ -105,6 +105,7 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
 | `eas-config.py`, `pins.json` | the choice generator and the pins it reads |
 | `eas-ready.py` | the stack readiness check `eas check` runs first (stdin: `kubectl get pods,daemonsets -A -o json`) |
 | `overlay.py`, `overlay.json`, `patches/` | the k3s/k3d patch overlay |
+| `ei-kcadm.sh`, `patches/ei/` | enterprise-inference's `keycloak_config` patch, applied after `init`: kcadm gets the Keycloak admin password from its environment and the client secret from Keycloak, never as an argument; stops the install when the task changed shape |
 
 ## Not verified
 

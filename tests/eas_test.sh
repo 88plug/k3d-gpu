@@ -43,6 +43,20 @@
 #            environment: puts the key on the deploy's /bin/sh -c argv; with the
 #            generator's k3d-gpu-overrides.yaml no sample holds it and the deploy gets an
 #            empty MM_LITELLM_MASTER_KEY. Needs ansible-playbook.
+#   kcadm    EI 3e8a244's keycloak_config role (tests/fixtures/eas/kcadm, verbatim) and
+#            integrations/eas/ei-kcadm.sh with patches/ei/0001:
+#            - the role is byte-identical to upstream (blob shas in SOURCES)
+#            - apply patches a git checkout of it, a re-run is a no-op, revert leaves the
+#              checkout clean; a task of another shape, a kcadm call elsewhere with a
+#              secret argument, or a directory that is no git checkout stops it, the
+#              checkout as it was
+#            - the role runs under ansible-playbook with kubernetes.core stubbed (k8s_exec
+#              execs the command as the real one does, in a "pod" whose environment holds
+#              the operator's KC_BOOTSTRAP_ADMIN_*) and a fake kcadm, while ps samples every
+#              argv for a fake admin password and the client secrets. As shipped (the
+#              control) the password and the client secret are on kcadm's argv; patched no
+#              sample holds either, kcadm gets the password from KC_CLI_PASSWORD, and the
+#              Secret stores the client secret Keycloak holds. Needs ansible-playbook.
 #   cli      `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
 #            bastion, against stub docker, kubectl, k3d, git, yq and `k3d-gpu fit`, with the
 #            real eas-config.py (so the facts it gathers are the facts the generator reads)
@@ -840,6 +854,16 @@ section_cli() {
     # section tests it on real EAS trees).
     cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/eas-ready.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
        "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
+    mkdir -p "${K}/eas/patches/ei"
+    cp "${EAS_DIR}"/patches/ei/0001-keycloak-config-kcadm-argv.patch "${K}/eas/patches/ei/"
+    # ei-kcadm.sh as a recorder too (section kcadm runs the real one on EI's role).
+    cat > "${K}/eas/ei-kcadm.sh" <<'EOF'
+echo "ei-kcadm $*" >> "${STUB_LOG}"
+if [ "$1" = apply ] && [ -n "${STUB_EI_KCADM_STOP:-}" ]; then
+    echo "ERROR: EI's roles/keycloak_config/tasks/install.yaml is not the task 0001-keycloak-config-kcadm-argv.patch was cut against" >&2
+    exit 1
+fi
+EOF
     cat > "${K}/eas/overlay.py" <<'EOF'
 import os, sys
 a = sys.argv[1:]
@@ -1218,9 +1242,26 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     local DM="${ES}/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml"
     mkdir -p "$(dirname "${DM}")"
     command cp -f "${ROOT}/tests/fixtures/eas/argv/deploy-models.yml" "${DM}"
+    : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
     cli_eq     "cli: eas.sh up passes with EI's deploy taking the key from _deploy_litellm_secret" "${rc}" 0
+    # EI's keycloak_config patch: out before init (EAS's init --upgrade refuses a changed
+    # ext/ repo), in after it, before install; its STOP stops the install.
+    log=$(cat "${LOG}")
+    cli_has    "cli: eas.sh takes EI's kcadm patch out before init" "${log}" "ei-kcadm revert ${ES}/eas/ext/enterprise.ai-inference"
+    cli_before "cli: the kcadm patch out, then init" "${log}" "ei-kcadm revert" "installer init"
+    cli_before "cli: init, then the kcadm patch in" "${log}" "installer init" "ei-kcadm apply ${ES}/eas/ext/enterprise.ai-inference"
+    cli_before "cli: the kcadm patch in, then install" "${log}" "ei-kcadm apply" "installer install"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_EI_KCADM_STOP=1 EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort \
+        EAS_NODES=1 EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'was cut against' <<< "${out}"; then
+        ok "cli: eas.sh stops when ei-kcadm.sh finds EI's keycloak_config task changed"
+    else
+        fail "cli: ei-kcadm.sh STOP: rc=${rc} ${out}"
+    fi
+    cli_lacks  "cli: ...before install" "$(cat "${LOG}")" "installer install"
     sed -i 's/^\( *MM_LITELLM_MASTER_KEY:\).*/\1 "{{ lookup('"'env'"', '"'LITELLM_MASTER_KEY'"') }}"/' "${DM}"
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
@@ -1657,7 +1698,141 @@ section_argv() {
     fi
 }
 
-SECTIONS=(overlay config cli ready argv)
+section_kcadm() {
+    local D="${ROOT}/tests/fixtures/eas/kcadm" A="${WORK}/kcadm" H="${ROOT}/integrations/eas/ei-kcadm.sh"
+    local pw="kc-ARGVPROBE5e0b7d21c94f4a8b" T="roles/keycloak_config/tasks/install.yaml" sha path got out rc pb n hits pwhits
+    mkdir -p "${A}/tmp"
+    # The role is EI 3e8a244's, byte for byte.
+    while read -r sha path; do
+        got=$(git hash-object "${D}/${path}")
+        if [ "${got}" = "${sha}" ]; then ok "kcadm: ${path} is EI 3e8a244's"; else fail "kcadm: ${path} is blob ${got}, want ${sha}"; fi
+    done < <(grep -v '^#' "${D}/SOURCES")
+    # ei_checkout <dir>: a git checkout holding the role, as EAS's init clones EI.
+    ei_checkout() {
+        rm -rf "$1" && mkdir -p "$1" && cp -r "${D}/roles" "$1/" && git -C "$1" init -q \
+            && git -C "$1" add -A && git -C "$1" -c user.name=t -c user.email=t@t.invalid commit -qm ei
+    }
+    # ---- ei-kcadm.sh on a checkout ----
+    ei_checkout "${A}/ei"
+    out=$(bash "${H}" apply "${A}/ei" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'reads the admin password from its environment' <<< "${out}"; then
+        ok "kcadm: apply patches EI's keycloak_config task"
+    else
+        fail "kcadm: apply: rc=${rc} ${out}"
+    fi
+    if grep -vE '^[[:space:]]*#' "${A}/ei/${T}" | grep -qE -- '--password|-s secret='; then
+        fail "kcadm: the patched task still passes a secret to kcadm: $(grep -nE -- '--password|-s secret=' "${A}/ei/${T}")"
+    else
+        ok "kcadm: the patched task has no --password and no -s secret="
+    fi
+    if grep -qF "/bin/sh -c 'KC_CLI_PASSWORD=\"\$KC_BOOTSTRAP_ADMIN_PASSWORD\"" "${A}/ei/${T}"; then
+        ok "kcadm: the patched task hands kcadm the password as KC_CLI_PASSWORD"
+    else
+        fail "kcadm: the patched task has no KC_CLI_PASSWORD from KC_BOOTSTRAP_ADMIN_PASSWORD"
+    fi
+    sha=$(sha256sum < "${A}/ei/${T}")
+    out=$(bash "${H}" apply "${A}/ei" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'already' <<< "${out}" && [ "$(sha256sum < "${A}/ei/${T}")" = "${sha}" ]; then
+        ok "kcadm: a second apply is a no-op"
+    else
+        fail "kcadm: second apply: rc=${rc} ${out}"
+    fi
+    bash "${H}" revert "${A}/ei" > /dev/null 2>&1; rc=$?
+    if [ "${rc}" -eq 0 ] && [ -z "$(git -C "${A}/ei" status --porcelain)" ]; then
+        ok "kcadm: revert leaves the checkout clean (EAS's init --upgrade can move it)"
+    else
+        fail "kcadm: revert: rc=${rc}, $(git -C "${A}/ei" status --porcelain)"
+    fi
+    if bash "${H}" revert "${A}/ei" > /dev/null 2>&1; then ok "kcadm: revert without the patch is a no-op"; else fail "kcadm: revert without the patch fails"; fi
+    # A task of another shape: the patch does not fit, nothing is written.
+    ei_checkout "${A}/moved"
+    sed -i 's/--realm master$/--realm master --insecure/' "${A}/moved/${T}"
+    git -C "${A}/moved" -c user.name=t -c user.email=t@t.invalid commit -qam moved
+    out=$(bash "${H}" apply "${A}/moved" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'was cut against' <<< "${out}" && [ -z "$(git -C "${A}/moved" status --porcelain)" ]; then
+        ok "kcadm: a changed task stops apply, the checkout untouched"
+    else
+        fail "kcadm: changed task: rc=${rc} ${out} $(git -C "${A}/moved" status --porcelain)"
+    fi
+    # Another kcadm call with a secret argument, in any role.
+    ei_checkout "${A}/other"
+    mkdir -p "${A}/other/roles/keycloak_users/tasks"
+    printf '%s\n' '- name: set a password' '  kubernetes.core.k8s_exec:' '    command: >-' \
+        '      /opt/keycloak/bin/kcadm.sh set-password -r inference --username u' '      --new-password {{ p }}' \
+        > "${A}/other/roles/keycloak_users/tasks/main.yaml"
+    git -C "${A}/other" add -A && git -C "${A}/other" -c user.name=t -c user.email=t@t.invalid commit -qm other
+    out=$(bash "${H}" apply "${A}/other" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'roles/keycloak_users/tasks/main.yaml' <<< "${out}"; then
+        ok "kcadm: a kcadm call elsewhere with a secret argument stops apply, naming its file"
+    else
+        fail "kcadm: kcadm --new-password elsewhere: rc=${rc} ${out}"
+    fi
+    mkdir -p "${A}/plain"
+    out=$(bash "${H}" apply "${A}/plain" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'usage' <<< "${out}"; then ok "kcadm: a directory that is no git checkout stops apply"; else fail "kcadm: plain dir: rc=${rc} ${out}"; fi
+    # ---- the role under ansible-playbook, ps sampling every argv ----
+    if ! command -v ansible-playbook >/dev/null; then
+        fail "kcadm: needs ansible-playbook (the bastion runs EAS under it)"
+        return
+    fi
+    # role_run <out> <roles dir>: EI's role while ps samples every process's argv;
+    # pwhits counts sampled lines holding the admin password, hits those holding it or a
+    # client secret (k8s.py and kcadm.py add each to the pattern file as it appears).
+    role_run() {
+        local out=$1
+        mkdir -p "${out}/state"
+        printf '%s\n' "${pw}" > "${out}/pw"
+        cp "${out}/pw" "${out}/pattern"
+        KCADM_FAKE_PASSWORD="${pw}" KCADM_STATE="${out}/state" KCADM_PATTERN="${out}/pattern" KCADM_FAKE_BIN="${D}/kcadm.py" \
+            ANSIBLE_COLLECTIONS_PATH="${D}/collections" ANSIBLE_COLLECTIONS_SCAN_SYS_PATH=false ANSIBLE_ROLES_PATH="$2" \
+            ANSIBLE_LOCAL_TEMP="${A}/tmp" ANSIBLE_REMOTE_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ANSIBLE_RETRY_FILES_ENABLED=0 \
+            ansible-playbook -i localhost, "${D}/play/play.yml" -e "ansible_python_interpreter=$(command -v python3)" \
+            < /dev/null > "${out}/play.log" 2>&1 &
+        pb=$!
+        hits=0 pwhits=0
+        while kill -0 "${pb}" 2>/dev/null; do
+            n=$(ps -eo args | grep -c -F -f "${out}/pw")
+            pwhits=$((pwhits + n))
+            n=$(ps -eo args | grep -c -F -f "${out}/pattern")
+            hits=$((hits + n))
+            sleep 0.2
+        done
+        wait "${pb}" && rc=0 || rc=$?
+    }
+    # The control: the role as EI ships it.
+    role_run "${A}/control" "${D}/roles"
+    if [ "${rc}" -eq 0 ] && [ "${pwhits}" -gt 0 ]; then
+        ok "kcadm: control: as shipped, the admin password is on kcadm's argv (${pwhits} sampled lines)"
+    else
+        fail "kcadm: control: rc=${rc}, ${pwhits} sampled lines hold the password (want rc 0 and > 0): $(tail -5 "${A}/control/play.log")"
+    fi
+    if [ "${hits}" -gt "${pwhits}" ]; then
+        ok "kcadm: control: as shipped, the client secret is on kcadm's argv ($((hits - pwhits)) sampled lines)"
+    else
+        fail "kcadm: control: no sample holds the client secret (${hits} lines with any secret, ${pwhits} with the password)"
+    fi
+    kc_eq() { if [ "$2" = "$3" ]; then ok "$1"; else fail "$1: got '$2', want '$3'"; fi; }
+    kc_eq "kcadm: control: kcadm got the password from --password" "$(cat "${A}/control/state/auth" 2>/dev/null)" "argv ok"
+    # Patched by ei-kcadm.sh.
+    bash "${H}" apply "${A}/ei" > /dev/null 2>&1 || fail "kcadm: apply before the patched run"
+    role_run "${A}/fixed" "${A}/ei/roles"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
+        ok "kcadm: patched, no process argv holds the admin password or a client secret"
+    else
+        fail "kcadm: patched: rc=${rc}, ${hits} sampled lines hold a secret (${pwhits} the password): $(tail -5 "${A}/fixed/play.log")"
+    fi
+    kc_eq "kcadm: patched, the sampler looked for the password and both client secrets" "$(wc -l < "${A}/fixed/pattern")" 3
+    kc_eq "kcadm: patched, kcadm got the right password from KC_CLI_PASSWORD" "$(cat "${A}/fixed/state/auth" 2>/dev/null)" "env ok"
+    kc_eq "kcadm: patched, the Secret stores the client secret Keycloak holds" "$(cat "${A}/fixed/state/stored" 2>/dev/null)" match
+    kc_eq "kcadm: control, the Secret stores the client secret Keycloak holds" "$(cat "${A}/control/state/stored" 2>/dev/null)" match
+    if grep -qF -f "${A}/fixed/pattern" "${A}/fixed/play.log"; then
+        fail "kcadm: patched, a secret reached ansible's output"
+    else
+        ok "kcadm: patched, no secret in ansible's output"
+    fi
+}
+
+SECTIONS=(overlay config cli ready argv kcadm)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then

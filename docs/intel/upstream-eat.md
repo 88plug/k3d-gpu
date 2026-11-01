@@ -239,7 +239,7 @@ shellcheck --severity=error es_auto_installer.sh
 
 **Gate 2. Live probes on one throwaway k3d cluster.** **Status: all six ran on 2026-10-20 (UTC) on one i9-13900T host. Probes 1 and 2 found a defect in 0005, now fixed; probe 5 needed one deviation.** EAS `main` `e8f3ebc` with all five patches applied, from an Ubuntu 24.04 bastion container on the host network (`configure` supports Ubuntu and RHEL only; this host runs Manjaro). Each run took the shared live lock, used one cluster named `k3dgpu-gate2`, and deleted it afterwards.
 
-Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)) then ran `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered, and is REFUTED: the agent-toolkit layer installed, `eas check` passed through the EAS gateway and `eas down` tore it down, but enterprise-inference's `keycloak_config` role passes the Keycloak admin password on `kcadm.sh`'s command line, and the run's `ps` samples caught it once.
+Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)) then ran `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered, and is REFUTED: the agent-toolkit layer installed, `eas check` passed through the EAS gateway and `eas down` tore it down, but enterprise-inference's `keycloak_config` role passes the Keycloak admin password on `kcadm.sh`'s command line, and the run's `ps` samples caught it once. `k3d-gpu eas up` now patches that role ([the EI issue draft below](#ei-issue-draft-keycloak_config-puts-the-keycloak-admin-password-on-kcadms-command-line-unsent)); no live run has checked the patch yet.
 
 | # | Probe | Cluster | Result |
 |---|---|---|---|
@@ -367,6 +367,36 @@ The docs' `jq '.error.message'` prints `null`.
 **Evidence that the guardrail did run** (same run): the guard model's `vllm:request_success_total` went up by one for each probe. The probes were a virtual key as-is, a virtual key with `"guardrails": ["content_safety"]`, and the master key. LiteLLM at `LITELLM_LOG=DEBUG` logged `should_run_guardrail ... requested_guardrails= [] self.default_on= True`, then `Custom code guardrail 'content_safety': Blocking request`. The guardrail row reads `guardrail: custom_code`, `mode: pre_call`, `default_on: true`. It was still loaded from the DB after the Langfuse role restarted LiteLLM. A benign prompt got `finish_reason: stop`.
 
 **Suggested fix:** in those docs lines, describe a block as HTTP 200 with `finish_reason: "content_filter"` and the reason in `choices[0].message.content`. Have the end-to-end test print `{finish_reason: .choices[0].finish_reason, content: .choices[0].message.content}`. Mention that clients which look only at the status code will treat a block as an answer.
+
+## EI issue draft: keycloak_config puts the Keycloak admin password on kcadm's command line (unsent)
+
+Drafted 2026-11-01 from k3d-gpu's F3 run (EAS `97f6157`, EI `3e8a244`, EAT `036b662`). Not sent. `k3d-gpu eas up` applies the patch below ([`integrations/eas/ei-kcadm.sh`](../../integrations/eas/ei-kcadm.sh)), so nothing on our side waits on this issue.
+
+**Title:** keycloak_config: the Keycloak admin password and the client secret are on kcadm's command line while it runs
+
+**Versions:** intel/enterprise-inference `3e8a244`, `roles/keycloak_config/tasks/install.yaml`; EAS `97f6157`, which installs Keycloak 26.6.0 ([keycloak defaults#L6](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/keycloak/defaults/main.yaml#L6)); kubernetes.core 6.3.0.
+
+**What happens:** `k8s_exec` execs `shlex.split(command)` as a process in the Keycloak container, with no shell and no stdin ([k8s_exec.py#L191-L199](https://github.com/ansible-collections/kubernetes.core/blob/80c33c5573aa63c7fdb315c72d4d7bfac725c337/plugins/modules/k8s_exec.py#L191-L199)). Two of the role's commands carry a secret as an argument: `kcadm.sh config credentials ... --password <admin password>` ([#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175)) and `kcadm.sh update clients/<id> ... -s secret=<client secret>` ([#L198-L205](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L198-L205)). While each kcadm JVM runs, the value is in its `/proc/<pid>/cmdline`, which `ps` shows to any user on the node. `no_log` keeps the values out of Ansible's output; it does not keep them out of the process table.
+
+**How we saw it:** on a one-node k3d cluster the node is a container on the host, so the host's `ps` lists the pod's processes. A `ps -eo args` sample taken on the host every 2 s during `es_auto_installer.sh install agent-toolkit` caught the admin password once, in the argv of the kcadm JVM (`keycloak-admin-cli-26.6.0.jar`). The same holds on any node where other users or agents can list processes.
+
+**Suggested change** (the patch k3d-gpu applies, [0001-keycloak-config-kcadm-argv.patch](../../integrations/eas/patches/ei/0001-keycloak-config-kcadm-argv.patch); checked with a `ps` sampler against a stand-in for kcadm, not yet on a live cluster):
+
+- Authenticate without `--password`. kcadm reads `KC_CLI_PASSWORD` when `--password` is absent ([BaseConfigCredentialsCmd.java#L104-L110](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110)), and the Admin CLI guide recommends not passing passwords on the command line ([admin-cli.adoc#L129](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/docs/documentation/server_admin/topics/admin-cli.adoc#L129)). The Keycloak operator already sets `KC_BOOTSTRAP_ADMIN_PASSWORD` in the pod from `keycloak-admin-secret` ([EAS keycloak.yaml.j2#L22-L24](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/keycloak/templates/keycloak.yaml.j2#L22-L24), [KeycloakDistConfigurator.java#L102-L113](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/operator/src/main/java/org/keycloak/operator/controllers/KeycloakDistConfigurator.java#L102-L113)), so a shell in the pod can hand it over:
+
+    ```yaml
+    command: >-
+      /bin/sh -c 'KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD"
+      /opt/keycloak/bin/kcadm.sh config credentials
+      --server {{ keycloak_admin_server_url }} --realm master
+      --user {{ _kcc_admin_sec.resources[0].data.username | b64decode }}'
+    ```
+
+    The shell's argv holds the variable's name, and kcadm's argv holds no password.
+
+- Let Keycloak generate the client secret: `kcadm.sh create clients/<id>/client-secret`, then `kcadm.sh get clients/<id>/client-secret` ([admin-cli.adoc#L906-L926](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/docs/documentation/server_admin/topics/admin-cli.adoc#L906-L926)), and store the `value` it prints in `keycloak-client-secret`. The value comes back on kcadm's stdout, and Keycloak and the Secret still converge on every run, as the comment at #L131-L139 intends.
+
+The realm import, the Secret names and the block's conditions stay as they are.
 
 ## What this draft does not claim
 

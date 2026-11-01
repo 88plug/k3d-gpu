@@ -6937,6 +6937,7 @@ cmd_sandbox() {
 #   integrations/eas/eas.sh        the in-bastion driver (clone, overlay, init, edits, install)
 #   integrations/eas/eas-config.py facts + pins + flags -> overrides, edits, choices.txt
 #   integrations/eas/overlay.py    the patch overlay, decided against the pinned checkout
+#   integrations/eas/ei-kcadm.sh   EI's keycloak_config patch: no secret in kcadm's argv
 #   integrations/eas/pins.json     the EAS, EI and EAT commits, per profile
 # State per cluster: ${STATE_DIR}/eas-<cluster>/ (mode 0700).
 EAS_ENV="k3d-gpu"
@@ -6945,7 +6946,8 @@ EAS_GW_SELECTOR="gateway.envoyproxy.io/owning-gateway-name=eg-gateway"
 EAS_DEFAULT_DOMAIN="solutions.ai"   # base_domain_name in EAS configs/defaults/global_config.yaml
 # Environment the bastion gets by name only (docker run -e NAME), never by value.
 EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy ES_LOG_LEVEL)
-EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json)
+EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json
+           ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch)
 # Files eas-config.py writes; each `eas up` starts without them.
 EAS_OUTPUTS=(choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml
              repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json layer)

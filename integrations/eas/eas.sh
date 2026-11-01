@@ -8,7 +8,11 @@
 #       2. the patch overlay: overlay.py --apply, decisions in overlay.txt
 #       3. the layer manifest's revs as commit SHAs (repos.<layer>.yaml from eas-config.py)
 #       4. es_auto_installer.sh init <layer> --env k3d-gpu; EI's model deploy must take the
-#          LiteLLM master key from the Secret read the overrides empty (key_argv_guard)
+#          LiteLLM master key from the Secret read the overrides empty (key_argv_guard), and
+#          EI's keycloak_config role gets patches/ei/0001, which keeps the Keycloak admin
+#          password and the client secret out of kcadm's argv (ei-kcadm.sh: it stops the
+#          install when the role's task changed shape; the patch comes out again before
+#          init, so `init --upgrade` finds ext/ clean)
 #       5. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/:
 #          keys merge; a model's env merges and its args_append follows its catalog args
 #       6. es_auto_installer.sh install <layer> --env k3d-gpu -- -e @k3d-gpu-images.yaml
@@ -160,6 +164,13 @@ key_argv_guard() {
         || err "EI's deploy_models.yaml no longer takes the master key from _deploy_litellm_secret alone: k3d-gpu-overrides.yaml would not keep the master key off the deploy's command line (eas-config.py argv_master_key)"
 }
 
+# ei_kcadm apply|revert: ei-kcadm.sh on EI's checkout, once init has cloned it.
+ei_kcadm() {
+    local ei="${CHECKOUT}/ext/enterprise.ai-inference"
+    [ -d "${ei}" ] || return 0
+    bash "${HERE}/ei-kcadm.sh" "$1" "${ei}"
+}
+
 cmd_up() {
     local layer=${1:-}
     [ -n "${layer}" ] || err "usage: eas.sh up <layer> [-- <ansible-playbook args>]"
@@ -169,6 +180,7 @@ cmd_up() {
     overlay --apply
     pin_manifest "${layer}"
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
+    ei_kcadm revert
     if [ -f "${CHECKOUT}/env/${ENV_NAME}/.solutions.yaml" ]; then
         # --upgrade moves already-cloned ext/ repos onto the manifest's new revs (never
         # rewriting a config); without it a changed pin is refused (#L910-L940).
@@ -177,6 +189,7 @@ cmd_up() {
         installer init "${layer}" --env "${ENV_NAME}"
     fi
     key_argv_guard
+    ei_kcadm apply
     env_edits
     installer install "${layer}" --env "${ENV_NAME}" -- \
         -e "@${EAS_STATE}/k3d-gpu-images.yaml" -e "@${EAS_STATE}/k3d-gpu-overrides.yaml" "$@"
