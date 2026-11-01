@@ -36,6 +36,13 @@
 #            role looks for, --explain prints permalinks, every source it can cite is
 #            a permalink at a full commit SHA, and pins.json has the k3d-gpu.eas-pins/v1
 #            shape.
+#   argv     the LiteLLM master key on no process argument list during EI's model deploy:
+#            EI 3e8a244's two tasks that carry it (tests/fixtures/eas/argv, the
+#            MM_LITELLM_MASTER_KEY line verbatim) run under ansible-playbook with a fake key
+#            while ps samples every argv. Without the overrides (the control) ansible's
+#            environment: puts the key on the deploy's /bin/sh -c argv; with the
+#            generator's k3d-gpu-overrides.yaml no sample holds it and the deploy gets an
+#            empty MM_LITELLM_MASTER_KEY. Needs ansible-playbook.
 #   cli      `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
 #            bastion, against stub docker, kubectl, k3d, git, yq and `k3d-gpu fit`, with the
 #            real eas-config.py (so the facts it gathers are the facts the generator reads)
@@ -47,6 +54,8 @@
 #              uid:gid, state dir rw, kubeconfig ro, secrets by name only
 #            - eas.sh order: clone at the SHA, overlay, manifest pins, init, the edits,
 #              install with the overrides last; never configure
+#            - eas.sh stops before install when EI's model deploy takes the master key
+#              from anything but _deploy_litellm_secret, or has no deploy_models.yaml
 #            - refs: a profile and a SHA go as given, any other ref through git ls-remote
 #            - no secret value in an argument list, a log, choices.txt or a state file
 #            - refusals stop before any change
@@ -1175,6 +1184,33 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit >/dev/null 2>&1
     cli_has    "cli: a second up re-inits with --upgrade (moved pins)" "$(cat "${LOG}")" "installer init agent-toolkit --env k3d-gpu --upgrade"
     cli_lacks  "cli: a second up does not clone again" "$(cat "${LOG}")" "git clone"
+    # EI's model deploy: the key from _deploy_litellm_secret (the overrides empty it) passes;
+    # a key from anywhere else stops the install before it starts.
+    local DM="${ES}/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml"
+    mkdir -p "$(dirname "${DM}")"
+    command cp -f "${ROOT}/tests/fixtures/eas/argv/deploy-models.yml" "${DM}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    cli_eq     "cli: eas.sh up passes with EI's deploy taking the key from _deploy_litellm_secret" "${rc}" 0
+    sed -i 's/^\( *MM_LITELLM_MASTER_KEY:\).*/\1 "{{ lookup('"'env'"', '"'LITELLM_MASTER_KEY'"') }}"/' "${DM}"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'no longer takes MM_LITELLM_MASTER_KEY from _deploy_litellm_secret' <<< "${out}"; then
+        ok "cli: eas.sh stops when EI's deploy takes the key from elsewhere"
+    else
+        fail "cli: EI deploy taking the key from elsewhere: rc=${rc} ${out}"
+    fi
+    cli_lacks  "cli: ...before install" "$(cat "${LOG}")" "installer install"
+    rm -f "${DM}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'EI has no roles/llm_services/tasks/deploy_models.yaml' <<< "${out}"; then
+        ok "cli: eas.sh stops when EI has no deploy_models.yaml"
+    else
+        fail "cli: EI without deploy_models.yaml: rc=${rc} ${out}"
+    fi
+    rm -rf "${ES}/eas/ext"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA=main bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'EAS_SHA must be a full commit SHA' <<< "${out}"; then ok "cli: eas.sh refuses a floating EAS ref"; else fail "cli: eas.sh floating ref: rc=${rc} ${out}"; fi
     sed -i 's/rev: "3e8a/rev: "main-3e8a/' "${ES}/repos.agent-toolkit.yaml"
@@ -1321,7 +1357,66 @@ PY
     else fail "cli: known-issues.json shape"; fi
 }
 
-SECTIONS=(overlay config cli)
+section_argv() {
+    local D="${ROOT}/tests/fixtures/eas/argv" A="${WORK}/argv" fake="sk-ARGVPROBE7c1e94d0b3a24f6e8a51" rc pb n hits
+    local CASE="${ROOT}/tests/fixtures/eas/config/desktop-i9-13900T" args
+    mkdir -p "${A}/tmp"
+    if ! command -v ansible-playbook >/dev/null; then
+        fail "argv: needs ansible-playbook (the bastion runs EAS under it)"
+        return
+    fi
+    # The overrides eas up passes last, from the generator on a golden agent-toolkit case.
+    read -r -a args < "${CASE}/args"
+    python3 -S "${ROOT}/integrations/eas/eas-config.py" --facts "${CASE}/facts.json" --out "${A}/gen" "${args[@]}" \
+        > /dev/null 2>&1 || { fail "argv: eas-config.py on desktop-i9-13900T"; return; }
+    # The key as a grep pattern file, so the sampler's own grep never holds it in its argv.
+    printf '%s\n' "${fake}" > "${A}/pattern"
+    # play <out dir> [extra ansible args]: EI's two tasks under ansible-playbook while ps
+    # samples every process's argv; prints the play's rc and the argv lines holding the key.
+    play() {
+        local out=$1
+        shift
+        mkdir -p "${out}"
+        ARGV_FAKE_KEY="${fake}" ANSIBLE_LIBRARY="${D}/library" ANSIBLE_LOCAL_TEMP="${A}/tmp" \
+            ANSIBLE_REMOTE_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ANSIBLE_RETRY_FILES_ENABLED=0 \
+            ansible-playbook -i localhost, "${D}/deploy-models.yml" -e "argv_out=${out}" "$@" \
+            < /dev/null > "${out}/play.log" 2>&1 &
+        pb=$!
+        hits=0
+        while kill -0 "${pb}" 2>/dev/null; do
+            n=$(ps -eo args | grep -c -F -f "${A}/pattern")
+            hits=$((hits + n))
+            sleep 0.2
+        done
+        wait "${pb}" && rc=0 || rc=$?
+    }
+    # The control: EI's tasks as they ship put the key on the argv of the /bin/sh -c that
+    # ansible's environment: wraps around the deploy, for the whole deploy.
+    play "${A}/control"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -gt 0 ]; then
+        ok "argv: control: without the overrides the key is on a process argv (${hits} sampled lines)"
+    else
+        fail "argv: control: rc=${rc}, ${hits} sampled lines hold the key (want rc 0 and > 0): $(tail -5 "${A}/control/play.log")"
+    fi
+    play "${A}/fixed" -e "@${A}/gen/k3d-gpu-overrides.yaml"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
+        ok "argv: with k3d-gpu-overrides.yaml no process argv holds the master key"
+    else
+        fail "argv: with the overrides: rc=${rc}, ${hits} sampled lines hold the key: $(tail -5 "${A}/fixed/play.log")"
+    fi
+    if [ "$(cat "${A}/control/key" 2>/dev/null)" = set ] && [ "$(cat "${A}/fixed/key" 2>/dev/null)" = empty ]; then
+        ok "argv: the deploy gets an empty MM_LITELLM_MASTER_KEY with the overrides (model-manager reads the Secret itself)"
+    else
+        fail "argv: MM_LITELLM_MASTER_KEY in the deploy: control '$(cat "${A}/control/key" 2>/dev/null)', with the overrides '$(cat "${A}/fixed/key" 2>/dev/null)' (want set, empty)"
+    fi
+    if grep -rqF -- "${fake}" "${A}/fixed" "${A}/gen"; then
+        fail "argv: the key reached a log or the generator's files"
+    else
+        ok "argv: the key is in no log and no generated file"
+    fi
+}
+
+SECTIONS=(overlay config cli argv)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then
