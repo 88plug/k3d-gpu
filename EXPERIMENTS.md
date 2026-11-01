@@ -77,7 +77,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. Run 2026-10-21, 2 holds ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. B2q, Sq, Sq-mtp (Qwen bf16, 80.6 GB with its guard) and Rq were not deliverable (disk); X1q and X1q-mtp failed on two `h54b.sh` runner bugs before any engine started; Lsq ran, but its pod listed every render node and llama.cpp split the model over all four B70s, two of them serving the live `qwen38-a-hr`, so no one-card arm exists. Lsq-mtp was not run: its GGUF carries the MTP (`nextn`) tensors, but G1's runner has no such arm; nor were the described-only Gemma arms. `score.py`: "no gate reference (B2q and Sq missing)". Descriptive only, a 4-card run and not a one-card or B70 result: Lsq 27.3 tok/s N=1 median, GSM8K 48/50. | INCONCLUSIVE |
 | H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). Run 2026-10-21, 1 hold ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. Gg, Hg and Gg2 split their GPU layers over four B70s (two serving the live `qwen38-a-hr`), and Cg (`-ngl 0`) also allocated about 0.5 GB on one of those cards, so t_Cg and the prediction are confounded. The verdict does not come from `predict.py`'s band test, whose inputs are these 4-card and confounded runs. Descriptive only, not one-card or hybrid results: Cg 36.8, Gg 58.0, Hg 56.3, Gg2 57.4 tok/s N=1 median. | INCONCLUSIVE |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. Not run 2026-10-21, no hold used ([H54d: not run](#h54d-not-run-2026-10-21)): A* is undefined (H54a chose no arm), B1g stalled in both H54a holds, and H54q has not run; the caps rule makes a row with its stock or chosen arm missing INCONCLUSIVE. Re-checked 2026-10-29 ([H54d: re-checked, still not run](#h54d-re-checked-still-not-run-2026-10-29)): still not run, no hold used. H54q has since run. A* is still undefined, and B1g stays at v0.24.0 ([amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)), whose stall is vllm-project/vllm#45844 ([note N2](#h54-note-n2-why-b1g-stalled-unscored-diagnostic-2026-10-29)). An amendment that defines A* and moves B would now follow H50's measured B1 outcome, so none is written. 1 of H54d's 3 holds remains after [amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29). | INCONCLUSIVE |
-| H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20) and [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. | PENDING |
+| H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20), [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins) and [amendment R1](#h58-amendment-r1-the-runner-the-gpu-interlock-and-the-clause-readings-2026-11-01) (the runner, the GPU interlock and the clause readings). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. | PENDING |
 | H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). Both arms run llama.cpp v0.8.0 (`server-b11960`), per [amendment V1](#h60-amendment-v1-llamacpp-v080-for-both-arms-2026-10-29). | PENDING |
 | H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Od 0.785 (95% CI 0.692-1.561), per hold 0.72, 0.79, 1.44; Od 6.90, Ld 3.50, Ld-mtp 5.41 tok/s pooled N=1; all 50/50 on GSM8K; load matched (1.80 <= 2.0). The strict-pinned llama.cpp arms tracked host load 2.3-2.7x, Od 1.3x. | INCONCLUSIVE |
 | H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Ld 1.548 (95% CI 1.057-3.017), faster in each hold (1.47, 1.58, 1.52), 50/50 quality. Scope: llama.cpp b11749, default draft length 3, i9-13900T P-cores, single stream, busy shared host. | SUPPORTED |
@@ -5497,6 +5497,212 @@ the other two models H58's commands name. Each revision was read from the Huggin
 5. **Still the runner amendment's.** The runner, its regression tests, and the commits the run
    uses of the model optimizer (#163, merged as `66293c72`) and the fit-and-guard layer (#174,
    merged as `08e39ccf`).
+
+### H58 amendment R1: the runner, the GPU interlock and the clause readings (2026-11-01)
+
+Recorded 2026-11-01, before any H58 step. This is the runner amendment the pre-registration's
+**Order** asks for. Mechanics only: no clause, prediction, tolerance, stop rule or verdict rule
+changes. Where the pre-registration leaves a reading open, this amendment fixes it before the
+run and says so.
+
+**Deviation, disclosed.** The pre-registration asks for this amendment, with its tests, to be
+merged before the first H58 run. It is pushed, not merged. The run uses this branch's pushed
+head, as crescent amendments E1 to E3 and S1 did for H50 and H51. Its base is main `0c9b1f36`
+(k3d-gpu 0.1.83). That base carries the model optimizer (#163, `66293c72`), the fit-and-guard
+layer (#174, `08e39ccf`) and the llama.cpp backend with the busy-card filter (#182,
+`b8504e6b`). H50, H50o, H51, H53 and H54 have their verdicts, so the order holds.
+
+**What was read before this was written.** At 09:32-09:35Z on 2026-11-01, `k3d-gpu plan
+--model <id> --explain` ran on crescent at main `ef639c1d`, read-only, with an empty cache and
+state directory and no cluster. It is not an H58 step. Its three outputs are committed in
+[bench/h58/results/2026-11-01/precheck/](bench/h58/results/2026-11-01/precheck/):
+
+- Gemma 4 26B-A4B: the optimizer picks `OpenVINO/gemma-4-26b-a4b-it-int4-ov` on OVMS on the
+  GPU. The fit says it does not fit: "weights + overhead 15.3 GiB exceed the GPU budget 15.2
+  GiB". The serving pairs hold 15.1-16.1 GiB of each card's 31.9 GiB, so card1 is busy and the
+  other three have budgets of 14.5-15.2 GiB.
+- Qwen3.8-27B: `OpenVINO/Qwen3.8-27B-int4-ov`, "weights + overhead 15.7 GiB exceed the GPU
+  budget 15.2 GiB".
+- Qwen3.8-Flash-Next W4A16: its architecture (`qwen4_exp`) is in no OpenVINO release, so the
+  optimizer "keeps the engine's default model" and the fit sizes `OpenVINO/Qwen3-4B-int4-ov` on
+  one GPU.
+- DRAM bandwidth unknown: no STREAM run cached, and SMBIOS needs root.
+
+This amendment is written knowing those outputs. Each reading below follows the
+pre-registration's words. The two that a refusal would touch, (b)'s count and (c) when Gemma does
+not serve, are marked; the verdict would be the same without either, since (d) and (e) are read
+on their own.
+
+The same morning the three P1 repos read at their pins on the Hub API. One variant has moved
+since P1 item 4: `OpenVINO/Qwen3.8-27B-int4-ov` is at `d15f4d91` (2026-10-30), not `7b20ea8c`.
+P1 records the variants and does not pin them. `agent up` serves the repo's head, and the run
+records the revision it served.
+
+**Files.** In `bench/h58/`:
+
+- `run.sh`: the run.
+- `h58.py`: the P1 check, the GPU interlock, the placement reading, the squeeze and the scorer.
+- `stress-ng.sh`: the pinned stress-ng.
+- `test_h58.py`: the tests, in CI. They run `run.sh` end to end against stand-ins for k3d-gpu,
+  k3d, kubectl, docker, sudo, curl, git and the Hub API, in three cases: Gemma refused with
+  Flash-Next blocked, Gemma on the CPU through the banking flow, and the runs that do not start.
+
+Two harness changes support it. `bench/eatflow/live.sh` gains solo arm Z. `bench/eatflow/pairs.py`
+gains H58 as a rule-L3 solo row with seed `H58-crescent-2026-11-01` and arm sequence Z.
+
+**Workspace and command.** The run uses `~/k3dgpu-bench/k3d-gpu-h58`, clean and detached at
+this branch's pushed head. The tools are `~/k3dgpu-bench/bin`'s (crescent amendment E4): k3d
+v5.9.0, kubectl v1.37.2, helm v4.3.1 and uv 0.13.6. One run, under the bench lock and the
+hold-start rule:
+`bench/eatflow/crescent/hold.sh H58-run1 21600 bash bench/h58/run.sh ~/k3dgpu-bench/results/H58/run1`.
+The run's cap is 21600 s. The pre-registration sets none.
+
+**Start checks.** A failed check stops the run before any step (exit 3), and that is not a run:
+
+1. No `K3D_GPU_*` variable is set.
+2. The three P1 repos read at their pins (P1 item 3).
+3. No k3d cluster exists.
+4. The host inventory (`bench/eatflow/crescent/inventory.sh`) equals H52b's post-revert
+   inventory (`inventory-3.txt`) after the first line. That is the pre-registration's "as left
+   by H52b's revert".
+
+Then the clean state. `~/.cache/k3d-gpu` and `~/.local/state/k3d-gpu` are renamed aside, and
+restored after the run. On crescent they hold Hub metadata and fit caches from earlier commands,
+and no weights. A new user has neither. The model cache proper is the new cluster's volumes,
+which start empty. The run's own copies of both directories go into its records.
+
+The start records, which never touch the services:
+
+- `docker inspect` of every running container: restart count, state and OOM flag.
+- dmesg's OOM lines and `/proc/meminfo`.
+- Docker's container events, all through the run.
+- The front door: a chat through Dynamo `:8100`, counted on each pair (amendment E2 item 7). It
+  is repeated after the run.
+- hold.sh's `serving.py`.
+
+**The steps.** Each step is the pre-registered command with no other argument. It runs as the
+checkout's `scripts/k3d-gpu`, with stdin closed, in this order:
+
+1. `k3d-gpu up`. A new user gets the launcher's default node image,
+   `cryptoandcoffee/k3d-gpu:0.1.83` (sha256:9bd43915...), and the default cluster name, `gpu`.
+2. `k3d-gpu detect`. The run also records `detect --json`, and the node object once its
+   `gpu.intel.com/xe` allocatable has held for 60 s, up to 300 s. H52b saw `up` print four cards
+   before the restarted plugin settled on two.
+3. `k3d-gpu agent up --model google/gemma-4-26B-A4B-it`, then EAT's banking flow against its
+   server when it lands.
+4. `k3d-gpu agent up --model Qwen/Qwen3.8-27B`.
+5. `k3d-gpu agent up --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound`.
+6. The squeeze, (f).
+7. `k3d-gpu agent down` and `k3d-gpu down`.
+
+Before each `agent up`, `k3d-gpu plan --model <id> --explain` is recorded: the optimizer's
+choices and the fit's arithmetic at that moment. It is a record, not a step. The ceilings are
+900 s for `up`, 5400 s for each `agent up` (the launcher's own rollout wait is 1800 s), 3300 s
+for the banking flow and 1200 s for the squeeze.
+
+The run does not follow any hint k3d-gpu prints. `docs/first-run.md` tells a new user to skip
+`host-setup`, and it is not among the pre-registered commands. A step that fails is not retried,
+because the pre-registration counts a retry as a manual step.
+
+**The GPU interlock.** The pre-registration has the serving pairs run as found and never be
+touched. They hold about half of every B70. A placement on one of those cards would put work on
+a card the pairs hold, and the host's standing rule allows no work on a card outside a GPU
+window. H58 opens none.
+
+So `h58.py interlock` reads the cluster's Deployments and pods every 0.5 s for the whole run.
+It deletes anything that asks for a GPU or NPU resource (`gpu.intel.com/`, `nvidia.com/`,
+`habana.ai/`, `npu.intel.com/`, `amd.com/`), a resource claim or a `/dev/dri` hostPath. It
+deletes it before its server starts: each such pod first pulls its image and model. Each deletion
+is recorded with the object as it was applied.
+
+A placement the interlock removes did not land, for a reason outside k3d-gpu, and (e) reads it
+from that object. The interlock reads the cluster through the kubeconfig `up` writes in k3d-gpu's
+state directory (`kubeconfig-gpu`). It must have read the cluster within the last 10 s before
+the first `agent up` and before each one after, or the run stops.
+
+**The banking flow, arm Z (clause (c)).** H50's harness runs one solo hold against the server
+`agent up` started, through H53's solo path (`bench/eatflow/solo.py`). The settings are live.sh's
+solo mode with `LIVE_SOLO=Z` and model set gemma4: alias `google/gemma-4-26B-A4B-it`, H50's
+pinned sampling `agent_gemma4`, typical load, H50's LiteLLM image, recording proxy, banking agent
+and MCP sidecar at blueprint `758d484`. Rule L3 sets the settle gap and the pre-window before
+each attempt. B24's 24 task ids run in the order drawn from the row's seed, with a 3000 s cap.
+
+live.sh deploys nothing for Z, and it refuses a server that asks for an accelerator. The harness
+pieces are the flow under test, deployed as they were for H50's A1, so they are not user steps or
+flags. The cluster's kubeconfig is passed to the harness in a 0600 file and deleted after.
+
+**Readings.**
+
+- **(a)** A flag is any argument a user step adds to the pre-registered form, or any `K3D_GPU_*`
+  variable set on a user step. The runner sets none, and the tests check what the launcher
+  receives.
+- **(b)** A manual step is either an action of the runner's that the docs do not name (none is
+  scripted), or a user step of the banking flow (`up`, or `agent up` for Gemma) that exits non-zero.
+  A failed step stops the flow, and a person must choose how to go on (a device, a variant, a
+  card). If the interlock removed Gemma's server, (b) is INCONCLUSIVE. Marked above.
+- **(c)** The baseline is H50's A1, since H50 ran a valid hold of 24 pairs
+  ([H50 run](#h50-run-xeon-6741p-2026-10-29)), read from its committed records:
+  - Decode: the sum of `completion_tokens - 1` over the sum of `e2e_s - ttft_s`, across A1's 54
+    turns with status 200, at least 2 completion tokens and `e2e_s > ttft_s`. That is 20.50 tok/s.
+  - Within-budget success: 19 of 24, 0.7917.
+
+  Arm Z gives the same two numbers from its hold. (c) holds when decode is at least
+  0.90 x 20.50 = 18.45 tok/s and success is at least 0.7917 - 0.05 = 0.7417, from at least 16
+  complete attempts.
+
+  "Within 5 points" is read as no more than 5 points under the baseline, since the clause bounds
+  a shortfall from the best arm. An arm more than 5 points better would hold here; that case is
+  reported if it occurs.
+
+  If Gemma's `agent up` does not serve, (c) fails, with no decode and no success (marked above).
+  If the interlock removed it, or the harness did not deliver (live.sh not exiting 0, or under 16
+  complete attempts), (c) is INCONCLUSIVE.
+- **(d)** Read from the settled node and from `detect`. It needs three things:
+  - `gpu.intel.com/xe` allocatable of 4;
+  - the four AMX labels (`AMXTILE`, `AMXBF16`, `AMXINT8`, `AMXFP16`);
+  - a `dsa.intel.com` work-queue resource above 0.
+
+  IAA and QAT are not read. H52b made neither usable: IAA has no work queue host-setup can add
+  while `iaa_crypto` holds every entry (#210), and QAT's plugin crash-looped. Each engine missing
+  fails (d).
+- **(e)** The fit's placements (`console/fit.py`) are gpu, gpu-tp, gpu-split, moe-offload and
+  cpu. "Experts-in-DRAM" is moe-offload: GPUs, with the experts and lookup tables in DRAM. A
+  CPU-only placement is not it.
+  - Gemma and Qwen3.8-27B hold when they land, that is when `agent up` exits 0, on gpu, gpu-tp,
+    gpu-split or cpu, with the fit's annotation, serving a variant of the model asked. The served
+    id must name `gemma-4-26b-a4b` or `qwen3.8-27b`.
+  - Flash-Next holds when it lands on moe-offload serving a variant of itself (`flash-next`).
+  - A refusal ("does not fit this host") or any other error fails.
+  - A placement the interlock removed is read from its render. It fails if the render already
+    fails, and is INCONCLUSIVE if the render would hold.
+- **(f)** The squeeze runs only when, after step 5, an agent Deployment of this run is Ready and
+  its guard process runs ("while our agent pods hold their model"). Otherwise both sub-clauses are
+  INCONCLUSIVE, recorded as not run.
+  - **The squeeze.** After a 120 s pre-window, stress-ng holds anonymous memory sized to bring
+    MemAvailable 4 GiB under the guard's floor. The floor is the fit's
+    `guard.mem_available_floor`, half its host reserve. stress-ng runs in its own transient scope
+    (`systemd-run --scope`, `MemoryMax` = size + 2 GiB, no swap) at `oom_score_adj` 1000, for at
+    most 420 s. It ends 60 s after the guard's first step, at the stop rule, or at 420 s.
+  - **The stop rule's latency** is a 4-token chat on each pair's engine port every 15 s. The
+    squeeze stops in three cases: a pair's median latency over the last 60 s reaches twice its
+    pre-window median; a pair fails two chats in a row; or a pre-existing container stops,
+    restarts or turns unhealthy.
+  - **"0 OOM kills"** holds when three things are true during the squeeze. No kernel oom-kill
+    line names a task that is neither stress-ng nor in a kubepods cgroup (this run's pods). No
+    pre-existing container restarts or stops. Docker records no oom or die event for one.
+  - **"The guard lowers admission"** holds when the guard steps down (fewer sequences or less
+    context) or stops the server during the squeeze. A stop by the stop rule leaves this
+    sub-clause INCONCLUSIVE, as the pre-registration says.
+- **stress-ng** is V0.22.01, the latest release (2026-09-20, commit `72a9d0ca`). No release
+  binary is published, so `bench/h58/stress-ng.sh` builds it from its tag on crescent and links it
+  as `~/k3dgpu-bench/bin/stress-ng`, recording its sha256. The host's packaged 0.20.01 is not
+  used.
+
+**Verdict.** As pre-registered: SUPPORTED when (a) to (f) all hold, REFUTED when any clause
+fails on a valid run, INCONCLUSIVE otherwise. A run is valid when its start checks passed, its
+commit did not change during it, and its checkout had no local change. `h58.py score` reads the
+records and writes `score.json`. The records go to `bench/h58/results/2026-11-01/run1/`, without
+the kubeconfigs.
 
 ### H54 amendment R1: the H54a runner and the flag checks (2026-10-20)
 
