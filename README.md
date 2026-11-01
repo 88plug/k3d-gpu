@@ -16,10 +16,11 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 > DSA reached a pod; IAA got no work queue, and the QAT plugin crash-looped and
 > advertised nothing [ledger:H52b]. The ledger scores H52 REFUTED and H52b REFUTED.
 > On that Xeon's CPU, llama.cpp with Google's QAT Q4_0 GGUF and its MTP drafter
-> out-decoded OVMS int4 on Gemma 4 26B-A4B at four concurrent agents, so it is now the
-> default CPU engine for that CPU class [ledger:H59], and llama.cpp served a 125B MoE
-> entirely from its DRAM, its share of the DRAM bandwidth ceiling inside the pre-registered
-> band around a smaller Gemma 4 control's [ledger:H60].
+> out-decoded OVMS with OpenVINO's base-model int4 IR on Gemma 4 26B-A4B at four concurrent
+> requests, so it is now the default CPU engine for that CPU class [ledger:H59] (one model
+> measured; other models with an int4 GGUF follow the rule unmeasured), and llama.cpp
+> served a 125B MoE entirely from its DRAM, its share of the DRAM bandwidth ceiling inside
+> the pre-registered band around a smaller Gemma 4 control's [ledger:H60].
 > NPU and Gaudi 3 scheduling is still tested only against a simulated sysfs. See
 > **[docs/intel.md](docs/intel.md)** for the capability matrix, how P/E pinning
 > works, and how it compares with other local Kubernetes.

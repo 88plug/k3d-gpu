@@ -227,7 +227,7 @@ and installs through EAS.
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
 | EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F3 is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
-| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's QAT Q4_0 GGUF and QAT MTP drafter [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
+| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's int4 GGUF (for Gemma 4 26B-A4B, the one model measured, Google's QAT Q4_0 GGUF and QAT MTP drafter) [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
@@ -247,7 +247,7 @@ stated as the ledger graded it; only the SUPPORTED rows back a claim.
 
 | Row | What it asked, and what happened | Verdict |
 |----|-------------|--------|
-| [ledger:H59] | Engine choice on the CPU at four concurrent agents: llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter against OVMS with OpenVINO's base-model int4 IR, Gemma 4 26B-A4B. llama.cpp decoded faster in each of 3 holds and passed the GSM8K quality gate, so with no backend set `agent up` now serves llama.cpp on this CPU class ([run](../EXPERIMENTS.md#h59-run-xeon-6741p-2026-11-01)) | SUPPORTED |
+| [ledger:H59] | Engine choice on the CPU at four concurrent requests: llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter against OVMS with OpenVINO's base-model int4 IR, Gemma 4 26B-A4B. llama.cpp decoded faster in each of 3 holds and passed the GSM8K quality gate, so with no backend set `agent up` now serves llama.cpp on this CPU class, for any model with an int4 GGUF, although only this model was measured ([run](../EXPERIMENTS.md#h59-run-xeon-6741p-2026-11-01)) | SUPPORTED |
 | [ledger:H60] | Qwen3.8-Flash-Next (125B MoE) served entirely from host DRAM by llama.cpp reads the same share of the DRAM bandwidth ceiling as a same-hold Gemma 4 QAT control, inside the pre-registered band ([run](../EXPERIMENTS.md#h60-run-xeon-6741p-2026-11-01)) | SUPPORTED |
 | H7x | Whether OVMS's decode lead over EAT's vLLM CPU engine is only weight precision. At matched 16-bit weights OVMS 2026.4.1 still decoded ahead of EAT 1.1.0's vLLM CPU v0.28.0, so it is not only precision; vLLM prefilled the long prompt faster ([run](../EXPERIMENTS.md#h7x-run-xeon-6741p-2026-11-01)) | REFUTED |
 | H28x | H28 on the Xeon: 8 pods that mmap one model through an image volume shared one page-cache copy, as on the i9, but were not ready in half the copy arm's time; the memory part replicated, the time part did not ([run](../EXPERIMENTS.md#h28x-run-2-xeon-6741p-2026-11-01)) | REFUTED |
@@ -486,8 +486,9 @@ Shipped since this roadmap was first written:
 - **Agent endpoint.** `k3d-gpu agent up`: an OpenAI-compatible server that picks vLLM on
   a Gaudi, OVMS on an XMX Intel GPU, else OVMS on the P-cores, from what the node
   advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)). On a CPU
-  class where an engine-choice row is SUPPORTED, llama.cpp with the QAT GGUF and MTP
-  drafter takes the CPU instead: the Xeon 6741P class since 2026-11-01 [ledger:H59].
+  class where an engine-choice row is SUPPORTED, llama.cpp with the model's int4 GGUF takes
+  the CPU instead: the Xeon 6741P class since 2026-11-01, measured on Gemma 4 26B-A4B with
+  the QAT GGUF and MTP drafter only [ledger:H59].
 - **EAS and EAT 2.0.** `k3d-gpu eas up`, `status`, `check` and `down` drive Intel's EAS
   installer in its bring-your-own-cluster mode, with every k3d setting and patch chosen
   from the cluster ([intel/eas.md](intel/eas.md)). F3 ran it end to end once; it is
