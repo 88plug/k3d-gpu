@@ -84,6 +84,7 @@ def endpoint(address, port):
     return "%s:%s" % (host, port if port is not None else "(port not set)")
 
 
+# known-issue: eat-9 (the rule is general; EAT#9 is the instance that motivated it)
 def check_listener(ls):
     subject = "%s %s" % (endpoint(ls["address"], ls["port"]), ls["name"])
     where = "loopback" if is_loopback(ls["address"]) else "off loopback"

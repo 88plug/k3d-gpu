@@ -376,15 +376,20 @@ B70 runs land:
 - Expected collision: a second GPU plugin. `deploy-intel-gpu-plugin.yml` applies
   `deployments/gpu_plugin/base/intel-gpu-plugin.yaml` from intel-device-plugins `main`
   (`intel_gpu_plugin_ref` defaults to `main`, unpinned) beside the baked DaemonSet.
+  `eat-up.sh` therefore stops on `compute_platform=xpu` and points at
+  `K3D_GPU_AGENT_BACKEND=vllm`.
 - Expected collision: a second balloons policy. The reworked `nri_cpu_balloons` role
   renders one NUMA-sized `BalloonsPolicy` per node (`node.<name>`). #21 still installs
   it only on `deploy_nri_balloon_policy == "yes"` (`fresh-install.sh` line 247), so
-  `eat-up.sh`'s `off` keeps it away; a config that turns it on meets k3d-gpu's policy.
+  `eat-up.sh`'s `off` keeps it away, and `eat-up.sh` stops on any other value, an
+  absent key included (`prompt_for_input`, which the stack path and `brownfield.sh model`
+  both call, turns that on).
 - Expected gap: the `hostPath` libraries resolve inside the k3d node container, not
   on the host. The node image would have to carry compatible Level Zero and OpenCL
   user space at those paths, or the pod would mount empty or mismatched libraries.
 - Expected gap: Kata (`kata-fc`, `kata-qemu`) needs `/dev/kvm` and nested
   virtualization inside the k3d node, which k3d-gpu does not pass through today.
+  `eat-up.sh` stops on `deploy_kata_containers=on`.
 
 Gaps for the #20 example instance (`docs/examples/openclaw-instance.yaml`) on k3d-gpu:
 

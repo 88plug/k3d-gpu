@@ -257,6 +257,12 @@ except where an item says otherwise, and item 11 is new there. In
     above. `release-1.1.0` reworks the role (`install_nri.yaml` is gone; it
     renders one `BalloonsPolicy` per node) and still runs it only on
     `deploy_nri_balloon_policy=yes` (fresh-install.sh:247), which stays off.
+    `prompt_for_input` turns an absent key on for `compute_platform` c
+    (parse-user-prompts.sh:55-66). The stack path calls it (fresh-install.sh:39),
+    so an absent key deploys EAT's policy there. `brownfield.sh model` calls it too,
+    and `deploy-inference-models.yml` then sets vLLM's `cpu_balloon_annotation` to
+    EAT's `vllm-balloon-tp<N>` over k3d-gpu's `performance`. `eat-up.sh` stops before
+    touching the cluster on any value but `off` or `no`, absent included.
 11. **The guardrail ignores the config on the brownfield path** (new in
     `release-1.1.0`). `deploy-agentic-stack.sh:195` sets
     `DEPLOY_GUARDRAILS="${DEPLOY_GUARDRAILS:-on}"` when it is sourced, and
@@ -270,6 +276,15 @@ except where an item says otherwise, and item 11 is new there. In
     `eat-up.sh` stops before touching the cluster when the config gives
     `deploy_guardrails` no value (a config written for `release-1.0.3-hotfix`
     has none) and asks for `off` or `on`.
+12. **Release-1.1.0 settings that collide with a k3d-gpu cluster.** `eat-up.sh`
+    stops before touching the cluster, reading each key as `read_config_file`
+    does, on `compute_platform=xpu` (fresh-install.sh:219 applies
+    intel-device-plugins' `gpu_plugin` from `main`, unpinned, beside the plugin
+    k3d-gpu bakes; vLLM on an Intel GPU is `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu
+    agent up`), `deploy_kata_containers=on` (Kata needs `/dev/kvm`, which a k3d
+    node lacks) and `rack_scale_mode=on` (it builds its own cluster from
+    `rack-profile.yaml`: netplan, BGP, the NVIDIA GPU operator). None of these has
+    run here; each is read from source.
 
 Not a blocker on the previous pin: **AMX/AVX-512 are not required.** The CPU
 vLLM image (`v0.24.0`) with EAT's exact Qwen3 settings (`VLLM_CPU_SGL_KERNEL=1`,

@@ -1104,6 +1104,7 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         for d in fit:
             if d["drafter"] == "assistant":
                 if facts and facts["moe"]:
+                    # known-issue: vllm-pr-51493 (the VLLM_USE_V2_MODEL_RUNNER=1 clause goes once a release has the fix)
                     doc["notes"].append("MoE target: Google says the 26B A4B drafter may not speed up at batch 1 without good parallelism (https://ai.google.dev/gemma/docs/mtp/overview); "
                                         "if vLLM's V1 runner fails on it, VLLM_USE_V2_MODEL_RUNNER=1 (https://github.com/vllm-project/vllm/pull/51493); K3D_GPU_AGENT_DRAFT=off turns the drafter off")
                 cfg = {"method": "mtp", "model": d["id"], "num_speculative_tokens": 4}
