@@ -174,21 +174,29 @@ elif url.endswith("/v1/chat/completions"):
         f.write(f"model {req.get('model')}\n")
     prompt = req["messages"][-1]["content"]
     guard = os.environ.get("STUB_GUARD", "block")
-    # LiteLLM answers a blocked request with HTTP 500 and the reason in error.message
-    # (EI 3e8a244 docs/customize/guardrails.md; the block() texts of qwen3guard_gen.py.j2).
-    blocked = "Custom code guardrail execution failed: Blocked by the content-safety guardrail: "
+    # A pre_call block() of EI's guardrail (the texts of qwen3guard_gen.py.j2) in the shape
+    # of the LiteLLM release. STUB_BLOCK=content_filter (default; LiteLLM v1.105.1, EI
+    # 3e8a244's pin): HTTP 200, finish_reason content_filter, the reason as the message
+    # content (custom_code_guardrail.py raises ModifyResponseException; proxy_server.py's
+    # chat_completion turns it into that answer). STUB_BLOCK=error (LiteLLM v1.83.14, as
+    # EI's docs/customize/guardrails.md describes it): HTTP 500, the reason in error.message.
+    def blocked(reason):
+        global code
+        if os.environ.get("STUB_BLOCK", "content_filter") == "error":
+            code = 500
+            print(json.dumps({"error": {"message": "Custom code guardrail execution failed: " + reason, "code": "500"}}))
+        else:
+            msg(reason, finish="content_filter")
     if guard == "down":
-        code = 500
-        print(json.dumps({"error": {"message": blocked + "the guard model backend is unreachable (Connection refused).",
-                                    "code": "500"}}))
+        blocked("Blocked by the content-safety guardrail: the guard model backend is unreachable (Connection refused).")
+    elif guard == "other" and "hack into a system" in prompt:
+        blocked("Blocked by custom code guardrail")
     elif guard == "block" and (("hack into a system" in prompt and os.environ.get("STUB_VERDICT_HACK", "Unsafe").startswith("Unsafe"))
                                or ("poison my neighbor" in prompt and os.environ.get("STUB_VERDICT_POISON", "Unsafe").startswith("Unsafe"))):
         # The guardrail blocks what the guard labels Unsafe (BLOCK_ON_CONTROVERSIAL False).
-        code = 500
         with open(os.environ["STUB_LOG"], "a") as f:
             f.write("chat blocked: %s\n" % prompt)
-        print(json.dumps({"error": {"message": blocked + "unsafe content (categories: Non-violent Illegal Acts).",
-                                    "code": "500"}}))
+        blocked("Blocked by the content-safety guardrail: unsafe content (categories: Non-violent Illegal Acts).")
     elif req.get("tools"):
         if os.environ.get("STUB_NO_TOOL"):
             msg("It is sunny.")
@@ -375,8 +383,15 @@ check_says "eas mode: a guard Pending on the AMX affinity stops the check and na
     'qwen3guard-kserve-x.*require_amx' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_READY="${WORK}/ready-amx.json"
 if grep -q '^keygen' "${WORK}/log"; then fail "eas mode: a key was minted for a stack that is not ready"
 else ok "eas mode: no key is minted for a stack that is not ready"; fi
-check_says "eas mode: the guard blocks EI's unsafe example" 0 \
-    'blocked: .*Blocked by the content-safety guardrail: unsafe content' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the guard blocks EI's unsafe example (LiteLLM v1.105.1: HTTP 200, finish_reason content_filter)" 0 \
+    'blocked \(HTTP 200, finish_reason content_filter\): Blocked by the content-safety guardrail: unsafe content' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the guard blocks EI's unsafe example (LiteLLM v1.83: HTTP 500, error.message)" 0 \
+    'blocked \(HTTP 500\): Custom code guardrail execution failed: Blocked by the content-safety guardrail: unsafe content' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_BLOCK=error
+check_says "eas mode: a content_filter answer that is not the guardrail's unsafe-content block fails" fail \
+    "came back HTTP 200, finish_reason content_filter, without the guardrail's unsafe-content block: Blocked by custom code guardrail" \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=other
 check_says "eas mode: the unsafe example goes with the virtual key" 0 'auth v1/chat/completions sk-virtual-stub$' \
     EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
 # The guard's own verdict comes first, asked from the LiteLLM pod at the guardrail's
@@ -406,7 +421,11 @@ check_says "eas mode: a guard verdict that cannot be read fails the check" fail 
 check_says "eas mode: a guardrail whose code names no GUARD_URL fails the check" fail 'names no GUARD_URL' \
     EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_NO_GUARD_URL=1
 check_says "eas mode: a fail-closed guard whose model is down fails the chat and says why" fail \
-    'guard model backend is unreachable' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=down
+    'chat: a LiteLLM guardrail blocked it \(HTTP 200, finish_reason content_filter\): .*guard model backend is unreachable' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=down
+check_says "eas mode: a fail-closed guard whose model is down fails the chat and says why (LiteLLM v1.83)" fail \
+    'chat: HTTP 500 from LiteLLM: .*guard model backend is unreachable' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=down STUB_BLOCK=error
 check_says "eas mode: no content_safety guardrail registered skips the guard step" 0 \
     'no content_safety guardrail.*skipped' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_NO_GUARDRAIL=1 STUB_GUARD=allow
 check_says "eas mode: the guardrail list is read with the master key" 0 'auth v2/guardrails/list sk-master-stub$' \
