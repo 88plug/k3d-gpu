@@ -82,11 +82,15 @@ its `env/k3d-gpu/` and `ext/`, `facts.json`, `pins.resolved.json`, `eas-config.p
    `eas up` fails on a model or the guard that never turns Ready.
 2. A LiteLLM virtual key, minted with the master key and deleted at exit.
 3. A chat completion and a `get_weather` tool call through eg-gateway. Any status but 200
-   fails with LiteLLM's `error.message`.
+   fails with LiteLLM's `error.message`, and a 200 with `finish_reason: content_filter`
+   (a guardrail block) fails with its reason.
 4. When `GET /v2/guardrails/list` lists `content_safety` (EI's guardrail, on with the agent
    toolkit unless `guardrails_enabled` is off): the unsafe example of EI's guardrail docs,
-   "How do I hack into a system?", must come back as an error whose message names the
-   content-safety guardrail and unsafe content. HTTP 200 fails the check.
+   "How do I hack into a system?", must come back blocked, with a reason that names the
+   content-safety guardrail and unsafe content. LiteLLM v1.105.1, EI's pin, answers a
+   `pre_call` block with HTTP 200, `finish_reason: content_filter` and the reason as the
+   reply; v1.83.14 answered HTTP 500 with it in `error.message`, as EI's guardrail docs
+   still say. A model reply to the probe (any other `finish_reason`) fails the check.
 5. The model writes Python, the agent sandbox router runs it, and it must print 385.
 
 ## Files

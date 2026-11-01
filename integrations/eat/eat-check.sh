@@ -18,8 +18,11 @@
 #   2b. eas only, when LiteLLM lists the content_safety guardrail: the guard model's own
 #      verdict on each probe (EI's docs' unsafe example first), asked from the LiteLLM pod
 #      at the guardrail's GUARD_URL; the first probe it labels Unsafe must come back from
-#      LiteLLM blocked (not HTTP 200, and error.message names the content-safety guardrail
-#      and unsafe content). No probe labelled Unsafe fails the check.
+#      LiteLLM blocked, its reason naming the content-safety guardrail and unsafe content:
+#      HTTP 200 with finish_reason content_filter and the reason as the reply (LiteLLM
+#      v1.105.1), or an error status with it in error.message (v1.83.14). A model reply
+#      (any other finish_reason) fails, as does no probe labelled Unsafe. A content_filter
+#      answer to the chat or tool-call request fails those steps with its reason.
 #   3. code run: the model writes Python through the gateway, and the toolkit's
 #      agent-sandbox router runs it in a warm-pool sandbox; it must print 385.
 #      bash passes the model's text to the router: this is a scripted pipeline,
@@ -150,6 +153,12 @@ chat() {
         msg=$(jq -r '.error.message // empty' <<< "${body}" 2>/dev/null || true)
         err "chat: HTTP ${status} from LiteLLM: ${msg:-$(head -c 300 <<< "${body}")}"
     fi
+    # LiteLLM v1.105.1 answers a pre_call guardrail block with HTTP 200, finish_reason
+    # content_filter and the block reason as the reply (a fail-closed guard that cannot
+    # reach its model blocks every chat this way).
+    if [ "$(jq -r '.choices[0].finish_reason // empty' <<< "${body}" 2>/dev/null)" = content_filter ]; then
+        err "chat: a LiteLLM guardrail blocked it (HTTP 200, finish_reason content_filter): $(jq -r '.choices[0].message.content // empty' <<< "${body}")"
+    fi
     printf '%s\n' "${body}"
 }
 
@@ -182,9 +191,9 @@ if [ "${EAT_MODE}" = eas ]; then
     # "Safety: Safe|Unsafe|Controversial", and blocks Unsafe; Controversial only when
     # BLOCK_ON_CONTROVERSIAL is True (EI's default: False). So the guard's own verdict is
     # asked first, from the LiteLLM pod with the guardrail's GUARD_URL, GUARD_MODEL and
-    # GUARD_MAX_TOKENS: the first probe it labels Unsafe must then come back from LiteLLM as
-    # an error naming the block. EI's docs' example goes first (docs/customize/guardrails.md
-    # at EI 3e8a244); Qwen3Guard-Gen-0.6B labels both probes Unsafe.
+    # GUARD_MAX_TOKENS: the first probe it labels Unsafe must then come back from LiteLLM
+    # blocked, with the guardrail's unsafe-content reason. EI's docs' example goes first
+    # (docs/customize/guardrails.md at EI 3e8a244); Qwen3Guard-Gen-0.6B labels both probes Unsafe.
     info "Guardrail content_safety: the guard's verdict on each probe, then LiteLLM on the first it labels Unsafe..."
     guardrail=$(gw /v2/guardrails/list "${master}" \
         | jq -c 'first(.guardrails[]? | select(.guardrail_name == "content_safety")) // empty') \
@@ -226,12 +235,23 @@ print(json.load(urllib.request.urlopen(req, timeout=60))["choices"][0]["message"
             messages: [{role: "user", content: $p}]}' | gw_status /v1/chat/completions "${key}") \
             || err "no answer from https://${host}/v1/chat/completions on ${node_ip}"
         split_status "${out}"
-        [ "${status}" != 200 ] \
-            || err "the guard labels '${probe}' Unsafe (${cats}), yet LiteLLM answered HTTP 200 for it: the content_safety guardrail did not screen this request"
-        msg=$(jq -r '.error.message // empty' <<< "${body}" 2>/dev/null || true)
+        # A block comes back in the shape of the LiteLLM release: v1.105.1 (EI 3e8a244's pin)
+        # answers HTTP 200 with finish_reason content_filter and the reason as the reply
+        # (ModifyResponseException); v1.83.14 answered HTTP 500 with the reason in
+        # error.message. A 200 with any other finish_reason is the model's own answer.
+        if [ "${status}" = 200 ]; then
+            finish=$(jq -r '.choices[0].finish_reason // empty' <<< "${body}" 2>/dev/null || true)
+            [ "${finish}" = content_filter ] \
+                || err "the guard labels '${probe}' Unsafe (${cats}), yet LiteLLM answered HTTP 200 with a model reply (finish_reason ${finish:-none}): the content_safety guardrail did not screen this request"
+            shape="HTTP 200, finish_reason content_filter"
+            msg=$(jq -r '.choices[0].message.content // empty' <<< "${body}" 2>/dev/null || true)
+        else
+            shape="HTTP ${status}"
+            msg=$(jq -r '.error.message // empty' <<< "${body}" 2>/dev/null || true)
+        fi
         case "${msg}" in
-            *"Blocked by the content-safety guardrail: unsafe content"*) echo "    blocked: ${msg}" ;;
-            *) err "'${probe}' came back HTTP ${status} without the guardrail's unsafe-content block: ${msg:-${body}}" ;;
+            *"Blocked by the content-safety guardrail: unsafe content"*) echo "    blocked (${shape}): ${msg}" ;;
+            *) err "'${probe}' came back ${shape}, without the guardrail's unsafe-content block: ${msg:-${body}}" ;;
         esac
     else
         echo "    no content_safety guardrail registered in LiteLLM (guardrails_enabled off): skipped"
