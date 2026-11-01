@@ -1,0 +1,107 @@
+{
+  "agent_sandbox": {
+    "controller_image": "registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.8@sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731"
+  },
+  "cluster": "k3d-gpu",
+  "containerd_cni_bin_dirs": [
+    "/usr/bin"
+  ],
+  "daemonsets": [
+    {
+      "annotations": {
+        "meta.helm.sh/release-name": "nri-resource-policy-balloons",
+        "meta.helm.sh/release-namespace": "kube-system",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "nri-balloons",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app.kubernetes.io/instance": "nri-resource-policy-balloons",
+        "app.kubernetes.io/managed-by": "Helm",
+        "app.kubernetes.io/name": "nri-resource-policy-balloons",
+        "helm.sh/chart": "nri-resource-policy-balloons-v0.14.0",
+        "objectset.rio.cattle.io/hash": "5113c9cdc0d0a9fe4455faed153b6d80bd9f60d1"
+      },
+      "name": "nri-resource-policy-balloons",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "node-feature-discovery",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "nfd",
+        "objectset.rio.cattle.io/hash": "5113c9cdc0d0a9fe4455faed153b6d80bd9f60d1"
+      },
+      "name": "nfd-worker",
+      "namespace": "node-feature-discovery"
+    }
+  ],
+  "docker_rootless": false,
+  "fit": {
+    "Qwen/Qwen2.5-Coder-14B-Instruct": {
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=4",
+        "VLLM_CPU_KVCACHE_SPACE=20"
+      ],
+      "schema": "k3d-gpu.fit/v1",
+      "summary": "fit: Qwen/Qwen2.5-Coder-14B-Instruct on CPU via vllm"
+    },
+    "Qwen/Qwen2.5-Coder-7B-Instruct": {
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=4",
+        "VLLM_CPU_KVCACHE_SPACE=12"
+      ],
+      "schema": "k3d-gpu.fit/v1",
+      "summary": "fit: Qwen/Qwen2.5-Coder-7B-Instruct on CPU via vllm"
+    },
+    "meta-llama/Llama-3.1-8B-Instruct": null
+  },
+  "host": {
+    "inotify_max_user_instances": 128,
+    "inotify_max_user_watches": 524288,
+    "mem_available_kib": 104857600
+  },
+  "namespaces": [
+    "agent-sandbox",
+    "agent-sandbox-system",
+    "default",
+    "kube-node-lease",
+    "kube-public",
+    "kube-system",
+    "node-feature-discovery"
+  ],
+  "nodes": [
+    {
+      "allocatable": {
+        "cpu": "32",
+        "gpu.intel.com/i915": "0",
+        "gpu.intel.com/xe": "1",
+        "memory": "131419028Ki",
+        "pods": "110"
+      },
+      "annotations": {
+        "k3s.io/node-args": "[\"server\", \"--disable\", \"traefik\", \"--disable\", \"intel-gpu-plugin\", \"--node-label\", \"k3d-gpu.io/hybrid-cpu=true\", \"--tls-san\", \"0.0.0.0\"]"
+      },
+      "labels": {
+        "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+        "intel.feature.node.kubernetes.io/gpu": "true",
+        "k3d-gpu.io/hybrid-cpu": "true",
+        "kubernetes.io/hostname": "k3d-k3d-gpu-server-0",
+        "node-role.kubernetes.io/control-plane": "true"
+      },
+      "name": "k3d-k3d-gpu-server-0"
+    }
+  ],
+  "nri_socket": true,
+  "schema": "k3d-gpu.eas-facts/v1",
+  "server_version": "v1.37.1+k3s1"
+}

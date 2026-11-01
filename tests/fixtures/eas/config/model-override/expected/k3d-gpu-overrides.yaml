@@ -1,0 +1,12 @@
+# k3d-gpu eas-config: ansible extra vars for es_auto_installer.sh install, passed
+# last (-- -e @k3d-gpu-overrides.yaml) so each value wins; why: choices.txt
+istio_platform: "k3d"
+metallb_enabled: false
+kubernetes_cpu_policy: "best-effort"
+nfd_enabled: false
+kubernetes_cluster_cidr: "10.42.0.0/16"
+kubernetes_service_cidr: "10.43.0.0/16"
+kata_containers_enabled: false
+kubernetes_accelerator: "cpu"
+agent_sandbox_enabled: true
+llm_services_autodeploy_models: ["qwen2-5-coder-14b"]

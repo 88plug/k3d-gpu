@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: h54
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lg
+  namespace: h54
+  labels:
+    app: lg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lg
+  template:
+    metadata:
+      labels:
+        app: lg
+    spec:
+      containers:
+      - name: server
+        image: ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+        - name: shm
+          mountPath: /dev/shm
+        args:
+        - -m
+        - /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+        - --host
+        - 0.0.0.0
+        - --port
+        - '8080'
+        - --alias
+        - gemma
+        - -t
+        - '48'
+        - -Cr
+        - 0-47
+        - --cpu-strict
+        - '1'
+        - --jinja
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: models
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+      - name: shm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lg
+  namespace: h54
+spec:
+  selector:
+    app: lg
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080

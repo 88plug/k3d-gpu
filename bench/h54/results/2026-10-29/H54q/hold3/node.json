@@ -1,0 +1,190 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "v1",
+            "kind": "Node",
+            "metadata": {
+                "annotations": {
+                    "alpha.kubernetes.io/provided-node-ip": "172.19.0.2",
+                    "flannel.alpha.coreos.com/backend-data": "{\"VNI\":1,\"VtepMAC\":\"02:e2:25:47:3c:ee\"}",
+                    "flannel.alpha.coreos.com/backend-type": "vxlan",
+                    "flannel.alpha.coreos.com/kube-subnet-manager": "true",
+                    "flannel.alpha.coreos.com/public-ip": "172.19.0.2",
+                    "k3s.io/hostname": "k3d-k3dgpu-g-h54q-3-server-0",
+                    "k3s.io/internal-ip": "172.19.0.2",
+                    "k3s.io/node-args": "[\"server\",\"--disable\",\"traefik\",\"--disable\",\"intel-gpu-plugin\",\"--disable\",\"intel-gpu-dra\",\"--disable\",\"nri-balloons\",\"--kubelet-arg\",\"eviction-hard=memory.available\\u003c100Mi,nodefs.available\\u003c1%,imagefs.available\\u003c1%,nodefs.inodesFree\\u003c1%\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true\",\"--node-label\",\"experimental.k3d-gpu.io/dra=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true\",\"--node-label\",\"ei-infra-eligible=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETIBT=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.GFNI=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.SHA=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512F=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETSS=true\",\"--node-label\",\"ei-inference-eligible=true\",\"--node-label\",\"experimental.k3d-gpu.io/image-volume=true\",\"--node-label\",\"nvidia.com/gpu.present=false\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.VAES=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true\",\"--tls-san\",\"0.0.0.0\"]",
+                    "k3s.io/node-config-hash": "5HHXIDUX4YJZJWS77NE4PG2NTXLIFL2XH2YNBDSARCMJT3HU7YGA====",
+                    "k3s.io/node-env": "{\"K3S_KUBECONFIG_OUTPUT\":\"/output/kubeconfig.yaml\",\"K3S_TOKEN\":\"********\"}",
+                    "node.alpha.kubernetes.io/ttl": "0",
+                    "volumes.kubernetes.io/controller-managed-attach-detach": "true"
+                },
+                "creationTimestamp": "2026-10-29T20:59:49Z",
+                "finalizers": [
+                    "wrangler.cattle.io/node"
+                ],
+                "labels": {
+                    "beta.kubernetes.io/arch": "amd64",
+                    "beta.kubernetes.io/instance-type": "k3s",
+                    "beta.kubernetes.io/os": "linux",
+                    "ei-inference-eligible": "true",
+                    "ei-infra-eligible": "true",
+                    "experimental.k3d-gpu.io/dra": "true",
+                    "experimental.k3d-gpu.io/image-volume": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVX512F": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.CETIBT": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.GFNI": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+                    "feature.node.kubernetes.io/cpu-cpuid.VAES": "true",
+                    "kubernetes.io/arch": "amd64",
+                    "kubernetes.io/hostname": "k3d-k3dgpu-g-h54q-3-server-0",
+                    "kubernetes.io/os": "linux",
+                    "node-role.kubernetes.io/control-plane": "true",
+                    "node.kubernetes.io/instance-type": "k3s",
+                    "nvidia.com/gpu.present": "false"
+                },
+                "name": "k3d-k3dgpu-g-h54q-3-server-0",
+                "resourceVersion": "613",
+                "uid": "ffc020ff-6ed1-478b-9315-a37721c81565"
+            },
+            "spec": {
+                "podCIDR": "10.42.0.0/24",
+                "podCIDRs": [
+                    "10.42.0.0/24"
+                ],
+                "providerID": "k3s://k3d-k3dgpu-g-h54q-3-server-0"
+            },
+            "status": {
+                "addresses": [
+                    {
+                        "address": "172.19.0.2",
+                        "type": "InternalIP"
+                    },
+                    {
+                        "address": "k3d-k3dgpu-g-h54q-3-server-0",
+                        "type": "Hostname"
+                    }
+                ],
+                "allocatable": {
+                    "cpu": "96",
+                    "ephemeral-storage": "3687149282645",
+                    "hugepages-1Gi": "0",
+                    "hugepages-2Mi": "0",
+                    "memory": "527664744Ki",
+                    "pods": "110"
+                },
+                "capacity": {
+                    "cpu": "96",
+                    "ephemeral-storage": "3724393213952",
+                    "hugepages-1Gi": "0",
+                    "hugepages-2Mi": "0",
+                    "memory": "527767144Ki",
+                    "pods": "110"
+                },
+                "conditions": [
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:59:59Z",
+                        "lastTransitionTime": "2026-10-29T20:59:49Z",
+                        "message": "kubelet has sufficient memory available",
+                        "reason": "KubeletHasSufficientMemory",
+                        "status": "False",
+                        "type": "MemoryPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:59:59Z",
+                        "lastTransitionTime": "2026-10-29T20:59:49Z",
+                        "message": "kubelet has no disk pressure",
+                        "reason": "KubeletHasNoDiskPressure",
+                        "status": "False",
+                        "type": "DiskPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:59:59Z",
+                        "lastTransitionTime": "2026-10-29T20:59:49Z",
+                        "message": "kubelet has sufficient PID available",
+                        "reason": "KubeletHasSufficientPID",
+                        "status": "False",
+                        "type": "PIDPressure"
+                    },
+                    {
+                        "lastHeartbeatTime": "2026-10-29T20:59:59Z",
+                        "lastTransitionTime": "2026-10-29T20:59:49Z",
+                        "message": "kubelet is posting ready status",
+                        "reason": "KubeletReady",
+                        "status": "True",
+                        "type": "Ready"
+                    }
+                ],
+                "daemonEndpoints": {
+                    "kubeletEndpoint": {
+                        "Port": 10250
+                    }
+                },
+                "declaredFeatures": [
+                    "ExtendWebSocketsToKubelet",
+                    "InPlacePodLevelResourcesVerticalScaling",
+                    "InPlacePodVerticalScalingInitContainers",
+                    "RestartAllContainersOnContainerExits"
+                ],
+                "features": {
+                    "supplementalGroupsPolicy": true
+                },
+                "nodeInfo": {
+                    "architecture": "amd64",
+                    "bootID": "d40bd344-edb4-4aee-85a8-20b25e4305e8",
+                    "containerRuntimeVersion": "containerd://2.3.4-k3s1",
+                    "kernelVersion": "7.0.0-31-generic",
+                    "kubeProxyVersion": "",
+                    "kubeletVersion": "v1.37.1+k3s1",
+                    "machineID": "",
+                    "operatingSystem": "linux",
+                    "osImage": "Ubuntu 26.04.1 LTS",
+                    "runningInUserNamespace": false,
+                    "systemUUID": "00000000-0000-0000-0000-7cc255947e5f"
+                },
+                "runtimeHandlers": [
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": ""
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": "nvidia"
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": true,
+                            "userNamespaces": true
+                        },
+                        "name": "runc"
+                    },
+                    {
+                        "features": {
+                            "recursiveReadOnlyMounts": false,
+                            "userNamespaces": false
+                        },
+                        "name": "runhcs-wcow-process"
+                    }
+                ]
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

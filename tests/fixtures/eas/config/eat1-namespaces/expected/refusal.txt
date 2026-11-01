@@ -1,0 +1,2 @@
+REFUSE: namespace genai-gateway (EAT 1.x LiteLLM, eat-up.sh) -> tear the EAT 1.x stack down first (k3d-gpu down resets the cluster): both stacks would own LiteLLM [88plug/k3d-gpu@d997ea8 integrations/eat/eat-remote.sh:42]
+REFUSE: namespace ingress-nginx (EAT 1.x ingress, eat-up.sh) -> remove it first: its controller binds host ports 80 and 443, which EAS's gateway takes through ServiceLB [88plug/k3d-gpu@d997ea8 integrations/eat/eat-check.sh:39-43]

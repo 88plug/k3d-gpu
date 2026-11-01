@@ -1,0 +1,1 @@
+REFUSE: k3s.io/node-args has --disable servicelb -> recreate the cluster without --disable=servicelb: EAS's gateway needs a LoadBalancer address [intel/enterprise-ai-solutions@97f6157 roles/metallb/tasks/install.yaml:94]

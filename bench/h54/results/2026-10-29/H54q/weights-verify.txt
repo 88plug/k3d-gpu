@@ -1,0 +1,47 @@
+2026-10-29T19:37:16Z
+OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin: OK
+OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin: OK
+OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin: OK
+OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin: OK
+google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B-it-mmproj.gguf: OK
+google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf: OK
+google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/model.safetensors: OK
+google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00001-of-00002.safetensors: OK
+google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00002-of-00002.safetensors: OK
+weights.sha256 rc=0
+model-00001-of-00008.safetensors: OK
+model-00002-of-00008.safetensors: OK
+model-00003-of-00008.safetensors: OK
+model-00004-of-00008.safetensors: OK
+model-00005-of-00008.safetensors: OK
+model-00006-of-00008.safetensors: OK
+model-00007-of-00008.safetensors: OK
+model-00008-of-00008.safetensors: OK
+weights-autoround.sha256 rc=0
+OK  OVQ chat_template.jinja ae53464bf3be2580 18683
+OK  OVQ config.json 0bdc021081e0b6f4 3810
+OK  OVQ generation_config.json 4c2d18c072dc54cc 203
+OK  OVQ openvino_config.json dbdca34da1807f65 1393
+OK  OVQ openvino_detokenizer.bin 461919bda7b54645 4413547
+OK  OVQ openvino_detokenizer.xml 21dd767e165935ba 29928
+OK  OVQ openvino_language_model.bin 15516f615701908c 14519629844
+OK  OVQ openvino_language_model.xml 3682b3bddc1926df 5113419
+OK  OVQ openvino_text_embeddings_model.bin 1808d6e3fbe2ae11 738721800
+OK  OVQ openvino_text_embeddings_model.xml c06d1c3f81b3338e 7075
+OK  OVQ openvino_text_embeddings_per_layer_model.bin 57fda7ab0340cda7 20
+OK  OVQ openvino_text_embeddings_per_layer_model.xml 22795a6cac6c8ead 4764
+OK  OVQ openvino_tokenizer.bin 72cc61385a142c29 17270350
+OK  OVQ openvino_tokenizer.xml 2b4c6c46990ec715 46897
+OK  OVQ openvino_vision_embeddings_model.bin 87a4b947fe95ae91 573967772
+OK  OVQ openvino_vision_embeddings_model.xml df91d44c09dc951d 3053576
+OK  OVQ preprocessor_config.json 12476d626b89e273 403
+OK  OVQ processor_config.json 32bdf45d2ad4cc29 1689
+OK  OVQ tokenizer.json cc8d3a0ce36466cc 32169626
+OK  OVQ tokenizer_config.json b8045a4576903e86 3728
+OVQ /home/devcloud/k3dgpu-gemma/models/k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov: 20 files, 0 bad; not in the manifest: ['export-venv-freeze.txt', 'graph.pbtxt']
+OVQ manifest rc=0
+google_gemma-4-26B-A4B-it-qat-q4_0-unquantized revision google/gemma-4-26B-A4B-it-qat-q4_0-unquantized f1e06dc520982d9b9edd76859fdb7ab209449949
+google_gemma-4-26B-A4B-it-qat-q4_0-gguf revision google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e
+OpenVINO/gemma-4-26b-a4b-it-int4-ov revision OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f03844f5887982def09708bdc9f53f7a
+Intel_gemma-4-26B-A4B-it-int4-AutoRound revision edff62728a3c79ec541983b86a21674500e0f05b
+2026-10-29T19:40:43Z

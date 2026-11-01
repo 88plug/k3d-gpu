@@ -1,0 +1,2 @@
+[32m==>[0m fit: OpenVINO/Qwen3.8-27B-int4-ov on 1 GPU via ovms, context 32768 x 6 seqs, GPU 28.5 GiB/card, host 16.6 GiB (pod limit 19Gi), host reserve 50.3 GiB
+[32m==>[0m agent: OpenVINO/Qwen3.8-27B-int4-ov as 'qwen3.8-27b' on GPU (gpu.intel.com/xe), 2 CPU(s)

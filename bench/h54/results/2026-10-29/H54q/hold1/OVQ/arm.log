@@ -1,0 +1,5 @@
+2026-10-29T19:58:06Z OVQ start (1564 s before the item stop)
+2026-10-29T19:58:40Z OVQ ready after 34 s
+2026-10-29T19:58:40Z OVQ items: 150 to ask
+q-items OVQ: 150 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T20:19:34Z OVQ status measured: 150 answered, 0 errored, 0 cut, 0 not asked (queue empty)

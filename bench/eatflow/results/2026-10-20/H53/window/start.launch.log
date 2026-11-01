@@ -1,0 +1,7 @@
+2026-10-30T00:37:45Z qwen38-a-hr running=true; qwen38-a-hr: health 200, model Qwen3.8-27B, reply: We need to respond to user: "Say OK". Need final likely just "
+2026-10-30T00:37:45Z qwen38-a-hr: image, command, env, devices, mounts and ports as before the stop
+2026-10-30T00:37:47Z qwen38-b-hr running=true; qwen38-b-hr: health 200, model Qwen3.8-27B, reply: We need to respond to user: "Say OK". Need final likely just "
+2026-10-30T00:37:47Z qwen38-b-hr: image, command, env, devices, mounts and ports as before the stop
+2026-10-30T00:37:52Z :30000 pass=1 before=2 after=3 content=OK
+2026-10-30T00:38:03Z :30001 pass=1 before=3 after=4 content=OK
+2026-10-30T00:38:03Z window closed (restore rc=0)
