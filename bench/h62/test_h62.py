@@ -634,6 +634,39 @@ class ArmScriptTest(unittest.TestCase):
         self.assertIn("kill", read(self.log).splitlines()[-1])
 
 
+class OnTtyTest(unittest.TestCase):
+    """Amendment V2: configure takes no option, and its y/N prompt refuses a stdin that is not a
+    terminal, so guest-b.sh answers it the way a person at a terminal does."""
+
+    def run_on_tty(self, script, reply="y"):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        log = os.path.join(tmp, "out.log")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "h62.py"), "on-tty", log, reply,
+                            "bash", "-c", script], capture_output=True, text=True, timeout=30)
+        with open(log) as f:
+            return r.returncode, f.read()
+
+    def test_stdin_is_a_terminal_and_the_reply_answers_the_prompt(self):
+        rc, out = self.run_on_tty('[ -t 0 ] || { echo notty; exit 3; }; read -rp "Proceed? [y/N] " r; '
+                                  'echo "reply=$r"; exit 5')
+        self.assertEqual(rc, 5)
+        self.assertIn("reply=y", out)
+        self.assertNotIn("notty", out)
+
+    def test_a_second_read_sees_end_of_input_rather_than_hanging(self):
+        rc, out = self.run_on_tty('read -r a; read -r b || echo eof; echo "a=$a"')
+        self.assertEqual(rc, 0)
+        self.assertIn("eof", out)
+        self.assertIn("a=y", out)
+
+    def test_output_and_errors_go_to_the_log(self):
+        rc, out = self.run_on_tty("echo to-out; echo to-err >&2; exit 1", reply="n")
+        self.assertEqual(rc, 1)
+        self.assertIn("to-out", out)
+        self.assertIn("to-err", out)
+
+
 class ScriptsTest(unittest.TestCase):
     """The shell scripts: syntax, and what each one is pinned to run."""
 
@@ -697,7 +730,7 @@ class ScriptsTest(unittest.TestCase):
         sh = read(HERE, "guest-b.sh")
         steps = ['git clone -q -b "${TAG}" https://github.com/intel/enterprise-ai-solutions.git',
                  'h62.py" eas-pin configs/repos/repos.agent-toolkit.yaml',
-                 "./es_auto_installer.sh configure --force",
+                 'h62.py" on-tty "${R}/configure.log" y ./es_auto_installer.sh configure',
                  "./es_auto_installer.sh init agent-toolkit",
                  'h62.py" eas-edit env/local',
                  "./es_auto_installer.sh install agent-toolkit"]

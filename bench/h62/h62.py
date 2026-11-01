@@ -28,6 +28,8 @@ file runs on the host and in either guest.
   h62.py verify-script SIBLINGS_JSON    a self-contained script that checks a weights directory
                                         against the Hub's file list (run in B5's pod)
   h62.py trigger EAS_TAGS EAT_TAGS      the re-run trigger, from two `git ls-remote --tags` outputs
+  h62.py on-tty LOG REPLY CMD...        CMD with stdin on a new terminal that is sent REPLY, a newline and
+                                        end of input; its output and errors appended to LOG; its exit code
   h62.py pairs-left PAIRS_DIR           B24 pairs still to run
   h62.py vmtax H50_ANALYSIS H62_ANALYSIS
                                         A1 on the host (H50) and in its guest (H62), and H50's B1
@@ -453,6 +455,27 @@ def vmtax(h50, h62):
             "gated": False}
 
 
+def on_tty(log, reply, cmd):
+    """Run cmd with stdin on a fresh pseudo-terminal, type reply and Enter into it, then end of
+    input (^D on a new line), the way a person answers a y/N prompt (amendment V2: EAS's
+    `configure` takes no option and refuses a stdin that is not a terminal). Output and errors
+    are appended to log. Returns cmd's exit code."""
+    import pty
+    import subprocess
+    master, slave = pty.openpty()
+    try:
+        with open(log, "ab") as out:
+            p = subprocess.Popen(cmd, stdin=slave, stdout=out, stderr=subprocess.STDOUT)
+        os.close(slave)
+        slave = None
+        os.write(master, reply.encode() + b"\n\x04")
+        return p.wait()
+    finally:
+        if slave is not None:
+            os.close(slave)
+        os.close(master)
+
+
 def _load(path):
     with open(path) as f:
         return json.load(f)
@@ -530,6 +553,8 @@ def main(argv):
             t = trigger(f.read(), g.read())
         fired = [f"{k} {v}" for k in ("eas", "eat") for v in t[k]]
         print("fired: " + (", ".join(fired) if fired else "none"))
+    elif cmd == "on-tty":
+        return on_tty(args[0], args[1], args[2:])
     elif cmd == "pairs-left":
         print(pairs_left(args[0]))
     elif cmd == "vmtax":

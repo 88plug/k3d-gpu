@@ -4593,6 +4593,47 @@ changes.
   now pins the copy's path, its EAS branch and its sha256, and `ScriptsTest` runs `bash -n` and
   shellcheck on it.
 
+### H62 amendment V2: EAS's configure answered on a terminal (2026-11-01)
+
+Written 2026-11-01 after setup attempt 1 failed at its first installer step, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It changes mechanics only. No arm,
+prediction, statistic, gate, threshold, cap or verdict rule changes.
+
+- **Setup attempt 1** (`bench/h62/campaign.sh` at `0086363c`, 06:59:22Z to 07:11:49Z).
+  - The host gate passed: MemAvailable 410 GiB against 336 GiB, `/` 31% used, and Hugging Face,
+    Docker Hub and registry.k8s.io reachable. A1's IR matched its manifest (26 files, 0 bad).
+  - The guest gate passed: `amx_tile` on 96 of 96 vCPUs and `nproc` 96 in both guests (kernel
+    6.8.0-147-generic).
+  - `guest-b.sh` stopped at 07:00:36Z, at its first installer step, with
+    `ERROR: 'configure' takes no arguments (got '--force').`
+  - VM a was still in its IR step. Its run was stopped there at 07:11:44Z rather than left to
+    finish its 45 min with no B5 to pair against. `setup.sh` then exited 1 (guest-a 255, guest-b
+    1), `campaign.sh` ran no hold, and its teardown removed both guests at 07:11:49Z.
+  - It is not a hold and counts against no cap. Its records come back under the run's
+    `setup-attempt1/`.
+- **Why `--force` failed.** The pre-registration called `--force` the installer's documented
+  answer to configure's y/N prompt. EAS `v1.2.0-rc.1` (`5c27fb3`) does not accept it there:
+  - its usage text lists `--force`, but its parser refuses any argument to `configure` or `show`
+    (`es_auto_installer.sh` lines 1336-1337);
+  - it sets `FORCE=false` before parsing (line 1293), so no environment variable reaches the
+    prompt either;
+  - `confirm()` (lines 129-136) proceeds on `FORCE=true`, or on a `y` typed at a terminal, and
+    refuses a stdin that is not a terminal. `configure` is its only caller other than `teardown`
+    (lines 330 and 1522).
+  - So at rc.1, `configure` runs only when a person at a terminal answers `y`, which is what the
+    guide has the reader do.
+- **The change.** `guest-b.sh` runs `./es_auto_installer.sh configure` with no argument, its stdin
+  on a new pseudo-terminal that is sent `y`, Enter and then end of input
+  (`h62.py on-tty LOG y CMD...`). Output and errors still go to `configure.log`. configure's own
+  steps are unchanged, and no other installer step reads a terminal.
+- **Checked before pushing.** `h62.py on-tty` ran rc.1's own `confirm()`, extracted from
+  `es_auto_installer.sh`, and it proceeded. The same function refuses with stdin on `/dev/null`.
+  `OnTtyTest` in `bench/h62/test_h62.py` covers the terminal, the reply, end of input and the
+  log. `test_guest_b_is_intels_documented_path` now pins the new configure line, in the same
+  order.
+- **Then.** The run branch's new head is pushed, deployed to `~/k3dgpu-bench/k3d-gpu-h62` and
+  recorded. `campaign.sh` runs again from setup, with both guests built from scratch.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
