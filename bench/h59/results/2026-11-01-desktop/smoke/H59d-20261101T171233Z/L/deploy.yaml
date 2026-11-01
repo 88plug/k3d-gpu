@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llamacpp
+  namespace: k3d-gpu-agent
+  labels:
+    app: llamacpp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llamacpp
+  template:
+    metadata:
+      labels:
+        app: llamacpp
+        k3d-gpu.io/cores: performance
+      annotations:
+        k3d-gpu.io/agent-device: CPU
+        k3d-gpu.io/agent-backend: llama.cpp
+        k3d-gpu.io/agent-fit: cpu 6x131072
+    spec:
+      containers:
+      - name: llamacpp
+        image: ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+        imagePullPolicy: IfNotPresent
+        args:
+        - --model
+        - /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf
+        - --alias
+        - gemma
+        - --host
+        - 0.0.0.0
+        - --port
+        - '8000'
+        - --jinja
+        - --reasoning
+        - 'off'
+        - -c
+        - '786432'
+        - -np
+        - '6'
+        - -ngl
+        - '0'
+        - --cache-ram
+        - '0'
+        - -ctxcp
+        - '4'
+        - --threads
+        - '8'
+        - --threads-batch
+        - '16'
+        - --load-mode
+        - mmap+mlock
+        - --spec-draft-model
+        - /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf
+        - --spec-type
+        - draft-mtp
+        securityContext:
+          capabilities:
+            add:
+            - IPC_LOCK
+        ports:
+        - name: http
+          containerPort: 8000
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+        resources:
+          requests:
+            cpu: '16'
+            memory: 43Gi
+          limits:
+            memory: 43Gi
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          readOnly: true
+      volumes:
+      - name: models
+        hostPath:
+          path: /var/apb-models
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llamacpp
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: llamacpp
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

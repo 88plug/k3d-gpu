@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# campaign.sh WHAT...: H59d on the desktop (i9-13900T). WHAT is smoke or a hold number (1-4), or
+# "spare K" to run spare hold K repeating hold J ("spare 5 2"). Each step runs bench/h59/hold.sh
+# desktop under ~/k3dgpu-bench.lock (the desktop's lock, F3 amendment R1), with the co-tenants
+# (qwen35-9b, gpustack-worker) recorded read-only before and after. The campaign stops at the
+# first hold whose rc is not 0, so a spare is chosen by hand.
+set -uo pipefail
+W=/home/andrew/k3d-gpu/.claude/worktrees/wf_95997d03-11c-1
+export G=/home/andrew/k3dgpu-h59 LOCK=/home/andrew/k3dgpu-bench.lock K3D_REAL=/usr/bin/k3d
+export H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.85@sha256:980402d79c9b42d5b0b2873c18f9663f5fa8f4116b0ee4591e5d33974b6b5242
+export SUDO_ASKPASS=/tmp/claude-1000/-home-andrew-k3d-gpu/86e13552-98b8-48e1-b1aa-9fbfea1a0978/scratchpad/askpass.sh
+export PATH=${G}/bin:${PATH}
+cd "${W}"
+C=${G}/cotenants
+mkdir -p "${C}"
+step() {  # step LABEL hold.sh-args...
+    local label=$1 rc
+    shift
+    bash "${G}/cotenants.sh" "${label} pre" > "${C}/${label}-pre.txt" 2>&1
+    bash bench/h59/hold.sh desktop "$@"
+    rc=$?
+    bash "${G}/cotenants.sh" "${label} post" > "${C}/${label}-post.txt" 2>&1
+    echo "$(date -u +%FT%TZ) ${label} rc=${rc}" >> "${G}/campaign-steps.log"
+    return "${rc}"
+}
+while [ $# -gt 0 ]; do
+    case $1 in
+        smoke) step smoke smoke || exit $? ; shift ;;
+        spare) step "hold$2" "$2" "$3" || exit $? ; shift 3 ;;
+        *) step "hold$1" "$1" || exit $? ; shift ;;
+    esac
+done
+echo "$(date -u +%FT%TZ) done" >> "${G}/campaign-steps.log"

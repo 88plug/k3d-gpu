@@ -1,0 +1,475 @@
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:26:39.553588  397635 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:26:39Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:26:59.579879  399968 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:26:59Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:27:29.706443  401849 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:27:29Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:27:39.717441  404768 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:27:39Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:27:59.746004  405759 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:27:59Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:28:09.758990  407716 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:28:09Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:28:19.771220  408675 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:28:19Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:28:29.783736  409645 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:28:29Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:28:39.794169  410549 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:28:39Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:28:49.806190  411538 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:28:49Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:29:10.851580  412505 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": writeto tcp4 127.0.0.1:52962->127.0.0.1:8000: read tcp4 127.0.0.1:52962->127.0.0.1:8000: read: connection reset by peer"
+error: lost connection to pod
+port-forward exited 2026-11-01T18:29:10Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:29:20.863871  414501 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:29:20Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:29:30.880095  415463 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:29:30Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:29:40.893030  416354 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:29:40Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:29:50.904153  417374 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:29:50Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:30:00.917334  418324 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:30:00Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:30:10.930055  419233 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:30:10Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:30:20.942177  420222 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:30:20Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:30:30.954488  421196 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:30:30Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:30:50.980539  422099 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:30:50Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:00.992082  424158 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:00Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:11.005336  425124 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:21.018222  426268 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:31.029600  427317 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:41.043564  428244 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:31:51.055503  429230 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:31:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:01.072192  430198 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:11.084942  431123 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:21.097229  432077 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:31.112096  433028 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:41.124308  433920 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:32:51.137686  434953 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:32:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:33:01.151090  435907 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:33:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:33:11.162860  436809 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:33:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:33:21.177141  437784 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:33:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:33:51.212010  438748 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:33:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:01.223457  441662 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:11.235796  442917 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:21.247967  443864 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:31.260511  444857 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:41.270829  445784 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:34:51.283965  446819 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:34:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:01.293731  447771 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:11.305522  448724 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:21.318632  449730 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:31.331229  450650 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:41.344969  451620 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:35:51.357929  452616 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:35:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:01.373088  453514 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:11.386965  454688 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:21.400225  455660 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:31.410887  456558 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:41.424306  457548 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:36:51.437904  458546 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:36:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:01.449387  459455 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:11.460783  460462 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:21.472146  461375 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:31.484736  462305 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:41.496870  463263 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:37:51.510269  464286 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:37:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:01.524579  465167 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:11.538177  466193 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:21.550544  467096 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:31.562885  467994 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:41.576558  468994 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:38:51.589787  469959 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:38:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:39:01.603754  470891 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:39:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+Handling connection for 19704
+E1101 10:39:21.627382  471846 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:39:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:39:31.640656  473751 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:39:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:39:41.655984  474712 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:39:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:39:51.667937  475710 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:39:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:01.682414  476627 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:01Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:11.695928  477586 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:11Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:21.709557  478537 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:21Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:31.724148  479478 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:31Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:41.737872  480443 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:41Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000
+Handling connection for 19704
+E1101 10:40:51.754494  481393 portforward.go:424] "Unhandled Error" err="an error occurred forwarding 19704 -> 8000: error forwarding port 8000 to pod 0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-3a5155a2-6311-3233-7c62-85614295803c\": failed to connect to localhost:8000 inside namespace \"0f90d43d4a3ef66edf6228b8d7c95b6d1996b8f55460edd6c675f1c31dbbb653\", IPv4: dial tcp4 127.0.0.1:8000: connect: connection refused IPv6 dial tcp6 [::1]:8000: connect: connection refused "
+error: lost connection to pod
+port-forward exited 2026-11-01T18:40:51Z
+Forwarding from 127.0.0.1:19704 -> 8000
+Forwarding from [::1]:19704 -> 8000

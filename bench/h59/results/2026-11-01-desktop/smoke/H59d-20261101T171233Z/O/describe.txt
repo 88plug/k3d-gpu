@@ -1,0 +1,107 @@
+Name:             ovms-7cdcbc5d4c-nknlx
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h59-smoke-server-0/172.20.0.2
+Start Time:       Sun, 01 Nov 2026 09:15:54 -0800
+Labels:           app=ovms
+                  k3d-gpu.io/cores=performance
+                  pod-template-hash=7cdcbc5d4c
+Annotations:      k3d-gpu.io/agent-device: CPU
+                  k3d-gpu.io/agent-fit: cpu 6x16384
+Status:           Running
+IP:               10.42.0.10
+IPs:
+  IP:           10.42.0.10
+Controlled By:  ReplicaSet/ovms-7cdcbc5d4c
+Init Containers:
+  pull:
+    Container ID:  containerd://598fae0986f78319ce3d64ff2a77755bfa2328b434c55b5ebe515e90e0acbb38
+    Image:         openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Image ID:      docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Port:          <none>
+    Host Port:     <none>
+    Args:
+      --pull
+      --source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov
+      --model_repository_path=/models
+      --model_name=gemma
+      --task=text_generation
+      --target_device=CPU
+      --tool_parser=gemma4
+      --reasoning_parser=gemma4
+      --max_num_seqs=6
+      --cache_size=21
+    State:          Terminated
+      Reason:       Completed
+      Exit Code:    0
+      Started:      Sun, 01 Nov 2026 09:16:16 -0800
+      Finished:     Sun, 01 Nov 2026 09:16:16 -0800
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /models from models (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6p8qt (ro)
+Containers:
+  ovms:
+    Container ID:  containerd://65caf45d7fdd3776ac216682192c4c0adc164ad2aae34043f54ccd97a20c060d
+    Image:         openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Image ID:      docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      --rest_port=8000
+      --model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+      --model_name=gemma
+      --cache_dir=/models/.ov_cache
+      --log_level=INFO
+    State:          Running
+      Started:      Sun, 01 Nov 2026 09:16:17 -0800
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      memory:  41Gi
+    Requests:
+      cpu:        16
+      memory:     41Gi
+    Readiness:    http-get http://:http/v2/health/ready delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6p8qt (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  kube-api-access-6p8qt:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  61s                default-scheduler  Successfully assigned k3d-gpu-agent/ovms-7cdcbc5d4c-nknlx to k3d-k3dgpu-d-h59-smoke-server-0
+  Normal   Pulling    61s                kubelet            spec.initContainers{pull}: Pulling image "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+  Normal   Pulled     41s                kubelet            spec.initContainers{pull}: Successfully pulled image "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58" in 20.642s (20.642s including waiting). Image size: 404902607 bytes.
+  Normal   Created    40s                kubelet            spec.initContainers{pull}: Container created
+  Normal   Started    40s                kubelet            spec.initContainers{pull}: Container started
+  Normal   Pulled     39s                kubelet            spec.containers{ovms}: Container image "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58" already present on machine and can be accessed by the pod
+  Normal   Created    39s                kubelet            spec.containers{ovms}: Container created
+  Normal   Started    39s                kubelet            spec.containers{ovms}: Container started
+  Warning  Unhealthy  39s                kubelet            spec.containers{ovms}: Readiness probe failed: Get "http://10.42.0.10:8000/v2/health/ready": dial tcp 10.42.0.10:8000: connect: connection refused
+  Warning  Unhealthy  18s (x5 over 38s)  kubelet            spec.containers{ovms}: Readiness probe failed: HTTP probe failed with statuscode: 503

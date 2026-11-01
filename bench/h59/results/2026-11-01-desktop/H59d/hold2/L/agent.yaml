@@ -1,0 +1,237 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+# GGUF weights (downloaded or converted once), kept across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llamacpp-models
+  namespace: k3d-gpu-agent
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gguf-convert
+  namespace: k3d-gpu-agent
+data:
+  convert.sh: |
+    gguf_convert () 
+    { 
+        set -euo pipefail;
+        local repo=$1 rev=$2 out=$3 need=$4 quant=$5 src tmp have free;
+        shift 5;
+        if [ -f "${out}/manifest.json" ]; then
+            echo "gguf-convert: ${out} is already built";
+            return 0;
+        fi;
+        src="${out}.src" tmp="${out}.partial";
+        rm -rf "${tmp}";
+        mkdir -p "${src}" "${tmp}";
+        have=$(du -sb "${src}" | cut -f1);
+        free=$(df -P -B1 "${tmp}" | awk 'NR == 2 { print $4 }');
+        if [ "$((need - have))" -gt "${free}" ]; then
+            echo "gguf-convert: needs $(((need - have) >> 30)) GiB more under $(dirname "${out}"), $((free >> 30)) GiB free";
+            return 1;
+        fi;
+        pip install -q --target /tmp/pydeps ${GGUF_CONVERT_PIP};
+        PYTHONPATH=/tmp/pydeps python3 -c 'import sys
+    from huggingface_hub import snapshot_download
+    snapshot_download(repo_id=sys.argv[1], revision=sys.argv[2], local_dir=sys.argv[3],
+                      allow_patterns=["*.json", "*.safetensors", "*.jinja", "*.txt", "*.model", "tokenizer*"])' "${repo}" "${rev}" "${src}";
+        PYTHONPATH=/tmp/pydeps python3 /app/convert_hf_to_gguf.py "$@" --outfile "${tmp}/model.gguf" "${src}";
+        if [ "${quant}" != - ]; then
+            /app/llama-quantize "${tmp}/model.gguf" "${tmp}/model-${quant}.gguf" "${quant}";
+            mv -f "${tmp}/model-${quant}.gguf" "${tmp}/model.gguf";
+        fi;
+        pip freeze --path /tmp/pydeps > "${tmp}/pip-freeze.txt";
+        python3 -c 'import hashlib, json, os, sys
+    d, f = sys.argv[1], os.path.join(sys.argv[1], "model.gguf")
+    h = hashlib.sha256()
+    with open(f, "rb") as fh:
+        for c in iter(lambda: fh.read(1 << 24), b""):
+            h.update(c)
+    json.dump({"source": sys.argv[2] + "@" + sys.argv[3], "convert": sys.argv[4], "quantize": sys.argv[5],
+               "sha256": h.hexdigest(), "bytes": os.path.getsize(f)}, open(os.path.join(d, "manifest.json"), "w"), indent=1)' "${tmp}" "${repo}" "${rev}" "$*" "${quant}";
+        rm -rf "${out}";
+        mv -T "${tmp}" "${out}";
+        rm -rf "${src}";
+        echo "gguf-convert: built ${out}/model.gguf"
+    }
+    gguf_convert "$@"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gguf-convert-b459c9c78d78
+  namespace: k3d-gpu-agent
+  labels:
+    app: gguf-convert
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: gguf-convert
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: convert
+          image: ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+          imagePullPolicy: IfNotPresent
+          command: [bash, /scripts/convert.sh]
+          args:
+            - "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant"
+            - "9537141506fe8875b3ed45b264af13580cb29166"
+            - "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166"
+            - "4294967296"
+            - "Q4_0"
+            - "--outtype"
+            - "bf16"
+          env:
+            - name: GGUF_CONVERT_PIP
+              value: "transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
+            - name: HOME
+              value: /tmp
+            - name: HF_HUB_DISABLE_XET
+              value: "1"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              memory: 64Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llamacpp-models
+        - name: scripts
+          configMap:
+            name: gguf-convert
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llamacpp
+  namespace: k3d-gpu-agent
+  labels:
+    app: llamacpp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llamacpp
+  template:
+    metadata:
+      labels:
+        app: llamacpp
+        k3d-gpu.io/cores: performance
+      annotations:
+        k3d-gpu.io/agent-device: CPU
+        k3d-gpu.io/agent-backend: llama.cpp
+        k3d-gpu.io/agent-fit: "cpu 4x262144"
+    spec:
+      initContainers:
+        # The conversion Job writes manifest.json last.
+        - name: wait-gguf
+          image: ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c]
+          args:
+            - |
+              for d in /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166; do
+                until [ -f "$d/manifest.json" ]; do echo "waiting for $d"; sleep 15; done
+              done
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      containers:
+        - name: llamacpp
+          image: ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--model"
+            - "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf"
+            - "--model-url"
+            - "https://huggingface.co/google/gemma-4-26B-A4B-it-qat-q4_0-gguf/resolve/d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf"
+            - "--alias"
+            - "gemma"
+            - "--host"
+            - "0.0.0.0"
+            - "--port"
+            - "8000"
+            - "--jinja"
+            - "--reasoning"
+            - "off"
+            - "-c"
+            - "1048576"
+            - "-np"
+            - "4"
+            - "-ngl"
+            - "0"
+            - "--cache-ram"
+            - "0"
+            - "-ctxcp"
+            - "4"
+            - "--threads"
+            - "8"
+            - "--threads-batch"
+            - "16"
+            - "--load-mode"
+            - "mmap+mlock"
+            - "--spec-draft-model"
+            - "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf"
+            - "--spec-type"
+            - "draft-mtp"
+          securityContext:
+            capabilities:
+              add: [IPC_LOCK]
+          ports:
+            - name: http
+              containerPort: 8000
+          # No liveness probe: the first start downloads the weights. /health is 503
+          # until the model is loaded.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "16"
+              memory: 45Gi
+            limits:
+              memory: 45Gi
+          volumeMounts:
+            - name: models
+              mountPath: /models
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: llamacpp-models
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llamacpp
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: llamacpp
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
