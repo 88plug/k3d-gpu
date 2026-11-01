@@ -1,0 +1,201 @@
+# wildct kernel modules for k3s, third load (wildct amendment R5). After amendment R4, H10 read
+# "NFPROBE missing: NFLOG limit": iptables-nft writes -m limit and -j NFLOG as nftables' native limit
+# and log expressions, which need nft_limit and nft_log. On 2026-10-29 (about 17:05 PDT) the box owner
+# approved the netfilter module class (nf_/nft_/xt_/ipt_/ip6t_/ip_set*) for this campaign, each load
+# with the same snapshot, check and rollback procedure. kernel.modprobe stays empty.
+#
+# Load (as root, through sudo): modprobe -a nft_limit nft_log -> "LOADED 2026-10-30T05:02:48Z" (rc 0).
+# Snapshot (as andrew, read-only), the same commands each time:
+#   docker ps --format '{{.Names}}|{{.Status}}' | sed -E 's/Up [^(|]*/Up/' | sort
+#   for p in <every 0.0.0.0 published port>; do curl -s -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:$p/; done
+#   docker inspect -f '{{.Name}} {{.State.StartedAt}} {{.RestartCount}}' $(docker ps -q) | sort
+# then, as root: iptables-save | wc -l; nft list ruleset | wc -l;
+#   lsmod | grep -cE '^(nf|nft|xt|ip_set|ipt|ip6t)_'   (the netfilter module count)
+# The container, port and start-time lines and both rule counts were identical before, at once after
+# and again 2 min 18 s after the load; only the netfilter module count moved, 33 -> 35 (nft_limit and
+# nft_log). This snapshot reads neither Prometheus's targets nor the tailnet address, which amendments
+# R3 and R4 also read.
+# Persist (as root): the three lines below appended to /etc/modules-load.d/k3dgpu-wildct.conf.
+# Then bench/wildct/nfprobe.sh with the 0.1.79 node image read "NFPROBE clean" (its rc was not
+# captured); step 1's H10 with the 0.1.81 node image read "NFPROBE clean", rc 0
+# (../runs/resume-health-r5.txt).
+
+== before (file written 2026-10-30T05:02:42Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+## as root: iptables-save lines, nft ruleset lines, netfilter module count
+180
+286
+33
+
+== at once after (file written 2026-10-30T05:02:49Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+## as root: iptables-save lines, nft ruleset lines, netfilter module count
+180
+286
+35
+
+== 2 min 18 s after (file written 2026-10-30T05:05:06Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+## as root: iptables-save lines, nft ruleset lines, netfilter module count
+180
+286
+35
+
+== /etc/modules-load.d/k3dgpu-wildct.conf, tail -4 after the append
+ip_set_hash_ipportnet
+# k3d-gpu wildct, 2026-10-29 (owner approved netfilter class): iptables-nft limit/NFLOG for k3s
+nft_limit
+nft_log
+
+== nfprobe.sh cryptoandcoffee/k3d-gpu:0.1.79@sha256:6e27ff9817bf9398edb20f479dceb5f08273a04a01971b37628a7b2791bdfcfe | grep -E 'FAIL|NFPROBE'
+NFPROBE clean

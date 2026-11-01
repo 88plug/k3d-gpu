@@ -61,6 +61,8 @@ case "$*" in
     *"get secret k3d-gpu-llm -o jsonpath"*)
         ns=$2; [ -f "${STUB_STATE}/secret-key-${ns}" ] || exit 1; cat "${STUB_STATE}/secret-key-${ns}" ;;
     *"get sandboxtemplate"*) [ -f "${STUB_STATE}/pin" ] || exit 1; cat "${STUB_STATE}/pin" ;;
+    *"get deployment agent-sandbox-controller"*) [ ! -f "${STUB_STATE}/controller" ] || cat "${STUB_STATE}/controller" ;;
+    *"get crd "*) for c in sandboxtemplates sandboxwarmpools; do printf '%s.extensions.agents.x-k8s.io|v1beta1||\n' "${c}"; done ;;
     *"get secret open-webui-admin"*) exit 1 ;;
     *"delete secret"*) rm -f "${STUB_STATE}/secret-${2}" "${STUB_STATE}/secret-key-${2}" ;;
 esac
@@ -202,6 +204,16 @@ has "sandbox up --remote: sandbox Secret copy" "$(cat "${S}/kubectl.log")" "stdi
 grep -n 'stdin-secret\|apply -f -' "${S}/kubectl.log" | grep -q 'stdin-secret' && \
     [ "$(grep -n 'stdin-secret' "${S}/kubectl.log" | head -1 | cut -d: -f1)" -lt "$(grep -n '^kubectl apply -f -$' "${S}/kubectl.log" | tail -1 | cut -d: -f1)" ] \
     && ok "sandbox up --remote: Secret before the profile" || fail "sandbox up --remote: Secret before the profile"
+# --adopt next to another installer's controller: the same pinned profile, no controller manifest.
+: > "${S}/kubectl.log"; : > "${S}/applied"
+printf 'registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.0||' > "${S}/controller"
+out=$(K3D_GPU_REMOTE_ADDRS=104.21.77.178,172.67.210.235 OPENAI_BASE_URL="https://llm.example.net/v1" OPENAI_API_KEY="${KEY}" \
+    run eval 'remote_resolve() { printf "https://llm.example.net/v1\tzai-org/GLM-5.3\tOPENAI_BASE_URL\n"; }; sandbox_status() { :; }; SANDBOX_TIMEOUT=0; kubectl() { command kubectl "$@"; [ "$*" != "-n agent-sandbox get sandboxwarmpool python-ecores -o jsonpath={.status.readyReplicas}" ] || echo 1; }; cmd_sandbox up --adopt --remote')
+rm -f "${S}/controller"
+has "sandbox up --adopt --remote: adopts the other controller" "${out}" "adopting agent-sandbox-system/agent-sandbox-controller (registry.k8s.io/agent-sandbox/agent-sandbox-controller:v0.5.0)"
+has "sandbox up --adopt --remote: pinned profile applied" "$(cat "${S}/applied")" "cidr: 104.21.77.178/32"
+has "sandbox up --adopt --remote: sandbox Secret copy" "$(cat "${S}/kubectl.log")" "stdin-secret apply --server-side --force-conflicts --field-manager=k3d-gpu -f -"
+lacks "sandbox up --adopt --remote: no controller manifest" "$(cat "${S}/kubectl.log")" "share/agent-sandbox.yml"
 out=$(run cmd_sandbox status --remote)
 has "sandbox: --remote only with up" "${out}" "--remote goes with 'sandbox up'"
 printf 'llm.example.net 104.21.77.178,172.67.210.235' > "${S}/pin"

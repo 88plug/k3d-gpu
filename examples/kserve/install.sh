@@ -44,7 +44,9 @@ helm upgrade --install kserve-resources oci://ghcr.io/kserve/charts/kserve-resou
     --version "${KSERVE_VERSION}" --namespace kserve \
     --values "${HERE}/kserve-values.yaml" --wait --timeout 10m
 
+# known-issue-begin: kserve-4592
 kubectl apply --server-side -f "${HERE}/openvino-runtime.yaml"
+# known-issue-end: kserve-4592
 
 sed -e "s/supplementalGroups: \[\]/supplementalGroups: [${render_gid}]/" \
     -e "s|gpu.intel.com/i915:|gpu.intel.com/${driver}:|" "${HERE}/qwen3-isvc.yaml" \

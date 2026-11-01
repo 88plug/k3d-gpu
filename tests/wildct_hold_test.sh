@@ -608,6 +608,19 @@ row_envs_match_the_registration() {
         "bash ${ROOT}/bench/h57d/hold.sh 2 perf" || return 1
     has h57w 5 perf Ld Ld-mtp Od -- "bash ${ROOT}/bench/h57d/hold.sh 5 perf Ld Ld-mtp Od" || return 1
     has h57w-convert -- "G=${HOME}/k3dgpu-bench-wildct/h57" "LOCK=${HOME}/k3dgpu-bench-wildct/live.lock" || return 1
+    # H59w (H59 amendment R1): bench/h59/hold.sh's wildct profile carries the opt-out, W3 and load1 12.
+    has h59w 2 -- "G=${HOME}/k3dgpu-bench-wildct/h59" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" \
+        "K3D_REAL=${HOME}/k3dgpu-bench-wildct/bin/k3d" "H59_IMAGE=${IMG}" "bash ${ROOT}/bench/h59/hold.sh wildct 2" || return 1
+    has h59w 5 3 -- "bash ${ROOT}/bench/h59/hold.sh wildct 5 3" || return 1
+    has h59w-prep -- "G=${HOME}/k3dgpu-bench-wildct/h59" "LOCK=${HOME}/k3dgpu-bench-wildct/live.lock" \
+        "bash ${ROOT}/bench/h59/prep.sh wildct" || return 1
+    python3 -c 'import sys
+sys.path.insert(0, sys.argv[1] + "/bench/h59")
+import run
+p = run.PROFILES["wildct"]
+sys.exit(not (p["k3s_args"] == sys.argv[2] and p["vendors"] == "auto,-nvidia,-intel" and p["load1_max"] == 12
+              and p["prefix"].startswith("k3dgpu-w-")))' "${ROOT}" "${W3_LEDGER}" \
+        || { echo "bench/h59/run.py's wildct profile is not the registration's"; return 1; }
     has h18w -- "bash ${ROOT}/bench/sandbox_round.sh (runs 1-3)" || return 1
     # H52w's procedure: `hold.sh H52w 1800 3 bench/wildct/h52w.sh <out>`; h52w.sh sets its own
     # cluster, opt-out and W3, and runs the installed release's default node image (no IMAGE).
@@ -687,6 +700,8 @@ row_guards() {
     IMAGE=cryptoandcoffee/k3d-gpu:0.1.74 bash "${ROW}" h25w 2> /dev/null; [ $? = 2 ] || { echo "IMAGE without a digest accepted"; return 1; }
     IMAGE=${IMG} bash "${ROW}" h57w 1 perf 2> /dev/null; [ $? = 2 ] || { echo "h57w ran without the k3d shim"; return 1; }
     WILDCT_HOLD=X bash "${ROW}" h57w-convert 2> /dev/null; [ $? = 2 ] || { echo "h57w-convert ran inside a hold"; return 1; }
+    IMAGE=${IMG} bash "${ROW}" h59w 1 2> /dev/null; [ $? = 2 ] || { echo "h59w ran without the k3d shim"; return 1; }
+    WILDCT_HOLD=X bash "${ROW}" h59w-prep 2> /dev/null; [ $? = 2 ] || { echo "h59w-prep ran inside a hold"; return 1; }
     # WILDCT_ROW_CHECK=1 (launch's pre-check): every check, the k3d shim included; runs nothing.
     local a
     chk() { WILDCT_ROW_CHECK=1 IMAGE=${IMG} bash "${ROW}" "$@" > "${W}/chk.out" 2>&1; }
@@ -700,6 +715,16 @@ row_guards() {
     for a in "1 quality" "4 perf" "5 Perf Ld" "5 perf Xx" "1 perf Ld" "6 perf" "5 perf" "0 perf" "5 perf Ld Ld"; do
         # shellcheck disable=SC2086 # the row's arguments, split on purpose
         chk h57w ${a}; [ $? = 2 ] || { echo "check mode passed h57w ${a}"; return 1; }
+    done
+    chk h59w 1; [ $? = 2 ] || { echo "check mode passed h59w without the k3d shim"; return 1; }
+    install -D -m 0755 "${ROOT}/bench/h59/k3d-shim.sh" "${HOME}/k3dgpu-bench-wildct/h59/bin/k3d"
+    for a in 1 2 3 4 "5 1" "6 4"; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h59w ${a} || { echo "check mode refused h59w ${a}: $(cat "${W}/chk.out")"; return 1; }
+    done
+    for a in "" 5 7 0 "1 2" "5 5" "6 0" "1 perf" "5 1 O"; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h59w ${a}; [ $? = 2 ] || { echo "check mode passed h59w ${a}"; return 1; }
     done
     chk h25w || { echo "check mode refused h25w: $(cat "${W}/chk.out")"; return 1; }
     [ "$(calls '')" = 0 ] || { echo "check mode ran a command: $(cat "${W}/calls.log")"; return 1; }

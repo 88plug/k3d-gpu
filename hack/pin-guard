@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""Enforce pins/classes on the diff merge-base(BASE, HEAD)..HEAD.
+
+  hack/pin-guard --base REF [--head REF] [--autobump] [--branch NAME] [--classes FILE]
+
+  a. historical path (a historical line, or a ledger line whose rows all have a
+     verdict in BASE's Hypotheses table): any modification, deletion or rename fails
+  b. historical-ref: each string occurs in its file as often as at the merge-base
+     (a string the merge-base does not hold yet is being recorded, and passes)
+  c. arm path (a ledger line with a PENDING row in BASE's table), outside */results/,
+     a file the diff modifies, deletes or renames: when the pin tokens on removed
+     lines differ from those on added lines (as multisets), the same diff must add an
+     EXPERIMENTS.md heading
+       ### <names> amendment <ID>: <title> (YYYY-MM-DD)
+     ("Amendment" and "(<host>, YYYY-MM-DD)" are read the same way)
+     whose names include a PENDING row of the line or one of its aliases, dated no
+     earlier than the merge-base's commit date minus one day. A PENDING row with a
+     "### <row or alias> run" heading in BASE gets a warning: it has started.
+     A ledger line whose rows all have verdicts is an arm for this diff, not
+     historical, when the diff records a run of one of them (adds a "### <names>
+     run" heading, or rewrites its Hypotheses table line) or pre-registers a row of
+     it (absent from BASE's table, PENDING in HEAD's, named by an added
+     "### <names> pre-registration" heading, which then sets its pins; the row may
+     add itself to the line in HEAD's pins/classes in the same diff), or adds a
+     PENDING row to the line in HEAD's pins/classes with an amendment naming it (the
+     amendment moves that row's arm onto this runner, and is held to the rule above).
+  d. --autobump (an autobump/* branch): touching .github/ or pins/classes fails, and
+     touching EXPERIMENTS.md fails unless the branch is autobump/amend-*
+  e. a changed file under bench/ or oracle/ that holds a pin token and no line
+     classifies fails: classify it in pins/classes
+
+Classes come from BASE's pins/classes; a path it leaves unmatched takes HEAD's line
+(a path the diff classifies). --classes FILE replaces both (a replay of commits that
+predate pins/classes). Exit 0 clean, 1 on a failure, 2 on a usage or git error.
+"""
+
+import argparse
+import collections
+import datetime
+import importlib.machinery
+import importlib.util
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_loader = importlib.machinery.SourceFileLoader("pin_classes", os.path.join(HERE, "hack", "pin-classes"))
+_spec = importlib.util.spec_from_loader("pin_classes", _loader)
+pc = importlib.util.module_from_spec(_spec)
+_loader.exec_module(pc)
+
+AMEND_RE = re.compile(r"^### (?P<names>.+?) [Aa]mendment [A-Z]+[0-9]+: .+ \((?:[^()]*,\s*)?\d{4}-\d{2}-\d{2}\)\s*$")
+PREREG_RE = re.compile(r"^###\s+(?P<names>.+?)\s+pre-registration\b")
+RUN_RE = re.compile(r"^###\s+(?P<names>.+?)\s+(?:re-)?run\b")
+DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})\)\s*$")
+ROW_RANGE = re.compile(r"^H(\d+)([a-z]{0,2})-H(\d+)([a-z]{0,2})$")
+TABLE_ROW = re.compile(r"^\|\s*(H\d+[a-z]{0,2})\s*\|")
+
+
+class Git:
+    def __init__(self, root):
+        self.root = root
+
+    def run(self, *args, ok=(0,)):
+        p = subprocess.run(["git", "-C", self.root] + list(args), capture_output=True)
+        if p.returncode not in ok:
+            raise RuntimeError("git %s: %s" % (" ".join(args), p.stderr.decode(errors="replace").strip()))
+        return p
+
+    def out(self, *args):
+        return self.run(*args).stdout.decode(errors="replace")
+
+    def show(self, rev, path):
+        """The file at rev, or None when rev has no such (text) file."""
+        p = self.run("show", "%s:%s" % (rev, path), ok=(0, 128))
+        if p.returncode:
+            return None
+        try:
+            return p.stdout.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+
+
+def names_of(text):
+    """The row ids and aliases a heading's <names> part lists, casefolded; H30-H32 is
+    H30, H31 and H32."""
+    out = set()
+    for tok in re.split(r"[\s,/]+|\band\b", text):
+        tok = tok.strip("*`'\".:;()")
+        if not tok:
+            continue
+        out.add(tok.casefold())
+        m = ROW_RANGE.match(tok)
+        if m:
+            a, b = int(m.group(1)), int(m.group(3))
+            out.update({("H%d%s" % (a, m.group(2))).casefold(), ("H%d%s" % (b, m.group(4))).casefold()})
+            if not m.group(2) and not m.group(4) and 0 <= b - a <= 50:
+                out.update(("H%d" % i).casefold() for i in range(a, b + 1))
+    return out
+
+
+def headings(text, rx):
+    return [line for line in (text or "").splitlines() if rx.match(line)]
+
+
+def added_lines(diff_text):
+    """(removed, added) content lines of a -U0 diff."""
+    removed, added, hunk = [], [], False
+    for line in diff_text.splitlines():
+        if line.startswith("diff --git"):
+            hunk = False
+        elif line.startswith("@@"):
+            hunk = True
+        elif hunk and line.startswith("-"):
+            removed.append(line[1:])
+        elif hunk and line.startswith("+"):
+            added.append(line[1:])
+    return removed, added
+
+
+def ledger_of(text):
+    if text is None:
+        return {}
+    with tempfile.TemporaryDirectory() as d:
+        pathlib.Path(d, "EXPERIMENTS.md").write_text(text)
+        return pc.read_ledger(d)
+
+
+class Guard:
+    def __init__(self, root, base, head, autobump, branch, classes_file):
+        self.git = Git(root)
+        self.base = self.git.out("rev-parse", "--verify", base + "^{commit}").strip()
+        self.head = self.git.out("rev-parse", "--verify", head + "^{commit}").strip()
+        self.mb = self.git.out("merge-base", self.base, self.head).strip()
+        self.autobump, self.branch = autobump, branch
+        self.fails, self.warns = [], []
+        if classes_file:
+            lines, refs = pc.load(classes_file)
+            self.base_lines, self.head_lines, self.refs = lines, [], refs
+        else:
+            base_text = self.git.show(self.base, pc.CLASSES_FILE)
+            head_text = self.git.show(self.head, pc.CLASSES_FILE)
+            self.base_lines, base_refs = pc.parse(base_text) if base_text else ([], [])
+            self.head_lines, head_refs = pc.parse(head_text) if head_text else ([], [])
+            seen = {(r.glob, r.ref) for r in base_refs}
+            self.refs = base_refs + [r for r in head_refs if (r.glob, r.ref) not in seen]
+        base_exp = self.git.show(self.base, "EXPERIMENTS.md")
+        self.ledger = ledger_of(base_exp)
+        self.head_ledger = ledger_of(self.git.show(self.head, "EXPERIMENTS.md"))
+        self.run_names = [names_of(RUN_RE.match(h).group("names")) for h in headings(base_exp, RUN_RE)]
+        exp_removed, exp_added = added_lines(self.diff("EXPERIMENTS.md"))
+        self.amendments = []
+        for line in exp_added:
+            m = AMEND_RE.match(line)
+            if m:
+                d = DATE_RE.search(line)
+                self.amendments.append((line, names_of(m.group("names")), d.group(1) if d else None))
+        self.preregs = set()
+        self.landing = set()  # rows whose run this diff records
+        for line in exp_added:
+            m = PREREG_RE.match(line)
+            self.preregs |= names_of(m.group("names")) if m else set()
+            m = RUN_RE.match(line)
+            self.landing |= names_of(m.group("names")) if m else set()
+        # A Hypotheses table line the diff rewrites: a verdict landing, or a re-opened row's.
+        rewritten = {m.group(1) for m in map(TABLE_ROW.match, exp_removed) if m}
+        self.landing |= {m.group(1).casefold() for m in map(TABLE_ROW.match, exp_added) if m and m.group(1) in rewritten}
+        day = self.git.out("log", "-1", "--format=%cs", self.mb).strip()
+        self.floor = (datetime.date.fromisoformat(day) - datetime.timedelta(days=1)).isoformat()
+
+    def diff(self, *paths):
+        return self.git.out("diff", "--no-ext-diff", "--no-color", "-U0", "-M", self.mb, self.head, "--", *paths)
+
+    def line_for(self, path):
+        ln = pc.match(self.base_lines, path)
+        return ln if ln else pc.match(self.head_lines, path)
+
+    def effective(self, path):
+        ln = self.line_for(path)
+        if ln is None:
+            return "ours", None
+        if ln.kind != "ledger":
+            return ln.kind, ln
+        state = pc.resolve(ln, self.ledger)
+        if state == "historical" and (self.prereg_rows(ln, path) or self.landing_rows(ln)
+                                      or self.joined_rows(ln, path)):
+            # reused by a row this diff pre-registers or amends onto it, or a re-run it records
+            state = "arm"
+        return state, ln
+
+    def landing_rows(self, ln):
+        """Rows of the line whose run record this diff adds ("### <names> run ...")."""
+        return [r for r in ln.rows if r.casefold() in self.landing]
+
+    def prereg_rows(self, ln, path):
+        """Rows of the line this diff pre-registers: absent from BASE's table, PENDING in
+        HEAD's, named by an added pre-registration heading. HEAD's ledger line for path
+        counts too, so a new row can add itself to a finished runner's line in the same
+        diff (no other change to BASE's line takes effect)."""
+        head = pc.match(self.head_lines, path)
+        rows, aliases = list(ln.rows), list(ln.aliases)
+        if head is not None and head.kind == "ledger":
+            rows += [r for r in head.rows if r not in rows]
+            aliases += [a for a in head.aliases if a not in aliases]
+        new = [r for r in rows if r not in self.ledger and self.head_ledger.get(r) == "PENDING"]
+        return [r for r in new if r.casefold() in self.preregs or any(a.casefold() in self.preregs for a in aliases)]
+
+    def joined_rows(self, ln, path):
+        """PENDING rows (in BASE's table) that HEAD's ledger line for path adds to BASE's
+        line, each named by an amendment heading this diff adds: the amendment moves the
+        row's arm onto this runner. check_arm then holds the amendment to its date floor."""
+        head = pc.match(self.head_lines, path)
+        if head is None or head.kind != "ledger":
+            return []
+        named = set().union(*(a[1] for a in self.amendments))
+        return [r for r in head.rows if r not in ln.rows and self.ledger.get(r) == "PENDING"
+                and r.casefold() in named]
+
+    def fail(self, msg):
+        self.fails.append(msg)
+
+    def changes(self):
+        """[(status letter, [path] or [old path, new path])] of the diff."""
+        fields = self.git.out("diff", "--name-status", "-z", "-M", self.mb, self.head).split("\0")
+        out, i = [], 0
+        while i < len(fields) and fields[i]:
+            code = fields[i][0]
+            n = 2 if code in "RC" else 1
+            out.append((code, fields[i + 1:i + 1 + n]))
+            i += 1 + n
+        return out
+
+    def check(self):
+        changes = self.changes()
+        for code, paths in changes:
+            old, new = paths[0], paths[-1]
+            for p in set(paths):
+                self.check_autobump(p)
+            if code in "MDRT":
+                kind, ln = self.effective(old)
+                if kind == "historical":
+                    what = {"M": "modified", "D": "deleted", "R": "renamed to " + new, "T": "changed type"}[code]
+                    why = ("%s line %d" % (pc.CLASSES_FILE, ln.n)) if ln else pc.CLASSES_FILE
+                    self.fail("%s: historical record %s (%s: %s)" % (old, what, why, self.state_of(ln)))
+                    continue
+            target = old if code == "D" else new
+            kind, ln = self.effective(target)
+            # A new file moves no pin a row already has; its pins are guarded from then on.
+            if kind == "arm" and code not in "AC" and "/results/" not in "/" + target:
+                self.check_arm(code, old, new, target, ln)
+            if code != "D" and pc.guarded(new) and self.line_for(new) is None:
+                text = self.git.show(self.head, new)
+                if text is not None and pc.text_tokens(new, text):
+                    self.fail("%s: holds pin tokens (%s) and no %s line classifies it: classify it in %s"
+                              % (new, pc.text_tokens(new, text)[0], pc.CLASSES_FILE, pc.CLASSES_FILE))
+        self.check_refs({p for _, paths in changes for p in paths})
+        return self.fails, self.warns
+
+    def state_of(self, ln):
+        if ln is None or ln.kind != "ledger":
+            return "historical" + (" (%s)" % ln.reason if ln and ln.reason else "")
+        return "ledger rows %s have verdicts in %s's EXPERIMENTS.md" % (",".join(ln.rows), self.base[:12])
+
+    def check_autobump(self, path):
+        if not self.autobump:
+            return
+        if path.startswith(".github/"):
+            self.fail("%s: an autobump branch never touches .github/" % path)
+        elif path == pc.CLASSES_FILE:
+            self.fail("%s: an autobump branch never reclassifies pins" % path)
+        elif path == "EXPERIMENTS.md" and not (self.branch or "").startswith("autobump/amend-"):
+            self.fail("EXPERIMENTS.md: only an autobump/amend-* branch touches the ledger (branch %s)" % (self.branch or "?"))
+
+    def check_arm(self, code, old, new, target, ln):
+        if target.endswith(".md"):
+            return
+        removed, added = added_lines(self.diff(*sorted({old, new})))
+        gone = collections.Counter(t for line in removed for t in pc.pin_tokens(line))
+        came = collections.Counter(t for line in added for t in pc.pin_tokens(line))
+        if gone == came:
+            return
+        pending = [r for r in ln.rows if self.ledger.get(r) == "PENDING"]
+        for r in pending:
+            if any(r.casefold() in n for n in self.run_names) or any(
+                    a.casefold() in n for n in self.run_names for a in ln.aliases if a not in self.ledger):
+                self.warns.append("%s: %s has a run heading in EXPERIMENTS.md already: this pin change "
+                                  "amends a row that has started" % (target, r))
+                break
+        if not pending and self.prereg_rows(ln, target):
+            return  # the pre-registration this diff adds sets the new row's pins
+        rows = pending or self.landing_rows(ln) or self.joined_rows(ln, target)
+        owners = {r.casefold() for r in rows} | {a.casefold() for a in ln.aliases}
+        if [a for a in self.amendments if a[1] & owners and a[2] and a[2] >= self.floor]:
+            return
+        stale = [a for a in self.amendments if a[1] & owners and (not a[2] or a[2] < self.floor)]
+        changed = sorted((gone - came).elements())[:2] + sorted((came - gone).elements())[:2]
+        if stale:
+            self.fail("%s: arm pin change (%s); the amendment %r is dated before %s"
+                      % (target, ", ".join(changed), stale[0][0], self.floor))
+        else:
+            self.fail("%s: arm pin change (%s) for %s %s with no amendment in this diff: add "
+                      "'### <%s> amendment <ID>: <title> (YYYY-MM-DD)' to EXPERIMENTS.md"
+                      % (target, ", ".join(changed), "PENDING" if pending else "re-run", ",".join(rows),
+                         "|".join(rows + list(ln.aliases))))
+
+    def check_refs(self, changed):
+        for r in self.refs:
+            if r.glob not in changed:
+                continue
+            before = (self.git.show(self.mb, r.glob) or "").count(r.ref)
+            after = (self.git.show(self.head, r.glob) or "").count(r.ref)
+            if before and after != before:
+                self.fail("%s: historical-ref %r occurs %d time(s), %d at the merge-base (%s line %d)"
+                          % (r.glob, r.ref, after, before, pc.CLASSES_FILE, r.n))
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="pin-guard", description=__doc__.split("\n")[0])
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--head", default="HEAD")
+    ap.add_argument("--autobump", action="store_true")
+    ap.add_argument("--branch", default=os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME"))
+    ap.add_argument("--classes")
+    ap.add_argument("--root", default=os.getcwd())
+    a = ap.parse_args(argv[1:])
+    try:
+        g = Guard(a.root, a.base, a.head, a.autobump, a.branch, a.classes)
+        fails, warns = g.check()
+    except (RuntimeError, ValueError, OSError) as e:
+        sys.stderr.write("pin-guard: %s\n" % e)
+        return 2
+    for w in warns:
+        print("::warning::" + w)
+    for f in fails:
+        print("FAIL " + f)
+        if os.environ.get("GITHUB_ACTIONS"):
+            print("::error::" + f)
+    if fails:
+        return 1
+    print("ok   %s..%s: pins/classes holds (%d warning(s))" % (g.mb[:12], g.head[:12], len(warns)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

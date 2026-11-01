@@ -167,10 +167,33 @@ contract() {
     local name=$1 file=$2 re=$3
     if matches "${re}" "$(cat "${WF}/${file}")"; then pass "${name}"; else fail "${name} (/${re}/ in ${file})"; fi
 }
-contract "release build publishes <repo>:<version> on Docker Hub" build-and-push.yml \
-    '^ +cryptoandcoffee/k3d-gpu:\$\{\{ inputs\.release \}\}$'
-contract "release build publishes <repo>:<version> on GHCR" build-and-push.yml \
-    '^ +ghcr\.io/.*/k3d-gpu:\$\{\{ inputs\.release \}\}$'
+# The build pushes the versioned tags hack/release-tags prints; every release gets
+# <repo>:<version> on Docker Hub and GHCR, the newest one also the floating tags.
+contract "release build pushes the versioned tags hack/release-tags prints" build-and-push.yml \
+    'tags=\$\(\.ci-main/hack/release-tags "\$RELEASE" "\$K3S"\)'
+contract "release build pushes to Docker Hub and GHCR" build-and-push.yml \
+    'RELEASE_REPOS: cryptoandcoffee/k3d-gpu ghcr\.io/\$\{\{ github\.repository_owner \}\}/k3d-gpu$'
+contract "release build retries the 26.04 build (attempt 3)" build-and-push.yml \
+    '^ +- name: Build & push — Ubuntu 26\.04 \(attempt 3\)$'
+contract "release build retries the 24.04 build (attempt 3)" build-and-push.yml \
+    '^ +- name: Build & push — Ubuntu 24\.04 \(attempt 3\)$'
+contract "release build moves the floating tags only through hack/release-tags" build-and-push.yml \
+    'docker buildx imagetools create --tag "\$ref" "\$src"'
+contract "release build pushes no literal :latest tag" build-and-push.yml \
+    '!^ +(cryptoandcoffee|ghcr\.io/.*)/k3d-gpu:latest$'
+RT_ORIGIN="${WORK}/rt-origin.git"
+( export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+  git init -q --bare "${RT_ORIGIN}" && cd "${WORK}" && git init -q rt && cd rt \
+  && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m r && git tag "aur-v${VERSION}" \
+  && git push -q "${RT_ORIGIN}" "aur-v${VERSION}" )
+rt_out=$(cd "${WORK}/rt" && GIT_CONFIG_GLOBAL=/dev/null REMOTE="${RT_ORIGIN}" bash "${ROOT}/hack/release-tags" "${VERSION}" v1.37.1-k3s1 2>&1)
+if matches "^26\.04 versioned $(ere "${PINNED}")$" "${rt_out}" \
+   && matches "^26\.04 versioned ghcr\.io/88plug/k3d-gpu:$(ere "${VERSION}")$" "${rt_out}" \
+   && matches "^26\.04 floating $(ere "${REPO}:latest ${PINNED}")$" "${rt_out}"; then
+    pass "hack/release-tags gives the launcher's <repo>:<version> and moves latest for the newest release"
+else
+    fail "hack/release-tags does not print ${PINNED} (versioned) and ${REPO}:latest (floating): ${rt_out}"
+fi
 contract "release build checks out the release tag" build-and-push.yml \
     "ref: .*aur-v"
 contract "release build dispatches the AUR deploy after pushing" build-and-push.yml \

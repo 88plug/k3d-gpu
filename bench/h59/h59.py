@@ -9,10 +9,12 @@ The row's verdict from the recorded holds: the ratio of L's to O's median per-re
 tok/s over the pooled N=4 requests of performance holds 1-3, its 95% bootstrap CI (H54's
 boot_ratio: 10,000 resamples of each arm, seed 1), the per-hold N=4 ratios (SUPPORTED needs L
 faster than O in each performance hold, amendment S2), the quality gate (L's GSM8K items
-correct >= O's - 2) and the host's load rule. --load h57d applies H57d's load gate (H59d's rule, and
-H59w's through H57w) to the per-arm mean foreign P-core load over the N=4 phases, read from
-the H57d sampler's records; --load GATE.json reads {"matched": bool, "reason": str} that a
-host runner wrote under its own rule (H59 on the Xeon: H54's). --arms maps the arm names L and
+correct >= O's - 2) and the host's load rule. --load h57d applies H57d's load gate to the
+per-arm mean foreign P-core load over the N=4 phases, read from the H57d sampler's records
+(amendment S1's reading; since amendment R2 it is recorded, not gated, for H59d and H59w);
+--load GATE.json reads {"matched": bool, "reason": str} that a host runner wrote under its own
+rule (H59 on the Xeon: H54's, `run.py gate`; H59d and H59w: H57d's gate over each arm's idle
+window, `run.py idle-gate`, amendment R2). --arms maps the arm names L and
 O to the record directories' names (default L=L,O=O).
 
 Records, in H57d's layout: RESULTS_DIR/holdK/ARM/status.json for K = 1-4 (1-3 performance,

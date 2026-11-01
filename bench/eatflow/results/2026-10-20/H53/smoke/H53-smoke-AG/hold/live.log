@@ -1,0 +1,13 @@
+== arm H53 start 00:15:14 (+0s)
+== k3d-gpu up 00:15:16 (+2s)
+== wait-ready 00:18:24 (+190s)
+== ready 00:19:15 (+241s)
+== load typical 00:19:31 (+257s)
+== baseline typical 00:19:32 (+258s)
+== solo hold 1 (AG), deadline +2250s 00:19:52 (+278s)
+agentbench: AG: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup /sys/fs/cgroup/system.slice/docker-0f3ecc5db6fc6a5011721ffe8eb1db36d348e0df866e428c31ae3e2c103f8c88.scope/kubepods/burstable/podaae2b796-aecd-4431-88ac-d979d4e06784
+agentbench: task 21: 1966 s left < 99999 s, hold ends
+agentbench: solo hold 1 (AG): 0 complete attempt(s)
+== finished 00:19:58 (+284s)
+== cleanup 00:19:58 (+284s)
+== done 00:20:00 (+286s)

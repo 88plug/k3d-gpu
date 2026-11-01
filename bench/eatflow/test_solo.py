@@ -199,6 +199,32 @@ class BlockVerdictTest(unittest.TestCase):
         self.assertEqual((bv["n_blocks"], bv["verdict"]), (2, "INCONCLUSIVE"))
 
 
+class AliveBlocksTest(unittest.TestCase):
+    """H53 amendment R1's futility rule: which blocks can still count."""
+
+    @staticmethod
+    def rows(hold, n, void=()):
+        return [{"hold": hold, "j": j, "status": "void" if j in void else "complete"} for j in range(n)]
+
+    def test_nothing_run_leaves_every_block(self):
+        self.assertEqual(S.alive_blocks([], set()), [1, 2, 3, 4])
+
+    def test_a_hold_that_delivered_nothing_takes_its_block_out(self):
+        # Hold 1 ran (rc recorded) with no rows: block 1 cannot reach 8 pairs; 2-4 still can.
+        self.assertEqual(S.alive_blocks([], {1}), [2, 3, 4])
+        self.assertEqual(S.alive_blocks(self.rows(2, 24), {1, 2}), [2, 3, 4])
+
+    def test_a_short_hold_and_a_short_block(self):
+        # Hold 3 ran 7 complete attempts: block 2 is out. Holds 5 and 6 ran 10 each but only
+        # 7 tasks overlap complete (hold 6 voided three): block 3 is out.
+        rows = self.rows(1, 12) + self.rows(2, 12) + self.rows(3, 7) + self.rows(5, 10) + self.rows(6, 10, void={0, 1, 2})
+        self.assertEqual(S.alive_blocks(rows, {1, 2, 3, 5, 6}), [1, 4])
+
+    def test_two_blocks_out_leave_fewer_than_three(self):
+        rows = self.rows(2, 24) + self.rows(3, 24)
+        self.assertEqual(len(S.alive_blocks(rows, {1, 2, 3, 4})), 2)   # holds 1 and 4 (AG) delivered nothing
+
+
 class RunSoloTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
