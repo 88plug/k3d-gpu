@@ -1,0 +1,26 @@
+{
+  "classes": {
+    "other": {
+      "bytes": 2271403997,
+      "tensors": 3
+    }
+  },
+  "files": [
+    {
+      "bytes": 2189717,
+      "name": "openvino_detokenizer.bin"
+    },
+    {
+      "bytes": 2263625445,
+      "name": "openvino_model.bin"
+    },
+    {
+      "bytes": 5588835,
+      "name": "openvino_tokenizer.bin"
+    }
+  ],
+  "format": "openvino",
+  "schema": "k3d-gpu.weights/v1",
+  "source": "OpenVINO/Qwen3-4B-int4-ov@b467368d16b75df14055562fe927ae8e1f15f7ef",
+  "total_bytes": 2271403997
+}

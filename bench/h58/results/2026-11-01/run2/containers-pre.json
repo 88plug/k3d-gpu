@@ -1,0 +1,146 @@
+[
+ {
+  "name": "qwen38-b-hr",
+  "id": "e4d6195699d9",
+  "image": "rahulunair/sglang-xpu@sha256:feb7b9130eff2fa26dfa09ab1a8b9a8423db013ad7d18f804f8b55a57cb2c175",
+  "restarts": 0,
+  "started_at": "2026-10-30T00:36:38.285296282Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "qwen38-a-hr",
+  "id": "e4e0a92af9b8",
+  "image": "rahulunair/sglang-xpu@sha256:feb7b9130eff2fa26dfa09ab1a8b9a8423db013ad7d18f804f8b55a57cb2c175",
+  "restarts": 0,
+  "started_at": "2026-10-30T00:36:38.267089897Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "dynamo-frontend",
+  "id": "1697701011c0",
+  "image": "nvcr.io/nvidia/ai-dynamo/dynamo-frontend:1.5.0",
+  "restarts": 0,
+  "started_at": "2026-09-21T23:54:50.172927039Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "llmd-envoy",
+  "id": "062cd2970f0f",
+  "image": "docker.io/envoyproxy/envoy:distroless-v1.33.2",
+  "restarts": 0,
+  "started_at": "2026-09-21T22:23:47.405242707Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "llmd-epp",
+  "id": "7d58ea4350c1",
+  "image": "ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.10.0",
+  "restarts": 0,
+  "started_at": "2026-09-23T15:59:11.757313458Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "aiperf010",
+  "id": "4dfe69ce5343",
+  "image": "rahulunair/sglang-xpu@sha256:feb7b9130eff2fa26dfa09ab1a8b9a8423db013ad7d18f804f8b55a57cb2c175",
+  "restarts": 0,
+  "started_at": "2026-09-21T18:49:22.094180195Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "xe-exporter",
+  "id": "c6517dcbc9a1",
+  "image": "farmgpu/xe-exporter:latest",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.933539948Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "grafana",
+  "id": "db169fe2bbd0",
+  "image": "grafana/grafana:13.1.1",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.934070935Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "otel-collector",
+  "id": "4df076389f27",
+  "image": "otel/opentelemetry-collector-contrib:0.157.0",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.931790901Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "tempo",
+  "id": "46f3042e62ec",
+  "image": "grafana/tempo:3.0.2",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.932188544Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "node-exporter",
+  "id": "a6edab83af73",
+  "image": "prom/node-exporter:v1.12.1",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.92903136Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "prometheus",
+  "id": "ca8f6e4dd46c",
+  "image": "prom/prometheus:v3.13.2",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.928286294Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "alloy",
+  "id": "b3923ea2dadc",
+  "image": "grafana/alloy:v1.18.0",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.932279196Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "drm-exporter",
+  "id": "b3c145cc260a",
+  "image": "ghcr.io/home-operations/drm-exporter:0.3.3",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.931825828Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "loki",
+  "id": "5429be49ea30",
+  "image": "grafana/loki:3.7.4",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.933343704Z",
+  "running": true,
+  "oom_killed": false
+ },
+ {
+  "name": "xpumd",
+  "id": "6bb0d1b56385",
+  "image": "ghcr.io/intel/xpumanager/xpumd:v2.0.1",
+  "restarts": 0,
+  "started_at": "2026-09-15T22:50:34.931765747Z",
+  "running": true,
+  "oom_killed": false
+ }
+]

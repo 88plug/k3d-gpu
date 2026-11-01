@@ -1,0 +1,18 @@
+== start: commit d904cae270a076b12bc3023970bb699bbd034c1c 2026-11-01T10:31:43Z
+== user: k3d-gpu up rc=0 2026-11-01T10:32:49Z
+== user: k3d-gpu detect rc=0 2026-11-01T10:34:05Z
+== record: k3d-gpu detect --json rc=0 2026-11-01T10:34:42Z
+== record: k3d-gpu plan --model google/gemma-4-26B-A4B-it --explain rc=0 2026-11-01T10:35:24Z
+== user: k3d-gpu agent up --model google/gemma-4-26B-A4B-it rc=1 2026-11-01T10:35:30Z
+== google/gemma-4-26B-A4B-it: {"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "OpenVINO/gemma-4-26b-a4b-it-int4-ov", "why": "weights + overhead 15.3 GiB exceed the GPU budget 15.2 GiB"} 2026-11-01T10:35:32Z
+== record: k3d-gpu plan --model Qwen/Qwen3.8-27B --explain rc=0 2026-11-01T10:36:14Z
+== user: k3d-gpu agent up --model Qwen/Qwen3.8-27B rc=1 2026-11-01T10:36:24Z
+== Qwen/Qwen3.8-27B: {"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "OpenVINO/Qwen3.8-27B-int4-ov", "why": "weights + overhead 15.7 GiB exceed the GPU budget 15.2 GiB"} 2026-11-01T10:36:26Z
+== record: k3d-gpu plan --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound --explain rc=0 2026-11-01T10:37:08Z
+== user: k3d-gpu agent up --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound rc=1 2026-11-01T10:37:26Z
+== Intel/Qwen3.8-Flash-Next-W4A16-AutoRound: {"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound", "why": "DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)"} 2026-11-01T10:37:28Z
+== squeeze: {"ran": false, "why": "no agent of this run holds its model"} 2026-11-01T10:37:28Z
+== teardown (rc 0) 2026-11-01T10:37:28Z
+== teardown: k3d-gpu agent down rc=0 2026-11-01T10:37:28Z
+== teardown: k3d-gpu down rc=0 2026-11-01T10:37:29Z
+== done: REFUTED 2026-11-01T10:37:30Z
