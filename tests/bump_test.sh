@@ -165,6 +165,39 @@ assert e["workarounds"] == [] and e["retained"] == {}, e' "${R}"
 check "hack/known-issues check passes after the removal" python3 "${ROOT}/hack/known-issues" --root "${R}" check
 check "the removal PR body says review" grep -q 'Policy: review (changes-defaults)' "${WORK}/wa.md"
 
+# a hook that writes a file of another class fails the bump: a bumper writes only
+# ours and eat-stock paths, whatever its hooks do (here the ledger-rules hook's
+# console/model_opt.py also edits a ledger run's file)
+R2="${WORK}/repo2"
+mkdir -p "${R2}/pins" "${R2}/share" "${R2}/bench/h1" "${R2}/console"
+cat > "${R2}/pins/registry.toml" <<'EOF'
+[groups.tools]
+tests = []
+hooks = ["ledger-rules"]
+
+[[pin]]
+id = "tool"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "o/tool", tag = "{v}" }
+sites = [{ file = "share/tool.env", var = "TOOL_VERSION" }]
+EOF
+echo 'TOOL_VERSION=v1.2.0' > "${R2}/share/tool.env"
+printf 'TOOL_VERSION=v1.2.0  # H1 measured this\n' > "${R2}/bench/h1/run.sh"
+: > "${R2}/EXPERIMENTS.md"
+: > "${R2}/images.unpinned"
+cat > "${R2}/console/model_opt.py" <<'PY'
+open("console/ledger-rules.json", "w").write("{}\n")
+open("bench/h1/run.sh", "a").write("# rewritten by a hook\n")
+PY
+echo '{}' > "${R2}/console/ledger-rules.json"
+git -C "${R2}" init -q -b main && git -C "${R2}" add -A && git -C "${R2}" commit -qm base
+out=$(PINLIB_FIXTURES="${FIX}" python3 "${ROOT}/hack/bump" --root "${R2}" --resolved "${RES}" --no-tests tools 2>&1); rc=$?
+check "a hook writing a historical file fails the bump (rc ${rc})" test "${rc}" -ne 0
+check "the failure names the file and its class" grep -q 'bench/h1/run.sh (historical)' <<< "${out}"
+
 # the registry: one group (one branch) for both NRI components
 check "nri-balloons and nri-balloons-guard bump in group nri (one branch)" python3 - "${ROOT}" <<'PY'
 import sys, tomllib
