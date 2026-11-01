@@ -1,0 +1,136 @@
+{
+  "arch": "qwen3",
+  "card_bytes": [],
+  "ckpt_bytes": 0,
+  "ctx": 32768,
+  "degraded": false,
+  "dram_tok_s": null,
+  "engine": "vllm",
+  "explain": [
+    "model Qwen/Qwen3-4B: safetensors (qwen3) weights, 7.5 GiB to serve",
+    "  embed    0.7 GiB (lookup table)",
+    "  other    6.8 GiB",
+    "context cap: 40960 (max_position_embeddings)",
+    "host RAM: MemTotal 503.3 GiB, MemAvailable 410.1 GiB (others already hold 93.2 GiB)",
+    "host reserve = max(10% x MemTotal, 4.0 GiB) = 50.3 GiB",
+    "host budget = 410.1 GiB - 50.3 GiB = 359.8 GiB",
+    "GPUs:",
+    "  card1 (0000:12:00.0): VRAM 31.9 GiB, in use 16.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.2 GiB; BUSY (others hold >= 50%), not used",
+    "  card2 (0000:48:00.0): VRAM 31.9 GiB, in use 15.4 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.9 GiB",
+    "  card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 15.8 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.5 GiB",
+    "  card4 (0000:96:00.0): VRAM 31.9 GiB, in use 15.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 15.2 GiB",
+    "CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)",
+    "engine vllm: vllm: architecture qwen3 not checked",
+    "  KV cache (2 B per element):",
+    "    full attention: 36 layers x 2 (K, V) x 8 kv heads x 128 head dim x 2 B = 147456 B/token",
+    "placements, as asked:",
+    "  vllm/cpu: FITS",
+    "    host budget / 1.10 slack 326.1 GiB - weights 7.5 GiB - activations 0.0 GiB - runtime 6.0 GiB = 312.5 GiB for KV",
+    "    KV: 69 seqs x 4608.0 MiB at 32768 tokens = 311.0 GiB",
+    "k8s: memory request = limit = ceil(324.5 GiB x 1.10) = 357Gi",
+    "guard rungs (seqs x context): 69x32768, 34x32768, 17x32768, 8x32768, 4x32768, 2x32768, 1x32768, 1x16384, 1x8192, 1x4096",
+    "engine flags: --max-model-len=32768 --max-num-seqs=69 VLLM_CPU_KVCACHE_SPACE=311"
+  ],
+  "fits": true,
+  "flags": [
+    "--max-model-len=32768",
+    "--max-num-seqs=69",
+    "VLLM_CPU_KVCACHE_SPACE=311"
+  ],
+  "format": "safetensors",
+  "gpu_bytes": 0,
+  "gpus": 0,
+  "guard": {
+    "calm_samples": 60,
+    "calm_some_avg60": 5.0,
+    "cooldown_samples": 12,
+    "emergency_samples": 3,
+    "full_avg10": 5.0,
+    "host_bytes": 348463371264,
+    "mem_available_floor": 27021677772,
+    "placement": "cpu",
+    "rung_kv_bytes": [
+      333933707264,
+      164282499072,
+      82678120448,
+      38654705664,
+      19327352832,
+      9663676416,
+      5368709120,
+      3221225472,
+      2147483648,
+      1073741824
+    ],
+    "rung_memory_limit": [
+      "357Gi",
+      "184Gi",
+      "100Gi",
+      "55Gi",
+      "35Gi",
+      "25Gi",
+      "21Gi",
+      "19Gi",
+      "18Gi",
+      "16Gi"
+    ],
+    "rungs": [
+      [
+        69,
+        32768
+      ],
+      [
+        34,
+        32768
+      ],
+      [
+        17,
+        32768
+      ],
+      [
+        8,
+        32768
+      ],
+      [
+        4,
+        32768
+      ],
+      [
+        2,
+        32768
+      ],
+      [
+        1,
+        32768
+      ],
+      [
+        1,
+        16384
+      ],
+      [
+        1,
+        8192
+      ],
+      [
+        1,
+        4096
+      ]
+    ],
+    "some_avg10": 20.0
+  },
+  "host_bytes": 348463371264,
+  "host_reserve": 54043355545,
+  "k8s": {
+    "memory_limit": "357Gi",
+    "memory_request": "357Gi"
+  },
+  "kv_bytes": 333933707264,
+  "model": "Qwen/Qwen3-4B",
+  "note": "vllm: architecture qwen3 not checked",
+  "placement": "cpu",
+  "schema": "k3d-gpu.fit/v1",
+  "seqs": 69,
+  "source": "Qwen/Qwen3-4B@1cfa9a7208912126459214e8b04321603b3df60c",
+  "summary": "fit: Qwen/Qwen3-4B on CPU (AMX) via vllm, context 32768 x 69 seqs, host 324.5 GiB (pod limit 357Gi), host reserve 50.3 GiB",
+  "tp": 1,
+  "weight_bytes": 8044936192
+}

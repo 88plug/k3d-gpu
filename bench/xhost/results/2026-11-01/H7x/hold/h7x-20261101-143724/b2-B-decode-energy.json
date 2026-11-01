@@ -1,0 +1,1 @@
+{"zone":"intel-rapl:0","name":"package-0","joules":21323.340,"seconds":121.445,"avg_watts":175.580,"command_seconds":121.429,"energy_uj":21323340065,"max_energy_range_uj":262143328850,"samples":26,"exit_code":0}

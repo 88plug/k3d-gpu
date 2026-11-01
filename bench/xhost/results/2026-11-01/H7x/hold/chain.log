@@ -1,0 +1,4 @@
+== H7x waiting for the lock 2026-11-01T14:37:24Z
+== H7x lock taken 2026-11-01T14:37:24Z
+== H7x start: env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 H7X_READY_S=1800 H7X_VLLM_MEM=fit APB_MODELS=/home/devcloud/k3dgpu-xhost/models APB_EAT_CHART=/home/devcloud/k3dgpu-xhost/eat-src/core/helm-charts/vllm APB_OUT=/home/devcloud/k3dgpu-xhost/runs/H7x bash /home/devcloud/k3dgpu-xhost/k3d-gpu-h7x/bench/apb/h7x.sh 2026-11-01T14:37:24Z
+== H7x rc=0; clusters deleted: none; now:  2026-11-01T15:22:13Z

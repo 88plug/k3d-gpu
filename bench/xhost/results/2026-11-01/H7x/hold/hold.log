@@ -1,0 +1,217 @@
+== render 2026-11-01T14:37:24Z (+0s)
+vLLM memory limit 22Gi from k3d-gpu fit
+== up 2026-11-01T14:37:26Z (+2s)
+node cpuset 0-7,48-55
+== stage 2026-11-01T14:37:55Z (+31s)
+== block 1 engine A start 2026-11-01T14:38:13Z (+49s)
+== block 1 engine A ready 2026-11-01T14:38:39Z (+75s)
+== block 1 engine A done 2026-11-01T14:41:47Z (+263s)
+== block 2 engine B start 2026-11-01T14:41:47Z (+263s)
+== block 2 engine B ready 2026-11-01T14:43:44Z (+380s)
+== block 2 engine B done 2026-11-01T14:47:22Z (+598s)
+== block 3 engine B start 2026-11-01T14:47:22Z (+598s)
+== block 3 engine B ready 2026-11-01T14:47:22Z (+598s)
+== block 3 engine B done 2026-11-01T14:50:55Z (+811s)
+== block 4 engine A start 2026-11-01T14:50:55Z (+811s)
+== block 4 engine A ready 2026-11-01T14:51:06Z (+822s)
+== block 4 engine A done 2026-11-01T14:54:12Z (+1008s)
+== block 5 engine A start 2026-11-01T14:54:12Z (+1008s)
+== block 5 engine A ready 2026-11-01T14:54:12Z (+1008s)
+== block 5 engine A done 2026-11-01T14:57:19Z (+1195s)
+== block 6 engine B start 2026-11-01T14:57:19Z (+1195s)
+== block 6 engine B ready 2026-11-01T14:58:28Z (+1264s)
+== block 6 engine B done 2026-11-01T15:02:06Z (+1482s)
+== block 7 engine B start 2026-11-01T15:02:06Z (+1482s)
+== block 7 engine B ready 2026-11-01T15:02:06Z (+1482s)
+== block 7 engine B done 2026-11-01T15:05:43Z (+1699s)
+== block 8 engine A start 2026-11-01T15:05:43Z (+1699s)
+== block 8 engine A ready 2026-11-01T15:05:53Z (+1709s)
+== block 8 engine A done 2026-11-01T15:09:00Z (+1896s)
+== block 9 engine A start 2026-11-01T15:09:00Z (+1896s)
+== block 9 engine A ready 2026-11-01T15:09:00Z (+1896s)
+== block 9 engine A done 2026-11-01T15:12:06Z (+2082s)
+== block 10 engine B start 2026-11-01T15:12:06Z (+2082s)
+== block 10 engine B ready 2026-11-01T15:13:15Z (+2151s)
+== block 10 engine B done 2026-11-01T15:16:53Z (+2369s)
+== block 11 engine C start 2026-11-01T15:16:53Z (+2369s)
+== block 11 engine C ready 2026-11-01T15:18:55Z (+2491s)
+== block 11 engine C done 2026-11-01T15:22:09Z (+2685s)
+{
+ "blocks": [
+  {
+   "block": 1,
+   "engine": "A",
+   "void": false,
+   "decode_tps": [
+    12.95619928380542,
+    12.954387403541414,
+    12.967370185667185,
+    12.970325363650725,
+    12.950297480233317
+   ]
+  },
+  {
+   "block": 2,
+   "engine": "B",
+   "void": false,
+   "decode_tps": [
+    10.673543147046718,
+    10.731515705619438,
+    10.598257073026375,
+    10.445165774847977,
+    10.425501866466075
+   ]
+  },
+  {
+   "block": 3,
+   "engine": "B",
+   "void": false,
+   "decode_tps": [
+    10.634467480012257,
+    10.624856571590069,
+    10.675248601102057,
+    10.715014089300904,
+    10.70914472756866
+   ]
+  },
+  {
+   "block": 4,
+   "engine": "A",
+   "void": false,
+   "decode_tps": [
+    12.916392963358733,
+    12.959037918890267,
+    12.963141842279217,
+    12.943536576486121,
+    12.959100648533129
+   ]
+  },
+  {
+   "block": 5,
+   "engine": "A",
+   "void": false,
+   "decode_tps": [
+    12.963589672153672,
+    12.958434044812009,
+    12.935352000902123,
+    12.970294269112259,
+    12.964489456272233
+   ]
+  },
+  {
+   "block": 6,
+   "engine": "B",
+   "void": false,
+   "decode_tps": [
+    10.655237524568207,
+    10.606987569859564,
+    10.593457055143364,
+    10.628616624690254,
+    10.497869830970382
+   ]
+  },
+  {
+   "block": 7,
+   "engine": "B",
+   "void": false,
+   "decode_tps": [
+    10.413044819534692,
+    10.414719243887378,
+    10.394256065888916,
+    10.393285663788186,
+    10.385528702094359
+   ]
+  },
+  {
+   "block": 8,
+   "engine": "A",
+   "void": false,
+   "decode_tps": [
+    12.97113802702638,
+    12.98291098304542,
+    12.971631832407693,
+    12.97245506742135,
+    12.978896639668324
+   ]
+  },
+  {
+   "block": 9,
+   "engine": "A",
+   "void": false,
+   "decode_tps": [
+    12.955027283029747,
+    12.986913518597495,
+    12.965136627784368,
+    12.964012420446224,
+    12.97797069719218
+   ]
+  },
+  {
+   "block": 10,
+   "engine": "B",
+   "void": false,
+   "decode_tps": [
+    10.544208833090503,
+    10.67419394278727,
+    10.501390960505033,
+    10.680556624165733,
+    10.637641048659649
+   ]
+  },
+  {
+   "block": 11,
+   "engine": "C",
+   "void": false,
+   "decode_tps": [
+    11.837497092752184,
+    11.932990879264143,
+    12.046410399729957,
+    12.111432196346444,
+    11.989687339416259
+   ]
+  }
+ ],
+ "void": {
+  "A": 0,
+  "B": 0,
+  "C": 0
+ },
+ "verdict": "REFUTED",
+ "R": 1.2222,
+ "gap": 0.2222,
+ "R_bandwidth": 1.2222,
+ "pair_ratios": [
+  1.2225,
+  1.2139,
+  1.2222,
+  1.248,
+  1.2188
+ ],
+ "C_over_B": 1.1304,
+ "arms": {
+  "A": {
+   "decode_tps_median": 12.964012420446224,
+   "prefill_ttft_median_s": 3.004839450120926,
+   "conc4_tps_median": 48.474338826287244,
+   "decode_incremental_j_per_token_median": 3.6128021568869286,
+   "blocks": 5
+  },
+  "B": {
+   "decode_tps_median": 10.606987569859564,
+   "prefill_ttft_median_s": 2.077678935136646,
+   "conc4_tps_median": 39.155684825177296,
+   "decode_incremental_j_per_token_median": 4.167732386750363,
+   "blocks": 5
+  },
+  "C": {
+   "decode_tps_median": 11.989687339416259,
+   "prefill_ttft_median_s": 1.8155012889765203,
+   "conc4_tps_median": 46.22708274159807,
+   "decode_incremental_j_per_token_median": 3.8334856366769925,
+   "blocks": 1
+  }
+ }
+}
+== finished 2026-11-01T15:22:09Z (+2685s)
+== cleanup 2026-11-01T15:22:09Z (+2685s)
+== deleted 2026-11-01T15:22:13Z (+2689s)
