@@ -11,7 +11,8 @@
 #   3. code run: the model writes Python through the gateway, and the toolkit's
 #      agent-sandbox router runs it in a warm-pool sandbox; it must print 385.
 #      bash passes the model's text to the router: this is a scripted pipeline,
-#      not an agent loop.
+#      not an agent loop. The router is reached through a kubectl port-forward on a
+#      local port the kernel picks, and must answer GET /healthz as the router does.
 #
 #   EAT_MODE        eat (default) | eas
 #   EAT_WORK        eat: eat-up.sh work dir; its vault.yml holds the LiteLLM master key (default: ./eat-work)
@@ -40,7 +41,6 @@ EAT_TEMPERATURE="${EAT_TEMPERATURE:-0}"
 EAT_MAX_TOKENS="${EAT_MAX_TOKENS:-200}"
 CORE="${EAT_WORK}/eat/core"
 SANDBOX_NS=agent-sandbox-system
-ROUTER_PORT=18080
 
 err()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
@@ -48,9 +48,10 @@ info() { echo "==> $*"; }
 [[ "${EAT_TEMPERATURE}" =~ ^[0-9]+([.][0-9]+)?$ ]] || err "EAT_TEMPERATURE must be a number, got '${EAT_TEMPERATURE}'"
 [[ "${EAT_MAX_TOKENS}" =~ ^[0-9]+$ ]] || err "EAT_MAX_TOKENS must be a whole number, got '${EAT_MAX_TOKENS}'"
 
-pf="" vkey="" master="" alias=""
+pf="" pflog="" vkey="" master="" alias=""
 cleanup() {
     [ -z "${pf}" ] || kill "${pf}" 2>/dev/null || true
+    [ -z "${pflog}" ] || rm -f "${pflog}"
     # The run's virtual key goes when the check ends, pass or fail.
     if [ -n "${vkey}" ]; then
         # The key reaches jq through its environment, not its argument list.
@@ -138,11 +139,33 @@ sed 's/^/      /' <<< "${code}"
 sandbox=$(kubectl -n "${SANDBOX_NS}" get pods -o name | grep -m1 '/python-pool-' | cut -d/ -f2) \
     || err "no python-pool warm sandbox in ${SANDBOX_NS}"
 token=$(kubectl -n "${SANDBOX_NS}" get secret sandbox-router-auth -o jsonpath='{.data.ROUTER_AUTH_TOKEN}' | base64 -d)
-kubectl -n "${SANDBOX_NS}" port-forward svc/sandbox-router-svc "${ROUTER_PORT}:8080" >/dev/null 2>&1 &
+# The router's local port is the one the kernel gives kubectl (":8080"), read from kubectl's
+# own "Forwarding from 127.0.0.1:<port>" line: a fixed port may be held by another local
+# service, which would then get the code and the router token.
+pflog=$(mktemp)
+kubectl -n "${SANDBOX_NS}" port-forward svc/sandbox-router-svc :8080 > "${pflog}" 2>&1 &
 pf=$!
-for _ in $(seq 1 40); do curl -s -o /dev/null "127.0.0.1:${ROUTER_PORT}" && break; sleep 0.5; done
+port=""
+for _ in $(seq 1 40); do
+    port=$(awk '/^Forwarding from 127\.0\.0\.1:[0-9]+ -> 8080$/ { split($3, a, ":"); print a[2]; exit }' "${pflog}")
+    [ -z "${port}" ] || break
+    kill -0 "${pf}" 2>/dev/null || err "kubectl port-forward to svc/sandbox-router-svc exited: $(tr '\n' ' ' < "${pflog}")"
+    sleep 0.5
+done
+[ -n "${port}" ] || err "kubectl port-forward to svc/sandbox-router-svc reported no local port in 20 s: $(tr '\n' ' ' < "${pflog}")"
+router="http://127.0.0.1:${port}"
+# The endpoint must answer as the sandbox router (GET /healthz: {"status":"ok"}) before the
+# token and the code go to it.
+health=""
+for _ in $(seq 1 40); do
+    health=$(curl -s --max-time 5 "${router}/healthz") || health=""
+    [ "$(jq -r '.status? // empty' <<< "${health}" 2>/dev/null)" != ok ] || break
+    sleep 0.5
+done
+[ "$(jq -r '.status? // empty' <<< "${health}" 2>/dev/null)" = ok ] \
+    || err "${router} (kubectl's port-forward) does not answer as the sandbox router: GET /healthz gave '${health}'"
 result=$(jq -n --arg c "${code}" '{command: ("python3 -c " + ($c | @sh))}' \
-    | curl -sf "127.0.0.1:${ROUTER_PORT}/execute" -H @<(printf 'Authorization: Bearer %s\n' "${token}") \
+    | curl -sf "${router}/execute" -H @<(printf 'Authorization: Bearer %s\n' "${token}") \
         -H "X-Sandbox-ID: ${sandbox}" -H "X-Sandbox-Namespace: ${SANDBOX_NS}" -H "X-Sandbox-Port: 8888" \
         -H 'content-type: application/json' --data-binary @-)
 echo "    sandbox ${sandbox}: $(jq -c . <<< "${result}")"
