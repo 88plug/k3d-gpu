@@ -75,7 +75,9 @@ git clone -q . /tmp/k && /tmp/k/hack/bump telemetry --root /tmp/k --dry-run
 3. Run `hack/pins check`. Any other pinned image in an ours or eat-stock file is
    owned by `[images.default]` (source oci, scheme docker-suffix, group by path);
    EAT's chart-default images there are frozen (they move with an EAT release, by
-   hand).
+   hand). A reference that must never move (an image an earlier release
+   installed, which the launcher recognises by it) goes in `[images.default]
+   frozen` as `{ file, ref = "name:tag", reason }`.
 
 ## Add a group
 

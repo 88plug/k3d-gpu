@@ -143,6 +143,9 @@ def check(root):
                 problems.append("%s: class %s, but its site %s is %s" % (p["id"], p["class"], s["file"], cls))
     problems += known_issue_sites(reg, tree, spans_by)
     problems += coverage(root, reg, tree, spans_by)
+    for (f, ref), _ in sorted(registry.frozen_refs(reg).items()):
+        if ref + "@sha256:" not in (tree.read(f) or ""):
+            problems.append("[images.default] frozen: %s holds no %s@sha256: drop the entry" % (f, ref))
     return problems
 
 

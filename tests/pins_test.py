@@ -262,6 +262,51 @@ class Report(unittest.TestCase):
         self.assertEqual(len(lag), 3)
 
 
+class Frozen(unittest.TestCase):
+    """[images.default] frozen: an exact reference the default rule never moves (an
+    image an earlier release installed, which the launcher recognises by it)."""
+
+    FROZEN = ('groups = [{ glob = "*", group = "images" }]\n'
+              'frozen = [{ file = "share/app.yml", ref = "busybox:1.37", reason = "an earlier release installed it" }]')
+
+    def outdated(self, s):
+        fx = os.path.join(s.d, "no-network.json")
+        with open(fx, "w") as f:
+            json.dump({}, f)  # any request fails: a frozen pin must not ask
+        p = subprocess.run([sys.executable, str(PINS), "--root", s.d, "outdated", "--json", "--all", "--group", "images"],
+                           capture_output=True, text=True, env=dict(os.environ, PINLIB_FIXTURES=fx, PINLIB_HTTP_TRIES="1"))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return json.loads(p.stdout)
+
+    def test_a_frozen_reference_never_resolves(self):
+        s = Scratch(registry=REGISTRY.replace('groups = [{ glob = "*", group = "images" }]', self.FROZEN))
+        try:
+            rows = [r for r in self.outdated(s) if "busybox" in r["id"]]
+            self.assertEqual(len(rows), 1, rows)
+            self.assertEqual((rows[0]["behind"], rows[0].get("error"), rows[0]["note"]),
+                             (False, None, "an earlier release installed it"), rows[0])
+            self.assertEqual(s.pins("check"), (0, s.pins("check")[1]))
+        finally:
+            s.close()
+        s = Scratch()  # the same reference unfrozen asks the registry
+        try:
+            rows = [r for r in self.outdated(s) if "busybox" in r["id"]]
+            self.assertTrue(rows and rows[0].get("error"), rows)
+        finally:
+            s.close()
+
+    def test_a_frozen_entry_that_matches_nothing_fails_check(self):
+        s = Scratch(registry=REGISTRY.replace('groups = [{ glob = "*", group = "images" }]',
+                                              self.FROZEN.replace("busybox:1.37", "busybox:1.36")))
+        try:
+            rc, out = s.pins("check")
+            self.assertEqual(rc, 1, out)
+            self.assertIn("frozen", out)
+            self.assertIn("busybox:1.36", out)
+        finally:
+            s.close()
+
+
 class IssueGroups(unittest.TestCase):
     def test_newly_fixed_issue_maps_to_the_groups_that_own_its_sites(self):
         ki = ('[[issue]]\nid = "prom-1"\ntitle = "t"\nkind = "bug"\nupstream = ""\ncomponent = "c"\n'

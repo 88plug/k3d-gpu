@@ -183,6 +183,11 @@ groups = [
   { glob = "tests/*", group = "examples" },
   { glob = "*", group = "images" },
 ]
+# Exact references the default rule never moves, each with why. `hack/pins check`
+# fails on an entry its file no longer holds.
+frozen = [
+  { file = "scripts/k3d-gpu", ref = "registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7", reason = "SANDBOX_UNLABELLED_IMAGES: the controller an earlier k3d-gpu release installed before the managed-by label; sandbox ownership matches it exactly" },
+]
 
 # =============================================================================
 # k3s

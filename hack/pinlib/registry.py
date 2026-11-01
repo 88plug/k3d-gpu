@@ -339,20 +339,32 @@ EAT_FROZEN = ("EAT stock: the tag EAT's charts name (a chart default); it moves 
               "by hand, never to a registry's newest tag")
 
 
-def _default_pin(conf, written, tag, group, cls):
-    pin = {"id": "image:%s:%s:%s" % (group, written, tag), "class": cls, "group": group, "generated": True,
+def _default_pin(conf, written, tag, group, cls, frozen=None):
+    pin = {"id": "image:%s:%s:%s%s" % (group, written, tag, "@frozen" if frozen else ""), "class": cls,
+           "group": group, "generated": True,
            "family": "eat-stock" if cls == "eat-stock" else conf.get("family", "base-image"),
            "scheme": "docker-suffix", "source": {"kind": "oci", "image": written, "tag": "{v}"},
            "sites": [], "tests": []}
     if cls == "eat-stock":
         pin["frozen"] = EAT_FROZEN
+    if frozen:
+        pin["frozen"] = frozen
     return pin
+
+
+def frozen_refs(reg):
+    """{(file, "name:tag"): reason} of [images.default] frozen: exact references the
+    default rule never moves (an image an earlier release installed, which the
+    launcher recognises by that reference)."""
+    conf = reg.get("images", {}).get("default", {})
+    return {(f["file"], f["ref"]): f["reason"] for f in conf.get("frozen", [])}
 
 
 def default_pins(tree, reg, owned_spans):
     """Generated pins for image references no explicit pin's sites cover: one per
     image name, tag, class and file group."""
     conf = reg.get("images", {}).get("default", {})
+    frozen = frozen_refs(reg)
     il = oci.images_lock()
     covered = set()
     for s in owned_spans:
@@ -377,7 +389,8 @@ def default_pins(tree, reg, owned_spans):
                 continue
             written = m.group("ref")[: -(len(tag) + 1)]
             group = group_of(path)
-            pin = by_key.setdefault((written, tag, group, cls), _default_pin(conf, written, tag, group, cls))
+            why = frozen.get((path, written + ":" + tag))
+            pin = by_key.setdefault((written, tag, group, cls, why), _default_pin(conf, written, tag, group, cls, why))
             site = {"file": path, "ref": written, "tag": "{v}", "match_tag": tag}
             if site not in pin["sites"]:
                 pin["sites"].append(site)
@@ -391,7 +404,8 @@ def default_pins(tree, reg, owned_spans):
                 continue
             written = ref[: ref.index(":" + tag + "@")]
             group = group_of(path)
-            pin = by_key.setdefault((written, tag, group, cls), _default_pin(conf, written, tag, group, cls))
+            why = frozen.get((path, written + ":" + tag))
+            pin = by_key.setdefault((written, tag, group, cls, why), _default_pin(conf, written, tag, group, cls, why))
             site = {"file": path, "ref": written, "tag": "{v}", "values": True, "match_tag": tag}
             if site not in pin["sites"]:
                 pin["sites"].append(site)
