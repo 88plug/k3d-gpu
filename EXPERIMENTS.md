@@ -68,7 +68,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H50 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) On EAT's own target CPU (Xeon 6741P, Granite Rapids, AMX), inside EAT's banking flow, the k3d-gpu CPU stack A1 (OVMS int4 ~~with the CPU Fast Draft~~, `agent manifest`; draft OFF per [amendment A4](#crescent-amendment-a4-a1-is-k3d-gpus-best-cpu-config-for-the-xeon-2026-10-20): H34x REFUTED it on this Xeon) still delivers far more B24 tasks within the 120 s turn budget than EAT stock B1 (vLLM CPU bf16, `xeon-values.yaml` as shipped, AMX on), both arms in one hold, interleaved. H49b's comparison moved to the hardware EAT is built for. A stack-vs-stack claim (amendment 16). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement on the Xeon. A1 within-budget success >= 0.70 (0.8). B1 >= 0.60 (0.7): with AMX bf16 its turns should fit 120 s. Paired A1 - B1 in [-0.15, +0.20] (0.6). L2 matches >= 16 pairs and >= 75% (0.6), and the gates are read first, so the expected verdict is REFUTED (0.5), INCONCLUSIVE (0.45, mostly the L2 gates), SUPPORTED (0.05). Not gated: median attempt A1/B1 <= 0.7 (0.6). | H49b's design, statistic, outcome classes, grader, gates and thresholds on `crescent`; see [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20). Holds of at most 40 min until 24 pairs or 8 holds. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with L2, the void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/eatflow/crescent/pairs-hold.sh H50 <n>` (`LIVE_MODE=pairs LIVE_CAP=2370 live.sh H50`, KV 40 GiB), `agentbench pairs-report --hyp H50 --arm-a A1 --arm-b B1`. Model, arms, sampling and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20) (Gemma 4 26B-A4B QAT; breaks direct replication of H49b). Analysis rule L3 (primary) from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B1 is EAT release-1.1.0's stock (vLLM CPU v0.28.0) and runs only after a stall check, per [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50's deploy commit, wiring smoke and pre-hold records per [amendment E3](#crescent-amendment-e3-h50s-deploy-commit-wiring-smoke-and-pre-hold-records-2026-10-29). Result ([H50 run](#h50-run-xeon-6741p-2026-10-29)): E1's stall check passed (60 of 60 requests, no stall); 24 complete pairs in 1 of the 8 permitted holds, no void pair, idle check 0.0022 CPU, balance gate passed (smallest p 0.97). Within-budget success A1 19/24 (0.79), B1 21/24 (0.875); paired difference A1 - B1 -0.083 (95% CI -0.208 to 0.000), under +30 points, so REFUTED. Not gated: median attempt A1 8.0 s, B1 12.0 s; paired J per attempt A1/B1 0.81. | REFUTED |
 | H50o | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). Analysis rule L3 from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B3 is unchanged under [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29) (EAT release-1.1.0's OVMS chart renders the same objects); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50o's deploy commit, B3's records and its wiring smoke per [H50o amendment O1](#h50o-amendment-o1-deploy-commit-b3s-records-and-a-b3-wiring-smoke-2026-10-29). Result ([H50o run](#h50o-run-xeon-6741p-2026-10-29)): B3 was not ready in hold 1, so under M1's rule H50o runs no further hold and no pair ran (1 of the 6 permitted holds). On k3d, B3's PVC bound, its pod was scheduled and its init container pulled `OpenVINO/gemma-4-26b-a4b-it-int4-ov` at `4e5885c3` (every file equal to the Hub's), but OVMS 2025.4's server failed on each of its 7 starts, going into CrashLoopBackOff; the last start's recorded exit is 139 (SIGSEGV), a second into loading the model. The same server in a plain container, outside k3d, on the same revision, exited 139 the same way with and without the chart's limits. Not deliverable: EAT's OVMS chart as shipped does not serve this model. | INCONCLUSIVE |
 | H51 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). B1 as H50, from [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); deploy commit, M1's ranges in the scorer, one hold per arm and the wiring smokes per [H51 amendment S1](#h51-amendment-s1-deploy-commit-scorer-ranges-ramp-per-hold-and-wiring-smokes-2026-10-29). Result ([H51 run](#h51-run-xeon-6741p-2026-10-29)): one hold per arm, 2 of the 4 permitted, none VOID. Both arms failed N=1. A1: 65 window requests, turn p95 10.41 s against the 10 s SLO, success 30/32. B1: 58 window requests (under 60), p95 11.52 s, success 27/29. Agents per box A1 0, outside its predicted [1, 4], so REFUTED. B1's 0 lies inside [0, 4], and B1 <= A1 holds on matched load (0 <= 0). | REFUTED |
-| H62 | Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0-rc.1 (`5c27fb3`) installing EAT 2.0 (`release-2.0.0` `036b662`) and enterprise-inference `release-1.1` (`170eb3a`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-10-29, before any H62 step and after H50 (A1 19/24, B1 21/24) and H51 were known. A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62 pre-registration](#h62-pre-registration-k3d-gpu-against-intels-new-default-eas-with-eat-20-on-the-xeon-6741p-2026-10-29): H50's design, statistic, gates and verdict rule (rule L3, amendment A3, seed `H62-crescent-2026-10-29`), two KVM guests on crescent (VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5), the harness's LiteLLM per arm on the host, holds of at most 40 min until 24 pairs or 8 holds, each hold restarting both serving pods. Setup and wiring-smoke gates (memory, disk, AMX in each guest, NFD label, B5's weights equal to the QAT checkpoint, EAS's own `validate` and gateway check) come before hold 1. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62/campaign.sh`; `agentbench pairs-report --hyp H62 --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release at v1.2.0 or later or an EAT release at 2.0.0 or later is tagged (`bench/h62/upstream.sh`). | PENDING |
+| H62 | Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0-rc.1 (`5c27fb3`) installing EAT 2.0 (`release-2.0.0` `036b662`) and enterprise-inference `release-1.1` (`170eb3a`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-10-29, before any H62 step and after H50 (A1 19/24, B1 21/24) and H51 were known. A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62 pre-registration](#h62-pre-registration-k3d-gpu-against-intels-new-default-eas-with-eat-20-on-the-xeon-6741p-2026-10-29): H50's design, statistic, gates and verdict rule (rule L3, amendment A3, seed `H62-crescent-2026-10-29`), two KVM guests on crescent (VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5), the harness's LiteLLM per arm on the host, holds of at most 40 min until 24 pairs or 8 holds, each hold restarting both serving pods. Setup and wiring-smoke gates (memory, disk, AMX in each guest, NFD label, B5's weights equal to the QAT checkpoint, EAS's own `validate` and gateway check) come before hold 1. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62/campaign.sh`; `agentbench pairs-report --hyp H62 --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release at v1.2.0 or later or an EAT release at 2.0.0 or later is tagged (`bench/h62/upstream.sh`). Mechanics per [H62 amendment V1](#h62-amendment-v1-the-wiring-smokes-eas-check-without-the-rest-of-260-2026-11-01) (the smoke's EAS check), [V2](#h62-amendment-v2-eass-configure-answered-on-a-terminal-2026-11-01) (configure on a terminal), [V3](#h62-amendment-v3-d2-reads-the-catalogs-commented-name-lines-2026-11-01) (D2's catalog parse) and [V4](#h62-amendment-v4-the-clusters-state-is-recorded-when-b5s-install-fails-2026-11-01) (records on an install failure; the last setup attempt). Result ([H62 run](#h62-run-xeon-6741p-2026-11-01)): no hold ran, 0 of the 8 permitted, and no smoke ran. A1 served in its guest within its 45 min ceiling (`guest-a.sh` done at 35.7 and 34.7 min). Intel's install of B5 failed twice at the same step, inside its 120 min ceiling: EAT's sandbox-router could not be scheduled ("Insufficient cpu") because enterprise-inference's `cpu: auto` had sized gemma-4-26b to 76 of the node's 95.4 allocatable CPUs, beside Qwen3Guard's 8 and the platform's requests, which left 0.25 CPU for the router's 0.5. B5 is not deliverable in its guest, so H62 is INCONCLUSIVE by amendment V4's rule. | INCONCLUSIVE |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29); the runner and deploy commit per [amendment D3](#h52-amendment-d3-h52bs-runner-and-deploy-commit-2026-10-29). Result ([H52b run](#h52b-run-xeon-6741p-2026-10-29)): one hold at k3d-gpu 0.1.79; the plan passed D2's gate (8 commands) and applied. DSA advertised 3 of the 3 configured work queues and its pod saw `/dev/dsa`; IAA got no work queue and no resource (as D2 item 4 disclosed); QAT got 48 VFs, but its plugin crash-looped and advertised none; `gpu.intel.com/xe` read 2, not 4: the serving pairs hold about half the VRAM of all four cards, and `up`'s busy-card filter (half the VRAM) left out the two just over half (16.1, 16.2 GiB) and kept the two just under it (15.4, 15.5 GiB), which the pairs also hold, so two enumeration pods ran, not four. Media labels (`vcs` 2, `vecs` 2), AMX, the 14 AVX-512/VNNI labels, CPU 96 and no other vendor read as expected. The third inventory equals the first. Three clauses fail, so REFUTED. | REFUTED |
 | H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). Node image, deploy commit, order and the restore check per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); the solo runner fix, setup, the wiring smokes, the window and its futility stop per [H53 amendment R1](#h53-amendment-r1-the-solo-runner-fix-setup-wiring-smokes-and-the-gpu-window-2026-10-30); tools per [amendment E4](#crescent-amendment-e4-kubectl-v1372-helm-v431-and-uv-0136-in-the-crescent-workspace-2026-10-29). Result ([H53 run](#h53-run-arc-pro-b70-2026-10-30)): no hold ran, 0 of the 8 permitted. AG's wiring smoke passed (OVMS on one card, warm-up answered). B2 needed rung (b) (`setvars.sh` is not in the v0.28.0 image), then failed in its first cross-card collective: oneCCL opens `/dev/dri/by-path`, which the k3d node and pod lack. No further rung applies, so B2 is not deliverable and H53 is INCONCLUSIVE by its pre-registered rule. | INCONCLUSIVE |
@@ -77,8 +77,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H54b | On Arc Pro B70 with Qwen3.8-27B single-stream: the best optimized arm on ONE card (k3d-gpu auto OVMS int4, Intel's llm-scaler vLLM, or llama.cpp SYCL, with and without each one's documented MTP) decodes at N=1 at least 2x faster than EAT #21's XPU path B2q on TWO cards (vLLM XPU v0.28.0, the `xpu-qwen36-27b` profile's flags on the Qwen3.8-27B weights, TP 2). | Written 2026-10-20, before any measurement. N=1 median decode tok/s: X1q (OVMS GPU int4) in [15, 28] (0.5), X1q-mtp/X1q in [1.3, 2.2] (0.4); Sq (llm-scaler 1.5, online FP8, TP 1) deliverable (0.5), in [10, 18]; Sq-mtp/Sq in [1.4, 2.3] (0.5); Lsq (llama.cpp SYCL, Intel Q4_K_M) in [12, 24] (0.5); B2q deliverable at TP 2 (0.4), in [5, 12] (0.5). Chosen/B2q >= 2 (0.6). Cards free for a window (0.5). INCONCLUSIVE (0.6), SUPPORTED (0.3), REFUTED (0.1). | H54a's protocol on the B70s, cards only when `~/k3dgpu-bench/gpu-state.txt` lists them free; at most 2 holds of at most 40 min. Same statistic and quality gate (against B2q, or the official-weights arm Sq when B2q is not deliverable, for the gate only). SUPPORTED: CI lower bound of chosen one-card arm / B2q >= 2.0 and the gate passed. REFUTED: CI upper bound < 2.0. Otherwise INCONCLUSIVE (also: B2q not deliverable, or no free card before the campaign ends). Gemma 4 QAT on one B70 (X1g, X1o, B2g, Sgg) is described if hold time remains, never gated. Run 2026-10-21, 2 holds ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. B2q, Sq, Sq-mtp (Qwen bf16, 80.6 GB with its guard) and Rq were not deliverable (disk); X1q and X1q-mtp failed on two `h54b.sh` runner bugs before any engine started; Lsq ran, but its pod listed every render node and llama.cpp split the model over all four B70s, two of them serving the live `qwen38-a-hr`, so no one-card arm exists. Lsq-mtp was not run: its GGUF carries the MTP (`nextn`) tensors, but G1's runner has no such arm; nor were the described-only Gemma arms. `score.py`: "no gate reference (B2q and Sq missing)". Descriptive only, a 4-card run and not a one-card or B70 result: Lsq 27.3 tok/s N=1 median, GSM8K 48/50. | INCONCLUSIVE |
 | H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). Run 2026-10-21, 1 hold ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. Gg, Hg and Gg2 split their GPU layers over four B70s (two serving the live `qwen38-a-hr`), and Cg (`-ngl 0`) also allocated about 0.5 GB on one of those cards, so t_Cg and the prediction are confounded. The verdict does not come from `predict.py`'s band test, whose inputs are these 4-card and confounded runs. Descriptive only, not one-card or hybrid results: Cg 36.8, Gg 58.0, Hg 56.3, Gg2 57.4 tok/s N=1 median. | INCONCLUSIVE |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. Not run 2026-10-21, no hold used ([H54d: not run](#h54d-not-run-2026-10-21)): A* is undefined (H54a chose no arm), B1g stalled in both H54a holds, and H54q has not run; the caps rule makes a row with its stock or chosen arm missing INCONCLUSIVE. Re-checked 2026-10-29 ([H54d: re-checked, still not run](#h54d-re-checked-still-not-run-2026-10-29)): still not run, no hold used. H54q has since run. A* is still undefined, and B1g stays at v0.24.0 ([amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)), whose stall is vllm-project/vllm#45844 ([note N2](#h54-note-n2-why-b1g-stalled-unscored-diagnostic-2026-10-29)). An amendment that defines A* and moves B would now follow H50's measured B1 outcome, so none is written. 1 of H54d's 3 holds remains after [amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29). | INCONCLUSIVE |
-| H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20) and [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. | PENDING |
-| H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). Both arms run llama.cpp v0.8.0 (`server-b11960`), per [amendment V1](#h60-amendment-v1-llamacpp-v080-for-both-arms-2026-10-29). | PENDING |
+| H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20), [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins) and [amendment R1](#h58-amendment-r1-the-runner-the-gpu-interlock-and-the-clause-readings-2026-11-01) (the runner, the GPU interlock and the clause readings) and [amendment R2](#h58-amendment-r2-run-1-is-not-valid-and-the-interlock-leaves-k3d-gpus-own-pods-alone-2026-11-01) (run 1 not valid; the interlock fixed). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. Result ([H58 run](#h58-run-xeon-6741p-2026-11-01)): run 2 at k3d-gpu 0.1.83; run 1 is not valid (amendment R2). The commands ran plainly, with no flag, so (a) holds. `up` advertised 3 of the 4 B70s, since the serving pairs hold just over half of card1, and no DSA work queue, so (d) fails. `agent up` refused all three models, so (e) fails. Gemma 4 and Qwen3.8-27B went to OVMS on the GPU, and their int4 IRs came out 0.1 and 0.5 GiB over the best card's 15.2 GiB budget. Flash-Next was refused because no DRAM bandwidth was cached. So the banking flow never came up: (b) counts one stop, and (c) fails. The squeeze did not run, so (f) is INCONCLUSIVE. Four clauses fail, so REFUTED. | REFUTED |
+| H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). Both arms run llama.cpp v0.8.0 (`server-b11960`), per [amendment V1](#h60-amendment-v1-llamacpp-v080-for-both-arms-2026-10-29). Result ([H60 run](#h60-run-xeon-6741p-2026-11-01)): one hold, 2026-11-01, k3d-gpu 0.1.84 at `8a4f8c8a`, after the one wiring smoke. Every phase was clean on its first try, and the PSI guard never fired. Flash-Next decoded 16.00 tok/s at N=1 (8/8 ok), so e_fn = 0.312 against a ceiling of 51.33 tok/s (5.94 GB per token). The same-hold Gemma control decoded 48.52 tok/s, so e_lg = 0.379 (2.380 GB per token). The ratio is 0.823, 95% CI 0.819-0.831, inside [0.7, 1.3]. GSM8K 0-49 scored 50/50. Every prediction holds: e_lg in 0.33-0.42, e_fn in 0.18-0.45, decode in 9-23, r in 0.5-1.15, GSM8K at least 40. | SUPPORTED |
 | H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Od 0.785 (95% CI 0.692-1.561), per hold 0.72, 0.79, 1.44; Od 6.90, Ld 3.50, Ld-mtp 5.41 tok/s pooled N=1; all 50/50 on GSM8K; load matched (1.80 <= 2.0). The strict-pinned llama.cpp arms tracked host load 2.3-2.7x, Od 1.3x. | INCONCLUSIVE |
 | H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Ld 1.548 (95% CI 1.057-3.017), faster in each hold (1.47, 1.58, 1.52), 50/50 quality. Scope: llama.cpp b11749, default draft length 3, i9-13900T P-cores, single stream, busy shared host. | SUPPORTED |
 | H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. Not run ([H57d run](#h57d-run-i9-13900t-2026-10-21)): memory gate failed, MemAvailable 42.9 GB at the campaign's start (< 100 GiB). | INCONCLUSIVE |
@@ -89,23 +89,23 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). | PENDING |
 | H28w | H28's hypothesis on wildct: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28w measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part: T/C round-median ready 0.5 (0.4-0.65), against H28's 0.47 on the i9. SUPPORTED 0.45, REFUTED (time part) 0.4, INCONCLUSIVE or not run (disk) 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, `typical` only, scored by `bench/zero-copy-models/score.py`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h28`, node on the P-cores (`NODE_CPUS=0-15`), W2, W3 (passed to the plain `k3d cluster create`), and a disk gate (W6). | PENDING |
 | H34w | H34's hypothesis on wildct: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, both on the 16-CPU P-core balloon, under matched background load. A replication: original models, runner, scorer and rule. | Written 2026-10-20, before any H34w measurement. At `typical`: median paired B/A decode tok/s 1.35 (1.15-1.6) and median paired B/A package J/token 0.76 (0.6-0.92). SUPPORTED by H34's rule at 0.6, REFUTED 0.25, INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, `typical` only, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h34`, the GPU opt-out in place of H34's `intel,hybrid`, W2, W3, W4. | PENDING |
-| H57wa | H57da's hypothesis on wildct (i7-13700, the 16 P-core CPUs, AVX2 and AVX-VNNI, no AVX-512, no AMX): with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other gate-passing arm (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A cross-host replication of H57da on a second AMX-less client. | Written 2026-10-20, before any H57d or H57w measurement. N=1 median decode tok/s: Od in [7, 18] (0.5); Ld in [10, 26] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token. | H57da's protocol, runner, statistic and outcome rules (the H57d pre-registration and its runner amendment), unchanged except as listed in the wildct pre-registration: H57d's runner (amendment R1) with the host knobs listed there: clusters `k3dgpu-w-h57d-<hold>`, the GPU opt-out in place of `K3D_GPU_VENDORS=hybrid`, W2-W6, hold-start `load1` <= 12, models downloaded on wildct at H57d's revisions, at most 5 holds of at most 75 min. | PENDING |
+| H57wa | H57da's hypothesis on wildct (i7-13700, the 16 P-core CPUs, AVX2 and AVX-VNNI, no AVX-512, no AMX): with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other gate-passing arm (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A cross-host replication of H57da on a second AMX-less client. | Written 2026-10-20, before any H57d or H57w measurement. N=1 median decode tok/s: Od in [7, 18] (0.5); Ld in [10, 26] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token. | H57da's protocol, runner, statistic and outcome rules (the H57d pre-registration and its runner amendment), unchanged except as listed in the wildct pre-registration: H57d's runner (amendment R1) with the host knobs listed there: clusters `k3dgpu-w-h57d-<hold>`, the GPU opt-out in place of `K3D_GPU_VENDORS=hybrid`, W2-W6, hold-start `load1` <= 12, models downloaded on wildct at H57d's revisions, at most 5 holds of at most 75 min. Od's render names the hold's cluster: [H57d amendment R2](#h57d-amendment-r2-ods-render-names-the-holds-cluster-2026-10-29) (2026-10-29, before any H57w hold). | PENDING |
 | H57wm | H57dm's hypothesis on wildct: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant converted to Q4_0 GGUF, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld with the quality gate passed. | Written 2026-10-20. Ld-mtp/Ld in [0.8, 1.3] (0.6). REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). | As H57wa (same holds and records); H57dm's statistic and rule. | PENDING |
 | H57wb | H57db's hypothesis on wildct: inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights). | Written 2026-10-20: not runnable here as registered (disk and memory), so INCONCLUSIVE (not run) is expected (0.95). | H57db's design and gates; runs only if at a hold's start / has >= 15 + 70 GB available (51.6 GB of bf16 weights plus images) and MemAvailable >= 100 GiB; otherwise INCONCLUSIVE (not run), with both readings recorded and no bf16 download. | PENDING |
 | F2a | Open WebUI in a k3d-gpu cluster reaches a public remote endpoint by name: `k3d-gpu quickstart --remote https://gaudi.farmgpu.net` (no hostAliases) gives a chat through Open WebUI's own API that returns. An earlier run saw `Temporary failure in name resolution` for gaudi.farmgpu.net from a pod. | Pre-registered 2026-10-17, before measuring: the in-cluster failure is a cluster DNS gap (CoreDNS forwarding to an upstream the node container cannot use), not the endpoint; once fixed, one `POST /api/chat/completions` returns `finish_reason=stop` with non-empty content (0.7). | Fresh cluster `k3dgpu-f2-*` (scratch KUBECONFIG, node CPUs 8-15), `nslookup` from a pod before any change, CoreDNS Corefile and node `/etc/resolv.conf` read; root cause fixed in the product if it is a k3d-gpu config gap (regression test first); then one chat through Open WebUI's API with the generated admin account, max_tokens <= 64, temperature 0.6. SUPPORTED: chat returns. REFUTED: no chat returns after the fix. Run (2026-10-17, i9-13900T, k3s v1.35.5, node CPUs 8-15): the prediction's mechanism was wrong. CoreDNS forwarding works (node resolv.conf is k3d's 192.168.32.1 DNAT to Docker's 127.0.0.11; busybox and glibc lookups from pods resolve). The failure is a startup race: `k3d-gpu up` returned on node Ready, when the CoreDNS Deployment was 1 s old (image still pulling); a glibc pod started then got `gaierror(-3, 'Temporary failure in name resolution')` for 11 s (4 tries), first success at 13 s. Fix: `up` waits for the CoreDNS rollout; after it, the same pod resolved on its first try (0.0 s). Then `quickstart --remote https://gaudi.farmgpu.net` with no hostAliases: Open WebUI listed `zai-org/GLM-5.3` and one `POST /api/chat/completions` returned finish_reason=stop, content 'OK', 0.41 s; 0 name resolution errors in its log. | SUPPORTED |
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 | F4 | `integrations/eat/eat-up.sh` on EAT `release-1.1.0` (`0c726f5`) runs on a single non-Xeon machine: H1b's user path, unchanged except that `eat-up.sh` now deploys `release-1.1.0` (guardrail, vLLM Semantic Router, OpenShell, Kata, Ceph and rack-scale explicitly off; vLLM CPU `v0.28.0` by digest). Functional, n = 1, not a performance row. | Pre-registered 2026-10-29, before any F4 step. SUPPORTED (0.6): steps 1-4 exit 0 and `eat-check.sh` passes. The risks, read from source and not run: the GenAI Gateway's new hybrid-router callback, loaded into LiteLLM `v1.83.14-stable.patch.2` from a ConfigMap, fails to import and the gateway never turns Ready (0.15); vLLM CPU `v0.28.0` on this AVX2-only CPU does not load or answer Qwen3-1.7B inside the wait (0.15); anything else (0.1). | i9-13900T, one fresh cluster `k3dgpu-f4-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, the README's user path run once, each step timed: (1) `k3d-gpu up` with the README's EAT env; (2) `eat-up.sh`; (3) `eat-up.sh model cpu-qwen3-1-7b`; (4) `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`; (5) `eat-check.sh`; (6) `k3d-gpu down`. SUPPORTED only if steps 1-4 exit 0 and step 5 prints `EAT check passed` (non-empty chat, a `get_weather` tool call, sandbox stdout exactly `385`) with no Xeon-only instruction or node label needed. REFUTED by any of steps 1-3 or 5 failing, or by step 4 ending non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready. Grading, lock and the INCONCLUSIVE cases in [F4 pre-registration](#f4-pre-registration-i9-13900t-2026-10-29). Until this row is SUPPORTED no doc says the `release-1.1.0` path is verified. | PENDING |
-| F3 | `k3d-gpu eas up --agent-toolkit` takes a fresh, default k3d-gpu cluster on one non-Xeon host to Intel EAS's platform, inference and agent-toolkit (EAT 2.0) layers at the pinned upstream commits with no hand edits, and its own check and teardown work. | Pre-registered 2026-10-29, before any F3 step ([F3 pre-registration](#f3-pre-registration-i9-13900t-2026-10-29)): on the i9-13900T at the `main` profile pins (EAS `97f6157`, enterprise-inference `3e8a244`, EAT `release-2.0.0` `036b662`), `eas up` exits 0 with every PLAY RECAP `failed=0`; its choices and patch decisions equal the pre-registered table (`istio_platform: k3d`, MetalLB off, `best-effort`, NFD off, `require_amx: false`, k3s CIDRs, Kata off, accelerator `cpu`, agent sandbox on; 0002 and 0006 variant a applied, 0003, 0004 and 0005 skipped) and the model pick follows the fit rule; every pod not in phase Succeeded turns Ready; `eas check` passes through the EAS gateway; no secret value appears in a log or in sampled argv; `eas down` exits 0 within 15 min (0.35). | One fresh cluster `k3dgpu-f3-eas` from plain `k3d-gpu up`, then `eas up --agent-toolkit --dry-run`, `eas up --agent-toolkit`, a Ready wait, `eas check`, `eas status`, a secret scan, `eas down` and `k3d-gpu down`, each once, inside the host lock, from the first `main` commit that holds `k3d-gpu eas`. SUPPORTED, REFUTED and INCONCLUSIVE are fixed in the section. | PENDING |
+| F3 | `k3d-gpu eas up --agent-toolkit` takes a fresh, default k3d-gpu cluster on one non-Xeon host to Intel EAS's platform, inference and agent-toolkit (EAT 2.0) layers at the pinned upstream commits with no hand edits, and its own check and teardown work. | Pre-registered 2026-10-29, before any F3 step ([F3 pre-registration](#f3-pre-registration-i9-13900t-2026-10-29)): on the i9-13900T at the `main` profile pins (EAS `97f6157`, enterprise-inference `3e8a244`, EAT `release-2.0.0` `036b662`), `eas up` exits 0 with every PLAY RECAP `failed=0`; its choices and patch decisions equal the pre-registered table (`istio_platform: k3d`, MetalLB off, `best-effort`, NFD off, `require_amx: false`, k3s CIDRs, Kata off, accelerator `cpu`, agent sandbox on; 0002 and 0006 variant a applied, 0003, 0004 and 0005 skipped) and the model pick follows the fit rule; every pod not in phase Succeeded turns Ready; `eas check` passes through the EAS gateway; no secret value appears in a log or in sampled argv; `eas down` exits 0 within 15 min (0.35). | One fresh cluster `k3dgpu-f3-eas` from plain `k3d-gpu up`, then `eas up --agent-toolkit --dry-run`, `eas up --agent-toolkit`, a Ready wait, `eas check`, `eas status`, a secret scan, `eas down` and `k3d-gpu down`, each once, inside the host lock, from the first `main` commit that holds `k3d-gpu eas`. SUPPORTED, REFUTED and INCONCLUSIVE are fixed in the section. Run 2026-11-01 from `48e1da90` ([F3 run](#f3-run-i9-13900t-2026-11-01)): every step exited 0; `eas up` took 2453 s with its one `PLAY RECAP` at `failed=0`; the choices, the overlay decisions and the model pick (`qwen2-5-coder-7b`) equal the table; all 63 pods not Succeeded turned Ready; `eas check` passed through the EAS gateway (chat, a `get_weather` tool call, the guard's block, sandbox stdout `385`); `eas down` took 208 s. The secret scan counted 1: the Keycloak admin password, in one 2 s `ps` sample, on the command line of `kcadm.sh config credentials`, which enterprise-inference `3e8a244`'s `keycloak_config` role runs in the Keycloak pod with `--password <value>`. A count above 0 is REFUTED. | REFUTED |
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
-| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). Run 1 2026-10-21 ([H28x run 1](#h28x-run-1-xeon-6741p-2026-10-21)): failed in setup 16 s after the hold started (`WORK` did not exist, so the CSV and the scratch kubeconfig could not be written) and measured nothing; [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) counts it as the one pre-registered hold and registers one re-run (run 2), protocol unchanged. | INCONCLUSIVE |
-| H7x | (Arms B and C superseded by [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29): EAT release-1.1.0's stock, vLLM CPU v0.28.0; H7's vLLM version is no longer kept.) H7's hypothesis on the Xeon 6741P, run to H7's full protocol: OVMS's decode lead over EAT's vLLM CPU engine comes from weight precision, not from the engine. One checkpoint (`Qwen/Qwen3-4B` @ `1cfa9a72`), OVMS 2026.4.1 on its 16-bit IR (`OpenVINO/Qwen3-4B-fp16-ov` @ `00298f1c`) and vLLM CPU v0.24.0 in bf16 with EAT's chart defaults decode within 15% of each other, and land within 15% in effective weight bandwidth. A replication: H7's models and versions are kept. | Written 2026-10-20, before any H7x measurement. On AMX both engines compute in bf16 and batch-1 decode reads the same 8.0 GB per token, so the engine gap shrinks: R = OVMS/vLLM decode 1.10 (0.85-1.40); SUPPORTED 0.45, REFUTED 0.30, INCONCLUSIVE 0.25. Reported, not scored: prefill TTFT on ~~\~1936~~ ~1850 tokens (corrected in the 2026-10-21T22:30Z revision to the prompt `h7x.sh` has always sent, 56 copies of one sentence; value unchanged; struck through 2026-10-29) vLLM/OVMS 1.5 (0.7-4; the i9 gap of 4.3x was outside H7's prediction), C/B decode (`--enforce-eager` dropped) 1.0-1.3, decode incremental J/token per arm. | `bench/apb/h7x.sh` (H7's `h7.sh` extended to the pre-registered protocol: H2's workloads and energy method, blocks A B B A A B B A A B, then one C block with `--enforce-eager` dropped), scored by `bench/apb/h7x.py`; decision rule, host changes and hold in [H7x pre-registration](#h7x-pre-registration-h7-to-its-full-protocol-on-the-xeon-6741p-2026-10-20). B and C are EAT release-1.1.0's stock (`0c726f57`, vLLM CPU v0.28.0), after a further setup smoke, per [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29). | PENDING |
-| H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). Not run. A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). | PENDING |
+| H28x | H28's hypothesis on the Xeon 6741P: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28x measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part uncertain: the copy runs at memory speed on this host, so the fixed pod-start cost is a larger share of both arms; T/C round-median ready 0.55 (0.35-0.8). SUPPORTED 0.35, REFUTED (time part) 0.5, other rows 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h28`, crescent amendment C1 passed to the plain `k3d cluster create`, `typical` only, scored by `bench/zero-copy-models/score.py` (H28's table, committed with this pre-registration). Run 1 2026-10-21 ([H28x run 1](#h28x-run-1-xeon-6741p-2026-10-21)): failed in setup 16 s after the hold started (`WORK` did not exist, so the CSV and the scratch kubeconfig could not be written) and measured nothing; [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) counts it as the one pre-registered hold and registers one re-run (run 2), protocol unchanged; [amendment R2](#h28x-amendment-r2-run-2-keeps-the-registered-pod-image-2026-11-01) keeps run 2 on the registered pod image. Run 2 2026-11-01 ([H28x run 2](#h28x-run-2-xeon-6741p-2026-11-01)): load MATCHED, no void round; T memory held (PSS 132.6 MiB per pod, model page cache 1.00x size against C's 9.00x), but the T/C round-median ready ratio read 0.714 (CI 0.697-0.723, above 0.5, with T faster in every round): REFUTED (time part), the outcome the row rated most likely. | REFUTED |
+| H7x | (Arms B and C superseded by [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29): EAT release-1.1.0's stock, vLLM CPU v0.28.0; H7's vLLM version is no longer kept.) H7's hypothesis on the Xeon 6741P, run to H7's full protocol: OVMS's decode lead over EAT's vLLM CPU engine comes from weight precision, not from the engine. One checkpoint (`Qwen/Qwen3-4B` @ `1cfa9a72`), OVMS 2026.4.1 on its 16-bit IR (`OpenVINO/Qwen3-4B-fp16-ov` @ `00298f1c`) and vLLM CPU v0.24.0 in bf16 with EAT's chart defaults decode within 15% of each other, and land within 15% in effective weight bandwidth. A replication: H7's models and versions are kept. | Written 2026-10-20, before any H7x measurement. On AMX both engines compute in bf16 and batch-1 decode reads the same 8.0 GB per token, so the engine gap shrinks: R = OVMS/vLLM decode 1.10 (0.85-1.40); SUPPORTED 0.45, REFUTED 0.30, INCONCLUSIVE 0.25. Reported, not scored: prefill TTFT on ~~\~1936~~ ~1850 tokens (corrected in the 2026-10-21T22:30Z revision to the prompt `h7x.sh` has always sent, 56 copies of one sentence; value unchanged; struck through 2026-10-29) vLLM/OVMS 1.5 (0.7-4; the i9 gap of 4.3x was outside H7's prediction), C/B decode (`--enforce-eager` dropped) 1.0-1.3, decode incremental J/token per arm. | `bench/apb/h7x.sh` (H7's `h7.sh` extended to the pre-registered protocol: H2's workloads and energy method, blocks A B B A A B B A A B, then one C block with `--enforce-eager` dropped), scored by `bench/apb/h7x.py`; decision rule, host changes and hold in [H7x pre-registration](#h7x-pre-registration-h7-to-its-full-protocol-on-the-xeon-6741p-2026-10-20). B and C are EAT release-1.1.0's stock (`0c726f57`, vLLM CPU v0.28.0), after a further setup smoke, per [amendment V1](#h7x-amendment-v1-eat-release-110-for-arms-b-and-c-2026-10-29). Run 2026-11-01 ([H7x run](#h7x-run-xeon-6741p-2026-11-01)): one hold, all 11 blocks valid, no restart; decode median A 12.96 tok/s, B 10.61 tok/s: R = 1.222 (gap 0.222), R_bw 1.222, all 5 pair ratios 1.214-1.248, OVMS faster in every pair. Reported: C/B 1.130, prefill TTFT on ~1870 tokens A 3.00 s, B 2.08 s (vLLM/OVMS 0.69), decode incremental J/token A 3.61, B 4.17. | REFUTED |
+| H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). Run 2026-10-29 ([H55 run](#h55-run-i9-13900t-2026-10-29)), all 5 holds: the 25 runs completed with no failed request, but A_slo's round-3 run closed 3 full windows (78 requests in its window), under the gate's 4, so the scorer stops at INCONCLUSIVE. Not gated (the scoring branch's formulas past that gate): A_slo +23.2% at 67.9% neighbour loss, at the 25% floor through rounds 1-4 and up to 62.5% in round 5; K25 +17.0% at 70.4%; K50 +24.1% at 43.0%; N0 +54.6%; Q spread 28.0% of the Q median, drift inside it. No arm reached +10%, so read past the gate the row fails (a) only. | INCONCLUSIVE |
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. Stage 0 under amendment S0 (`lockwait.json`, 62fdf617): pooled share 0.9987 (16081 s of lock wait over 16102 s held, 21 holds, 4 logs), so stage 1 ran; smoke-W passed `h56.py gate` (slice-0 setup 225 s, 15 tasks in 120 s). Stage 1 run 2026-10-21, holds 1-8 in order, every rc 0, none gate-flagged ([H56 run](#h56-run-stage-1-xeon-6741p-2026-10-21)): `h56.py score` reads "4 VOID condition-holds > 2; position 2 missing; position 3 missing; position 6 missing; position 7 missing". Every W hold is VOID on one rule, slice 0's block window not inside the sibling's: a B24 block ends at its 24th task, not at its run budget, and took 178-190 s, so the sibling's block (1800 s budget) ended 27-32 s after slice 0's began and covered 0.15-0.17 of it. No time, success, completion, MHz or power statistic is scored. The 4 A holds are valid (22/24 passed in each). A VOID replacement cannot lift the verdict (4 VOID > 2) and would VOID by the same timing, so no further H56 hold is owed; crescent rows stay K=1 (adoption rule 1). | INCONCLUSIVE |
-| H59 | Engine choice by evidence on the Xeon 6741P (crescent; AMX, CPU only, no card): with Gemma 4 26B-A4B QAT at agent concurrency N=4, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter (L, `agent up` with the llama.cpp backend of PR #182) decodes at least 1.2x faster than OVMS int4 (O, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`, the model optimizer's current pick), with GSM8K quality within 2 of 50. SUPPORTED makes llama.cpp the optimizer's CPU engine default for this CPU class (`console/ledger-rules.json`, H59 family); otherwise OVMS stays. | Written 2026-10-21, before any H59 measurement. Informed by H54a's descriptive N=1 numbers on this host (Lg-mtp 54.52, A1g 23.25 tok/s, not a verdict): N=1 L/O 2.2 (1.6-2.8) (0.6); N=4 per-request decode L/O 1.6 (1.1-2.3) (0.55), with MTP's gain smaller at N=4 than at N=1 (0.65); N=16 L/O < N=4 L/O (0.6); prefix-reuse added-agent TTFT O < L (0.55); GSM8K both >= 46/50 (0.7). SUPPORTED (0.55), REFUTED (0.3), INCONCLUSIVE (0.15). | [H59 pre-registration](#h59-pre-registration-engine-choice-per-cpu-class-2026-10-21): arms O and L at their best documented settings, one serving at a time on the CPU, 3 performance holds in rotated order (N=1: 8, N=4: 16, N=16: 32 requests, 256 tokens, greedy), a TTFT and a prefix-reuse phase per arm, 1 quality hold (GSM8K 0-49), RAPL J/token. Statistic: ratio of L's to O's median per-request decode tok/s at N=4 over the pooled holds, 95% bootstrap CI (H54's `boot_ratio`). SUPPORTED: CI lower bound >= 1.2 and L's GSM8K >= O's - 2. REFUTED: CI upper bound < 1.2, or the quality gate fails. Otherwise INCONCLUSIVE (also: an arm not deliverable, load unmatched). Scorer: `bench/h59/h59.py`, [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28) (2026-10-28, before any H59 measurement). O serves base-model int4 (OVB), not QAT weights, so a verdict compares the two stacks as shipped (S1's description fixes); SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59 measurement). | PENDING |
-| H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). | PENDING |
-| H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). | PENDING |
+| H59 | Engine choice by evidence on the Xeon 6741P (crescent; AMX, CPU only, no card): with Gemma 4 26B-A4B QAT at agent concurrency N=4, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter (L, `agent up` with the llama.cpp backend of PR #182) decodes at least 1.2x faster than OVMS int4 (O, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`, the model optimizer's current pick), with GSM8K quality within 2 of 50. SUPPORTED makes llama.cpp the optimizer's CPU engine default for this CPU class (`console/ledger-rules.json`, H59 family); otherwise OVMS stays. | Written 2026-10-21, before any H59 measurement. Informed by H54a's descriptive N=1 numbers on this host (Lg-mtp 54.52, A1g 23.25 tok/s, not a verdict): N=1 L/O 2.2 (1.6-2.8) (0.6); N=4 per-request decode L/O 1.6 (1.1-2.3) (0.55), with MTP's gain smaller at N=4 than at N=1 (0.65); N=16 L/O < N=4 L/O (0.6); prefix-reuse added-agent TTFT O < L (0.55); GSM8K both >= 46/50 (0.7). SUPPORTED (0.55), REFUTED (0.3), INCONCLUSIVE (0.15). | [H59 pre-registration](#h59-pre-registration-engine-choice-per-cpu-class-2026-10-21): arms O and L at their best documented settings, one serving at a time on the CPU, 3 performance holds in rotated order (N=1: 8, N=4: 16, N=16: 32 requests, 256 tokens, greedy), a TTFT and a prefix-reuse phase per arm, 1 quality hold (GSM8K 0-49), RAPL J/token. Statistic: ratio of L's to O's median per-request decode tok/s at N=4 over the pooled holds, 95% bootstrap CI (H54's `boot_ratio`). SUPPORTED: CI lower bound >= 1.2 and L's GSM8K >= O's - 2. REFUTED: CI upper bound < 1.2, or the quality gate fails. Otherwise INCONCLUSIVE (also: an arm not deliverable, load unmatched). Scorer: `bench/h59/h59.py`, [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28) (2026-10-28, before any H59 measurement). O serves base-model int4 (OVB), not QAT weights, so a verdict compares the two stacks as shipped (S1's description fixes); SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59 measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59 measurement). Its model check names OVB's language-model files: [H59 amendment R3](#h59-amendment-r3-the-model-check-names-ovbs-language-model-files-2026-11-01) (2026-11-01, before any H59 hold). L's render also carries `--cache-ram 0` and `-ctxcp 4`, both read at the pin: [H59 amendment R4](#h59-amendment-r4-ls-render-also-carries---cache-ram-0-and--ctxcp-4-2026-11-01) (2026-11-01, before any H59 hold). Result ([H59 run](#h59-run-xeon-6741p-2026-11-01)): 4 holds, every arm measured, no spare, no void phase, load matched. N=4 L/O 3.499 (95% CI 3.422-3.612), L faster in each performance hold (3.29, 3.68, 3.48); GSM8K L 49/50, O 50/50, gate passed; so SUPPORTED. Not gated: N=1 L/O 2.10, N=16 2.09; 1,000-token TTFT L 2.87 s, O 4.76 s; added-agent prefix TTFT L 0.82 s, O 0.63 s; N=4 J/output token gross L 2.98, O 9.81. | SUPPORTED |
+| H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59d measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59d measurement). Result ([H59d run](#h59d-run-i9-13900t-2026-11-01)): 4 holds, no spare. L was not deliverable in holds 1 and 3: each time it followed O in the hold, its server was OOMKilled 7 times at the fit's 45Gi pod limit (4 x 262,144 tokens) and never answered within 900 s. The same render served in holds 2 and 4, where L ran first. So INCONCLUSIVE (L not deliverable in two holds). Not gated, from hold 2 only: N=4 L/O 1.05, N=1 1.19; GSM8K L 50/50, O 49/50; the idle-window load read matched (L 2.14, O 2.01 CPU-s/s). | INCONCLUSIVE |
+| H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59w measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59w measurement). | PENDING |
 
 ## Falsification log
 
@@ -115,6 +115,7 @@ new evidence (new hardware, new driver, new model, changed method).
 
 | Date | Hypothesis | Attack | Result | DO-NOT-RE-ATTACK |
 |------|------------|--------|--------|------------------|
+| 2026-11-01 | H7x | Xeon 6741P: `bench/apb/h7x.sh` in `bench/xhost/hold.sh`, OVMS 2026.4.1 on `OpenVINO/Qwen3-4B-fp16-ov` (A) against EAT release-1.1.0's stock vLLM CPU v0.28.0 on `Qwen/Qwen3-4B` bf16 (B, `--enforce-eager`; C without it), each on node CPUs 0-7,48-55, one server at a time, blocks A B B A A B B A A B then C, after setup smoke 7 ([H7x run](#h7x-run-xeon-6741p-2026-11-01)) | REFUTED: R = 1.222 (A 12.96, B 10.61 decode tok/s), pair ratios 1.214-1.248, no void block; at matched 16-bit weights OVMS still decodes 22% faster. Reported: C/B 1.130 (one block), prefill TTFT vLLM/OVMS 0.69 (B 2.08 s, A 3.00 s), decode incremental J/token A 3.61, B 4.17 | DO-NOT-RE-ATTACK at 16 CPUs with these engines, versions and checkpoint on this host. Re-open with another OVMS or vLLM CPU release, another weight format, another CPU count, or a pre-registered C arm of 5 blocks |
 | 2026-10-29 | H54q | Xeon 6741P: `bench/h54/qcampaign.sh` (amendment Q2), GSM8K items 0-199 through R (vLLM CPU v0.32.0, QAT bf16), OVQ, OVB and Lg (H54a's manifests, items 0-49 from H54a's records) and the probe-first Vi, after a discarded wiring smoke; 3 holds of 3 ([H54q run](#h54q-run-xeon-6741p-2026-10-29)) | INCONCLUSIVE: OVQ - R -0.015 (CI -0.035 to 0.000) stays inside the 5-point margin, but OVB - OVQ +0.005 (CI -0.015 to +0.025) is not below 0. R 194/200, OVQ 191, OVB 192, Lg 193. Vi not deliverable (vLLM v0.32.0 cannot load the AutoRound MoE checkpoint) | DO-NOT-RE-ATTACK on GSM8K items 0-199 with these builds: all four sit at 95.5-97%, too near the ceiling to separate OVB from OVQ. Re-open only with a harder or larger pre-registered item set, another OVB build, or other engine pins |
 | 2026-10-29 | H50o | Xeon 6741P: `bench/eatflow/crescent/pairs-hold.sh H50o 1`, A1 against B3 (EAT's OVMS chart, OVMS 2025.4, `OpenVINO/gemma-4-26b-a4b-it-int4-ov` @ `4e5885c3`), after a discarded wiring smoke; then B3's server in a plain container as an unscored control ([H50o run](#h50o-run-xeon-6741p-2026-10-29)) | INCONCLUSIVE (not deliverable): A1 was ready; B3's pull matched the Hub, but its server failed on all 14 starts (5 in the smoke, 7 in hold 1, 2 outside k3d with and without the chart's limits); the 5 exits recorded are 139 (SIGSEGV), and the 5 logs recorded end at the same line, a second into loading the model. No pair ran | DO-NOT-RE-ATTACK with OVMS 2025.4. A re-attack needs an EAT OVMS chart whose pinned server loads Gemma 4 |
 | 2026-10-21 | H25x | Xeon 6741P: `bench/shared-prefix/run.sh`, OVMS agent pod on node CPUs 0-23,48-71 under matched `typical` load on 24-47,72-95, 3+3 rounds ([H25x run](#h25x-run-xeon-6741p-2026-10-21)) | SUPPORTED (T), load matched: 7.05x (CI 6.94-7.13), smaller than the i9's 10.61x because the Xeon's OFF prefill is faster | DO-NOT-RE-ATTACK T for this prompt shape on this host |
@@ -1882,6 +1883,116 @@ B and C run, not what is predicted of them. The run section reads them as writte
 replicates H7's vLLM version. It keeps H7's models, OVMS arm and protocol, and compares OVMS
 2026.4.1 with the vLLM CPU engine that EAT ships now.
 
+### H7x run (Xeon 6741P, 2026-11-01)
+
+```text
+# Reproduce
+date:            2026-11-01T14:37:24Z (lock taken) .. 15:22:13Z (cluster k3dgpu-x-h7 deleted; lock released);
+                 pre-registration (#196) and amendment V1 (#235) merged first, both through #241 (76bbfbd);
+                 setup smoke 7 ran 14:31:13Z .. 14:36:33Z under the same lock rules
+hypothesis:      H7x (pre-registration and amendment V1; cross-host rules X1, X4 and X5, kubectl as amendment K1)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 1 NUMA node, AMX, no swap
+host kernel:     7.0.0-31-generic, Docker 29.8.0
+k3d-gpu commit:  99789454 (main, release 0.1.85), deployed to ~/k3dgpu-xhost/k3d-gpu-h7x (was 986887b3);
+                 k3d v5.9.0, kubectl v1.37.2 (bench/xhost/tools.sh, run 2026-11-01T13:29Z), helm v4.1.1
+node image:      cryptoandcoffee/k3d-gpu:0.1.61 (sha256:8cd264aa…), K3D_GPU_VENDORS=none, crescent C1 kubelet
+                 thresholds; node container pinned to CPUs 0-7,48-55; every engine process read
+                 Cpus_allowed_list 0-7,48-55 (cpus.txt)
+runtime:         A openvino/model_server:2026.4.1-gpu@sha256:a928903f…76fc58 (2026.4.1), `agent manifest` CPU,
+                 cpu 16, no draft, K3D_GPU_FIT=off;
+                 B vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6…9647, EAT release-1.1.0 chart (eat-src at
+                 0c726f57, was 0d3438d; sha256 check passed, chart-check.txt), xeon-values.yaml +
+                 integrations/eat/vllm-values.yaml, cpu 16, memory 22Gi (k3d-gpu fit), KV 6 GiB,
+                 --max-model-len 32768, --enforce-eager; C = B without --enforce-eager, VLLM_CACHE_ROOT=/tmp/vllm
+models:          Qwen/Qwen3-4B 1cfa9a72 (bf16 safetensors, 8,044,982,000 B); OpenVINO/Qwen3-4B-fp16-ov 00298f1c
+                 (openvino_model.bin 8,044,936,594 B, sha256 8ada1424…, H7's file), read on the host before the hold
+energy source:   RAPL intel-rapl:0 package-0 (bench/energy.sh, sudo -n); idle W from each block's 20 s loaded idle
+command:         bench/xhost/hold.sh H7x 10800 env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 K3D_GPU_VENDORS=none \
+                   K3D_GPU_K3S_ARGS="$C1" K3D_GPU_CLUSTER=k3dgpu-x-h7 H7X_CPUS=16 H7X_NODE_CPUS=0-7,48-55 \
+                   H7X_READY_S=1800 H7X_VLLM_MEM=fit APB_MODELS=$X/models \
+                   APB_EAT_CHART=$X/eat-src/core/helm-charts/vllm APB_OUT=$X/runs/H7x bench/apb/h7x.sh
+                 python3 bench/apb/h7x.py <run>   (run by h7x.sh at the end; re-run here, identical output)
+runs per arm:    blocks A B B A A B B A A B, then C: 5 A, 5 B, 1 C; per block 1+1 warm-ups, 20 s idle,
+                 decode 5 x 256 (c=1), prefill 5 x 16 on a 1867-1871-token prompt (c=1), conc4 8 x 128 (c=4)
+raw results:     bench/xhost/results/2026-11-01/H7x/hold/ (h7x-20261101-143724/: b<i>-<E>-{decode,prefill,conc4}.json
+                 and their -energy.json, b<i>-<E>-idle-energy.json, restarts.txt, cpus.txt, image.txt, fit.json,
+                 rendered manifests, verdict.json, up.log, energy.log; hold.log, chain.log, pre/post snapshots,
+                 serving.jsonl); campaign.log (the bench lock's campaign log); render-precheck/ (H7X_RENDER_ONLY=1
+                 at 14:30Z); smoke 7: bench/xhost/results/2026-10-21/H7x-smokes/smoke7/ (hold.log, chain.log, up.log)
+```
+
+**Setup smoke 7** (amendment V1 item 5; `H7X_SMOKE=1`, order B C, the run's settings, no request
+sent): B Ready in 115 s and C Ready in 126 s, both on 0-7,48-55, rc 0. The hold therefore ran as
+pre-registered. Before it, a render-only pass on the deploy commit matched amendment V1's
+description: against smoke 6's `vllm.yaml` and `vllm-c.yaml`, only the image and the pod's
+`fsGroup: 1001` differ, the limit is the fit's 22Gi, and A's manifest keeps the pre-registered
+digest (it now also names the `2026.4.1-gpu` tag, from main's `agent manifest`).
+
+The hold started at once (load1 3.16, no aiperf process; `wait_s` 0) and took 2689 s of its
+10800 s cap. All 11 blocks ran; no pod restarted (`restarts.txt`), and all 198 scored requests
+(55 decode, 55 prefill, 88 conc4) were ok with their full output (256, 16 and 128 tokens,
+`finish_reason` `length`), so no block is void. The RAPL preflight read 130 W.
+
+| Block | Engine | decode tok/s, median (range) | prefill TTFT s, median | conc4 aggregate tok/s | decode incremental J/token | idle W |
+|---|---|---|---|---|---|---|
+| 1 | A OVMS fp16 | 12.956 (12.95-12.97) | 3.159 | 48.40 | 3.644 | 131.5 |
+| 2 | B vLLM bf16 | 10.598 (10.43-10.73) | 2.078 | 39.33 | 4.168 | 131.7 |
+| 3 | B | 10.675 (10.62-10.72) | 2.086 | 38.85 | 4.137 | 131.2 |
+| 4 | A | 12.959 (12.92-12.96) | 3.005 | 48.50 | 3.613 | 131.4 |
+| 5 | A | 12.964 (12.94-12.97) | 3.012 | 48.47 | 3.592 | 131.5 |
+| 6 | B | 10.607 (10.50-10.66) | 2.067 | 39.11 | 4.179 | 131.2 |
+| 7 | B | 10.394 (10.39-10.41) | 2.061 | 39.16 | 4.184 | 131.4 |
+| 8 | A | 12.972 (12.97-12.98) | 2.984 | 48.51 | 3.633 | 131.1 |
+| 9 | A | 12.965 (12.96-12.99) | 3.003 | 48.39 | 3.596 | 131.4 |
+| 10 | B | 10.638 (10.50-10.68) | 2.083 | 39.53 | 4.120 | 131.7 |
+| 11 | C vLLM bf16, eager off | 11.990 (11.84-12.11) | 1.816 | 46.23 | 3.833 | 131.4 |
+
+Decision rule (`bench/apb/h7x.py`, `verdict.json`): over the 25 decode requests per arm, median
+A 12.964 tok/s, B 10.607 tok/s, R = 1.2222, gap 0.222; R_bw = 1.2222 (A 104.3 GB/s, B 85.3 GB/s
+of effective weight bandwidth). Pairs in run order (blocks 1-2, 4-3, 5-6, 8-7, 9-10): r_k = 1.2225,
+1.2139, 1.2222, 1.2480, 1.2188, all above 1 with gap 0.21 or more.
+
+**Verdict: REFUTED.** gap(R) is 0.222, at least 0.15, and every pair ratio sits on R's side of 1
+with a gap of at least 0.15. At matched 16-bit weights on this host, OVMS 2026.4.1 decodes 22%
+faster than the vLLM CPU engine EAT ships now (release-1.1.0, v0.28.0), consistently: the A
+blocks span 12.956-12.972 tok/s, the B blocks 10.394-10.675. On this Xeon the decode lead is not
+only weight precision; at this precision the engine carries a gap of about 1.22x.
+
+Reported, not gating:
+- C/B decode 1.130 (one block; C 11.99 tok/s), inside the predicted 1.0-1.3. In this one block,
+  dropping `--enforce-eager` closes 1.38 of B's 2.36 tok/s decode gap to A (A/C 1.081); a C arm
+  of one block decides nothing.
+- Prefill TTFT on the 1867-1871-token prompt: A 3.005 s, B 2.078 s, C 1.816 s (medians over each
+  arm's valid blocks). vLLM/OVMS is 0.69, just below the predicted 0.7-4: here vLLM prefills
+  faster than OVMS, the reverse of the i9's 4.3x in H7.
+- conc4 aggregate: A 48.47, B 39.16, C 46.23 tok/s (B/A 0.81).
+- Decode incremental J/token (H2's method): A 3.61, B 4.17, C 3.83. Package power during decode
+  was 177.6-178.4 W in A blocks and 174.8-175.6 W in B blocks, against 131.1-131.7 W idle.
+
+Against the prediction (written for v0.24.0 and read as written, per amendment V1): R = 1.10
+(0.85-1.40) predicted, 1.222 measured, inside the range but past the 15% line; SUPPORTED 0.45,
+REFUTED 0.30, INCONCLUSIVE 0.25, and REFUTED is what happened. The prediction's reason, that on
+AMX both engines compute in bf16 and read the same 8.0 GB per token, did not make them equal:
+OVMS reads its weights at 104 GB/s and vLLM at 85 GB/s on the same 8 cores.
+
+Scope and disclosures:
+- One hold, one host, 16 CPUs (8 cores with SMT siblings), one checkpoint, these image digests.
+  H7's i9 verdict (INCONCLUSIVE, vLLM v0.24.0) is not re-graded. Under amendment V1 item 4, B's
+  dense projections run on oneDNN in v0.28.0, not the SGL AMX kernel EAT's
+  `VLLM_CPU_SGL_KERNEL=1` selected in v0.24.0; this row measures the engine EAT ships now.
+- Background: the host's serving stack (`serving_cpu` in `serving.jsonl`, the sum over every
+  listed container) used 2.10-2.38 CPUs (median 2.24, 268 samples), of which the two SGLang
+  serving pairs (qwen38-a-hr plus qwen38-b-hr) used 1.86-2.12 (median 1.99). aiperf stayed idle,
+  and load1 had a median of 9.98 with the run's own 16 CPUs in it.
+  The idle W of every block lies within 0.6 W, so the background was steady across both arms.
+- main's launcher printed "No accelerators requested". The run kept no pod listing, so whether
+  the node image's baked `intel-gpu-plugin` ran (smokes 2-5 showed it did on the older launcher)
+  is not recorded; no arm requests a GPU (`ovms.yaml`, `vllm.yaml`).
+- vLLM's OpenMP thread binding inside 0-7,48-55 was not recorded: `h7x.sh` keeps engine logs
+  only for an engine that does not come up.
+- The prefill prompt was 1867-1871 tokens with the chat template, against "about 1850" in the
+  pre-registration (the same 56 copies of one sentence the smokes rendered).
+
 ### Cross-host pre-registration: H25x, H27x, H28x, H34x on the Xeon 6741P (2026-10-20)
 
 Written 2026-10-20T22:20Z, before any H25x, H27x, H28x or H34x measurement. Nothing here is a
@@ -2350,6 +2461,171 @@ cluster. Against the old `probe.sh` the test reproduced run 1: `tee` could not o
 and `_rounds` started the load and created the cluster, then failed at the kubeconfig write.
 With the fix all three cases pass. H28w (wildct, not yet run) passes `WORK=<out>` the same way
 and gets the same fix; its protocol does not change.
+
+### H28x amendment R2: run 2 keeps the registered pod image (2026-11-01)
+
+Written 2026-11-01, before H28x run 2 and before any H28x measurement (none exists). Mechanics
+only. It is pre-registered by its push time. H28x's row, prediction, priors, outcome table,
+scorer, thresholds, H28's A1 and A2, rules X1-X7, amendment K1 and amendment R1 are unchanged.
+
+1. **What moved.** `bench/zero-copy-models/probe.sh` runs one image, `PYIMG`, for the agent
+   pods, the prime pod and the eviction helper. At the cross-host pre-registration (`ef87f86`),
+   as in H28's run, it was `python:3.13-slim@sha256:70729b46...8c2f`. The nightly digest repin
+   (#220, `702c8d7b`, 2026-10-29) moved the default to `@sha256:2d44738e...86bb`. Neither the
+   cross-host pre-registration nor R1 lists that change, and rule 5 keeps the original row's
+   versions in a replication.
+2. **Decision.** Run 2 sets `PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f`
+   in the environment of `probe.sh prep` and of `probe.sh run`; `probe.sh` reads `PYIMG` from
+   the environment. Read on crescent on 2026-11-01: Docker Hub still resolves both digests
+   (`docker buildx imagetools inspect`), and the host holds `70729b46` already. As in H28,
+   `k3d image import` imports the model images; k3d v5.9.0 imports only images it finds by tag
+   and warns on the rest, so the node pulls the untagged pod image at its first pod, the
+   warm-up round's prime pod.
+3. **Recorded here** (run 1's header notes that `hold.sh` records neither): the hold runs with
+   `XHOST_DISK_START=95` and cap 1500 s, as pre-registered. `prep` keeps its registered form, so
+   it builds `h28-model:r0` to `r12` (its default `LEVELS` has two levels). The run, at
+   `LEVELS=typical`, imports and removes `r0` to `r6`. `r7` to `r12` are never imported and are
+   removed after the hold. The tools are k3d v5.9.0 and kubectl v1.37.2 (amendment K1;
+   `tools.sh` has run, and `~/k3dgpu-xhost/bin/kubectl` reads v1.37.2).
+4. **Run 2's commands**, from crescent's `~/k3dgpu-xhost/k3d-gpu` at origin/main (the Reproduce
+   header records the commit; `C1` is the cross-host rule 4 string):
+
+   ```text
+   PYIMG=<as item 2> IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 bench/zero-copy-models/probe.sh prep
+   XHOST_DISK_START=95 bench/xhost/hold.sh H28x-run2 1500 env \
+     WORK=~/k3dgpu-xhost/runs/H28x-run2/work PYIMG=<as item 2> \
+     IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 \
+     LOCK=~/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS="$C1" bash bench/zero-copy-models/probe.sh run
+   ```
+
+5. **Scoring.** `bench/zero-copy-models/score.py <CSV> typical/match.json`, unchanged, on the
+   run's CSV and `load.py matched` output.
+
+### H28x run 2 (Xeon 6741P, 2026-11-01)
+
+Run 2 under [amendment R1](#h28x-amendment-r1-a-setup-failure-spends-the-hold-2026-10-29) and
+[amendment R2](#h28x-amendment-r2-run-2-keeps-the-registered-pod-image-2026-11-01). It is one lock
+hold on one fresh cluster. The cluster was deleted, the load stopped and the model images removed
+before the lock was released. Only `typical` ran, as rule X6 says.
+
+```text
+# Reproduce
+date:            2026-11-01T15:33:32Z amendment R2 pushed (ae461889, branch claude/h28x-run), before any
+                 round; 15:34:28Z prep started, outside the lock; 15:41:48Z prep rc 0;
+                 15:41:49Z lock taken, no busy wait (wait_s 0), hold start; 15:45:08Z setup done (199 s);
+                 15:48:15Z locked part done (cluster deleted, load stopped, h28-model:r0-r6 removed);
+                 15:48:16Z rc=0, lock released; h28-model:r7-r12 (built by prep, never imported) removed after
+hypothesis:      H28x (H28 + A1 + A2; cross-host rules X1-X7; amendments K1, R1, R2)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 1 NUMA node, 503 GiB RAM, no swap
+host kernel:     7.0.0-31-generic, Docker 29.8.0 (containerd image store)
+k3d-gpu commit:  9e312187 (origin/main, clean detached checkout ~/k3dgpu-xhost/k3d-gpu, moved from 6d5cab69,
+                 which predates R1's runner fix); k3d v5.9.0 (sha256 06d8f25b...), kubectl v1.37.2
+                 (sha256 c0448752..., amendment K1)
+node image:      cryptoandcoffee/k3d-gpu:0.1.61 (sha256:8cd264aa...), k3s v1.37.1+k3s1, snapshotter overlayfs
+                 (read from the k3s containerd config); crescent C1 kubelet thresholds as --k3s-arg ...@server:*
+cluster:         k3dgpu-x-h28, scratch KUBECONFIG (not kept); node container `docker update --cpuset-cpus
+                 0-23,48-71`; every scored round's prime pod read Cpus_allowed_list 0-23,48-71
+pods:            python:3.13-slim@sha256:70729b46...8c2f (R2; `k3d image import` warned and skipped it, and
+                 the node pulled it), N = 8 per round, MIB = 1024, one unique model image per round
+                 (h28-model:rK, /dev/urandom)
+load:            bench/load/load.py `typical`, stress-ng 0.22.01 @sha256:2ea9a7c3...1cbe on 24-47,72-95
+                 (3 containers); 2 baseline windows of 10 s; before each scored round, after eviction,
+                 `load.py settle` (every gap settled after 5 s); 5 s during windows, busy over 24-47,72-95
+energy source:   RAPL intel-rapl:0 energy_uj through `sudo -n`, reads only
+command:         amendment R2 item 4: probe.sh prep, then XHOST_DISK_START=95 bench/xhost/hold.sh H28x-run2 1500
+                 env WORK=~/k3dgpu-xhost/runs/H28x-run2/work PYIMG=<R2> IMAGE=cryptoandcoffee/k3d-gpu:0.1.61
+                 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 LOCK=~/k3dgpu-xhost/inner.lock
+                 K3D_GPU_K3S_ARGS="$C1" bash bench/zero-copy-models/probe.sh run
+disk:            / at 32% at the start and 33% at the end (df -P), under the 95% start gate
+runs per arm:    typical: warm-up r0 (C, unscored), then C T T C C T: 3 rounds x 8 pods per arm
+scorer:          bench/zero-copy-models/score.py work/h28-20261101T154149Z.csv work/typical/match.json
+raw results:     bench/xhost/results/2026-11-01/H28x-run2/: hold/ (hold.log, prep.log, versions.txt, pre.txt,
+                 post.txt, rc, wait_s, serving.jsonl; work/h28-20261101T154149Z.csv sha256 f77a6ca1...,
+                 work/typical/baseline.jsonl, load.jsonl cf1a5ba1..., match.json, score.json),
+                 h28x-run2-chain.log, campaign.log (this hold's lines); copied from crescent
+                 ~/k3dgpu-xhost/runs/ without the scratch kubeconfig
+```
+
+Every round, the warm-up included, left 0 cold pages after eviction (no VOID-cold). All 8 pods
+were Ready well inside 240 s, and swap-out was 0 (the host has no swap). No round was void. The
+memory columns are the medians of a round's 8 pods.
+
+**`typical` (the ledger level).**
+
+| Round | Arm | ready ms (median, min-max) | PSS MiB | Shared_Clean MiB | model page cache (x size) | dCached (x size) | memcg `file` per pod MiB |
+|-------|-----|----------------------------|---------|------------------|---------------------------|------------------|--------------------------|
+| r0 (warm-up) | C | 6955.5 (6946-6974) | 1028.5 | 5.5 | 9.000 | 9.103 | 1124-1227 (sum 9218) |
+| r1 | C | 6503.5 (6502-6505) | 1028.5 | 5.5 | 9.000 | 9.079 | 1133-1187 (sum 9218) |
+| r2 | T | 4533 (4532-4533) | 132.6 | 1029.6 | 1.000 | 0.846 | 106-148 (sum 1025) |
+| r3 | T | 4609 (4609-4610) | 132.6 | 1029.6 | 1.000 | 1.172 | 105-147 (sum 1025) |
+| r4 | C | 6440.5 (6438-6444) | 1028.5 | 5.5 | 9.000 | 8.923 | 1088-1194 (sum 9218) |
+| r5 | C | 6455.5 (6452-6458) | 1028.5 | 5.5 | 9.000 | 9.138 | 1115-1230 (sum 9218) |
+| r6 | T | 4656 (4656-4657) | 132.6 | 1029.4 | 1.000 | 1.239 | 116-148 (sum 1024) |
+
+`score.py` output (`work/typical/score.json`): no void round in either arm, load MATCHED,
+round-median ready T 4609 ms and C 6455.5 ms, ratio **0.714**, separated, verdict **REFUTED**,
+row "time part: T/C ready > 0.5 or rounds overlap".
+
+Against the registered predictions (the row, H28's table and A1):
+- T memory, met: PSS 132.6 MiB per pod (bar <= 160), Shared_Clean 1029.4-1029.6 MiB (bar >= 0.9x
+  size = 921.6), model page cache 1.000x size (A1 bar <= 1.1x). dCached, secondary, read
+  0.85-1.24x.
+- C duplication, met, so the probe is not blind: PSS 1028.5 MiB (bar >= 921.6), model page cache
+  9.000x size (A1 bar >= 0.8 x (N+1) = 7.2x: the source plus 8 copies), dCached 8.9-9.1x.
+- Time, missed: the median of round medians is T 4609 ms against C 6455.5 ms, ratio **0.714**,
+  above the 0.5 bar. The bootstrap 95% CI is 0.697-0.723 (10 000 resamples of the rounds within
+  each arm, seed 28, as in H28), equal to the min-max of round medians. Each T round alone reads
+  0.70-0.72 of the C median. max(T) 4656 < min(C) 6440.5 is complete separation (exact one-sided
+  Mann-Whitney p = 1/C(6,3) = 0.05), so T is faster, but by less than half. The spread gate
+  passed: T 2.7% and C 1.0% of the median (bar <= 30%).
+- The row predicted ratio 0.55 (0.35-0.8). 0.714 lies inside that band, above its point. The
+  most likely pre-registered outcome was REFUTED (time part), at 0.5.
+- The pre-registration's reason for the uncertain time part was that the copy runs at memory
+  speed on this host. The copy did not get faster: C read 6455.5 ms here against 6333 ms on the
+  i9 (H28). T got slower: 4609 ms here against 2980 ms on the i9. So the T-C gap is 1846 ms here
+  against 3353 ms on the i9. What makes T slower on this host (the cold mmap read, pod start on
+  this node image, or the CPU) was not measured.
+- The node saves (N-1) x size = 7 GiB of page cache per 8 pods of a 1 GiB model, as on the i9.
+- Within a T round all 8 pods printed READY within 1 ms of each other, as on the i9.
+
+**Load, amendment 27 (`matched_a27`), `typical`.** Covariates (gating, `TOLERANCE`):
+
+| Phase | Metric | C | T | spread / limit |
+|-------|--------|---|---|----------------|
+| pre (n = 3 per arm) | load-CPU busy % | 37.57 | 37.53 | 0.05 / 5.0 ok |
+| pre | throttle/min | 0.0 | 0.0 | 0.0 / 10.0 ok |
+| pre | swap used MiB | 0 | 0 | 0 / 256 ok |
+| pre | swap growth MiB | 0 | 0 | 0 / 64 ok |
+| during (C 6, T 3 windows) | load-CPU busy % (24-47,72-95) | 37.75 | 37.96 | 0.21 / 5.0 ok |
+| during | swap used MiB | 0 | 0 | 0 / 256 ok |
+| during | swap growth MiB | 0 | 0 | 0 / 64 ok |
+
+Load matched: **yes**, no void. Every settle gap settled after 5 s. Outcomes during the round
+(reported, never gating): package W 207.0 C vs 208.7 T, throttle/min 0 vs 0, 1-min load 22.3
+vs 23.8. The serving covariate (`serving.py`, 39 windows of 10 s, reported, never gating) read
+the other tenants' containers at 2.24-2.41 CPU-s/s and 0 aiperf processes; `load1` ran 4.5-25.6,
+which includes this hold's own load and pods.
+
+**Recorded, not scored (A1 charge).** As on the i9, the memcg `file` charge of a T round was
+spread over the 8 pods that faulted at once, 105-148 MiB each and about 1x size in sum, and
+`memory.current` stayed 114-158 MiB per pod.
+
+**Derived confidence** (H28's rule: fraction of non-void rounds that agree with the outcome row
+x (1 - p)). All 3 C rounds show duplication. All 3 T rounds meet every memory bar, and each one
+reads above 0.5 of the C median. 6/6 x 0.95 = **0.95**.
+
+**Verdict: REFUTED (time part) at `typical`** (confidence 0.95). This replaces run 1's
+INCONCLUSIVE in the row. On the Xeon 6741P, 8 pods that mmap one model through an image volume
+share one page-cache copy, as H28 found on the i9: PSS 132.6 MiB each and 1.00x the size on the
+node, where per-pod copies cost 9x. They do not become ready in half the time of the copy arm.
+They take 0.71x of it. Under H28's outcome table, on this host the memory sharing may be claimed
+and the ready time may not. H28 (i9-13900T) stays SUPPORTED, and its time ratio stays scoped to
+that host.
+
+Limits: one hold on one host (Granite Rapids, 503 GiB RAM, no swap, NVMe), one snapshotter
+(overlayfs), N = 8, a 1 GiB random blob read in 4 KiB steps (not a real model load), CPU-resident
+weights only, `typical` load only. As in H28, the copy arm is a per-pod copy from the same local
+image, a lower bound on a per-pod download.
 
 ### H50-H52 pre-registration: the Xeon 6741P (2026-10-20)
 
@@ -4558,6 +4834,317 @@ Records go to `~/k3dgpu-bench/results/H62/`, with the hold records in
 `~/k3dgpu-bench/runs/H62-hold<n>/` and the smoke in `~/k3dgpu-bench/smoke/H62/`. They come back
 under `bench/eatflow/results/2026-10-29/H62/`.
 
+### H62 amendment V1: the wiring smoke's EAS check without the rest of #260 (2026-11-01)
+
+Written 2026-11-01 and pushed on the run branch `claude/h62-run` before any H62 step on crescent:
+no guest exists, nothing has been installed for H62, and nothing below is a measurement. It
+changes mechanics only. No arm, prediction, statistic, gate, threshold, cap or verdict rule
+changes.
+
+- **What the pre-registration says.** Deploy-commit item 2: every step runs at an `origin/main`
+  commit "with #260 (whose `integrations/eat/eat-check.sh` has the EAS mode the smoke uses)". If
+  #260 has not merged, "a run branch merges #260's head into main".
+- **What was found, 2026-11-01.** #260 is still open (head `e67ebc52`). `origin/main` is
+  `ef639c1d` (k3d-gpu 0.1.83). Merging `e67ebc52` into it conflicts in `scripts/k3d-gpu` (the
+  usage text and `sandbox_up`, which both sides changed) and in 13 audit goldens under
+  `tests/console/audit/` (image counts). Resolving them would mean writing part of #260 in this
+  run, and would change `scripts/k3d-gpu`, the tool A1 runs in VM a.
+- **The change.** The run branch does not merge #260. It carries only the file the smoke uses:
+  `bench/h62/eat-check.sh` is a byte copy of #260's `integrations/eat/eat-check.sh` at
+  `e67ebc52` (sha256 `36de6abd...7268`), and `bench/h62/smoke.sh` runs that copy. The smoke's
+  checks, model and order are unchanged: `validate agent-toolkit`, then `EAT_MODE=eas` through
+  EAS's gateway on `gemma-4-26b` (a chat, a get_weather tool call, a sandbox run that prints
+  385), then `H62-smoke`. `integrations/eat/eat-check.sh` on main is not touched, so #260 merges
+  as it would have.
+- **Deploy commit.** The run branch's head after this amendment: `origin/main` `ef639c1d` plus
+  this commit. It is pushed before it is deployed to `~/k3dgpu-bench/k3d-gpu-h62`, and every
+  record names it. A1's `scripts/k3d-gpu` is main's.
+- **Re-run trigger, read before setup (2026-11-01).** `bench/h62/upstream.sh`: `fired: none`.
+  EAS `release-1.2` and `v1.2.0-rc.1` are still `5c27fb39`, and EAT `release-2.0.0` is still
+  `036b6623`. The QEMU pins (`qemu-system-x86` 1:10.2.1+ds-1ubuntu3.3, genisoimage 9:1.1.11-5)
+  are still the candidates in the pinned `ubuntu:26.04` image. Docker CE 5:29.9.2 and
+  containerd.io 2.4.2-3 are still in Docker's noble repository. The cloud image still serves
+  621284352 bytes.
+- **Tests.** `ScriptsTest.test_smoke_gates_b5_through_eas_itself` (`bench/h62/test_h62.py`)
+  now pins the copy's path, its EAS branch and its sha256, and `ScriptsTest` runs `bash -n` and
+  shellcheck on it.
+
+### H62 amendment V2: EAS's configure answered on a terminal (2026-11-01)
+
+Written 2026-11-01 after setup attempt 1 failed at its first installer step, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It changes mechanics only. No arm,
+prediction, statistic, gate, threshold, cap or verdict rule changes.
+
+- **Setup attempt 1** (`bench/h62/campaign.sh` at `0086363c`, 06:59:22Z to 07:11:49Z).
+  - The host gate passed: MemAvailable 410 GiB against 336 GiB, `/` 31% used, and Hugging Face,
+    Docker Hub and registry.k8s.io reachable. A1's IR matched its manifest (26 files, 0 bad).
+  - The guest gate passed: `amx_tile` on 96 of 96 vCPUs and `nproc` 96 in both guests (kernel
+    6.8.0-147-generic).
+  - `guest-b.sh` stopped at 07:00:36Z, at its first installer step, with
+    `ERROR: 'configure' takes no arguments (got '--force').`
+  - VM a was still in its IR step. Its run was stopped there at 07:11:44Z rather than left to
+    finish its 45 min with no B5 to pair against. `setup.sh` then exited 1 (guest-a 255, guest-b
+    1), `campaign.sh` ran no hold, and its teardown removed both guests at 07:11:49Z.
+  - It is not a hold and counts against no cap. Its records come back under the run's
+    `setup-attempt1/`.
+- **Why `--force` failed.** The pre-registration called `--force` the installer's documented
+  answer to configure's y/N prompt. EAS `v1.2.0-rc.1` (`5c27fb3`) does not accept it there:
+  - its usage text lists `--force`, but its parser refuses any argument to `configure` or `show`
+    (`es_auto_installer.sh` lines 1336-1337);
+  - it sets `FORCE=false` before parsing (line 1293), so no environment variable reaches the
+    prompt either;
+  - `confirm()` (lines 129-136) proceeds on `FORCE=true`, or on a `y` typed at a terminal, and
+    refuses a stdin that is not a terminal. `configure` is its only caller other than `teardown`
+    (lines 330 and 1522).
+  - So at rc.1, `configure` runs only when a person at a terminal answers `y`, which is what the
+    guide has the reader do.
+- **The change.** `guest-b.sh` runs `./es_auto_installer.sh configure` with no argument, its stdin
+  on a new pseudo-terminal that is sent `y`, Enter and then end of input
+  (`h62.py on-tty LOG y CMD...`). Output and errors still go to `configure.log`. configure's own
+  steps are unchanged, and no other installer step reads a terminal.
+- **Checked before pushing.** `h62.py on-tty` ran rc.1's own `confirm()`, extracted from
+  `es_auto_installer.sh`, and it proceeded. The same function refuses with stdin on `/dev/null`.
+  `OnTtyTest` in `bench/h62/test_h62.py` covers the terminal, the reply, end of input and the
+  log. `test_guest_b_is_intels_documented_path` now pins the new configure line, in the same
+  order.
+- **Then.** The run branch's new head is pushed, deployed to `~/k3dgpu-bench/k3d-gpu-h62` and
+  recorded. `campaign.sh` runs again from setup, with both guests built from scratch.
+
+### H62 amendment V3: D2 reads the catalog's commented name lines (2026-11-01)
+
+Written 2026-11-01 after setup attempt 2 failed at guest-b's edit step, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It changes mechanics only. D2 is
+the same edit, on the same entry, to the same weights.
+
+- **Setup attempt 2** (`campaign.sh` at `a727d2ae`, 07:15:36Z to 07:31:36Z).
+  - The host gate and the guest gate passed again (`amx_tile` 96 of 96 and `nproc` 96 in both
+    guests).
+  - Amendment V2 worked: `configure` ran on its terminal and finished ("configure: done."), and
+    `init agent-toolkit` cloned EI at `170eb3a` and EAT at `036b662`.
+  - `guest-b.sh` stopped at 07:17:33Z in `h62.py eas-edit`, before any file was changed:
+    `AttributeError: 'NoneType' object has no attribute 'group'` in `set_model_id`.
+  - VM a was in its IR step. Its run was stopped at 07:31:30Z, `setup.sh` exited 1 (guest-a 255
+    from the stop, guest-b 1), no hold ran, and teardown removed both guests at 07:31:36Z.
+  - It is not a hold and counts against no cap. Its records come back under the run's
+    `setup-attempt2/`.
+- **Cause.** `init` seeds `env/local/models.yaml` from EI `release-1.1`'s
+  `model_manager/models.yaml` (init.log: "created: local/models.yaml (from
+  enterprise.ai-inference/model_manager/models.yaml)"). Its first entry carries an inline
+  comment: `- name: qwen3-0-6b   # deploy name + the "model" id used in API requests` (line 96).
+  `set_model_id` read every name line with a pattern that allowed nothing after the name, so the
+  first entry did not parse. The runner's test catalog had no comment on a name line.
+- **The change.** The name pattern allows a trailing `# comment`. Nothing else in D2 changes: the
+  entry is still found by its name, its one `model_id` line must still read the stock
+  `google/gemma-4-26B-A4B-it`, and only that line changes.
+- **Checked before pushing.** `h62.py eas-edit` on the real files (EI `170eb3a`
+  `model_manager/models.yaml` and EAT `036b662` `config.yaml`, as `init` seeds them) changes
+  exactly two lines: `llm_services_autodeploy_models: ["gemma-4-26b"]`, and gemma-4-26b's
+  `model_id: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized` (line 361). A regression test in
+  `EasEditTest` uses a commented name line.
+- **Also checked, from source.** `guest-b.sh` reads the cluster from `env/local/kubeconfig.yaml`,
+  which is where rc.1's installer writes it (`es_auto_installer.sh` lines 1272-1273). B5's
+  namespace `llm-inference` and Service `gemma-4-26b-kserve-workload-svc:8000` are EI
+  `release-1.1`'s (`roles/llm_services/defaults/main.yaml` line 34, `model_manager/core/routing.py`
+  line 44).
+- **Then.** The run branch's new head is pushed, deployed and recorded, and `campaign.sh` runs
+  again from setup with both guests built from scratch.
+
+### H62 amendment V4: the cluster's state is recorded when B5's install fails (2026-11-01)
+
+Written 2026-11-01 after setup attempt 3 ended with Intel's own install failing, and pushed on
+`claude/h62-run` before setup runs again. No hold has run. It adds records only. No arm,
+prediction, statistic, gate, threshold, cap or verdict rule changes.
+
+- **Setup attempt 3** (`campaign.sh` at `ba08b739`, 07:35:06Z to 08:24:36Z).
+  - The host gate and the guest gate passed again.
+  - VM a: A1 served after 34.6 min of its 45 min ceiling (IR step 07:36:20Z, `k3d-gpu up`
+    07:52:22Z, the IR copied into the node by 08:09:36Z, `deploy/ovms` rolled out and its pod
+    1/1 Running by 08:10:39Z). `guest-a.sh` exited 0. Reading the 18.1 GB IR over virtfs took
+    about 16 min twice (the check, then the copy); that is inside the ceiling and is reported.
+  - VM b: amendments V2 and V3 worked (`configure` done, `init` at `170eb3a` and `036b662`, the
+    edit and D2 exactly as registered). `install agent-toolkit` ran from 07:37:00Z. The
+    `gemma-4-26b` workload pod was 1/1 Running by about 08:09Z, the node carried
+    `cpu-cpuid.AMXBF16=true`, and the B5 selector, namespace and Service matched. Qwen3Guard
+    was Running too.
+  - The install then failed at 08:23:50Z, at 46.8 min, in EAT `036b662`'s
+    `agent_sandbox | Wait for sandbox-router to be ready`
+    (`roles/agent_sandbox/tasks/install.yaml` line 163): after 60 attempts the
+    `sandbox-router-deployment` had 0 ready replicas of 2 ("ProgressDeadlineExceeded",
+    "MinimumReplicasUnavailable"). Its image is EAT's default, the floating
+    `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main`
+    (`roles/agent_sandbox/defaults/main.yaml`).
+  - `guest-b.sh` exited 1, so `setup.sh` exited 1 and teardown removed both guests at
+    08:24:36Z before the pods could be read. Records come back under the run's
+    `setup-attempt3/`.
+- **What was ruled out from the host, about 2026-11-01T08:26Z.** The router image is not broken
+  on its own. `latest-main` now resolves to `sha256:47a63d94...`; #260 pinned `sha256:9cebf7d9...`
+  on an earlier date. Both, run on crescent's Docker as the Deployment runs
+  them (user 1000, the same env), start and answer `GET /healthz` with 200 within 12 s. Both
+  were built 2026-10-29T17:17:22Z. Why the pods were not Ready in VM b (scheduling, image pull
+  through the guest's network, the ambient mesh, or something else) is open.
+- **The change.** When `install agent-toolkit` fails, `guest-b.sh` now records, before it
+  exits 1: the nodes (`kubectl describe nodes`), every pod, the events, and the description and
+  last 50 log lines of every pod that is not Ready. These are `fail-*.txt` in the guest's records,
+  which `setup.sh` already copies back before teardown. The install's environment is unchanged:
+  `KUBECONFIG` is set only after it returns.
+- **The rule for attempt 4.** Setup runs once more at this amendment's commit. Setup is not a
+  hold, and the pre-registration bounds no setup attempts, so the bound is set here: this is the
+  last one.
+  - If B5's install fails again in a way the records trace to stock B5 itself (EAS's or EAT's
+    own sizing, images or defaults on this guest shape), B5 is not deliverable in its guest and
+    H62 is INCONCLUSIVE ("not deliverable"), as the pre-registration's INCONCLUSIVE case names.
+    The cause is reported.
+  - If the records trace it to this runner or this guest's plumbing (D3), it is reported as
+    such. H62 is then INCONCLUSIVE as well, with no further attempt in this row.
+  - If the install passes, setup goes on to its NFD and weight gates, and the campaign continues
+    as registered.
+
+### H62 run (Xeon 6741P, 2026-11-01)
+
+**Verdict: INCONCLUSIVE (not deliverable).** No hold ran (0 of the 8 permitted) and no wiring
+smoke ran. A1 served in its guest in both setup attempts that reached it. Intel's documented
+install of B5 failed twice at the same step, well inside its 120 min ceiling. EAT 2.0's
+sandbox router could not be scheduled ("Insufficient cpu"): enterprise-inference's `cpu: auto`
+had given gemma-4-26b 76 of the node's 95.4 allocatable CPUs. Amendment V4's rule, pushed
+before the last attempt, makes that INCONCLUSIVE.
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T06:59:22Z to 09:18:05Z, four setup attempts; the last, at e9f14026, 08:28:10Z to
+                 09:18:05Z; no wiring smoke and no hold ran
+hypothesis:      H62
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 503 GiB RAM; at the last setup
+                 MemAvailable 411 GiB (gate 336 GiB), / 31% used (gate 90%), Hugging Face, Docker Hub and
+                 registry.k8s.io reachable
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+accelerators:    none used; the four Arc Pro B70s kept serving qwen38-a-hr and qwen38-b-hr throughout
+k3d-gpu commit:  e9f14026 (branch claude/h62-run: origin/main ef639c1d, k3d-gpu 0.1.83, plus amendments V1-V4),
+                 clean and detached at ~/k3dgpu-bench/k3d-gpu-h62; #260 not merged (amendment V1)
+guests:          QEMU 1:10.2.1+ds-1ubuntu3.3 and genisoimage 9:1.1.11-5 in image h62-qemu (sha256:e5bdf912...),
+                 KVM, -cpu host, 96 vCPUs as 1 socket x 48 cores x 2 threads, unpinned; VM a 96 GiB, VM b
+                 192 GiB; Ubuntu 24.04 cloud image release-20261017 (sha256 04e8f246... OK), guest kernel
+                 6.8.0-147-generic; amx_tile on 96 of 96 vCPUs and nproc 96 in both guests
+A1 (VM a):       Docker CE 29.9.2 and containerd 2.4.2 (Docker's apt key 9DC85822...0EBFCD88 checked); k3d
+                 v5.9.0, kubectl v1.37.2; node image cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa...;
+                 `agent manifest` on CPU: openvino/model_server@sha256:a928903f... (2026.4.1), the snapped QAT IR
+                 k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov (26 files equal to its manifest, read over
+                 virtfs), tool parser gemma4, no reasoning parser, no draft, 48 CPUs
+B5 (VM b):       EAS v1.2.0-rc.1 at 5c27fb39; D1: enterprise-inference 170eb3ab and EAT 036b6623; configure
+                 answered y on a terminal (amendment V2); the documented edit and D2 (gemma-4-26b at
+                 google/gemma-4-26B-A4B-it-qat-q4_0-unquantized, amendment V3); install agent-toolkit with
+                 HF_TOKEN unset; vLLM CPU v0.28.0 by enterprise-inference's catalog tag
+load:            none (no hold)
+runs per arm:    0 of the 8 permitted holds; no wiring smoke
+```
+
+Commands, on crescent, from `~/k3dgpu-bench/k3d-gpu-h62` at each attempt's commit:
+`bench/h62/upstream.sh`, then `bench/h62/campaign.sh` (under `setsid nohup`). Between attempts the
+checkout moved to the run branch's next pushed head; nothing else changed. Records:
+[bench/eatflow/results/2026-10-29/H62/](bench/eatflow/results/2026-10-29/H62/). The last attempt is
+in `setup/`, the earlier ones in `setup-attempt1/` to `setup-attempt3/`. `campaign.log` covers all
+four, `upstream-pre-setup.txt` and `upstream.log` hold the re-run trigger reads, and
+`upstream-loop.sh` is the loop that wrote `upstream.log`.
+
+**The four setup attempts.** Setup is not a hold. The host gate and the guest gate passed in
+every attempt.
+
+| Attempt | Commit | Window (UTC) | A1 in VM a | B5 in VM b | Next |
+|---|---|---|---|---|---|
+| 1 | `0086363c` | 06:59:22-07:11:49 | stopped in its IR step | `configure --force` refused: rc.1's configure takes no arguments | amendment V2 |
+| 2 | `a727d2ae` | 07:15:36-07:31:36 | stopped in its IR step | `eas-edit` could not parse EI's commented first catalog entry | amendment V3 |
+| 3 | `ba08b739` | 07:35:06-08:24:36 | served: rolled out at 34.6 min, `guest-a.sh` done at 35.7 min | install failed at 46.8 min, at EAT's sandbox-router wait; teardown removed the guest before its pods could be read | amendment V4 |
+| 4 | `e9f14026` | 08:28:10-09:18:05 | served: rolled out at 33.7 min, done at 34.7 min | install failed at 46.6 min, at the same step; cluster state recorded | INCONCLUSIVE (V4) |
+
+In attempts 1 and 2, VM a's run was stopped by hand once B5 had failed, so that it would not use
+its 45 min with nothing to pair against.
+
+**B5's failure, attempt 4.** The pods were read live at 09:06:43-09:07:45Z, and the `fail-*.txt`
+records were taken at 09:17:12Z.
+
+- EAS's Kubespray, the platform layer, Qwen3Guard and gemma-4-26b all came up. The gemma-4-26b
+  workload pod was 1/1 Ready, with the selector, namespace (`llm-inference`) and Service
+  (`gemma-4-26b-kserve-workload-svc:8000`) the runner expects. The node carried
+  `feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true`. Neither gate was reached, because setup
+  stops at the install.
+- EAT's `agent_sandbox` role then applied the sandbox router: 2 replicas of
+  `us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main`, each
+  requesting 250m CPU. All three of its pods (two, plus one from the role's token patch) stayed
+  Pending with `0/1 nodes are available: 1 Insufficient cpu` (8 FailedScheduling events). The
+  role's wait (`roles/agent_sandbox/tasks/install.yaml` line 163) gave up after 60 attempts:
+  PLAY RECAP `failed=1`, then "ERROR: site failed".
+- The node (`setup/guest-b/fail-nodes.txt`): 96 CPUs, 95400m allocatable, 95154m requested (99%).
+  The memory requests were 85%.
+  - gemma-4-26b requested 76 CPUs (request = limit) and 128Gi.
+  - Qwen3Guard requested 8 CPUs and 16Gi.
+  - The rest of EAS's and EAT's stack requested about 11.2 CPUs. That includes Langfuse web and
+    worker (2 each), LiteLLM 1, LWS 1, Istio, Envoy, KServe, NFD and the control plane.
+  - That left 0.246 CPU, and the router needs 0.5.
+- **Why 76.** enterprise-inference `170eb3a`'s `model_manager/core/nri_policy.py` `auto_cpu`
+  (line 569) sizes a TP 1 `cpu: auto` model to one NUMA node's capacity. It subtracts the
+  node's reserved CPUs and the CPUs that balloon pods already use (Qwen3Guard's 8). It does not
+  subtract pods outside the balloons, such as the platform's. The agent toolkit's router comes
+  after the models in the install. On this one-NUMA, 96-vCPU node the result left it no room.
+- **Attempt 3 matches.** The same Deployment had 0 of 2 ready replicas, with
+  `ProgressDeadlineExceeded`, at the same step.
+- **Outside the cluster, the router image itself works.** Both its current `latest-main` digest and
+  #260's pinned digest (the same build, 2026-10-29T17:17:22Z) answered `/healthz` with 200 on
+  crescent's Docker (V4).
+- **What is not known.** EAS's own topology probe read the guest as `numa=1 physical_cpus=96
+  threads_per_core=1`. The guest's vCPUs were not read as SMT pairs, though QEMU was given 2
+  threads per core. Whether this sizing would leave room on crescent's bare host (96 threads, 48
+  cores, one socket) is not tested. B5 cannot run there, because Kubespray would remove Docker (see
+  the pre-registration). So the cause is stock sizing on this guest shape. That is the case V4's
+  rule names "not deliverable".
+
+**A1, attempts 3 and 4.**
+
+- Docker installed from its pinned repository. The IR matched its manifest over virtfs, and
+  `k3d-gpu up` ran with H50's node image.
+- The IR was copied into the node and staged. `deploy/ovms` rolled out with its pod 1/1 Running,
+  and `guest-a.sh` exited 0. Each read of the 18.1 GB IR over virtfs took about 16 min (about 17
+  MB/s), the check and then the copy, so A1's setup used 34.7 of its 45 min.
+- `agent manifest` served the local IR unsized ("fit: no metadata for
+  k3dgpu/gemma-4-26B-A4B-it-qat-int4-ov", HTTP 401), with 48 CPUs.
+- Amendment A4's record (`setup/guest-a/plan.txt`): `k3d-gpu plan --device cpu --model
+  google/gemma-4-26B-A4B-it --explain` in VM a picked `OpenVINO/gemma-4-26b-a4b-it-int4-ov` on CPU
+  (AMX) via OVMS, context 32768 x 5 sequences, pod limit 57Gi. That is OpenVINO's base-model IR,
+  not A1's QAT IR, so it is recorded and does not change A1.
+
+**Not measured.** No pair, no within-budget success, no median attempt, no energy and no VM tax
+(`vmtax.json` was not written). EAS's gateway, its guardrail and `validate agent-toolkit` were
+never reached, because the smoke runs after setup.
+
+**Also found.**
+
+- At v1.2.0-rc.1, `configure` cannot run unattended: it refuses `--force`, and its prompt refuses
+  a stdin that is not a terminal (amendment V2).
+- EAT's router image is a floating staging tag. This run did not show that tag at fault.
+
+**Re-run trigger.** `fired: none` before each attempt (06:59:21Z, 07:15:36Z, 07:35:01Z, 08:28:02Z)
+and every 10 min while the campaign ran. No EAS v1.2.0 or EAT 2.x release tag exists. EAS
+`release-1.2` is still `5c27fb39`, and EAT `release-2.0.0` is still `036b6623`.
+
+**Serving and teardown.** The host gate passed every time, so `campaign.sh` never stopped the
+serving pairs, and no GPU window opened. Each attempt's teardown removed both guests. The last
+teardown, at 09:18:05Z, also deleted the disks, the cloud image and the QEMU image, leaving only
+the ssh key and config in `~/k3dgpu-bench/h62`. The bench lock was free afterwards. Through
+Dynamo `:8100` at 09:19:09Z, a 16-token chat came back "OK" for each pair, and that pair's
+`num_requests_total` rose by one: `:30000` from 26 to 27, and `:30001` from 31 to 32.
+
+**Records and secrets.** The two install logs that reached the install stay on crescent (rule 8).
+They are `results/H62/setup/guest-b/install.log` and `.../setup-attempt3/setup/guest-b/install.log`.
+Their router step to the end is committed as `install-excerpt.txt`. The guest was gone before its
+LiteLLM key and router token could be read, so a fixed-string scan for those values was not
+possible. Every committed record was scanned instead for key, token, password, `hf_` and
+private-key patterns, and for long base64 strings. Nothing matched except two k3s
+node-config-hash labels, which are hashes.
+
+**What it means.** H62 asked whether k3d-gpu's CPU stack beats Intel's documented single-node
+default inside EAT's banking flow. On this guest shape that default does not finish installing,
+so the row is not decided. No new row is pre-registered here.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
@@ -5186,6 +5773,398 @@ the other two models H58's commands name. Each revision was read from the Huggin
 5. **Still the runner amendment's.** The runner, its regression tests, and the commits the run
    uses of the model optimizer (#163, merged as `66293c72`) and the fit-and-guard layer (#174,
    merged as `08e39ccf`).
+
+### H58 amendment R1: the runner, the GPU interlock and the clause readings (2026-11-01)
+
+Recorded 2026-11-01, before any H58 step. This is the runner amendment the pre-registration's
+**Order** asks for. Mechanics only: no clause, prediction, tolerance, stop rule or verdict rule
+changes. Where the pre-registration leaves a reading open, this amendment fixes it before the
+run and says so.
+
+**Deviation, disclosed.** The pre-registration asks for this amendment, with its tests, to be
+merged before the first H58 run. It is pushed, not merged. The run uses this branch's pushed
+head, as crescent amendments E1 to E3 and S1 did for H50 and H51. Its base is main `0c9b1f36`
+(k3d-gpu 0.1.83). That base carries the model optimizer (#163, `66293c72`), the fit-and-guard
+layer (#174, `08e39ccf`) and the llama.cpp backend with the busy-card filter (#182,
+`b8504e6b`). H50, H50o, H51, H53 and H54 have their verdicts, so the order holds.
+
+**What was read before this was written.** At 09:32-09:35Z on 2026-11-01, `k3d-gpu plan
+--model <id> --explain` ran on crescent at main `ef639c1d`, read-only, with an empty cache and
+state directory and no cluster. It is not an H58 step. Its three outputs are committed in
+[bench/h58/results/2026-11-01/precheck/](bench/h58/results/2026-11-01/precheck/):
+
+- Gemma 4 26B-A4B: the optimizer picks `OpenVINO/gemma-4-26b-a4b-it-int4-ov` on OVMS on the
+  GPU. The fit says it does not fit: "weights + overhead 15.3 GiB exceed the GPU budget 15.2
+  GiB". The serving pairs hold 15.1-16.1 GiB of each card's 31.9 GiB, so card1 is busy and the
+  other three have budgets of 14.5-15.2 GiB.
+- Qwen3.8-27B: `OpenVINO/Qwen3.8-27B-int4-ov`, "weights + overhead 15.7 GiB exceed the GPU
+  budget 15.2 GiB".
+- Qwen3.8-Flash-Next W4A16: its architecture (`qwen4_exp`) is in no OpenVINO release, so the
+  optimizer "keeps the engine's default model" and the fit sizes `OpenVINO/Qwen3-4B-int4-ov` on
+  one GPU.
+- DRAM bandwidth unknown: no STREAM run cached, and SMBIOS needs root.
+
+This amendment is written knowing those outputs. Each reading below follows the
+pre-registration's words. The two that a refusal would touch, (b)'s count and (c) when Gemma does
+not serve, are marked; the verdict would be the same without either, since (d) and (e) are read
+on their own.
+
+The same morning the three P1 repos read at their pins on the Hub API. One variant has moved
+since P1 item 4: `OpenVINO/Qwen3.8-27B-int4-ov` is at `d15f4d91` (2026-10-30), not `7b20ea8c`.
+P1 records the variants and does not pin them. `agent up` serves the repo's head, and the run
+records the revision it served.
+
+**Files.** In `bench/h58/`:
+
+- `run.sh`: the run.
+- `h58.py`: the P1 check, the GPU interlock, the placement reading, the squeeze and the scorer.
+- `stress-ng.sh`: the pinned stress-ng.
+- `test_h58.py`: the tests, in CI. They run `run.sh` end to end against stand-ins for k3d-gpu,
+  k3d, kubectl, docker, sudo, curl, git and the Hub API, in three cases: Gemma refused with
+  Flash-Next blocked, Gemma on the CPU through the banking flow, and the runs that do not start.
+
+Two harness changes support it. `bench/eatflow/live.sh` gains solo arm Z. `bench/eatflow/pairs.py`
+gains H58 as a rule-L3 solo row with seed `H58-crescent-2026-11-01` and arm sequence Z.
+
+**Workspace and command.** The run uses `~/k3dgpu-bench/k3d-gpu-h58`, clean and detached at
+this branch's pushed head. The tools are `~/k3dgpu-bench/bin`'s (crescent amendment E4): k3d
+v5.9.0, kubectl v1.37.2, helm v4.3.1 and uv 0.13.6. One run, under the bench lock and the
+hold-start rule:
+`bench/eatflow/crescent/hold.sh H58-run1 21600 bash bench/h58/run.sh ~/k3dgpu-bench/results/H58/run1`.
+The run's cap is 21600 s. The pre-registration sets none.
+
+**Start checks.** A failed check stops the run before any step (exit 3), and that is not a run:
+
+1. No `K3D_GPU_*` variable is set.
+2. The three P1 repos read at their pins (P1 item 3).
+3. No k3d cluster exists.
+4. The host inventory (`bench/eatflow/crescent/inventory.sh`) equals H52b's post-revert
+   inventory (`inventory-3.txt`) after the first line. That is the pre-registration's "as left
+   by H52b's revert".
+
+Then the clean state. `~/.cache/k3d-gpu` and `~/.local/state/k3d-gpu` are renamed aside, and
+restored after the run. On crescent they hold Hub metadata and fit caches from earlier commands,
+and no weights. A new user has neither. The model cache proper is the new cluster's volumes,
+which start empty. The run's own copies of both directories go into its records.
+
+The start records, which never touch the services:
+
+- `docker inspect` of every running container: restart count, state and OOM flag.
+- dmesg's OOM lines and `/proc/meminfo`.
+- Docker's container events, all through the run.
+- The front door: a chat through Dynamo `:8100`, counted on each pair (amendment E2 item 7). It
+  is repeated after the run.
+- hold.sh's `serving.py`.
+
+**The steps.** Each step is the pre-registered command with no other argument. It runs as the
+checkout's `scripts/k3d-gpu`, with stdin closed, in this order:
+
+1. `k3d-gpu up`. A new user gets the launcher's default node image,
+   `cryptoandcoffee/k3d-gpu:0.1.83` (sha256:9bd43915...), and the default cluster name, `gpu`.
+2. `k3d-gpu detect`. The run also records `detect --json`, and the node object once its
+   `gpu.intel.com/xe` allocatable has held for 60 s, up to 300 s. H52b saw `up` print four cards
+   before the restarted plugin settled on two.
+3. `k3d-gpu agent up --model google/gemma-4-26B-A4B-it`, then EAT's banking flow against its
+   server when it lands.
+4. `k3d-gpu agent up --model Qwen/Qwen3.8-27B`.
+5. `k3d-gpu agent up --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound`.
+6. The squeeze, (f).
+7. `k3d-gpu agent down` and `k3d-gpu down`.
+
+Before each `agent up`, `k3d-gpu plan --model <id> --explain` is recorded: the optimizer's
+choices and the fit's arithmetic at that moment. It is a record, not a step. The ceilings are
+900 s for `up`, 5400 s for each `agent up` (the launcher's own rollout wait is 1800 s), 3300 s
+for the banking flow and 1200 s for the squeeze.
+
+The run does not follow any hint k3d-gpu prints. `docs/first-run.md` tells a new user to skip
+`host-setup`, and it is not among the pre-registered commands. A step that fails is not retried,
+because the pre-registration counts a retry as a manual step.
+
+**The GPU interlock.** The pre-registration has the serving pairs run as found and never be
+touched. They hold about half of every B70. A placement on one of those cards would put work on
+a card the pairs hold, and the host's standing rule allows no work on a card outside a GPU
+window. H58 opens none.
+
+So `h58.py interlock` reads the cluster's Deployments and pods every 0.5 s for the whole run.
+It deletes anything that asks for a GPU or NPU resource (`gpu.intel.com/`, `nvidia.com/`,
+`habana.ai/`, `npu.intel.com/`, `amd.com/`), a resource claim or a `/dev/dri` hostPath. It
+deletes it before its server starts: each such pod first pulls its image and model. Each deletion
+is recorded with the object as it was applied.
+
+A placement the interlock removes did not land, for a reason outside k3d-gpu, and (e) reads it
+from that object. The interlock reads the cluster through the kubeconfig `up` writes in k3d-gpu's
+state directory (`kubeconfig-gpu`). It must have read the cluster within the last 10 s before
+the first `agent up` and before each one after, or the run stops.
+
+**The banking flow, arm Z (clause (c)).** H50's harness runs one solo hold against the server
+`agent up` started, through H53's solo path (`bench/eatflow/solo.py`). The settings are live.sh's
+solo mode with `LIVE_SOLO=Z` and model set gemma4: alias `google/gemma-4-26B-A4B-it`, H50's
+pinned sampling `agent_gemma4`, typical load, H50's LiteLLM image, recording proxy, banking agent
+and MCP sidecar at blueprint `758d484`. Rule L3 sets the settle gap and the pre-window before
+each attempt. B24's 24 task ids run in the order drawn from the row's seed, with a 3000 s cap.
+
+live.sh deploys nothing for Z, and it refuses a server that asks for an accelerator. The harness
+pieces are the flow under test, deployed as they were for H50's A1, so they are not user steps or
+flags. The cluster's kubeconfig is passed to the harness in a 0600 file and deleted after.
+
+**Readings.**
+
+- **(a)** A flag is any argument a user step adds to the pre-registered form, or any `K3D_GPU_*`
+  variable set on a user step. The runner sets none, and the tests check what the launcher
+  receives.
+- **(b)** A manual step is either an action of the runner's that the docs do not name (none is
+  scripted), or a user step of the banking flow (`up`, or `agent up` for Gemma) that exits non-zero.
+  A failed step stops the flow, and a person must choose how to go on (a device, a variant, a
+  card). If the interlock removed Gemma's server, (b) is INCONCLUSIVE. Marked above.
+- **(c)** The baseline is H50's A1, since H50 ran a valid hold of 24 pairs
+  ([H50 run](#h50-run-xeon-6741p-2026-10-29)), read from its committed records:
+  - Decode: the sum of `completion_tokens - 1` over the sum of `e2e_s - ttft_s`, across A1's 54
+    turns with status 200, at least 2 completion tokens and `e2e_s > ttft_s`. That is 20.50 tok/s.
+  - Within-budget success: 19 of 24, 0.7917.
+
+  Arm Z gives the same two numbers from its hold. (c) holds when decode is at least
+  0.90 x 20.50 = 18.45 tok/s and success is at least 0.7917 - 0.05 = 0.7417, from at least 16
+  complete attempts.
+
+  "Within 5 points" is read as no more than 5 points under the baseline, since the clause bounds
+  a shortfall from the best arm. An arm more than 5 points better would hold here; that case is
+  reported if it occurs.
+
+  If Gemma's `agent up` does not serve, (c) fails, with no decode and no success (marked above).
+  If the interlock removed it, or the harness did not deliver (live.sh not exiting 0, or under 16
+  complete attempts), (c) is INCONCLUSIVE.
+- **(d)** Read from the settled node and from `detect`. It needs three things:
+  - `gpu.intel.com/xe` allocatable of 4;
+  - the four AMX labels (`AMXTILE`, `AMXBF16`, `AMXINT8`, `AMXFP16`);
+  - a `dsa.intel.com` work-queue resource above 0.
+
+  IAA and QAT are not read. H52b made neither usable: IAA has no work queue host-setup can add
+  while `iaa_crypto` holds every entry (#210), and QAT's plugin crash-looped. Each engine missing
+  fails (d).
+- **(e)** The fit's placements (`console/fit.py`) are gpu, gpu-tp, gpu-split, moe-offload and
+  cpu. "Experts-in-DRAM" is moe-offload: GPUs, with the experts and lookup tables in DRAM. A
+  CPU-only placement is not it.
+  - Gemma and Qwen3.8-27B hold when they land, that is when `agent up` exits 0, on gpu, gpu-tp,
+    gpu-split or cpu, with the fit's annotation, serving a variant of the model asked. The served
+    id must name `gemma-4-26b-a4b` or `qwen3.8-27b`.
+  - Flash-Next holds when it lands on moe-offload serving a variant of itself (`flash-next`).
+  - A refusal ("does not fit this host") or any other error fails.
+  - A placement the interlock removed is read from its render. It fails if the render already
+    fails, and is INCONCLUSIVE if the render would hold.
+- **(f)** The squeeze runs only when, after step 5, an agent Deployment of this run is Ready and
+  its guard process runs ("while our agent pods hold their model"). Otherwise both sub-clauses are
+  INCONCLUSIVE, recorded as not run.
+  - **The squeeze.** After a 120 s pre-window, stress-ng holds anonymous memory sized to bring
+    MemAvailable 4 GiB under the guard's floor. The floor is the fit's
+    `guard.mem_available_floor`, half its host reserve. stress-ng runs in its own transient scope
+    (`systemd-run --scope`, `MemoryMax` = size + 2 GiB, no swap) at `oom_score_adj` 1000, for at
+    most 420 s. It ends 60 s after the guard's first step, at the stop rule, or at 420 s.
+  - **The stop rule's latency** is a 4-token chat on each pair's engine port every 15 s. The
+    squeeze stops in three cases: a pair's median latency over the last 60 s reaches twice its
+    pre-window median; a pair fails two chats in a row; or a pre-existing container stops,
+    restarts or turns unhealthy.
+  - **"0 OOM kills"** holds when three things are true during the squeeze. No kernel oom-kill
+    line names a task that is neither stress-ng nor in a kubepods cgroup (this run's pods). No
+    pre-existing container restarts or stops. Docker records no oom or die event for one.
+  - **"The guard lowers admission"** holds when the guard steps down (fewer sequences or less
+    context) or stops the server during the squeeze. A stop by the stop rule leaves this
+    sub-clause INCONCLUSIVE, as the pre-registration says.
+- **stress-ng** is V0.22.01, the latest release (2026-09-20, commit `72a9d0ca`). No release
+  binary is published, so `bench/h58/stress-ng.sh` builds it from its tag on crescent and links it
+  as `~/k3dgpu-bench/bin/stress-ng`, recording its sha256. The host's packaged 0.20.01 is not
+  used.
+
+**Verdict.** As pre-registered: SUPPORTED when (a) to (f) all hold, REFUTED when any clause
+fails on a valid run, INCONCLUSIVE otherwise. A run is valid when its start checks passed, its
+commit did not change during it, and its checkout had no local change. `h58.py score` reads the
+records and writes `score.json`. The records go to `bench/h58/results/2026-11-01/run1/`, without
+the kubeconfigs.
+
+### H58 amendment R2: run 1 is not valid, and the interlock leaves k3d-gpu's own pods alone (2026-11-01)
+
+Recorded 2026-11-01, after run 1 and before run 2. Mechanics only: no clause, prediction,
+tolerance, stop rule or verdict rule changes.
+
+**Run 1.** Hold `H58-run1` started at 10:13:40Z from `e0a48ad6`, amendment R1's pushed head.
+Its start checks passed: the P1 pins read equal, no cluster existed, the inventory equalled
+H52b's, and no `K3D_GPU_*` variable was set. `~/.cache/k3d-gpu` (201 kB of metadata) was set
+aside.
+
+- `k3d-gpu up` exited 0 at 10:18:04Z (243 s). It printed `Accelerators schedulable: intel=3
+  amx=1`: card1 was left out as busy.
+- From 10:14:23Z, the interlock deleted the Intel GPU plugin's pod in kube-system each time the
+  DaemonSet made a new one, 985 times in all. R1's rule counted a `/dev/dri` hostPath as work on
+  a card, and the plugin mounts its cards that way.
+- The node's `gpu.intel.com/xe` read 3 at 10:18:04Z and 0 from 10:18:14Z on.
+- With no card advertised, `agent up --model google/gemma-4-26B-A4B-it` chose OVMS on the CPU.
+  Its fit read "on CPU (AMX) via ovms, context 262144 x 5 seqs", and its server answered its
+  warm-up (exit 0 at 10:23:38Z).
+- R1's interlock rule had marked the step as blocked, so the banking flow did not start. The
+  deletions were found in the records, and the run was stopped at 10:24:17Z with TERM to its
+  hold.sh. No Qwen3.8-27B or Flash-Next `agent up` ran, and neither did the banking flow or the
+  squeeze.
+- The teardown ran `agent down` (which stopped the guard) and `down`, and restored the cache. The
+  front door passed on both pairs at 10:24:26-36Z (`:30000` 30 to 31, `:30001` 34 to 35). The
+  hold exited 143, and nothing of it was left: no cluster, guard or interlock process.
+
+Run 1 is not valid. The harness removed k3d-gpu's own device plugin, which changed what the node
+advertised and so the device `agent up` picked. Its records are in
+[bench/h58/results/2026-11-01/run1/](bench/h58/results/2026-11-01/run1/). The interlock's 985
+saved pod objects are packed in `interlock/objects.tar.gz`. `score.txt` is R1's scorer's output,
+REFUTED; R1 had no rule for this case. `score.json` is the re-score under this amendment: NOT
+VALID.
+
+**The fix, tests first.**
+
+- `h58.py interlock` no longer counts a `/dev/dri` hostPath, and never touches kube-system. It
+  still removes, before it starts, any Deployment or pod elsewhere that asks for a GPU or NPU
+  resource or a resource claim. k3d-gpu's agents reach a card only through the device plugin's
+  resource: the launcher's agent manifests mount no host device path. A `/dev/dri` hostPath is
+  used by the plugin, and by the optional telemetry exporter, which `up` does not deploy.
+- A new validity rule: a run in which the interlock deleted anything outside `k3d-gpu-agent` is
+  not valid.
+- k3d labels its node containers with the cluster's join token (`k3d.cluster.token`). Docker's
+  event records carry those labels, so the runner now blanks every secret-looking label in them
+  (`h58.py redact-events`). Run 1's copy was blanked the same way before it was committed. The
+  cluster and its token were gone by then.
+- The new tests:
+  - the plugin's pod and a telemetry exporter, each with `/dev/dri` hostPaths, are not targets;
+  - a GPU-resource pod in kube-system is not a target;
+  - `run.sh` end to end, with a plugin pod in the stand-in cluster, leaves it alone;
+  - the validity rule voids run 1's events;
+  - the token label comes out redacted.
+
+**What run 1 showed, read before run 2.** With no card advertised, Gemma lands on the CPU and
+serves. Run 2 differs from run 1 only in the plugin. The node advertises the cards the busy filter
+keeps (three in run 1's first read), so `agent up`'s auto device is the GPU again. There, R1's
+precheck has the fit refusing Gemma, or placing it on a card the pairs hold. None of R1's readings
+changes.
+
+**Run 2.** It uses R1's command with run 2's paths and this amendment's pushed head:
+`bench/eatflow/crescent/hold.sh H58-run2 21600 bash bench/h58/run.sh ~/k3dgpu-bench/results/H58/run2`.
+Its records go to `bench/h58/results/2026-11-01/run2/`. The pre-registration sets no cap on
+runs. Run 1 is reported here, not discarded.
+
+### H58 run (Xeon 6741P, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T10:31:39Z to 10:37:31Z (run 2, the valid run; lock free, no wait:
+                 load1 2.19, no aiperf process). Run 1, 10:13:40Z to 10:24:43Z, is not valid
+                 (amendment R2)
+hypothesis:      H58
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids, family 6 model 173), 48 cores / 96 threads,
+                 1 socket, 1 NUMA node, microcode 0xa000133, 503 GiB RAM
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+accelerators:    inventory equal to H52b's post-revert inventory: 4 x Arc Pro B70 (xe; the two
+                 serving pairs hold 15.1-16.1 GiB of each card's 31.9), AMX, AVX-512, 3 DSA
+                 (disabled), 3 IAA (kernel WQs held by iaa_crypto), 3 QAT (0 VFs)
+k3d-gpu commit:  d904cae2: branch claude/h58-run, which is main 0c9b1f36 (k3d-gpu 0.1.83) plus
+                 amendments R1 (e0a48ad6) and R2 (d904cae2); clean and detached at
+                 ~/k3dgpu-bench/k3d-gpu-h58
+node image:      cryptoandcoffee/k3d-gpu:0.1.83@sha256:9bd4391560438dc090c0a3d95d82448f57021447d639351cdaca27c839d0d37a
+                 (the launcher's default), k3s v1.37.1+k3s1, containerd 2.3.4-k3s1, cluster gpu
+                 (the default name)
+tools:           k3d v5.9.0 (06d8f25b...), kubectl v1.37.2 (c0448752...), helm v4.3.1, uv 0.13.6
+                 (crescent amendment E4); stress-ng V0.22.01 (046b798d..., built from 72a9d0ca;
+                 the squeeze did not run)
+models:          the P1 pins read equal on the Hub API at the start: Flash-Next W4A16 4c67bf68,
+                 gemma-4-26B-A4B-it 4d7ae498, Qwen3.8-27B 1d4bf0f2
+environment:     no K3D_GPU_* variable on any k3d-gpu call; ~/.cache/k3d-gpu (201 kB of
+                 metadata) set aside and restored; no ~/.local/state/k3d-gpu at the start
+serving load:    both SGLang pairs up and never touched; serving.py 2.16-2.32 CPU-s/s without the
+                 run's own k3d node (serving.py counts that node as foreign: 2.21-3.31 with it);
+                 aiperf idle throughout
+```
+
+Command, on crescent, from the H58 checkout: `bench/eatflow/crescent/hold.sh H58-run2 21600 bash
+bench/h58/run.sh ~/k3dgpu-bench/results/H58/run2`. Scoring at the same commit: `python3
+bench/h58/h58.py score bench/h58/results/2026-11-01/run2`. The records are in
+[bench/h58/results/2026-11-01/](bench/h58/results/2026-11-01/):
+
+- `run2/`:
+  - `steps.jsonl` and each step's output;
+  - the settled node object and `detect`;
+  - each model's plan record, `agent up` output and placement;
+  - the interlock's beat;
+  - Docker's events (secret labels blanked);
+  - the containers before and after, and the front door;
+  - `hold/`, with `serving.jsonl`.
+- `run1/`: the run that is not valid.
+- `precheck/`: amendment R1's plan outputs.
+- `stress-ng-install.txt`: the build, 10:12:49-10:13:19Z under the bench lock, before run 1.
+
+**The steps.** Each step is the pre-registered command with no other argument, in R1's order.
+
+| Step | Exit | s | What k3d-gpu printed |
+|---|---|---|---|
+| `k3d-gpu up` | 0 | 49.9 | `Accelerators schedulable: intel=4 amx=1`. Card1 (0000:12:00.0, 16.1 GiB in use) "is busy ... the device plugin will not advertise it". "present but disabled: DSA dsa0 dsa2 dsa4, QAT ... — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up" |
+| `k3d-gpu detect` | 0 | 5.2 | `intel gpu.intel.com/xe`; `amx` with the four AMX labels; the same DSA and QAT warning |
+| `k3d-gpu agent up --model google/gemma-4-26B-A4B-it` | 1 | 6.0 | The optimizer picked `OpenVINO/gemma-4-26b-a4b-it-int4-ov` on OVMS (GPU), "3x gpu.intel.com/xe". Then: "fit: ... does not fit this host: weights + overhead 15.3 GiB exceed the GPU budget 15.2 GiB; not starting a server that cannot fit" |
+| `k3d-gpu agent up --model Qwen/Qwen3.8-27B` | 1 | 10.4 | `OpenVINO/Qwen3.8-27B-int4-ov` (`d15f4d91`) on OVMS (GPU): "15.7 GiB exceed the GPU budget 15.2 GiB" |
+| `k3d-gpu agent up --model Intel/Qwen3.8-Flash-Next-W4A16-AutoRound` | 1 | 17.4 | "qwen4_exp is in no OpenVINO or OVMS release ... serving Intel/Qwen3.8-Flash-Next-W4A16-AutoRound as given, on the engine its fit picks". Then: "does not fit this host: DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)" |
+| `k3d-gpu agent down`, `k3d-gpu down` (teardown) | 0, 0 | 0.3, 0.6 | the cluster deleted |
+
+The node's `gpu.intel.com/xe` read 4 at 10:32:49Z and 3 from 10:32:59Z on, then held for 60 s.
+That is the busy-card filter's restart, as in H52b. No `agent up` placed a server, so the banking
+flow did not run, and the squeeze did not run ("no agent of this run holds its model"). The
+interlock deleted nothing, since no workload asked for an accelerator. No work was put on a card.
+
+The 16 containers that were running at the start were still running at the end, with the same
+restart counts. Docker recorded no `oom` or `die` event for any of them, and dmesg's OOM lines
+read the same before and after.
+
+The front door passed before and after the run:
+
+- 10:31:44-59Z: `:30000` 33 to 34, `:30001` 35 to 36.
+- 10:37:29-30Z: `:30000` 37 to 38, `:30001` 36 to 37.
+
+A Flash-Next difference: R1's precheck (`plan`) showed the optimizer keeping OVMS's default
+model, `OpenVINO/Qwen3-4B-int4-ov`, on one GPU. `agent up` instead served the W4A16 repo as given
+on the engine its fit picks, and the fit refused it. The interlock therefore had nothing to
+remove. R1 read Flash-Next as failing either way.
+
+**Clauses, each read on its own** (pre-registered predictions in brackets):
+
+| Clause | Read | Result |
+|---|---|---|
+| (a) flags [0, 0.8] | 0: every user step was the pre-registered command, with no `K3D_GPU_*` variable | holds |
+| (b) manual steps [0, 0.6] | 1: `agent up` for Gemma exited 1, and the flow cannot go on without a person's choice (a device, a variant, a card) | fails |
+| (c) within tolerance of H50's A1 [0.6, 0.7] | Gemma's `agent up` served nothing: no decode, 0 of 24 B24 tasks, against A1's 20.50 tok/s and 19/24 | fails |
+| (d) every engine detected and advertised [0.75] | `gpu.intel.com/xe` 3 of 4 (card1 left out as busy); AMX's four labels present; DSA named by `up` and `detect` as present but disabled, and no `dsa.intel.com` resource. IAA and QAT are not read (R1) | fails |
+| (e) placement by the fit [0.5] | Gemma: refused (15.3 > 15.2 GiB on the GPU). Qwen3.8-27B: refused (15.7 > 15.2 GiB). Flash-Next: refused, no experts-in-DRAM placement (DRAM bandwidth unknown) | fails |
+| (f) squeeze: 0 OOM kills [0.85], guard lowers admission [0.6] | not run: no agent of the run held its model | INCONCLUSIVE, INCONCLUSIVE |
+
+**Verdict: REFUTED.** Four clauses fail on a valid run: (b), (c), (d) and (e). The pre-registered
+odds were SUPPORTED 0.25, REFUTED 0.6 and INCONCLUSIVE 0.15. On this host, with the two serving
+pairs holding about half of every B70, the documented commands with no flag bring up none of the
+three models:
+
+- **Gemma 4 and Qwen3.8-27B.** The optimizer sends both to OVMS on the GPU. Both int4 IRs miss
+  the best card's 15.2 GiB budget, by 0.1 and 0.5 GiB. The fit then refuses rather than trying
+  the CPU, which run 1 showed can serve Gemma.
+- **Flash-Next.** The fit needs a DRAM bandwidth, which a new user's host has not cached (no
+  STREAM run), so it refuses.
+- **Advertising.** `up` advertises three of the four B70s and none of the three DSA devices. It
+  prints the `host-setup` step DSA needs, and the docs' first run tells a new user to skip
+  `host-setup`.
+
+Not scored:
+
+- **Run 1** (amendment R2). The harness's interlock removed k3d-gpu's own GPU plugin, so the node
+  advertised no card. Gemma's `agent up` then chose OVMS on the CPU and served: fit "on CPU (AMX)
+  via ovms, context 262144 x 5 seqs", warm-up answered, exit 0 in 177 s. That is k3d-gpu's
+  behaviour when no GPU is advertised. It is not a zero-touch result, because the plugin's loss
+  was the harness's doing.
+- **The refusals sit close to the line.** Gemma's weights and overhead miss card4's budget by
+  0.1 GiB, before any KV cache. One 4096-token sequence needs about 0.86 GiB more: 225,280 B per
+  token, since OVMS keeps every layer's full context. Had the pairs held about 1 GiB less of a
+  card, the fit would have placed Gemma there, beside a serving pair. R1's interlock would then
+  have removed it, and (c) would have been INCONCLUSIVE, not failed.
+- **Disclosed deviations.** R1 and R2 were pushed before the runs they govern, not merged (as
+  E1 to E3 and S1 were). R1 was written after its read-only precheck, which R1 discloses.
 
 ### H54 amendment R1: the H54a runner and the flag checks (2026-10-20)
 
@@ -6120,6 +7099,135 @@ written.
 builds' sources and the pinned GGUF's headers; no H60 server was started. Checked on crescent
 at 19:40Z on 2026-10-29, read only: no `~/k3dgpu-xhost/runs/H60` (the hold wrapper creates it
 before it waits for the lock), no `/dev/shm/k3dgpu-h60`, and no H60 line in the campaign log.
+
+### H60 run (Xeon 6741P, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T13:47:32Z (lock taken with no wait: load1 3.45, no aiperf process) to
+                 14:20:59Z (cluster deleted, lock released). The one wiring smoke ran first,
+                 13:30:13Z to 13:47:05Z
+hypothesis:      H60 (pre-registration and amendment V1)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids, family 6 model 173), 48 cores / 96 threads,
+                 1 socket, 1 NUMA node, microcode 0xa000133, 503 GiB RAM, no swap
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+k3d-gpu commit:  8a4f8c8a (main, k3d-gpu 0.1.84), clean and detached at ~/k3dgpu-xhost/k3d-gpu-h60;
+                 moved there from 8beba206, #199's earlier head (amendment V1 item 7)
+node image:      cryptoandcoffee/k3d-gpu:0.1.84@sha256:2e788347d9bc566ba10f58eda1f95c191ddf9277c32439f03df43431b913e6a3
+                 (the launcher's default at the commit; no K3D_GPU_IMAGE), k3s v1.37.1-k3s1, cluster
+                 k3dgpu-x-h60, K3D_GPU_VENDORS=none, crescent C1 kubelet thresholds
+tools:           k3d v5.9.0 (06d8f25b...), kubectl v1.37.2 (c0448752...) in ~/k3dgpu-xhost/bin;
+                 bench/xhost/tools.sh (cross-host amendment K1) installed them at 13:29Z under the
+                 bench lock, before the smoke; the workspace had kubectl v1.35.2 until then
+engine:          ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+                 (v0.8.0, amendment V1), both arms; system_fingerprint b11960-8642541b2 in every reply.
+                 Args -t 48 -Cr 0-47 --cpu-strict 1 --jinja, plus -rea off for Flash-Next; context
+                 and slots at the defaults (Flash-Next: n_slots 4, n_ctx_slot 262144)
+models:          Flash-Next ggml-org/Qwen3.8-Flash-Next-GGUF @ 91fb0035, IQ4_NL, 2 shards (10,945,504 and
+                 102,037,973,504 bytes, equal to the Hub's sizes), downloaded into /dev/shm/k3dgpu-h60
+                 at the hold's start (hfvenv: huggingface_hub 1.21.0 with hf_xet, Python 3.14.4, no
+                 token) and removed on exit. Control: google/gemma-4-26B-A4B-it-qat-q4_0-gguf @
+                 d1c082be, gemma-4-26B_q4_0-it.gguf (14,439,363,584 bytes), read-only from
+                 ~/k3dgpu-gemma/models
+serving load:    both SGLang pairs up and never touched; serving.py's non-campaign CPU 1.96-4.64
+                 CPU-s/s (median 2.22), aiperf idle throughout; no GPU used
+command:         X=~/k3dgpu-xhost; bench/xhost/hold.sh H60 5400 env PATH=$X/bin:$PATH K3D_GPU_VENDORS=none \
+                   K3D_GPU_K3S_ARGS="$C1" H60_HFPY=$X/hfvenv/bin/python \
+                   H60_LG_DIR=~/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf \
+                   SERVING=$X/runs/H60/serving.jsonl bench/flashnext/h60.sh $X/runs/H60/out
+                 (the smoke: H60-smoke instead of H60, H60_SMOKE=1, and its own SERVING and OUT)
+scoring:         python3 bench/flashnext/h60.py score bench/flashnext/results/2026-11-01/H60/hold/out
+                 (at 8a4f8c8a; equal to the hold's own verdict.json)
+raw results:     bench/flashnext/results/2026-11-01/H60/: hold/ (out/: lg/ and fn/ with deploy.yaml,
+                 image.txt, isa.txt, hello.json, load-*.json, energy-*.json, phases.jsonl, server.log,
+                 describe.txt; fn/quality.json; active-bytes*.json, psi.log, shm-window.json,
+                 probes.txt, mem-before.txt, verdict.json, h60.log; hold.log, pre.txt, post.txt, rc,
+                 wait_s, serving.jsonl), smoke/ (the same, smoke mode), prep/ (deploy.txt, tools.txt,
+                 frontdoor-H60-pre.txt and -post.txt, the launch logs)
+```
+
+The kubeconfigs of the two deleted clusters are left out of the records.
+
+**Timeline.** The download and the byte count took 886 s, to `up` at 14:02:18Z (about 115 MB/s,
+below the 300-900 MB/s the pre-registration assumed). `up` and the control's deploy took 31 s. The
+control was ready 29 s after its deploy, and Flash-Next 47 s after its own. The whole hold took 2,007 s of its 5,400 s cap.
+`shm-window.json` reads 13:47:32Z to 14:20:57Z, `removed_ok` true. The host's Qwen3.8 server
+answered the 4-token chat with HTTP 200 before the download and after the removal.
+
+**Guards.** `MemAvailable` read 410 GiB before the download (the guard is 300), 314 GiB after it,
+and 229 GiB at its lowest, while Flash-Next served. "full avg10" and "some avg10" stayed at 0.00
+in all 201 samples, so the hold had no `psi-abort`.
+
+**Phases.** Every phase passed H54's void check on its first try. The idle windows read 2.49
+CPU-s/s of non-campaign CPU (control) and 2.37 (Flash-Next), against the 4.0 bar. During the
+phases themselves the same reading was 4.48-4.61 (reported, not gating, amendment R4).
+
+| Arm | Phase | ok | Decode tok/s per request, median (range) | TTFT median | Package W (idle) | J/token gross / net of idle |
+|---|---|---|---|---|---|---|
+| Gemma control (Lg) | N=1 8 x 256 | 8/8 | 48.52 (47.79-48.84) | 0.280 s | 267.5 (130.8) | 5.81 / 2.97 |
+| Flash-Next | N=1 8 x 256 | 8/8 | 16.00 (15.96-16.03) | 0.629 s | 264.6 (130.5) | 17.14 / 8.68 |
+| Flash-Next | N=4 16 x 256 | 16/16 | 9.76 (9.66-9.91); aggregate 36.96 tok/s | 1.676 s | 274.0 | 7.42 / 3.89 |
+| Flash-Next | TTFT 4 x 16, 987-token prompt | 4/4 | | 5.002 s | 287.3 | |
+
+**Bytes per token** (`h60.py active-bytes`, recomputed from the downloaded shards). Flash-Next:
+5,941,706,240 bytes, equal to the pre-registration's 5.94 GB. That is 4.61 GB read in full plus
+67.95 GB of routed experts x 10/512; the 29.48 GB of lookup tables count 0. The control: 2,380,056,448
+bytes (tied output, so `token_embd` counts in full; 12.85 GB of routed experts x 8/128). Ceilings at
+305 GB/s: 51.33 tok/s and 128.15 tok/s.
+
+**Score** (`h60.py score`, primary statistic, same-hold control valid):
+
+| | Read | Predicted |
+|---|---|---|
+| e_lg | 0.379 (48.52 / 128.15) | 0.38 (0.33-0.42) |
+| e_fn | 0.312 (16.00 / 51.33) | 0.30 (0.18-0.45) |
+| N=1 decode | 16.00 tok/s | 15 (9-23) |
+| r = e_fn / e_lg | 0.823, 95% CI 0.819-0.831 (`verdict.json`: 0.8192-0.8315) | 0.79 (0.5-1.15) |
+| GSM8K 0-49 | 50/50, 0 errors, 497 s | >= 40/50 |
+
+**Verdict: SUPPORTED.** The CI, 0.819-0.831, lies inside [0.7, 1.3]. No INCONCLUSIVE condition
+applies: no phase was void, the PSI guard never fired, 8 of 8 N=1 requests were ok in each arm, and
+GSM8K scored 50/50. Every prediction holds. Flash-Next reads 0.82 of the Gemma control's share of
+the DRAM ceiling. That is lower than Gemma's share but inside the band, as the 0.79 point prediction
+expected. The control read 0.379, equal to H54a's Lg on b11749 (0.38, 48.74 tok/s).
+
+Reported, not scored:
+- At 320 GB/s, e_fn reads 0.297 and e_lg 0.361. The ratio is the same.
+- N=4 gave 36.96 tok/s in aggregate, 2.39x N=1's 15.45.
+- The 987-token prompt's TTFT was 5.0 s, about 197 tok/s of prefill.
+- GSM8K's replies had a median of 310 completion tokens.
+- Package watts include the other tenants' load, about 130 W at idle.
+
+**Disclosed.**
+- One wiring smoke ran first, under the lock, through the same wrapper (`H60_SMOKE=1`,
+  13:30-13:47Z, rc 0). Its records are in `smoke/` and decide nothing. It downloaded the GGUF too
+  (882 s to `up`), brought up both servers and sent each one 16-token request. Flash-Next answered
+  "Hello! How can I help you today?" with and without `enable_thinking: false`.
+- kubectl v1.37.2 came from cross-host amendment K1. H60 is the first cross-host-workspace row whose
+  hold started after `tools.sh` ran (K1 item 4, crescent amendment E4 item 4). `tools.txt` keeps the
+  checksums from before and after.
+- The pre-registration names no node image. The commit's launcher default, 0.1.84, was used,
+  pulled onto crescent by the smoke.
+- The Gemma control ran without `-rea off`, as `h60.sh` renders it and as H54a's Lg ran. Its
+  chat template opened a thinking block: `hello.json` carries `reasoning_content`, as H54a's
+  Lg's did on b11749. `bench/llm_load.py` counts reasoning and content chunks alike, and
+  `ignore_eos` fixed 256 tokens a request, so both arms' decode tok/s divide the same 255 tokens.
+  The control's timing window is short, though. Its thinking-channel markers stream no text, so
+  its `ttft_s` (the first chunk with text) lands 0.060 s after its `first_chunk_s` (median of its 8
+  N=1 requests), about 3 tokens at its rate. Flash-Next's gap is 0.0001 s. So
+  (256 - 1) / (latency - ttft) reads the control about 1% high. Timed from `first_chunk_s`
+  instead, the control decodes 47.97 tok/s (median; its `server.log` eval timings for the same 8
+  requests also give a median of 47.97), e_lg is 0.374, and r is 0.833, 95% CI 0.829-0.841 (the
+  same bootstrap). The scored figures stay as the pre-registered tool produced them, and the
+  verdict and every prediction hold either way. H54a's Lg, the comparison in the verdict, also
+  opened a thinking block, and its hold-2 N=1 requests show the same 0.061 s gap, so its
+  48.74 tok/s was timed the same way. Flash-Next ran with
+  `-rea off`, and its `hello.json` carries content only.
+- After the hold, both serving pairs answered through Dynamo `:8100` (`prep/frontdoor-H60-post.txt`,
+  14:21:55-14:22:00Z: `:30000` 50 to 51, `:30001` 42 to 43), as they did before the smoke
+  (13:30:01-06Z). H60 used no card and stopped no container.
 
 ### H54 note N2: why B1g stalled (unscored diagnostic, 2026-10-29)
 
@@ -7147,6 +8255,32 @@ drafter, records, 30 GB) and the four images it pulled are removed. cpufreq was 
 `bench/prefill-guard/cpufreq.sh snapshot` before the downloads and after hold 2 are byte-identical
 (and equal H5's campaign snapshot).
 
+### H57d amendment R2: Od's render names the hold's cluster (2026-10-29)
+
+Recorded 2026-10-29, before any H57wa or H57wm hold (no wildct hold has measured anything). It
+governs every later hold of H57d's runner. Mechanics only: no row's arms, models, statistic, gate,
+threshold, hold count or prediction changes.
+
+**What it fixes.** `bench/h57d/arm.sh` renders Od by running `scripts/k3d-gpu agent manifest`
+against the hold's own kubeconfig. Since PR #183 (`a7f95676`, 2026-10-21, after H57d's holds),
+every kubectl call of `k3d-gpu` names the context `k3d-${K3D_GPU_CLUSTER:-gpu}`. `arm.sh` did not
+set `K3D_GPU_CLUSTER`, so the render asked for context `k3d-gpu`, which a hold's kubeconfig does
+not hold. Its node queries failed without a word, and Od rendered with no `k3d-gpu.io/cores:
+performance` label and a 1-CPU request (H57d's Od: 16). H57dp's two holds ran so; the H57dp run
+section above discloses it as a deviation.
+
+`arm.sh` now passes `K3D_GPU_CLUSTER=${CLUSTER}` on that call. Nothing else of the render
+changes. H57w's Od would have rendered the same way, since its holds run this runner. With the fix
+it gets the P-core balloon and the 16-CPU request H57d's Od had, which the wildct pre-registration
+states for H57w ("Od's 16-CPU request").
+
+A regression test, `OdRendersInTheHoldsCluster` in `bench/h57d/test_h57d.py`, runs `arm.sh` for
+Od against the fit fixtures. Its kubectl stand-in answers only for the hold's context. The test
+reads the P-core label and 16 CPUs in the render; before the fix it read no label and 1 CPU. H59's
+runner sets the same variable on both of its arms
+([H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29)) and also
+refuses an arm whose render lacks the balloon.
+
 ### Wildct pre-registration: client Raptor Lake (i7-13700, 2026-10-20)
 
 Written 2026-10-20, before any H52w, H18w, H25w, H28w, H34w or H57w measurement on this host.
@@ -7524,6 +8658,101 @@ says. Tests: `tests/wildct_hold_test.sh` (smoke3's pods and node; `nfprobe.sh`'s
 names the next smoke `smoke4`, adds `restarts=0` and every pod ready to its pass, and leaves
 `/etc/modules-load.d/k3dgpu-wildct.conf` to the box owner at the end of the campaign.
 
+### Wildct amendment R4: the second module load, and H10's native nftables expressions (2026-10-29)
+
+Recorded 2026-10-29, before any wildct hold has measured anything. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes. No
+smoke ran.
+
+**What happened (disclosed).** The box owner approved loading and persisting the modules behind
+H10's missing extensions and set types (amendment R3): `xt_comment`, `xt_statistic`,
+`xt_multiport`, `xt_limit`, `xt_NFLOG`, `xt_physdev`, `xt_pkttype`, `ipt_REJECT`, `ip6t_REJECT`,
+`ip_set_hash_ip`, `ip_set_hash_net`, `ip_set_hash_ipport`, `ip_set_hash_ipportip` and
+`ip_set_hash_ipportnet`. They were loaded at 21:16:54Z (`modprobe -a`, rc 0), with three hard
+dependencies (`nfnetlink_log`, `nf_reject_ipv4`, `nf_reject_ipv6`), and appended to
+`/etc/modules-load.d/k3dgpu-wildct.conf`; `kernel.modprobe` stays empty. As in R3, the host's own
+services were read before the load, at once after it, 3 minutes later, and again after the probes
+below: every container's state, health, restart count and start time, the HTTP status of eight
+published endpoints on the host (seven of them also through its tailnet address) and Prometheus's
+two scrape targets read the same each time, and the firewall's rule counts and rule hashes did
+not change (`bench/wildct/results/2026-10-29/host/modules-netfilter.txt`). Main at `e5748cd1` was
+shipped (its launcher and `share/` equal 0.1.79's) and step 1 of the resume procedure ran again
+(21:21:50Z; `runs/resume-health-r4.txt`). H1-H9 passed (Docker 29.7.2, `/` 208 GB available,
+MemAvailable 118 GiB, H9 `br_netfilter vxlan`). H10 read `NFPROBE missing: NFLOG limit` (rc 1):
+every other extension and set type now works, and the `limit` and `NFLOG` rules pass
+iptables-nft's extension check, then fail with "RULE_APPEND failed (No such file or directory)".
+So `smoke4` did not run, and no cluster was created.
+
+**Diagnosis.** iptables-nft writes `-m limit` and `-j NFLOG` as nftables' native `limit` and `log`
+expressions, so those two rules need `nft_limit` and `nft_log` as well as the `xt_` modules.
+nf_tables answers ENOENT for an expression type it does not have and cannot load. Both modules
+are on disk for 6.6.156-2-MANJARO and not loaded. A diagnostic in a throwaway network namespace,
+with the host's `nft` (`diag/nftexpr.sh.txt`; record `runs/nftexpr.txt`), added a counter rule
+and a meta mark rule, and failed the limit and log rules the same way; `/proc/modules` read the
+same before and after. k3s's network policy controller (kube-router) writes its drop-logging rule
+in each pod's firewall chain with both (`-j NFLOG --nflog-group 100 -m limit --limit 10/minute`).
+Restoring `kernel.modprobe`, or loading `nft_limit` and `nft_log`, is the box owner's call. The
+next smoke is still `smoke4`.
+
+**Resume procedure.** `RESUME.md` records the second load, names `nft_limit` and `nft_log` next to
+`xt_limit` and `xt_NFLOG` in H10's fail column, and lists the read-only check scripts left in
+`diag/`. No runner changes.
+
+### Wildct amendment R5: the third module load, release 0.1.81 and smoke4 (2026-10-30)
+
+Recorded 2026-10-30 (UTC; 2026-10-29 in the box owner's time zone), before any wildct hold has
+measured anything. No row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk
+need, hold count or order changes. No runner changes.
+
+**What happened (disclosed).** After amendment R4, the box owner approved loading and persisting
+netfilter modules for this campaign as a class (`nf_`, `nft_`, `xt_`, `ipt_`, `ip6t_`, `ip_set`),
+each load under the same snapshot, check and rollback procedure, with `kernel.modprobe` left
+empty. `nft_limit` and `nft_log` were loaded at 05:02:48Z (`modprobe -a`, rc 0; each depends only
+on `nf_tables`, already loaded) and appended to `/etc/modules-load.d/k3dgpu-wildct.conf`, which
+now lists 18 modules, every one loaded. The host's 18 running containers (state, health, start
+time, restart count), the HTTP status of its 15 published ports and the line counts of
+`iptables-save` and `nft list ruleset` read the same before the load, at once after it and 2 min
+18 s later; this snapshot did not read Prometheus's targets or the tailnet address, which R3 and
+R4 also read (`bench/wildct/results/2026-10-30/host/modules-nft.txt`). `nfprobe.sh` with the
+0.1.79 node image then read `NFPROBE clean`.
+
+The resume procedure then ran from main at `cf49f0e6`. Step 3a: rule W7's newest release is
+0.1.81; its launcher (apart from the version line) and `share/` equal main's. Step 3b shipped
+main. Step 3c: `.deb` sha256 `beac5c26...`, node image
+`cryptoandcoffee/k3d-gpu:0.1.81@sha256:b68387c9...`, k3d v5.9.0, helm v4.3.1, kubectl v1.37.2; the
+tag resolves to the digest, and the installed launcher and `share/` match main's.
+`cryptoandcoffee/k3d-gpu:0.1.79`, pulled by the campaign, was removed. Steps 2 and 4 were done on
+2026-10-29 and did not run again. Step 1 (05:09:52Z; `runs/resume-health-r5.txt`): H1-H10 pass:
+Docker 29.7.2, live-restore off, cgroup systemd/2, `/` 208 GB available, MemAvailable 118 GiB,
+`load1` 0.79, H9 `br_netfilter vxlan` with `modprobe=[]`, and H10 `NFPROBE clean` (rc 0) with the
+0.1.81 node image.
+
+The wiring smoke `smoke4` (05:10:53Z, under `hold.sh`, rc 0) passed every marker of the resume
+procedure: `up rc=0 in 30 s`, `pods ready: yes after 16 s` (`ready.sh`: the node Ready, every pod
+n/n Running or Completed), `GPU-SCAN clean` and `down rc=0`; nvidia and intel named as opted out;
+the node container had `devices=[]`, `gpus=[]`, runtime `runc` and `restarts=0`. Seven pods were
+1/1 Running with 0 restarts and the gateway API CRD job Completed; the node had no taint. A
+read-only live view (`diag/smoke4-live.sh.txt`, record `runs/smoke4-live.txt`) read the node
+container every 10 s: running with `restarts=0` from 05:11:03Z to 05:11:33Z, then gone (the
+`down`). Its one full read waited for `ready.sh`, which first passed between two of its polls, so
+it made none. In `smoke3` the node restarted every ~16 s. The smoke sent no request and measured
+nothing: as rule W1's smoke it is discarded and disclosed, and is not a hold of any row. After it,
+no `k3dgpu-w-*` cluster or container and no process of the hold was left, the host's containers,
+start times, restart counts and port codes read as before it, and the firewall's line counts read
+as before the third load.
+
+**GPU isolation on smoke4's running cluster** (rule W8; `out/pods.txt`, `out/gpu-scan.txt` and
+`out/node.txt`, read before `down`): none of the eight pods is a GPU plugin (coredns,
+local-path-provisioner, metrics-server, the gateway API CRD job, the NRI balloons policy of the
+P/E-core `hybrid` accelerator, and the three NFD pods); no pod mounts a hostPath under `/dev`, and
+none asks for an nvidia.com/ or gpu.intel.com/ resource; the node's allocatable lists cpu,
+ephemeral-storage, hugepages-1Gi, hugepages-2Mi, memory and pods only.
+
+**Resume procedure.** `RESUME.md` records the third load, 0.1.81 and `smoke4`. Step 1 and the
+smoke pass, so the next step is step 6's first hold, `H52w`. H57wb's start gates (`/` >= 85 GB,
+MemAvailable >= 100 GiB) were met at step 1; if they still are at step 6's row 7, the pack stops
+there, as it says.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
@@ -7871,6 +9100,143 @@ the lock released and no child left; the 20-request pre-roll and its median refe
 On the host, `run.sh` needs root
 (RAPL, `perf`, the cpufreq snapshot and `ctl.py`'s write), so its end-to-end path is
 unverified until the first round.
+
+### H55 run (i9-13900T, 2026-10-29)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-10-29T20:55:06Z (round 1 takes the lock) to 2026-10-30T04:18:36Z (round 5 ends), 5 lock holds
+hypothesis:      H55 (host level, no cluster)
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (P = CPUs 0-15, E = 16-31; E max 3900000 kHz, min 800000 kHz;
+                 intel_pstate, governor powersave, EPP performance), microcode 0x133, PL1 = PL2 = 117 W
+host kernel:     6.6.128-1-MANJARO
+accelerators:    k3d-gpu detect: nvidia, intel (i915), hybrid (no accelerator used; no cluster)
+k3d-gpu commit:  890d1d16 (origin/main on 2026-10-29), run from a git archive of that commit;
+                 bench/admission, bench/prefill-guard and bench/llm_load.py there are identical to this
+                 record's base, c63e615e
+node image:      none (no cluster)
+model:           OpenVINO/Qwen3-4B-int4-ov @ b467368d, openvino_model.bin sha256 074214fa29ab1b47... (the
+                 bench/competitors.lock pin; checked before round 1 and again on 2026-11-01), graph.pbtxt
+                 sha256 cc554ddaeab0a883...; prompt bench/prefill-guard/prompt.txt sha256 1321749d2aa5dd10...
+runtime:         openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+                 (Docker Hub tag 2026.4.1-gpu; the server log reads 2026.4.1.cfc9ac721), CPU, docker
+                 --cpuset-cpus 0-14, no device flags; neighbour
+                 ghcr.io/colinianking/stress-ng@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe
+                 (0.22.01), --cpuset-cpus 17-31, --cpu 15 --cpu-method matrixprod --timeout 960s --metrics-brief,
+                 cpu.max set at creation; tool proxy and ctl.py on CPU 16
+energy source:   RAPL package (/sys/class/powercap/intel-rapl:0/energy_uj, read through sudo); IMC trace
+                 perf stat -a -I 1000 uncore_imc_free_running_{0,1}/data_total as root
+lock:            ~/k3dgpu-bench.lock (K3DGPU_LIVE_LOCK, the runner's default, flock -w 21600); no AD_EXTRA_LOCK
+co-tenants:      qwen35-9b (vLLM v0.19.1, 13530 MiB of GPU 1): running, 0 restarts, no request served
+                 (request_success_total stop = 1, generation_tokens_total = 11 at the start and after every
+                 round); gpustack-worker: running, crash-looping, RestartCount 4928 -> 4968 over the campaign;
+                 GPU 0 5206 MiB throughout; neither touched (cotenants.txt)
+runs per arm:    5 (one per round, 5x5 Latin square); 25 runs, 2,260 requests inside the windows
+records:         bench/admission/results/2026-10-29/H55/ (per run run.json, load.jsonl, decode.json, imc.csv,
+                 nb.exit, and for A_slo ctl.jsonl; per round ref, warm-up, pre-roll, status and server id; the
+                 campaign files, campaign.sh, cotenants.sh and cotenants.txt; cpufreq-snapshot.txt and
+                 cpufreq-after.txt; analysis.json; describe.py and describe.txt); SHA256SUMS also covers the
+                 .log files the repository ignores (round logs, server logs, the neighbours' nb.log)
+```
+
+Commands (from 890d1d16; `campaign.sh` in the records runs the loop and writes `cotenants.txt`):
+
+```bash
+bench/prefill-guard/cpufreq.sh snapshot > cpufreq-snapshot.txt          # as root, once, before round 1
+for r in 1 2 3 4 5; do                                                  # one lock hold per round
+  K3DGPU_LIVE_LOCK=~/k3dgpu-bench.lock AD_SUDO_PASS=<0600 password file> AD_SNAPSHOT=cpufreq-snapshot.txt \
+  AD_MODEL_DIR=<dir of OpenVINO/Qwen3-4B-int4-ov> bench/admission/run.sh <out> "$r" || break
+done
+python3 bench/admission/analyze.py <out> --out <out>/analysis.json
+python3 bench/admission/results/2026-10-29/H55/describe.py               # not gated, below
+```
+
+The campaign ran detached (`setsid nohup campaign.sh`) and unattended after round 1's second
+run; no step was re-run or changed, and the records were scored on 2026-11-01. Re-scoring the
+committed records reproduces `analysis.json` byte for byte. The holds took 87.6, 87.8, 88.4,
+87.6 and 88.2 min, each under the 7200 s cap. Round 4 waited 3 min 55 s for the lock; the others
+took it at once. These are the 5 holds the pre-registration allows. H55 registers no load gate:
+`load1` and package temperature are recorded at each run's start.
+
+Gates. All 25 runs completed. Every request inside the windows returned (2,260, none failed), and
+every run's load, decode and tool-proxy steps exited 0. Every neighbour was still running at its
+window's end, printed its `--metrics-brief` line and exited 0. Each static arm's two `cpu.max`
+reads equalled its set value. In the five A_slo runs `ctl.py` logged no stomp, ENOENT, read error
+or write error inside the window and was alive at its end; each logged one ENOENT 45-46 s after its
+window, when the neighbour exited, and stopped. One gate failed: A_slo's round-3 run
+closed 3 full windows, with 78 requests in its window, 2 short of a fourth. The gate needs 4.
+
+**Verdict: INCONCLUSIVE** (`bench/admission/analyze.py`): "A_slo round 3: 3 windows (< 4)". The
+scorer stops at that gate, before the Q-spread and drift gates and conditions (a)-(c). The hold
+cap is spent, so the row stays INCONCLUSIVE; another attempt would be a new row.
+
+Reported, not gated (`describe.py`: `analyze.py`'s own loader and the formulas of its scoring
+branch, applied past the gate). Penalty = arm median (or p90) `ttft_s` over all its requests /
+Q's - 1; loss = 1 - median bogo-ops/s / N0's. Tool proxy, decode, power and throttle are run
+medians; decode is one 128-token request per run.
+
+| Arm | Requests | TTFT median / p90 s | Run medians s (rounds 1-5) | Penalty median / p90 | Neighbour bogo-ops/s (loss) | Tool proxy s (x N0) | Decode tok/s (x N0) | Package W | Throttle |
+|---|---|---|---|---|---|---|---|---|---|
+| Q | 544 | 6.73 / 8.41 | 6.81, 7.26, 6.16, 8.05, 6.27 | - | - | 0.95 (0.56) | 11.11 (1.05) | 108.3 | 25862 |
+| N0 | 348 | 10.41 / 16.58 | 16.84, 9.31, 12.01, 10.66, 9.76 | +54.6% / +97.1% | 18612 | 1.71 | 10.56 | 115.9 | 1095 |
+| K50 | 438 | 8.36 / 11.50 | 11.17, 7.63, 9.52, 8.67, 7.70 | +24.1% / +36.8% | 10612 (43.0%) | 1.13 (0.66) | 10.98 (1.04) | 114.3 | 16792 |
+| K25 | 474 | 7.88 / 9.76 | 8.08, 7.50, 9.94, 8.13, 6.99 | +17.0% / +16.0% | 5515 (70.4%) | 0.97 (0.57) | 11.01 (1.04) | 112.7 | 25243 |
+| A_slo | 456 | 8.30 / 9.84 | 8.10, 8.17, 9.55, 7.52, 8.21 | +23.2% / +17.0% | 5979 (67.9%) | 1.08 (0.63) | 10.87 (1.03) | 113.6 | 20100 |
+
+Q spread 1.885 s (28.0% of the Q median); N0's +54.6% lies above it. Drift 0.518 s, inside the
+spread. NB spread 15.2%. No arm reached a +10% penalty. Read past the gate, A_slo fails (a)
+(+23.2%), meets (b) (67.9% < 72.4%), and (c) holds because no static arm is at +10% or less, so
+the row would read REFUTED on (a) alone. That reading is not the verdict.
+
+The controller. A_slo starts each run at 25%. In rounds 1-4 every window's median was above that
+round's `SLO_r`, so it stayed at the 25% floor for the whole window. In round 5 it climbed:
+`REF_5` was 8.171 s, the highest of the five references, which put the up-band at 8.580 s. Window
+medians of 7.86 s and 7.70 s stepped it to 37.5% and 50%, 8.68 s held it, and 8.13 s stepped it to
+62.5% at 768 s into the window (mean level over the window 44.0%). Its neighbour ran 10,002
+bogo-ops/s there, against 5,964-6,035 in rounds 1-4. The references themselves moved with the
+host: `REF_r` read 6.18, 6.05, 7.95, 6.21 and 8.17 s. In rounds 3 and 5 the reference was 1.29 and
+1.30 times that round's own Q-run median, so round 5's climb followed a slow pre-roll, not a quiet
+prefill: `REF_5` was also above that round's K50 and K25 run medians (7.70 and 6.99 s). What slowed
+it was not measured. `load1` and temperature are not recorded during a pre-roll; the host carried
+foreign load, and round 5's pre-roll began about 30 s after round 4's last neighbour (K50) exited.
+Round 3's high reference did not help A_slo: its windows read 9.60-10.46 s, above the round's
+`SLO_r` of 8.75 s, and only 78 requests fit in the window.
+
+Predictions against the record (not gated): N0 about +40%, read +54.6%; K50 +20 to +30% at about
+50% loss, read +24.1% at 43.0%; K25 +8 to +15% at about 75% loss, read +17.0% at 70.4%; A_slo at
+the 25-37.5% levels, +8 to +15% at 70-78% loss, read the floor in 4 rounds and 62.5% in one, +23.2%
+at 67.9%. The expected verdict was REFUTED; the row is INCONCLUSIVE. Beside the verdict: the
+neighbour arms drew 112.7-115.9 W of package power against Q's 108.3 W (PL1 117 W), as in H5.
+The tool proxy on CPU 16, outside the neighbour's cgroup, ran at 0.57-0.66 of its N0 time under
+the quotas, where H5's E-core frequency cap slowed it 3.4-3.7x.
+
+Confounds:
+
+- Shared host, busier than in H5's campaign: `load1` at run start read 6.84-35.5 (median 9.6;
+  H5 5.6-17.4) and package temperature 81-96 C. Another session's k3d cluster (`rv270`) was up
+  when round 3 ended, with `load1` 54.8 at that moment. Q's run medians ranged 6.16-8.05 s; the
+  highest, round 4's, started at `load1` 30.9. The Latin square spreads this over the arms; it
+  does not remove it.
+- Each round's reference is the median of its own 20 pre-roll requests, so whatever slows the
+  pre-roll (foreign load, or heat from the previous round's last neighbour run) moves both the
+  controller's band and `SLO_r` (above).
+- The co-tenants: qwen35-9b served no request; gpustack-worker restarted 40 times in the 7.4 h,
+  each restart a short burst of CPU. No H55 container had a device flag.
+- Host level, as registered: OVMS and the neighbour are host containers, and `cpu.max` was written
+  through docker and `ctl.py`, not through kubelet (the pre-registration's ship gate).
+
+cpufreq: H55 writes none. The campaign snapshot (128 lines, sha256 `7403983b...`, byte-identical
+to H5's) read back equal at each round's start and after each of the 25 runs
+(`cpufreq_matches_snapshot` is true in every `run.json`), at the campaign's end (`.now.snap`), and
+on 2026-11-01T16:21:47Z (`cpufreq-after.txt`, read without root: the four attributes are
+world-readable).
+
+Cleanup: no k3d cluster was created, and `run.sh` removed its OVMS and neighbour containers at each
+round's end; no `k3dgpu-h55-*` container remains. The two pinned images stay pulled. The campaign
+directory `~/k3dgpu-h55` (the source export and the records, the ignored `.log` files included) is
+kept.
 
 ### H28 pre-registration (i9-13900T, 2026-10-17)
 
@@ -10747,6 +12113,224 @@ whole stack, Qwen3Guard's 8 included, on a 32-CPU node; helm v3.22.1 with
 instances with this many pods; EAS #71 at teardown; and host memory taken by other
 tenants.
 
+### F3 amendment R1: the locks and the run directory (2026-10-29)
+
+Written 2026-10-29, before any F3 step. Nothing in the F3 pre-registration above is
+edited, and its prediction (0.35) stands. This amendment fixes how the run is held and
+where its files go. It changes no step, ceiling or grade.
+
+- **One F3 row.** A second F3 row was drafted for this run, with other wording and a
+  prior of 0.5. It is not added. The row and section above were committed first, so they
+  are the only F3 pre-registration.
+- **Locks.** The desktop holds (H55, H57dp, H59d) take `~/k3dgpu-bench.lock`, not
+  `<scratchpad>/live.lock`. F3 takes `~/k3dgpu-bench.lock` first, then
+  `<scratchpad>/live.lock`, each with `flock -o -w 36000`, so no child holds a lock
+  descriptor. That is the order H55 uses with `AD_EXTRA_LOCK`, so no wait cycle forms.
+  The 180 min cap counts from the moment both are held.
+- **Node image.** The image step 0 builds gets a local tag, and step 1 names it with
+  `K3D_GPU_IMAGE`. The header records its image ID.
+- **Run directory.** `K3D_GPU_STATE_DIR` is a new directory on disk for this run, so
+  `${STATE_DIR}` above is that directory. `KUBECONFIG` is unset, and every step uses the
+  cluster's own `${STATE_DIR}/kubeconfig-k3dgpu-f3-eas`.
+- **ps samples.** Each 2 s `ps -eo args` sample is appended to one gzip file, and step 7
+  counts through `zcat`. After step 8, the same counts are taken again over the same
+  files plus step 8's log and samples. That second scan is recorded, not graded.
+- **When.** At the time of writing, `k3d-gpu eas` (#260) is not on `origin/main`, so F3
+  waits for it, as the section says. #260's unscored wiring smoke runs first, on cluster
+  `k3dgpu-eas-smoke` inside the same two locks, and is recorded in #260.
+
+### F3 amendment R2: what the secret scan counts (2026-10-29)
+
+Written 2026-10-29, before any F3 step, after #260's second wiring smoke. It changes only
+which values step 7 counts. No step, ceiling or other grade changes, and the prediction
+stands.
+
+- **keycloak-admin-secret: the password key only.** The Secret has two keys, `username`
+  (5 bytes) and `password` (24 bytes). The username is an account name, not a secret. In
+  the smoke, a fixed-string count of it found 717 lines in the step logs, the ps samples
+  and the EAS logs, so counting it would grade any run REFUTED with no secret shown. Step
+  7 counts the `password` key of `keycloak-admin-secret`, records that `username` was not
+  counted, and counts the other values as the section says.
+- **Step 7's own log is not counted.** It is written while the scan runs and names the
+  Secrets only. Every other step log, the ps samples and every file under the EAS state
+  dir's `logs/` are counted as before.
+
+### F3 run (i9-13900T, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T11:59:53Z to 12:50:37Z, both locks held (R1's order; neither was held
+                 when the run asked, so no wait); 51 of the 180 min cap. Step 0 ran at
+                 11:59:40-11:59:42Z, before the locks
+hypothesis:      F3
+host cpu:        13th Gen Intel(R) Core(TM) i9-13900T (8 P-cores, 16 E-cores, 32 CPUs), Lenovo P360 Ultra,
+                 125.4 GiB MemTotal; no AMX, no AVX-512
+host kernel:     6.6.128-1-MANJARO; Docker 29.3.0
+accelerators:    `k3d-gpu up`: "Accelerators schedulable: nvidia=2 intel=8 hybrid=1"; node allocatable as
+                 `eas up` read it: gpu.intel.com/i915 8 (the UHD 770, shared), nvidia.com/gpu 2, cpu 32,
+                 memory 131521428Ki
+k3d-gpu commit:  48e1da900f8402fd76aeded71cabd0662dbcc7e5, main's merge of #283: the first origin/main commit
+                 that holds `k3d-gpu eas`, the F3 pre-registration with amendments R1 and R2, and
+                 `eat-up.sh` on release-1.1.0. Its launcher reads 0.1.83; main's next commit, 2cba2a72
+                 (release 0.1.84), changes only that version string and the AUR files
+node image:      k3d-gpu-f3node:48e1da90, image ID
+                 sha256:9ab13228938bfb527ea02fdb7346e14dace6106fc8c2440ca9e1f3b9819b57ad (step 0's build at
+                 that commit, every layer cached), k3s v1.37.1+k3s1
+pins:            profile main, read equal in pins.json at that commit: EAS 97f6157d6a72f7173c698c474d4e51d2c79f1fd6,
+                 enterprise-inference 3e8a24486b6ee812adf2bf452f8ba5751c16c8bd, EAT release-2.0.0
+                 036b66234801e9bd950afd90830821859780d668. Step 0's ls-remote: EAS main at 0f7bc2bd and EI
+                 main at 40bd1691 have moved on; release-2.0.0 is still at its pin
+bastion:         k3d-gpu-eas-bastion:6c6cd187e0abcf54, image
+                 sha256:592b23ea7803f3a046905307f30511ffd2d2120010d69ad146328a5927ca8d10, reused (built
+                 2026-10-29)
+model:           qwen2-5-coder-7b (Qwen/Qwen2.5-Coder-7B-Instruct, EI's catalog entry at 3e8a244) on EI's
+                 vLLM CPU runtime, VLLM_CPU_KVCACHE_SPACE 21 and --max-model-len 32768 (the fit's sizing);
+                 Qwen3Guard as EAT's guard model (EAT's default)
+tools:           k3d v5.9.0; kubectl v1.35.2 on the host (step 4); the bastion's kubectl v1.37.2, helm
+                 v3.22.1 and kubernetes.core 6.3.0 (pins.json profile bastion)
+environment:     HF_TOKEN unset; KUBECONFIG unset; K3D_GPU_CLUSTER=k3dgpu-f3-eas,
+                 K3D_GPU_STATE_DIR=<run dir>/out/state (a new directory) and
+                 K3D_GPU_IMAGE=k3d-gpu-f3node:48e1da90 (R1); no other K3D_GPU_* variable, no flag on any
+                 step. inotify 1024 / 524288 at the start and at the end
+energy source:   not measured (a functional row)
+runs per arm:    1
+```
+
+Commands, as run from `~/.cache/k3dgpu-f3/f3-scored/bin` (copies in [bench/f3/](bench/f3/)): `bash
+step0.sh` (step 0), then `bash launch.sh`, which starts `lockrun.sh <src> k3dgpu-f3-eas <out> 180`
+detached; `lockrun.sh` takes `~/k3dgpu-bench.lock`, then the scratchpad `live.lock`, both
+`flock -o -w 36000`, and runs `run.sh` under the cap. `<src>` is `git archive` of `48e1da90`.
+`run.sh` is the smoke harness of #283 with its smoke-only diagnostic removed. In its place, a
+read-only `kubectl get pods -A -o wide` runs after step 5. The committed copies differ from the
+files that ran by two lint fixes: an unused `rc5=$?` dropped from `run.sh`, and `cd ... || exit
+1` in `launch.sh`. The sha256 of each file that ran is in `runner.sha256`. The records are in
+[bench/f3/results/2026-11-01/](bench/f3/results/2026-11-01/): the header, the host and lock
+lines, `steps.tsv`, each step's log under `steps/`, `choices.txt`, `overlay.txt` and the other
+step-2 files, `facts.json` (with the fit JSON), the Jobs and pod lists, the namespaces after
+`eas down`, both scans and the EAS logs (`eas-logs/`). The kubeconfig and the state dir are not
+committed.
+
+**The steps.** Each step ran once, with no retry and no hand edit.
+
+| Step | Exit | s | Read |
+|---|---|---|---|
+| 0 `docker build`, `git ls-remote` | 0 | 1, 1 | the image ID and the heads above |
+| 1 `k3d-gpu up` | 0 | 60 | "Accelerators schedulable: nvidia=2 intel=8 hybrid=1" |
+| 2 `eas up --agent-toolkit --dry-run` | 0 | 6 | 27 choice lines and 5 overlay decisions, read below |
+| 3 `eas up --agent-toolkit` | 0 | 2453 | the same 27 choice lines as step 2; "applied 0002-eas-istio-global-platform.patch 0006-eas-envoy-control-plane-affinity.patch"; one `PLAY RECAP`: `ok=666 changed=175 unreachable=0 failed=0 skipped=186 rescued=0 ignored=0`; "INSTALLATION COMPLETE, Target: agent-toolkit" |
+| 4 Ready wait | 0 | 7 | 63 pods "condition met". Jobs `keycloak/agent-toolkit` and `kube-system/helm-install-gateway-api-crd`: `Complete=True`. 65 pods: 63 Running with every container Ready, 2 Completed |
+| 5 `eas check` | 0 | 278 | 20 pods Ready in the stack's five namespaces; the chat through `https://litellm.solutions.ai` (gateway 172.20.0.2), HTTP 200 with non-empty content; `get_weather({"city": "Portland"})`; the guard labels "How do I hack into a system?" Unsafe and LiteLLM answers it blocked (HTTP 200, `finish_reason content_filter`); the model wrote `print(sum(i**2 for i in range(1, 11)))` and sandbox `python-pool-4km5k` returned `{"stdout":"385\n","stderr":"","exit_code":0}`; "EAT check passed (eas)." |
+| 6 `eas status` | 0 | 13 | recorded, not graded |
+| 7 secret scan | 0 | 8 | total 1, below |
+| 8 `eas down` | 0 | 208 | `kubectl get ns` right after: `cert-manager` and `istio-system` Terminating; `default`, `habana-system`, `kube-*` and `node-feature-discovery` Active |
+| 9 `k3d-gpu down` | 0 | 9 | the cluster deleted |
+
+**Choices and decisions** (step 2, the same in step 3), each against the pre-registered table:
+
+| Predicted | Read | Equal |
+|---|---|---|
+| `existing_kubernetes` set to the mounted per-cluster kubeconfig | `existing_kubernetes: /kube/config` (the per-cluster kubeconfig, mounted read-only) | yes |
+| `istio_platform: k3d` | `istio_platform: k3d` (CNI `bin_dirs ["/usr/bin"]`) | yes |
+| `metallb_enabled: false` | `metallb_enabled: false` (ServiceLB on) | yes |
+| `kubernetes_cpu_policy: best-effort` | `best-effort` (DaemonSet `kube-system/nri-resource-policy-balloons`) | yes |
+| `nfd_enabled: false` | `nfd_enabled: false` (`node-feature-discovery/nfd-worker`) | yes |
+| `require_amx: false` | `defaults.require_amx: false` (no AMXBF16 label) | yes |
+| k3s CIDRs | `10.42.0.0/16`, `10.43.0.0/16` (no CIDR flag in `k3s.io/node-args`) | yes |
+| `kata_containers_enabled: false` | `kata_containers_enabled: false` | yes |
+| `kubernetes_accelerator: cpu`, pointing at `k3d-gpu agent up` | `kubernetes_accelerator: cpu (serve the device with k3d-gpu agent up)` (i915 allocatable 8) | yes |
+| `agent_sandbox_enabled: true` | `agent_sandbox_enabled: true` (no agent-sandbox CRD) | yes |
+| a core-count warning; an inotify warning with the `sysctl` line; the host unchanged | both warnings, the second with `sudo sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576`; inotify 1024 / 524288 at the end | yes |
+| 0002 apply, 0006 apply (variant a), 0003, 0004, 0005 skip | `0002 variant a applies`, `0006 variant a applies`, 0003 skip (`best-effort`), 0004 skip (one node), 0005 skip (documentation only); step 3 applied 0002 and 0006 | yes |
+
+The model rule: the node's allocatable memory is 131521428Ki (125.4 GiB), under the about 131
+GiB of EAT's default (`qwen2-5-coder-14b`). `k3d-gpu fit` for `Qwen/Qwen2.5-Coder-7B-Instruct`,
+the first candidate, reads `fits: true`, `placement: cpu`, `degraded: false`, `ctx: 32768` on
+vLLM CPU (`facts.json`, key `fit`). Its host budget was 48.0 GiB, from MemAvailable 60.6 GiB at
+step 2. Weights took 14.2 GiB and 22.4 GiB was left for KV. So the pick is
+`llm_services_autodeploy_models: [qwen2-5-coder-7b]`, as the rule says and as predicted.
+
+**The secret scan** (step 7, `steps/7-scan.log` verbatim; it prints no value):
+
+```text
+not counted: keycloak-admin-secret.keycloak.username (an account name, amendment R2)
+read: keycloak-admin-secret.keycloak.password (24 bytes)
+read: litellm-master-key (35 bytes)
+read: sandbox-router-auth (64 bytes)
+# scan step7: 10 files
+  step7 keycloak-admin-secret.keycloak.password raw hit process x1: java -cp /opt/keycloak/bin/client/keycloak-admin-cli-26.6.0.jar --add-opens=java.base/java.security=ALL-UNNAMED --enable-native-access=ALL-UNNAMED -Dkc.lib.dir=/opt/keycloak/bin/client/lib
+step7 keycloak-admin-secret.keycloak.password raw: 1
+step7 keycloak-admin-secret.keycloak.password base64: 0
+step7 litellm-master-key raw: 0
+step7 litellm-master-key base64: 0
+step7 sandbox-router-auth raw: 0
+step7 sandbox-router-auth base64: 0
+step7 total: 1
+step7 hit file deleted: /home/andrew/.cache/k3dgpu-f3/f3-scored/out/ps-samples.gz
+```
+
+The 10 files are the step logs other than step 7's, `run.log`, the `ps` samples of steps 3 and
+5, and the three files under the EAS state dir's `logs/`. Every log counted 0. The one hit is a
+single 2 s `ps -eo args` sample: the Keycloak admin password, raw, in the argv of Keycloak's
+admin CLI JVM (`keycloak-admin-cli-26.6.0.jar`, which `kcadm.sh` starts). HF_TOKEN was unset, so
+it was not counted.
+
+The source is enterprise-inference `3e8a244`
+[roles/keycloak_config/tasks/install.yaml#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175).
+That task, "kcadm — authenticate (writes in-pod config)", runs `/opt/keycloak/bin/kcadm.sh config
+credentials --server ... --realm master --user <username> --password <password>` in the Keycloak
+pod through `kubernetes.core.k8s_exec`. Its `no_log` keeps the value out of Ansible's output,
+which is why every log counted 0. The value is still an argument of the process, and a k3d node
+is a container on the host, so the host's process table lists it for as long as the JVM runs.
+Step 3 ran that task (EAS log, "keycloak_config | kcadm — authenticate"), and no step after it
+touches Keycloak, so the sample is from step 3. Step 7 deleted the gzip with the hit, as the
+section says, so the sample's time is not recorded. k3d-gpu's overlay has no patch for this task.
+
+Not graded: after `eas down`, the same counts over 12 files (step 8's log and samples added; the
+deleted gzip gone) were 0 for every value. EAS also writes its own install log inside its
+checkout, `eas/env/k3d-gpu/logs/`. That is outside the pre-registered set (`${STATE_DIR}/eas-k3dgpu-f3-eas/logs/`),
+so it was not counted.
+
+**Verdict: REFUTED.** Every other SUPPORTED condition held:
+
+- steps 1, 2 and 3 exited 0, and the one `PLAY RECAP` reads `failed=0`;
+- the choices and decisions equal the table, and step 3 applied the same;
+- the model pick follows the rule;
+- step 4 exited 0, and step 5 exited 0, its chat through the EAS gateway HTTP 200 with content
+  and its sandbox step passed;
+- step 8 exited 0 in 208 s, under 15 min;
+- no step needed a hand edit, a retry or a flag not named.
+
+Step 7 counted 1, and "any count in step 7 above 0" is a REFUTED condition. It follows from no
+INCONCLUSIVE condition, so the precedence rule grades it REFUTED. The prior was P(SUPPORTED) =
+0.35.
+
+What the run shows, read as the section allows:
+
+- **The install works.** On this host, `k3d-gpu eas up --agent-toolkit` took a fresh default
+  k3d-gpu cluster to EAS's platform, inference and agent-toolkit layers at the pins, with every
+  k3d choice made from the cluster and no hand edit. Through the EAS gateway, EAT 2.0's chat,
+  tool call, guardrail and code sandbox each worked once, and `eas down` removed it.
+- **The no-secret claim does not hold.** The run puts a secret where any local user's `ps` can
+  read it: enterprise-inference's Keycloak step passes the admin password as a command-line
+  argument. That is upstream code that k3d-gpu runs unchanged. It runs on every install of this
+  layer, and whether a 2 s sample catches the short JVM is chance: the unscored smoke 5 of #283
+  counted 0.
+
+Not scored:
+
+- **Host.** At the start of the lock: load1 4.04, MemAvailable 61.6 GiB, 53 running containers.
+  At the end: load1 7.10, MemAvailable 64.4 GiB, 53. `oom_kill` read 9 at both. In the 60 s
+  samples, MemAvailable fell to 8.7 GiB at 12:39:58Z, while the model loaded beside the other
+  tenants, and load1 peaked at 14.83. No OOM kill followed.
+- **The pod list after step 5** is the same 65 pods. It is the run's one read-only addition to
+  the pre-registered steps (`pods-after-check.txt`).
+- **The open risks the section named** (agent-sandbox v0.5.0 on Kubernetes 1.37, the stack's
+  CPU requests on 32 CPUs, helm v3.22.1 with `kubernetes.core` 6.3.0, a `sudo` inside the
+  bastion, inotify at 1024 instances, EAS #71 at teardown, and other tenants' memory) did not
+  stop any step on this run.
+
 ### H2 run (i9-13900T, 2026-10-16)
 
 ```text
@@ -13352,6 +14936,687 @@ S1 rule; the added condition can only turn a SUPPORTED into INCONCLUSIVE.
 condition. `bench/h59/test_h59.py` adds a pooled CI above 1.2 with one hold at 0.9
 (INCONCLUSIVE), one hold at exactly 1.0 (INCONCLUSIVE) and at 1.05 (SUPPORTED), and a CI below
 the bar with one slower hold (still REFUTED).
+
+### H59 amendment R1: the runner and the host profiles (2026-10-29)
+
+Recorded 2026-10-29, before any H59, H59d or H59w measurement. This is the runner amendment the
+pre-registration requires before the first H59-family hold. PR #182 (the llama.cpp backend of
+`agent up`) is on main, merged 2026-10-29 18:25Z as `b8504e6b`. Mechanics only: no row's arms,
+model files, statistic, quality gate, 1.2 bar, load rule, hold count, cap or prediction changes.
+No wiring smoke has run. One runs before each row's first hold, scores nothing, and is disclosed
+in that row's run section.
+
+**Files.** `bench/h59/`:
+
+- `run.py`: the arm table, the hold orders, the host profiles, each arm's render, stage and
+  check, crescent's load verdict and the prefix phase.
+- `hold.sh`: one hold under the host's rules. `hold-run.sh`: the cluster, the P-core sampler and
+  the arms. `arm.sh`: one arm (render, readiness, records, phases or quality, teardown).
+- `prep.sh`: the model files and the drafter, once per host. Also `k3d-shim.sh` and
+  `reproduce.sh`.
+- `bench/wildct/row.sh` gains rows `h59w` and `h59w-prep`.
+
+These are imported from other rows, not copied: H54's GSM8K items, prompt and grader, its TTFT
+prompt, void rule and `boot_ratio`; H57d's P-core sampler and load gate; H25's prefix prompts
+(`bench/shared-prefix/probe.py`). Scoring is amendment S1's `bench/h59/h59.py`, unchanged.
+
+Tests: `bench/h59/test_run.py` and the `h59w` rows of `tests/wildct_hold_test.sh`, in CI. They
+render both arms through the real `k3d-gpu agent manifest` against the fit fixtures, with a
+kubectl stand-in that answers only for the hold's own context. They run `arm.sh` against a local
+OpenAI-compatible server and score its records with `h59.py`. Four holds of a desktop row feed
+the bootstrap-ratio scorer end to end, and the server's request log is checked against the
+registered counts and settings (warmup, N=1, N=4, TTFT, prefix, GSM8K, the 900 s boot limit). A
+crescent arm runs its N=16 phase and re-runs a void N=4 phase.
+
+**Arms as rendered.** Each arm is `scripts/k3d-gpu agent manifest --model <id>` at the runner's
+commit, run in the hold's cluster. O is `--model google/gemma-4-26B-A4B-it`. L is `--model
+google/gemma-4-26B-A4B-it-qat-q4_0-gguf` with `K3D_GPU_AGENT_DRAFT=mtp`. Both set
+`K3D_GPU_AGENT_DEVICE=CPU`. The render also sets:
+
+- `K3D_GPU_CLUSTER` to the hold's cluster. Every node query of `agent manifest` names context
+  `k3d-${K3D_GPU_CLUSTER:-gpu}`. Without it a hold's own kubeconfig answers "context was not
+  found", and the arm renders with no P-core label and 1 CPU. That was H57dp's Od (PR #247); see
+  [H57d amendment R2](#h57d-amendment-r2-ods-render-names-the-holds-cluster-2026-10-29).
+- `K3D_GPU_AGENT_REVISION` to the registered commit: O `4e5885c3`, the commit OVB's weights are
+  fetched at, for the fit's metadata read; L `d1c082be`. An unpinned render reads `@main`
+  metadata. On the desktop that is a stale cache entry, which the llama.cpp backend refuses
+  ("metadata names no commit"). For O the launcher also reads the requested base repo's format
+  at that commit (`agent_model_format`). The base repo has no such commit, so the format reads as
+  unknown and the render takes OVMS's path, as it does without the pin.
+- `K3D_GPU_AGENT_MODEL_NAME=gemma`, the served name.
+- `K3D_GPU_TUNE=off`. A host's own tuned profile is not a k3d-gpu default.
+
+No other agent variable reaches the render. It drops any `K3D_GPU_AGENT_*`, `K3D_GPU_LLAMA_*`,
+`K3D_GPU_MODEL_OPT`, `K3D_GPU_MODEL_OPT_LEDGER`, `K3D_GPU_AUTOQUANT`, `K3D_GPU_FIT`,
+`K3D_GPU_FIT_RUNG`, `K3D_GPU_FIT_FILE`, `K3D_GPU_CONTEXT`, `K3D_GPU_KUBECONFIG` or
+`K3D_GPU_BALLOONS` set in the shell that starts a hold. The variables it passed are recorded
+(`render-env.txt`).
+
+`run.py check` then reads the staged render. A render that fails it stops the arm before
+`kubectl apply` (status failed), and the hold counts. It checks:
+
+- the images: O `openvino/model_server@sha256:a928903f...` (2026.4.1), L
+  `ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13e...`;
+- device CPU; no GPU resource;
+- O's pull container names OVB, CPU, `text_generation` and no draft;
+- L's `--model` is the GGUF at `d1c082be` and `--spec-draft-model` the drafter converted from
+  `95371415`, with `--spec-type draft-mtp`, `--jinja`, `--reasoning off` and numeric `-c`, `-np`,
+  `--threads` and `--threads-batch`;
+- on the desktop and wildct, the P-core label and a 16-CPU request (L: `--threads 8`,
+  `--threads-batch 16`); on crescent, no core label.
+
+A later bump of either image pin in the launcher stops the holds until an amendment names it.
+Offline renders of this commit, on the desktop fit fixture, give O the fit's `--max_num_seqs=4`
+and `--cache_size=20`. They give L `-c 1310720 -np 5 -ngl 0 --threads 8 --threads-batch 16
+--load-mode mmap+mlock`. On a host the fit follows the host's free memory at render time. So each
+arm's `fit.json` records what it ran with. `check.json` notes a fit of fewer than 4 sequences,
+which makes the N=4 phase queue; that is reported, not gated.
+
+**Flags read at each pin.** This is the pre-registration's flag check. No flag is missing, so
+none is dropped.
+
+- llama.cpp `b11960`, `common/arg.cpp`: `-m/--model` :3057, `-mu/--model-url` :3066,
+  `-a/--alias` :3033, `--host` :3343, `--port` :3359, `--jinja` :3727, `-rea/--reasoning` :3746,
+  `-c` :1650, `-np` :2556, `-ngl` :2811, `-t/--threads` :1528, `-tb/--threads-batch` :1538,
+  `-lm/--load-mode` :2703 (`mmap+mlock` is one of its values), `--spec-draft-model` :4322 and
+  `--spec-type` :4330. `draft-mtp` is a type in `common/speculative.cpp` :78.
+- Defaults L relies on: the prompt cache is on (`common/common.h` :639, `cache_prompt = true`),
+  and the draft length is 3 (:331).
+- OVMS `v2026.4.1`, `src/cli_parser.cpp`: `--task` :324, `--rest_port` :93, `--log_level` :117,
+  `--cache_dir` :152, `--pull` :236, `--source_model` :240, `--model_repository_path` :256,
+  `--model_name` :270, `--model_path` :274 and `--target_device` :314.
+- OVMS `src/graph_export/graph_cli_parser.cpp`: `--max_num_seqs` :44, `--enable_prefix_caching`
+  :52 (default true, so prefix caching is on), `--cache_size` :60, `--reasoning_parser` :84 and
+  `--tool_parser` :88. This parser allows unrecognised options, so a misspelt pull argument would
+  be dropped without a word. This read rules that out.
+
+**Model files.** `prep.sh` runs once per host and is not a hold.
+
+- Downloads at the registered commits, outside the lock, into `${G}/models`: the GGUF repo's
+  `gemma-4-26B_q4_0-it.gguf` only, and OVB's snapshot. Each LFS file is checked against the Hub's
+  sha256 (`bench/wildct/verify_models.py`).
+- The GGUF is also reachable as `gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be.../`,
+  the path L's render serves it from.
+- OVB's directory and `.ov_cache` are mode 777. OVMS's pull container runs as uid 5000 (H54
+  amendment R2's directory mode).
+- The drafter is #182's own conversion. `prep.sh` renders L with no cluster and takes the
+  conversion Job from that render: `full-b11960@sha256:7afc81bf...`, the pins
+  `transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0`,
+  `convert_hf_to_gguf.py --outtype bf16`, then `llama-quantize` Q4_0. The offline render names
+  it Job `gguf-convert-b459c9c78d78`. `prep.sh` runs that container once with `docker run`, under
+  the host lock and `timeout -k 30 3600`. It keeps the Job's image, command, arguments,
+  environment and memory limit, mounts the models at `/models`, and runs as the campaign user,
+  not root.
+- The Job's spec is kept as `prep-job.json`. A hold whose render carries another conversion Job
+  does not start the arm.
+- The drafter's sha256 is recorded in each Reproduce header. It is a different build from H57d's
+  (`8eb21d5b...`, b11749, transformers 5.20.2), as amendment S1 notes that L already differs from
+  H57d's Ld-mtp. `${G}/weights.sha256` holds every file the arms read.
+
+**Staging.** `run.py stage` changes where an arm reads its files, nothing it serves. The k3d shim
+binds `${G}/models` into the node at `/var/apb-models`, read-write, because O's pull container
+writes `graph.pbtxt`. Weights are never copied into the node.
+
+- O: `bench/apb/stage.py ovms`, so the PVC becomes that hostPath. The pull container is kept. It
+  rewrites `graph.pbtxt` from the hold's own arguments and finds OVB's files with no `.git`, so it
+  downloads nothing. OVMS's compiled-model cache is emptied after each O arm (H54's teardown), so
+  no boot reads an earlier hold's cache.
+- L: the PVC becomes the same hostPath, mounted read-only. The conversion ConfigMap and Job and
+  the `wait-gguf` init container are dropped; after `prep.sh` each would return at once. So is
+  `--model-url` with its value: it is llama-server's download source, and the GGUF is already at
+  `--model`.
+- Image, every other argument and its order, requests, limits and labels are as rendered. The
+  tests compare the staged render with the raw one.
+
+**Holds.** `hold.sh HOST HOLD [REPEATS]`:
+
+- Holds 1-3 are performance holds in the orders (O, L), (L, O), (O, L). Hold 4 is the quality
+  hold, in (L, O).
+- A spare 5 or 6 repeats hold REPEATS in its order. It may only repeat a hold that ran and whose
+  standing record (the hold, or spare 5 once spare 5 repeated it) left an arm not measured.
+  Spare 6 runs only after spare 5, since `h59.py` reads spare 6 over spare 5 for the same hold.
+  A spare writes the file `repeats`, which `h59.py` reads, only once it runs.
+- A hold runs once. Once the floors pass, `hold.sh` writes the hold's `started` file, before
+  anything runs. A hold with a `started` file or an `rc` is refused, so a failed or interrupted
+  hold counts and only a spare repeats it. There is no hold number above 6.
+- Before the lock, `hold.sh` refuses a host whose CPU class is not the row's, a node image not
+  pinned by digest, a `${G}/bin/k3d` that is not the shim, and missing model files. The CPU
+  class is the model number the optimizer matches a row by (`console/model_opt.py`
+  `class_tokens` of the first `model name`), compared exactly: an i7-13700K is not an i7-13700.
+- The node image (`H59_IMAGE`) is the k3d-gpu release whose launcher is this commit's or later,
+  by digest. The row's first hold records it, and later holds must run the same image.
+- A wiring smoke (`hold.sh HOST smoke`) runs hold 1's arms with one 16-token request and one
+  `chat_template_kwargs` chat each. It scores nothing and is disclosed.
+
+**Host profiles** (`run.py profile`):
+
+| | crescent (H59) | desktop (H59d) | wildct (H59w) |
+|---|---|---|---|
+| CPU checked | Xeon 6741P | i9-13900T | i7-13700 |
+| Lock | `~/k3dgpu-bench.lock` | the desktop's (`LOCK`) | W1's (outer), then a private inner lock |
+| Hold start | `load1` <= 12, no aiperf process (H50) | `load1` <= 24 | `load1` <= 12 (W1, and again inside) |
+| Floors | `/` at most 97% used | 15 GB free on `/`, MemAvailable >= 20 GiB | as the desktop, inside W6's 15 + 40 GB |
+| Cap, arms end | 2400 s, 2370 s (H54) | 4500 s, 4470 s (H57d) | 4500 s, 4470 s (H57w), inside W1's 4600 s |
+| Cluster | `k3dgpu-g-h59-<hold>`, `amx`, C1 | `k3dgpu-d-h59-<hold>`, `hybrid`, C1 | `k3dgpu-w-h59-<hold>`, `auto,-nvidia,-intel`, W3 |
+| CPUs | no balloon (half the node) | P-core balloon, 16 CPUs | as the desktop |
+| Phases | N=1, N=4, N=16, TTFT, prefix | N=1, N=4, TTFT, prefix | as the desktop |
+| Load rule | H54's void rule, `run.py gate` | H57d's gate, `h57d.py sample` | as the desktop |
+
+wildct runs each hold as `bench/wildct/hold.sh H59w-<n> 4600 40 bench/wildct/row.sh h59w <n>
+[<k>]`. That gives it W1's lock, the GPU opt-out, W3, W4's RAPL reader, W5's sampler and W6's
+15 + 40 GB start floor. `prep.sh` runs as `row.sh h59w-prep`, outside a hold.
+
+**Phases.** As registered, in `arm.sh`:
+
+- the 60 s idle window (RAPL), then 3 warmup requests;
+- N=1 (8 requests), N=4 (16 at concurrency 4), N=16 (32 at 16, crescent only), and TTFT (4 at
+  N=1 on H54's 1,000-token prompt, `max_tokens` 16). Each runs `bench/llm_load.py
+  --unique-prompts`, `max_tokens` 256, `ignore_eos`, temperature 0, under `bench/energy.sh`;
+- prefix reuse: H25's phase S without its control agent (`probe.py` `gen` and `request`). Agents
+  a1-a6 run in sequence. Each sends the byte-identical system text and 12 tool schemas plus its
+  own 96-token message, `max_tokens` 8, thinking off, streamed. The seed is 5900 plus the hold's
+  number. The score is the median first-chunk TTFT of agents 2-6 (`prefix.json`). It records
+  `usage.prompt_tokens`, which Gemma's tokenizer puts near H25's 1,536, not at it;
+- quality: H54's GSM8K 0-49 runner.
+
+An arm is measured when its N=4 phase completed a request. Otherwise it is failed: the server
+stopped answering after readiness (H54 amendment R3). In the quality hold an arm is measured when
+GSM8K recorded an item that did not error. The records use H57d's layout, which `h59.py` reads.
+Each arm adds `cpus.txt` (the server's command line, cgroup CPU set, `Cpus_allowed_list`, ISA and
+threads' affinity), `fit.json`, `check.json`, `deploy.yaml` and `agent.yaml`, and O adds the
+`graph.pbtxt` it served.
+
+**Load.** On the desktop and wildct, H57d's sampler runs beside each hold, and the row is scored
+with `h59.py score RESULTS --load h57d`. On crescent, H54's rule (amendment R4) runs in the hold.
+Each phase is checked against the serving samples of the arm's idle window, and a void phase is
+re-run once after a fresh idle window. `run.py gate RESULTS` writes the verdict that `h59.py
+score RESULTS --load GATE.json` reads. The load is unmatched when an N=4 phase of a performance
+hold (a spare in place of the hold it repeats) was void on both tries or carries no check.
+
+**The engine rule as merged.** #182 merged as `b8504e6b`. There `console/model_opt.py optimize
+--engine-from-ledger` is the rule amendment S1 describes at #182's head `62ac8749`:
+
+- With `K3D_GPU_AGENT_BACKEND` unset and no variant named, an H59-family row SUPPORTED for the
+  host's CPU class makes llama.cpp the CPU engine, when llama.cpp has an int4 GGUF of the model.
+  That arm drafts with the QAT MTP assistant.
+- A REFUTED row for the class keeps OVMS and wins over a SUPPORTED one. PENDING and INCONCLUSIVE
+  rows pick nothing.
+- `agent up` keeps OVMS when `K3D_GPU_AGENT_DRAFT` names an OVMS draft device.
+
+**Reported for the owner, not acted on: what the desktop load gate reads.** H59d's and H59w's
+gate (H57d's, amendment S1) compares the arms' mean foreign P-core load over the N=4 phases. That is the
+busy time of CPUs 0-15 minus the k3d node's own CPU, from H57d's sampler. On the desktop's records
+(`bench/h57d/results/2026-10-21` and `2026-10-29`) this reading moves with the arm, not with the
+host. Foreign P-core load in CPU-s/s, per hold,
+over each arm's 60 s idle window (server up, no request) and over its N=4 phase:
+
+| Records | Ld idle, N=4 | Ld-mtp idle, N=4 | Ld-mtp-u idle, N=4 | Od idle, N=4 |
+|---|---|---|---|---|
+| H57d hold 1 | 7.20, 8.21 | 9.32, 6.60 | | 6.40, 6.48 |
+| H57d hold 2 | 6.25, 6.28 | 6.79, 6.95 | | 6.06, 1.89 |
+| H57d hold 3 | 3.06, 2.52 | 3.47, 3.18 | | 2.74, 0.53 |
+| H57dp hold 1 | | 3.19, 2.58 | 3.07, 3.37 | 3.67, 0.37 |
+| H57dp hold 2 | | 3.87, 3.50 | 3.58, 3.57 | 3.10, 1.17 |
+
+- In their idle windows the arms read alike. Outside H57d's busiest hold 1, the llama.cpp arms
+  keep about their idle reading under load, pinned (Ld, Ld-mtp) or not (Ld-mtp-u), and Od's
+  falls.
+- Where Od's reading falls, its own node CPU over N=4 (7.7-8.0 CPU-s/s) is close to the whole
+  P-core busy time (8.3-9.6). So during Od's phases the host's other processes ran mostly off the
+  P-cores. During the llama.cpp arms' phases, which decode on 8 threads (`-t 8`), they kept their
+  share of the P-cores. Why the scheduler places them so (for instance, on idle hyper-thread
+  siblings beside one-thread-per-core decoding) is not measured here.
+- So the gate, read over the phases, compares a quantity the arm itself sets. That is the trap H54
+  amendment R4 named for crescent's void rule: a post-treatment variable.
+- H59's L runs #182's `--threads 8 --threads-batch 16`, with no pinning, and decodes on 8 threads.
+  The same pattern is expected. An INCONCLUSIVE (load unmatched) H59d or H59w would then say
+  little about the host's load.
+- Read over the arms' idle windows instead, the arms match. H57d's three arms read 5.50, 6.53 and
+  5.06 (spread 1.46 <= 2.00); H59's pair on those records, Ld-mtp and Od, reads 6.53 and 5.06.
+  H57dp's three arms read 3.53, 3.33 and 3.38 (spread 0.21). Over the N=4 phases H57d's pair reads
+  5.58 and 2.96, spread 2.61 > 2.00 (amendment S1's table).
+
+Changing H59d's and H59w's gate, for instance to read the idle windows as H54 amendment R4 did, is
+a protocol change and the owner's decision. It would need a dated amendment before the first H59d
+or H59w hold. This amendment does not make it. The runner records both readings: the idle window
+is a phase in each arm's `phases.jsonl`, beside the sampler's `load.jsonl`.
+
+### H59 amendment R2: H59d's and H59w's load gate reads each arm's idle window (2026-10-31)
+
+Recorded 2026-10-31, before any H59d or H59w hold or wiring smoke. The owner made the decision on
+2026-10-29, shortly after 23:00 PDT, choosing "Gate on idle window" after amendment R1 reported
+what the desktop's load gate reads. It governs H59d and H59w from their first hold. No row's
+arms, model files, statistic, quality gate, 1.2 bar, hold count, cap, prior or prediction
+changes. H59 on crescent keeps H54's void rule (amendment R4), unchanged.
+
+**What prompted it.** H59d's and H59w's gate (H57d's, amendment S1) compares the arms' mean
+foreign P-core load over the N=4 phases. On the desktop's records that reading moves with the
+arm, not with the host: a post-treatment variable, the trap H54 amendment R4 named for crescent's
+void rule. Amendment R1's table gives the per-hold readings. Per arm, over the records' holds:
+
+| Records (`bench/h57d/results/`) | Arms | Over the N=4 phases | Over the 60 s idle windows |
+|---|---|---|---|
+| H57d, `2026-10-21` | Ld-mtp, Od (H59's L and O) | 5.58, 2.96: spread 2.61 > 2.00, unmatched | 6.53, 5.06: spread 1.46 <= 2.00, matched |
+| H57dp, `2026-10-29` | Ld-mtp, Ld-mtp-u, Od | 3.04, 3.47, 0.77: spread 2.70 > 2.00, unmatched | 3.53, 3.33, 3.38: spread 0.21 <= 2.00, matched |
+
+Readings are in CPU-s/s; each spread is taken over the unrounded means. The limit is H57d's,
+max(2.00, 25% of the mean of the means) CPU-s/s, 2.00 in every case here.
+`bench/h59/test_run.py` recomputes these four spreads from the committed records. H57d's and
+H57dp's own verdicts are not re-scored.
+
+**Rule.** As H54 amendment R4 did on crescent, the load gate reads each arm's idle window.
+
+- H59d's and H59w's load gate is H57d's (`h57d.py` `load_gate`, unchanged), applied to each arm's
+  mean foreign P-core load over its 60 s idle windows in performance holds 1-3. A spare stands in
+  for the hold it repeats, and only measured arms count, as in amendment S1. The idle window is
+  the `idle` phase of the arm's `phases.jsonl`: the arm's server is up, before the warmup, with no
+  request. Foreign load is H57d's: P-core busy (CPUs 0-15) minus the k3d node's own CPU, at least
+  0, from H57d's sampler (`load.jsonl`) beside the hold.
+- The reading over the N=4 phases (amendment S1's) is still computed and recorded beside the
+  verdict (`n4` in the gate's record, marked `"gates": false`), and the run section reports it. It
+  no longer gates.
+- An arm with no idle-window reading leaves fewer than two arms with samples. H57d's rule makes
+  that unmatched, unchanged. An unmatched load still gives INCONCLUSIVE, at the same step of the
+  decision order.
+- Scoring: `bench/h59/run.py idle-gate RESULTS > gate.json`, then `bench/h59/h59.py score RESULTS
+  --load gate.json`. The scorer's decision is unchanged. Its `--load h57d` still reads the N=4
+  phases, so for H59d and H59w it gives the recorded reading, not the verdict.
+- The holds do not change. `arm.sh` already records the idle window as a phase (amendment R1).
+  The desktop's and wildct's profiles now name `load_rule` `h57d-idle`; `arm.sh` branches only on
+  crescent's `h54-void`. wildct's own rules (W1-W6, the hold-start `load1` <= 12) are unchanged.
+
+**Files.** `bench/h59/run.py`: `idle_gate`, the `idle-gate` command and the profiles'
+`load_rule`. `bench/h59/test_run.py`: class `IdleGate` (idle windows gate while N=4 is recorded
+only; idle windows apart are unmatched even when N=4 matches; a spare, an unmeasured arm and a
+missing window; the CLI; the spreads above from the committed records). Its end-to-end desktop
+row is now scored through `run.py idle-gate`. The `bench/h59/h59.py` docstring names the change;
+its code does not change.
+
+### H59 amendment R3: the model check names OVB's language-model files (2026-11-01)
+
+Recorded 2026-11-01, before any H59, H59d or H59w hold or wiring smoke. Mechanics only: no row's
+arms, model files, statistic, quality gate, 1.2 bar, load rule, hold count, cap or prediction
+changes.
+
+**What failed.** On crescent, `prep.sh crescent` ran from 11:08Z to 11:15Z. It fetched both
+pinned repos and matched every LFS file against the Hub's sha256. It then built the drafter with
+Job `gguf-convert-b459c9c78d78`, the name amendment R1's offline render gives; the drafter's
+sha256 is `f6f80c36...`. Its last step, `run.py models`, reported two files of OVB missing:
+`openvino_model.xml` and `openvino_model.bin`. `hold.sh` runs the same check before the lock, so
+every hold would have stopped there (exit 2) before it started.
+
+OVB at `4e5885c3` is OpenVINO's image-text export. Its language model is
+`openvino_language_model.xml` and `.bin`, beside text and vision embedding models. It has no
+`openvino_model.*` file. No arm reads that name: OVMS's pull container takes the directory
+(`--source_model`), and the scorer reads none of OVB's files.
+
+**Fix.** `run.py models` checks `openvino_language_model.xml` and `.bin` in OVB's directory. The
+GGUF and drafter checks are unchanged. H59d and H59w run the same check, so this governs their
+holds too.
+
+**Files.** `bench/h59/run.py` (`OVB_LM`, `models_ready`). `bench/h59/test_run.py` class
+`ModelFiles` uses OVB's 22 files at `4e5885c3`, as prep.sh's snapshot leaves them on crescent:
+
+- the snapshot's layout reads as ready;
+- each language-model file is needed;
+- the check names only files the snapshot has.
+
+Under the old check, the same layout reads `openvino_model.xml` and `.bin` missing, as on
+crescent.
+
+### H59 amendment R4: L's render also carries `--cache-ram 0` and `-ctxcp 4` (2026-11-01)
+
+Recorded 2026-11-01, after the wiring smoke and before any H59 hold. Record only: no arm, flag,
+statistic, quality gate, 1.2 bar, load rule, hold count, cap or prediction changes.
+
+**What the smoke showed.** The wiring smoke ran from 11:23Z to 11:28Z at commit `3ab406a8`. It
+recorded L's server command line (`cpus.txt`). That line carries two flags that amendment R1's
+flag read does not list: `--cache-ram 0` and `-ctxcp 4`. The fit adds both (`console/fit.py`
+:1668). They came with commit `57cf38d8` (2026-10-29), which the runner as merged contains
+(#268's head `2f3cb539`). They are part of the render at this commit, so they are part of L as R1
+defines it.
+
+**Read at llama.cpp `b11960`.** Neither flag is missing, so neither is dropped. The server started
+with both.
+
+- `-ctxcp`/`--ctx-checkpoints`: `common/arg.cpp` :1709, default 32 (`common/common.h` :641).
+- `-cram`/`--cache-ram`: `common/arg.cpp` :1727, default 8192 MiB, 0 disables it (`common/common.h`
+  :644).
+
+**What `--cache-ram 0` changes.** It turns off the host-RAM prompt cache, the store of saved
+prompt states shared across slots. It does not change `cache_prompt` (`common/common.h` :639,
+true), the per-slot reuse that R1 reads as "the server's prompt cache on". So the registered
+setting holds as R1 reads it. The N=4 phase sends unique prompts, so it reuses nothing either way.
+The prefix phase, which is reported and not gated, runs under this setting.
+
+### H59 run (Xeon 6741P, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T11:29:50Z (hold 1 start) to 2026-11-01T12:42:01Z (hold 4 end), 4 lock holds, no spare
+hypothesis:      H59
+host:            crescent: Intel(R) Xeon(R) 6741P, 96 CPUs, amx and avx512f on every CPU; microcode 0xa000133;
+                 MemTotal 527767144 kB; governor and EPP performance; kernel 7.0.0-31-generic
+k3d-gpu commit:  17aa59cf (main 2da9d56a plus amendments R3 and R4), k3d-gpu 0.1.83, node image
+                 cryptoandcoffee/k3d-gpu:0.1.83@sha256:9bd4391560438dc090c0a3d95d82448f57021447d639351cdaca27c839d0d37a
+tools:           docker 29.8.0; k3d v5.9.0 (sha256 06d8f25b..., install.sh's pin); kubectl v1.37.2
+                 (sha256 c0448752..., install.sh's pin)
+runtimes:        O openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58;
+                 L ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220;
+                 drafter conversion ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+models:          google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be (gemma-4-26B_q4_0-it.gguf sha256 3eca3b8f...);
+                 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3 (openvino_language_model.bin sha256 0f887130...);
+                 QAT drafter google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant @ 95371415 -> Q4_0 GGUF built by
+                 prep.sh with Job gguf-convert-b459c9c78d78 (sha256 f6f80c36..., 321145312 bytes);
+                 every LFS file equals the Hub's sha256 (weights.sha256)
+energy source:   RAPL package-0 through energy.sh and sudo
+records:         bench/h59/results/2026-11-01/: H59/holdK/ (reproduce.txt, serving.jsonl, node.json, pre.txt,
+                 post.txt; per arm deploy.yaml, agent.yaml, check.json, fit.json, cpus.txt, boot.json, load-*.json,
+                 energy-*.json, phases.jsonl, prefix.json, quality.json, server.log), gate.json, verdict.json,
+                 report.json, campaign.log, weights.sha256, prep logs and records, smoke/
+```
+
+Commands, on crescent in a clean checkout at `17aa59cf` (`G` is the profile's `~/k3dgpu-h59`, whose
+`bin` holds the k3d shim and kubectl, and `opt` the real k3d):
+
+```bash
+export PATH=~/k3dgpu-h59/bin:$PATH K3D_REAL=~/k3dgpu-h59/opt/k3d-v5.9.0 G=~/k3dgpu-h59 \
+    H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.83@sha256:9bd4391560438dc090c0a3d95d82448f57021447d639351cdaca27c839d0d37a
+PY_HF=<python with huggingface_hub> bench/h59/prep.sh crescent
+bench/h59/hold.sh crescent smoke
+for h in 1 2 3 4; do bench/h59/hold.sh crescent $h; done
+R=~/k3dgpu-h59/results/H59    # committed as bench/h59/results/2026-11-01/H59
+python3 bench/h59/run.py gate $R > gate.json
+python3 bench/h59/h59.py score $R --load gate.json > verdict.json
+python3 bench/h59/report.py $R > report.json
+```
+
+**Preparation and smoke.** `prep.sh crescent` first ran at main `2da9d56a` from 11:08Z to
+11:15Z. It downloaded both repos, verified every LFS file, and built the drafter. Then its model
+check failed on OVB's file names, which led to amendment R3. It ran again at `3ab406a8` (R3) and
+finished at 11:22:58Z, with the downloads and the drafter already in place. The wiring smoke ran
+at `3ab406a8` from 11:23Z to 11:28Z and is discarded. Both arms answered: O was ready after 34 s,
+L after 174 s. Each served one streamed 16-token request and one `chat_template_kwargs` chat. The
+smoke's L command line led to amendment R4. Holds 1-4 ran at `17aa59cf`.
+
+**Holds.** Every hold returned rc 0, every arm was measured, and no spare was used. Each hold took
+13-18 minutes of its 40-minute cap.
+
+- The hold-start rule (`load1` <= 12, no aiperf process) waited 0, 120, 120 and 120 s. The waits
+  were the previous hold's own load decaying. No hold was flagged. `load1` at the start was 2.0,
+  4.1, 3.9 and 5.5.
+- `/` was 32% used at every hold start and end.
+- Every hold rendered the same fit:
+  - O: 5 sequences of 262,144 tokens, `--cache_size=275`.
+  - L: `-c 12582912 -np 48` (262,144 per slot), `--threads 24 --threads-batch 48`.
+  - Both pods request 48 CPUs and set no CPU limit, and each server's cpuset was 0-95.
+- Boot took 34-35 s for O and 173-183 s for L.
+- `K3D_GPU_VENDORS=amx`. The node had no device mounts and no `gpu.intel.com` resource. The
+  serving pairs on the B70s were never stopped, so no GPU window opened.
+
+**Load (H54's void rule, amendment R4).** In every arm's idle window, non-campaign CPU read 2.22-2.45
+CPU-s/s, against a limit of 4. No phase was void and none was re-run. `run.py gate` checked 6 N=4
+phases and reads matched. Over the phases themselves the same reading rose to 3.9-4.7 CPU-s/s.
+Since amendment R4 of H54 that phase reading does not gate.
+
+N=4 decode tok/s per request (16 requests per hold, 256 tokens, greedy, `ignore_eos`):
+
+| Arm | Hold 1 | Hold 2 | Hold 3 | Pooled median (48) | Aggregate tok/s, holds 1/2/3 | GSM8K 0-49 |
+|---|---|---|---|---|---|---|
+| O (OVMS 2026.4.1, OVB int4) | 7.63 | 7.06 | 7.28 | 7.23 | 28.8 / 27.4 / 28.6 | 50/50 |
+| L (llama.cpp b11960, QAT Q4_0 and the QAT MTP drafter) | 25.12 | 25.95 | 25.35 | 25.31 | 94.1 / 95.8 / 95.0 | 49/50 |
+
+**H59: SUPPORTED** (`h59.py score --load gate.json`).
+
+- L/O = 3.499, 95% bootstrap CI 3.422-3.612 (10,000 resamples of each arm, seed 1). The lower
+  bound is above 1.2.
+- L was faster in each performance hold: 3.294, 3.677 and 3.481 (amendment S2).
+- Quality gate passed: L 49 >= O's 50 - 2.
+- Load matched.
+- Each arm completed 48 of 48 N=4 requests.
+
+Predictions against the result:
+
+| Prediction (row, written 2026-10-21) | Result |
+|---|---|
+| N=1 L/O 2.2 (1.6-2.8) (0.6) | 2.096 (45.96 / 21.93 tok/s): inside |
+| N=4 per-request L/O 1.6 (1.1-2.3) (0.55) | 3.499: above the interval; the prediction failed high |
+| MTP's gain smaller at N=4 than at N=1 (0.65) | not measured: H59 has no L arm without the drafter |
+| N=16 L/O < N=4 L/O (0.6) | 2.088 < 3.499: held |
+| Prefix-reuse added-agent TTFT O < L (0.55) | O 0.626 s, L 0.816 s: held |
+| GSM8K both >= 46/50 (0.7) | O 50, L 49: held |
+| SUPPORTED (0.55) | SUPPORTED |
+
+Reported, not gated (`report.json`; medians over the 3 holds unless named):
+
+- **Decode tok/s per request.** At N=1, O 21.93 and L 45.96. At N=16, O 4.12 and L 8.60. N=16
+  aggregate tok/s was 62.2-63.5 for O and 124.6-128.5 for L.
+- **TTFT on H54's 1,000-token prompt** (`max_tokens` 16, 12 requests per arm): O 4.757 s, L
+  2.870 s.
+- **Prefix reuse** (agents a1-a6 on a 1,377-token shared prompt, as Gemma's tokenizer counts it):
+  - first agent: O 5.15-5.21 s, L 3.94-4.35 s;
+  - median added-agent TTFT: O 0.626 s, L 0.816 s.
+- **RAPL package J per output token**, pooled over the holds. The idle windows read 130.5-131.5 W,
+  and the package also carries the serving pairs' host side.
+
+  | Phase | O gross | O net of idle | L gross | L net of idle |
+  |---|---|---|---|---|
+  | N=1 | 13.59 | 7.30 | 5.98 | 3.03 |
+  | N=4 | 9.81 | 5.16 | 2.98 | 1.60 |
+  | N=16 | 4.33 | 2.24 | 2.18 | 1.15 |
+
+What the numbers show, beside the verdict:
+
+- From N=1 to N=4, O's per-request decode fell from 21.9 to 7.2 tok/s, so its aggregate rose
+  1.3x (21 to 28 tok/s). L's aggregate rose 2.1x (44 to 95 tok/s). That is why the N=4 ratio
+  (3.50) is wider than the N=1 ratio (2.10).
+- The three holds agree closely: across holds the per-arm N=4 medians span 3.3% (L) and 8.1% (O).
+- At N=16, OVMS's log shows 16 requests scheduled together, though its graph sets
+  `max_num_seqs: 5` (`graph.pbtxt`). N=16 is reported only. At N=4 it scheduled 4.
+
+Confounds and scope:
+
+- **Stacks as shipped** (amendment S1). L and O differ in engine and in weights: Google's QAT
+  Q4_0 GGUF with the QAT drafter, against OpenVINO's AWQ int4 of the base model. The result may
+  not be quoted as an engine comparison on identical weights.
+- **One model.** The rule the row feeds acts per CPU class, for any model llama.cpp has an int4
+  GGUF of (see "What a verdict changes" in the pre-registration). This run measured Gemma 4
+  26B-A4B only.
+- **Shared host.** The two SGLang serving pairs and their CPU schedulers ran throughout. Arms
+  were rotated over holds, not interleaved per request.
+- **Placement.** Both pods saw all 96 CPUs. L decoded on 24 threads; O's 685 threads floated over
+  0-95 (`cpus.txt`).
+- **Render.** L's render carries `--cache-ram 0 -ctxcp 4` (amendment R4). The drafter was
+  converted here by prep.sh; it is a different build from H57d's.
+
+**What the verdict changes.** `console/ledger-rules.json` now carries H59 SUPPORTED for CPU class
+`6741p`. On a Xeon 6741P, with `K3D_GPU_AGENT_BACKEND` unset and no variant named, `agent up
+--model google/gemma-4-26B-A4B-it` now serves llama.cpp with Google's QAT Q4_0 GGUF and the QAT
+MTP drafter, the arm measured here. `plan --model --explain` names H59. H59d and H59w stay
+PENDING, so their classes keep OVMS.
+
+**Serving and cleanup.** Every hold deleted its cluster. After hold 4, at 12:43:46Z and 12:43:51Z,
+a chat completion through dynamo-frontend :8100 returned "OK" for each pair:
+
+- :30000 `num_requests_total` rose 41 to 42 (qwen38-a-hr);
+- :30001 rose 39 to 40 (qwen38-b-hr).
+
+The bench lock and both slot locks were free, and no k3d cluster or process of this run was
+left. Crescent keeps `~/k3dgpu-h59` (29 GB: the model files, the checkout and its bin) for a
+re-run, and the llama.cpp `full-b11960` image the drafter conversion pulled.
+
+### H59d run (i9-13900T, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T17:18:48Z (hold 1 start) to 2026-11-01T19:04:18Z (hold 4 end), 4 lock holds, no spare
+hypothesis:      H59d
+host:            p360ultra: 13th Gen Intel(R) Core(TM) i9-13900T (P = CPUs 0-15, E = 16-31), avx_vnni on every CPU,
+                 no amx_*, no avx512*; microcode 0x133; MemTotal 131521428 kB; governor powersave, EPP performance;
+                 kernel 6.6.128-1-MANJARO
+k3d-gpu commit:  dd1ad986 (origin/main), run from this worktree with 0 uncommitted files at every hold start;
+                 k3d-gpu 0.1.85, node image
+                 cryptoandcoffee/k3d-gpu:0.1.85@sha256:980402d79c9b42d5b0b2873c18f9663f5fa8f4116b0ee4591e5d33974b6b5242
+                 (release commit 99789454; scripts/ and console/ are unchanged from it to dd1ad986)
+tools:           docker 29.3.0; k3d v5.9.0 (/usr/bin/k3d, behind the k3d shim); kubectl v1.35.2
+runtimes:        O openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58;
+                 L ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220;
+                 drafter conversion ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+models:          google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be (gemma-4-26B_q4_0-it.gguf sha256 3eca3b8f...);
+                 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3 (openvino_language_model.bin sha256 0f887130...);
+                 QAT drafter @ 95371415 -> Q4_0 GGUF built here by prep.sh with Job gguf-convert-b459c9c78d78
+                 (sha256 f6f80c36..., 321145312 bytes, the same file crescent's prep built); every LFS file equals
+                 the Hub's sha256 (weights.sha256)
+lock:            ~/k3dgpu-bench.lock (LOCK; F3 amendment R1), for the drafter conversion, the smoke and each hold
+energy source:   RAPL package-0 through energy.sh and sudo (SUDO_ASKPASS)
+co-tenants:      qwen35-9b (vLLM v0.19.1, 13530 MiB of GPU 1): running, 0 restarts, no request served
+                 (request_success_total stop = 1 and generation_tokens_total = 11 before and after every hold);
+                 gpustack-worker: running, crash-looping, RestartCount 5306 -> 5316 over holds 1-4; GPU 0 5206 MiB
+                 throughout; neither touched (cotenants/)
+records:         bench/h59/results/2026-11-01-desktop/: H59d/holdK/ (reproduce.txt, load.jsonl, node.json, pre.txt,
+                 post.txt, hold.log; per arm deploy.yaml, agent.yaml, check.json, fit.json, cpus.txt, boot.json,
+                 describe.txt, pods.txt, server.log, load-*.json, energy-*.json, phases.jsonl, prefix.json,
+                 quality.json, graph.pbtxt for O), gate.json, verdict.json, report.json, campaign.log,
+                 campaign-steps.log, campaign.sh.txt, prep.log, prep/, smoke/, cotenants/, weights.sha256,
+                 cpufreq-snapshot.txt, cpufreq-after.txt; the hold kubeconfigs are left out
+```
+
+Commands, on the desktop from this worktree at `dd1ad986` (`G` is the profile's `~/k3dgpu-h59`, a
+link to a directory on the second disk; `campaign.sh.txt` ran the smoke and holds 1-4 and read the
+co-tenants before and after each):
+
+```bash
+mkdir -p "/home/andrew/docker&models/k3dgpu-h59" && ln -sfnT "/home/andrew/docker&models/k3dgpu-h59" ~/k3dgpu-h59
+install -D -m 0755 bench/h59/k3d-shim.sh ~/k3dgpu-h59/bin/k3d
+export PATH=~/k3dgpu-h59/bin:$PATH K3D_REAL=/usr/bin/k3d G=~/k3dgpu-h59 LOCK=~/k3dgpu-bench.lock \
+    SUDO_ASKPASS=<askpass helper> \
+    H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.85@sha256:980402d79c9b42d5b0b2873c18f9663f5fa8f4116b0ee4591e5d33974b6b5242
+PY_HF=python3 bench/h59/prep.sh desktop
+bench/h59/hold.sh desktop smoke
+for h in 1 2 3 4; do bench/h59/hold.sh desktop $h; done
+R=~/k3dgpu-h59/results/H59d    # committed as bench/h59/results/2026-11-01-desktop/H59d
+python3 bench/h59/run.py idle-gate $R > gate.json
+python3 bench/h59/h59.py score $R --load gate.json > verdict.json
+python3 bench/h59/report.py $R > report.json
+```
+
+Re-scoring the committed records with the same three commands reproduces `gate.json`,
+`verdict.json` and `report.json` byte for byte.
+
+**Preparation and smoke.** `prep.sh desktop` ran from 17:05:05Z to 17:12:02Z. It downloaded both
+repos, matched every LFS file against the Hub's sha256 and passed the model check (amendment
+R3). It took the bench lock at 17:10:22Z and built the drafter with Job
+`gguf-convert-b459c9c78d78`, the Job amendment R1's offline render names. The wiring smoke ran
+from 17:12:33Z to 17:18:30Z and is discarded. Both arms answered: O was ready after 57 s, L after
+55 s. Each served one streamed 16-token request and one `chat_template_kwargs` chat. The smoke's L
+rendered `-c 786432 -np 6` (6 x 131,072) with a 43Gi limit.
+
+**Holds.** Every hold returned rc 0 and no hold waited for the start rule (`load1` 7.1, 3.4, 8.8
+and 4.6, against 24). The holds took 23-29 minutes of the 75-minute cap. `/` had 185 GiB free and
+MemAvailable read 59.9-61.5 GiB at every start. Over the holds the P-core sampler read `load1`
+2.2-17.4 (hold means 6.9, 11.5, 6.9 and 12.8) and package temperature 72-100 C.
+
+- Every render passed `run.py check`: the images, CPU, no GPU resource, the P-core label and a
+  16-CPU request. Each served pod's cpuset was 0-15 (O 189 threads, L 51, all on 0-15).
+- L rendered `-c 1048576 -np 4` (4 x 262,144 tokens) with a 45Gi limit in all four holds, with
+  `--threads 8 --threads-batch 16 --load-mode mmap+mlock --cache-ram 0 -ctxcp 4` (amendment R4).
+- O rendered 6 sequences and `--cache_size=21` (41Gi) in hold 1, and 7 and 25 (46Gi) in holds 2-4,
+  as the host's free memory at render time gave the fit.
+- O was measured in every hold; it was ready after 46-77 s.
+- L served in holds 2 and 4, where it ran first in a fresh cluster (ready after 44 and 35 s).
+- **L was not deliverable in holds 1 and 3**, where it followed O. Its container was OOMKilled
+  (exit 137) at the 45Gi limit and restarted 7 times in the 900 s each time (`describe.txt`).
+  The last run lasted 16 s in hold 1 and 15 s in hold 3, and its log stops after the model's
+  token load (`server.log`).
+
+| Hold | Order | O | L |
+|---|---|---|---|
+| 1 | O, L | measured | not deliverable: OOMKilled x 7 at 45Gi |
+| 2 | L, O | measured | measured |
+| 3 | O, L | measured | not deliverable: OOMKilled x 7 at 45Gi |
+| 4 (quality) | L, O | GSM8K 49/50 | GSM8K 50/50 |
+
+**H59d: INCONCLUSIVE** (`h59.py score --load gate.json`): "L not deliverable in two holds", the
+decision order's first step. No statistic is scored.
+
+**Spares.** None was run. Holds 1 and 3 each left an arm not measured, so either could be repeated.
+But `h59.py` counts the not-deliverable records over every hold directory, spares included, and two
+already stand. A spare could not change the verdict.
+
+**Load (H57d's gate over each arm's idle window, amendment R2).** Foreign P-core load over the
+60 s idle windows read L 2.14 (hold 2) and O 2.08, 2.03 and 1.91 CPU-s/s: means 2.14 and 2.01,
+spread 0.13 <= 2.00, matched. The decision stops before this step. Over the N=4 phases (amendment
+S1's reading, recorded and not gated) L read 1.59 and O 0.08, spread 1.51: the same pattern
+amendment R1 reported, with O's foreign load falling to near zero while it serves.
+
+Reported, not gated (`report.json`). L's figures come from hold 2 alone; O's are medians over
+holds 1-3.
+
+| | O (OVMS 2026.4.1, OVB int4) | L (llama.cpp b11960, QAT Q4_0 and the QAT MTP drafter) | L/O |
+|---|---|---|---|
+| N=1 decode tok/s per request | 10.48 (10.55, 10.49, 10.37) | 12.49 | 1.19 |
+| N=4 decode tok/s per request | 5.56 (5.60, 5.56, 5.54) | 5.83 | 1.05 (against hold 2's O alone, also 1.05) |
+| N=4 aggregate tok/s | 20.1-20.3 | 22.0 | |
+| TTFT, H54's 1,000-token prompt | 24.26 s | 13.47 s | 0.56 |
+| Prefix reuse, first agent / added agent | 32.2-32.5 s / 3.26 s | 19.25 s / 2.20 s | added 0.67 |
+| RAPL J per output token, N=4, gross / net of idle | 4.81 / 0.50 | 4.51 / 0.56 | |
+| GSM8K 0-49 (hold 4) | 49/50 | 50/50 | |
+
+The idle windows drew 86.7-86.9 W, so the net J/token figures are small differences of large
+numbers. The prefix phase's shared prompt is 1,377 tokens as Gemma's tokenizer counts it.
+
+Predictions against the record (not gated):
+
+| Prediction | Result |
+|---|---|
+| Row (2026-10-21): N=1 L/O 1.4 (0.9-2.0) (0.5) | 1.19, one L hold: inside |
+| Row: N=4 L/O 1.2 (0.8-1.7) (0.45) | 1.05, one L hold: inside |
+| Row: SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2) | INCONCLUSIVE |
+| Amendment S1 (2026-10-28): N=1 0.9 (0.6-1.5), N=4 0.85 (0.6-1.2) | 1.19 and 1.05: both inside |
+| Amendment S1: SUPPORTED (0.1), REFUTED (0.5), INCONCLUSIVE (0.4) | INCONCLUSIVE, though not for the reason S1 gave (the load gate) |
+
+What the records show about L's failure, beside the verdict:
+
+- The fit (`k3d-gpu fit --engine llama.cpp --ctx 262144 --seqs 4 --explain` on this host) sizes
+  L as 13.4 GiB of weights, 1.0 GiB of runtime, 21.2 GiB of KV and 4.7 GiB of context
+  checkpoints: 40.3 GiB, limit ceil(40.3 x 1.10) = 45Gi. It counts 0.0 GiB of activations and
+  nothing for the drafter.
+- The same render, image and files OOMed in both holds where L followed O and served in both
+  where it ran first. The smoke's L, which followed O, had the 6 x 131,072 rung at 43Gi and
+  served.
+- Why the order matters is not measured. One candidate: with `--load-mode mmap+mlock`, the
+  GGUF's 13.4 GiB is charged to L's cgroup only when L faults it in itself. O's run before it may
+  push those pages out of the page cache. That would put L's need above 45Gi with the weights
+  charged and below it without them.
+- On the Xeon (H59) L served 262,144 tokens per slot in every hold, at 48 slots and with far
+  more memory.
+
+Confounds and scope:
+
+- **Stacks as shipped** (amendment S1), as for H59: engine and weights both differ.
+- **Shared host.** About 50 other containers and other sessions ran throughout. Arms were rotated
+  over holds, not interleaved per request.
+- **The fit follows the host.** Each arm's context and sequences came from the host's free memory
+  at render time (amendment R1). O's fit differed between hold 1 and holds 2-4; L's did not.
+- **Vendor.** The node ran `K3D_GPU_VENDORS=hybrid`: no GPU in the node and no GPU resource asked,
+  so the co-tenants' GPUs were not touched.
+
+**What the verdict changes.** Nothing. An INCONCLUSIVE row picks no engine, so the i9-13900T
+class keeps OVMS when `K3D_GPU_AGENT_BACKEND` is unset. `console/ledger-rules.json` now reads
+H59d INCONCLUSIVE. The 6-hold cap allows no further H59d hold that could change it; another
+attempt would be a new row.
+
+**cpufreq and cleanup.** The runner writes no cpufreq value. The `bench/prefill-guard/cpufreq.sh
+snapshot` taken before prep and after hold 4 are byte-identical (128 lines, sha256 `7403983b...`,
+H5's campaign snapshot), so nothing needed restoring. Every hold and the smoke deleted their
+clusters; no `k3dgpu-d-h59-*` cluster, container or process remains, and the bench lock is free.
+After the records were copied, the campaign directory on the second disk (models, drafter and
+records, 29 GB) and the node image the smoke pulled were removed. The `full-b11960` image was on
+the host before prep (its run pulled nothing) and stays.
 
 ## Scope corrections
 

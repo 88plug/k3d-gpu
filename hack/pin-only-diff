@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Is a diff only pin moves? The mechanical meaning of "changes no defaults".
+
+  hack/pin-only-diff [--root DIR] [--group G]... <base> <head>
+
+Passes (exit 0) when every changed line pairs with a line on the other side that
+differs only in version, digest, revision or ISO-date tokens, or lies inside a
+declared registry site (pins/registry.toml) or in a group's hook output (`outputs`
+of the groups named by --group, default every group). Otherwise it prints each
+offending line and exits 1; hack/pins policy then labels the PR changes-defaults.
+Exit 2 on bad usage or an unreadable commit. Python standard library only.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from pinlib import pindiff, registry  # noqa: E402
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="pin-only-diff", description=__doc__.split("\n")[0])
+    ap.add_argument("--root", default=registry.ROOT)
+    ap.add_argument("--group", action="append", default=[])
+    ap.add_argument("base")
+    ap.add_argument("head")
+    a = ap.parse_args(argv[1:])
+    root = os.path.abspath(a.root)
+    try:
+        reg = registry.load(os.path.join(root, "pins", "registry.toml"))
+        ok, bad = pindiff.check(root, a.base, a.head, reg, a.group or None)
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write("hack/pin-only-diff: %s\n" % (e.stderr or e).strip())
+        return 2
+    for b in bad:
+        print("not a pin move: %s" % b)
+    if ok:
+        print("ok   %s..%s changes only pins" % (a.base, a.head))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

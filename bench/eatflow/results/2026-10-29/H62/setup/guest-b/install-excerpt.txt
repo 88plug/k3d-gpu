@@ -1,0 +1,326 @@
+# excerpt of install.log (kept on crescent): lines 7037 to its end, ANSI colours removed
+TASK [agent_sandbox : agent_sandbox | Wait for sandbox-router to be ready] *****
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (60 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (59 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (58 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (57 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (56 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (55 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (54 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (53 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (52 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (51 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (50 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (49 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (48 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (47 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (46 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (45 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (44 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (43 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (42 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (41 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (40 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (39 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (38 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (37 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (36 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (35 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (34 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (33 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (32 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (31 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (30 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (29 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (28 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (27 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (26 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (25 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (24 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (23 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (22 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (21 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (20 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (19 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (18 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (17 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (16 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (15 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (14 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (13 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (12 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (11 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (10 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (9 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (8 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (7 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (6 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (5 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (4 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (3 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (2 retries left).
+FAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (1 retries left).
+[ERROR]: Task failed: Action failed: Unknown error.
+Origin: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.agent-toolkit/roles/agent_sandbox/tasks/install.yaml:163:3
+
+161                         key: ROUTER_AUTH_TOKEN
+162
+163 - name: "agent_sandbox | Wait for sandbox-router to be ready"
+      ^ column 3
+
+fatal: [localhost]: FAILED! => 
+    api_found: true
+    attempts: 60
+    changed: false
+    msg: 'Task failed: Action failed: Unknown error.'
+    resources:
+    -   apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+            annotations:
+                deployment.kubernetes.io/revision: '2'
+            creationTimestamp: '2026-11-01T09:06:38Z'
+            generation: 2
+            managedFields:
+            -   apiVersion: apps/v1
+                fieldsType: FieldsV1
+                fieldsV1:
+                    f:spec:
+                        f:progressDeadlineSeconds: {}
+                        f:replicas: {}
+                        f:revisionHistoryLimit: {}
+                        f:selector: {}
+                        f:strategy:
+                            f:rollingUpdate:
+                                .: {}
+                                f:maxSurge: {}
+                                f:maxUnavailable: {}
+                            f:type: {}
+                        f:template:
+                            f:metadata:
+                                f:labels:
+                                    .: {}
+                                    f:app: {}
+                            f:spec:
+                                f:containers:
+                                    k:{"name":"router"}:
+                                        .: {}
+                                        f:env:
+                                            .: {}
+                                            k:{"name":"ALLOW_UNAUTHENTICATED_ROUTER"}:
+                                                .: {}
+                                                f:name: {}
+                                                f:value: {}
+                                            k:{"name":"PROXY_TIMEOUT_SECONDS"}:
+                                                .: {}
+                                                f:name: {}
+                                                f:value: {}
+                                            k:{"name":"ROUTER_AUTH_TOKEN"}:
+                                                .: {}
+                                                f:name: {}
+                                                f:valueFrom:
+                                                    .: {}
+                                                    f:secretKeyRef: {}
+                                        f:image: {}
+                                        f:imagePullPolicy: {}
+                                        f:livenessProbe:
+                                            .: {}
+                                            f:failureThreshold: {}
+                                            f:httpGet:
+                                                .: {}
+                                                f:path: {}
+                                                f:port: {}
+                                                f:scheme: {}
+                                            f:initialDelaySeconds: {}
+                                            f:periodSeconds: {}
+                                            f:successThreshold: {}
+                                            f:timeoutSeconds: {}
+                                        f:name: {}
+                                        f:ports:
+                                            .: {}
+                                            k:{"containerPort":8080,"protocol":"TCP"}:
+                                                .: {}
+                                                f:containerPort: {}
+                                                f:protocol: {}
+                                        f:readinessProbe:
+                                            .: {}
+                                            f:failureThreshold: {}
+                                            f:httpGet:
+                                                .: {}
+                                                f:path: {}
+                                                f:port: {}
+                                                f:scheme: {}
+                                            f:initialDelaySeconds: {}
+                                            f:periodSeconds: {}
+                                            f:successThreshold: {}
+                                            f:timeoutSeconds: {}
+                                        f:resources:
+                                            .: {}
+                                            f:limits:
+                                                .: {}
+                                                f:cpu: {}
+                                                f:memory: {}
+                                            f:requests:
+                                                .: {}
+                                                f:cpu: {}
+                                                f:memory: {}
+                                        f:terminationMessagePath: {}
+                                        f:terminationMessagePolicy: {}
+                                f:dnsPolicy: {}
+                                f:restartPolicy: {}
+                                f:schedulerName: {}
+                                f:securityContext:
+                                    .: {}
+                                    f:runAsGroup: {}
+                                    f:runAsUser: {}
+                                f:terminationGracePeriodSeconds: {}
+                                f:topologySpreadConstraints:
+                                    .: {}
+                                    k:{"topologyKey":"topology.kubernetes.io/zone","whenUnsatisfiable":"ScheduleAnyway"}:
+                                        .: {}
+                                        f:labelSelector: {}
+                                        f:maxSkew: {}
+                                        f:topologyKey: {}
+                                        f:whenUnsatisfiable: {}
+                manager: OpenAPI-Generator
+                operation: Update
+                time: '2026-11-01T09:06:39Z'
+            -   apiVersion: apps/v1
+                fieldsType: FieldsV1
+                fieldsV1:
+                    f:metadata:
+                        f:annotations:
+                            .: {}
+                            f:deployment.kubernetes.io/revision: {}
+                    f:status:
+                        f:conditions:
+                            .: {}
+                            k:{"type":"Available"}:
+                                .: {}
+                                f:lastTransitionTime: {}
+                                f:lastUpdateTime: {}
+                                f:message: {}
+                                f:reason: {}
+                                f:status: {}
+                                f:type: {}
+                            k:{"type":"Progressing"}:
+                                .: {}
+                                f:lastTransitionTime: {}
+                                f:lastUpdateTime: {}
+                                f:message: {}
+                                f:reason: {}
+                                f:status: {}
+                                f:type: {}
+                        f:observedGeneration: {}
+                        f:replicas: {}
+                        f:unavailableReplicas: {}
+                        f:updatedReplicas: {}
+                manager: kube-controller-manager
+                operation: Update
+                subresource: status
+                time: '2026-11-01T09:16:40Z'
+            name: sandbox-router-deployment
+            namespace: agent-sandbox-system
+            resourceVersion: '19718'
+            uid: b8f3334f-461c-4f51-be7b-5591443f91a0
+        spec:
+            progressDeadlineSeconds: 600
+            replicas: 2
+            revisionHistoryLimit: 10
+            selector:
+                matchLabels:
+                    app: sandbox-router
+            strategy:
+                rollingUpdate:
+                    maxSurge: 25%
+                    maxUnavailable: 25%
+                type: RollingUpdate
+            template:
+                metadata:
+                    labels:
+                        app: sandbox-router
+                spec:
+                    containers:
+                    -   env:
+                        -   name: ROUTER_AUTH_TOKEN
+                            valueFrom:
+                                secretKeyRef:
+                                    key: ROUTER_AUTH_TOKEN
+                                    name: sandbox-router-auth
+                        -   name: PROXY_TIMEOUT_SECONDS
+                            value: '180'
+                        -   name: ALLOW_UNAUTHENTICATED_ROUTER
+                            value: 'false'
+                        image: us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main
+                        imagePullPolicy: IfNotPresent
+                        livenessProbe:
+                            failureThreshold: 3
+                            httpGet:
+                                path: /healthz
+                                port: 8080
+                                scheme: HTTP
+                            initialDelaySeconds: 10
+                            periodSeconds: 10
+                            successThreshold: 1
+                            timeoutSeconds: 1
+                        name: router
+                        ports:
+                        -   containerPort: 8080
+                            protocol: TCP
+                        readinessProbe:
+                            failureThreshold: 3
+                            httpGet:
+                                path: /healthz
+                                port: 8080
+                                scheme: HTTP
+                            initialDelaySeconds: 5
+                            periodSeconds: 5
+                            successThreshold: 1
+                            timeoutSeconds: 1
+                        resources:
+                            limits:
+                                cpu: '1'
+                                memory: 1Gi
+                            requests:
+                                cpu: 250m
+                                memory: 512Mi
+                        terminationMessagePath: /dev/termination-log
+                        terminationMessagePolicy: File
+                    dnsPolicy: ClusterFirst
+                    restartPolicy: Always
+                    schedulerName: default-scheduler
+                    securityContext:
+                        runAsGroup: 1000
+                        runAsUser: 1000
+                    terminationGracePeriodSeconds: 30
+                    topologySpreadConstraints:
+                    -   labelSelector:
+                            matchLabels:
+                                app: sandbox-router
+                        maxSkew: 1
+                        topologyKey: topology.kubernetes.io/zone
+                        whenUnsatisfiable: ScheduleAnyway
+        status:
+            conditions:
+            -   lastTransitionTime: '2026-11-01T09:06:38Z'
+                lastUpdateTime: '2026-11-01T09:06:38Z'
+                message: Deployment does not have minimum availability.
+                reason: MinimumReplicasUnavailable
+                status: 'False'
+                type: Available
+            -   lastTransitionTime: '2026-11-01T09:16:40Z'
+                lastUpdateTime: '2026-11-01T09:16:40Z'
+                message: ReplicaSet "sandbox-router-deployment-745bd47d69" has timed out
+                    progressing.
+                reason: ProgressDeadlineExceeded
+                status: 'False'
+                type: Progressing
+            observedGeneration: 2
+            replicas: 3
+            unavailableReplicas: 3
+            updatedReplicas: 1
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=592  changed=172  unreachable=0    failed=1    skipped=154  rescued=0    ignored=0   
+
+ERROR: site failed. Log: /home/ubuntu/enterprise-ai-solutions/env/local/logs/install-agent-toolkit-20261101-083038.log

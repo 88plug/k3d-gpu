@@ -1,0 +1,65 @@
+{
+ "a": {
+  "flags": []
+ },
+ "b": {
+  "stops": [
+   "the GPU interlock removed Gemma's server"
+  ]
+ },
+ "baseline": {
+  "arm": "A1",
+  "attempts": 24,
+  "decode_tok_s": 20.496002220065527,
+  "passed": 19,
+  "source": "bench/eatflow/results/2026-10-20/H50/pairs",
+  "success": 0.7916666666666666,
+  "turns": 54
+ },
+ "c": {
+  "measured": {},
+  "why": "the GPU interlock removed Gemma's server"
+ },
+ "clauses": {
+  "a": "holds",
+  "b": "inconclusive",
+  "c": "inconclusive",
+  "d": "fails",
+  "e": "fails",
+  "f_guard": "inconclusive",
+  "f_kills": "inconclusive"
+ },
+ "d": {
+  "missing": [
+   "Arc Pro B70: gpu.intel.com/xe 0 of 4",
+   "DSA: no dsa.intel.com work queue advertised"
+  ],
+  "read": {
+   "dsa": 0,
+   "xe": 0
+  }
+ },
+ "e": {
+  "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound": {
+   "verdict": "fails",
+   "why": "no agent up record"
+  },
+  "Qwen/Qwen3.8-27B": {
+   "verdict": "fails",
+   "why": "no agent up record"
+  },
+  "google/gemma-4-26B-A4B-it": {
+   "verdict": "fails",
+   "why": "placement None, served None, fit None; not landed: the GPU interlock removed it"
+  }
+ },
+ "f": {
+  "detail": "not run"
+ },
+ "hypothesis": "H58",
+ "invalid_why": [
+  "the GPU interlock deleted 985 object(s) outside k3d-gpu-agent (k3d-gpu's own)"
+ ],
+ "valid": false,
+ "verdict": "NOT VALID"
+}

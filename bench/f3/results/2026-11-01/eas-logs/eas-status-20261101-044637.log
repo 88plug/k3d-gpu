@@ -1,0 +1,84 @@
+Status: cluster  (env=k3d-gpu, installer 1.1.0)
+Using existing venv: /eas-state/eas/.venv
+Inventory: /eas-state/eas/env/k3d-gpu/inventory/hosts.yaml
+BYO cluster mode — kubeconfig: /kube/config
+
+PLAY [Deployment Status] *******************************************************
+
+TASK [status | Get all namespaces on cluster] **********************************
+[0;32mok: [localhost][0m
+
+TASK [status | Filter to application namespaces] *******************************
+[0;32mok: [localhost][0m
+
+TASK [status | Get pods in application namespaces] *****************************
+[0;32mok: [localhost] => (item=agent-sandbox-system)[0m
+[0;32mok: [localhost] => (item=cert-manager)[0m
+[0;32mok: [localhost] => (item=cnpg-system)[0m
+[0;32mok: [localhost] => (item=envoy-ai-gateway-system)[0m
+[0;32mok: [localhost] => (item=envoy-gateway-system)[0m
+[0;32mok: [localhost] => (item=habana-system)[0m
+[0;32mok: [localhost] => (item=istio-system)[0m
+[0;32mok: [localhost] => (item=keycloak)[0m
+[0;32mok: [localhost] => (item=kserve)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=llm-inference)[0m
+[0;32mok: [localhost] => (item=lws-system)[0m
+[0;32mok: [localhost] => (item=monitoring)[0m
+[0;32mok: [localhost] => (item=node-feature-discovery)[0m
+[0;32mok: [localhost] => (item=pgvector)[0m
+[0;32mok: [localhost] => (item=postgresql)[0m
+[0;32mok: [localhost] => (item=redis)[0m
+
+TASK [status | Build per-namespace pod summary] ********************************
+[0;32mok: [localhost][0m
+
+TASK [status | Get nodes] ******************************************************
+[0;32mok: [localhost][0m
+
+TASK [status | Print deployment status] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ══════════════════════════════════════════════════════════════════════════[0m
+[0;32m         Intel AI Enterprise Solutions — Deployment Status[0m
+[0;32m        ══════════════════════════════════════════════════════════════════════════[0m
+[0;32m[0m
+[0;32m        Cluster Nodes: 1[0m
+[0;32m          - k3d-k3dgpu-f3-eas-server-0 (True)[0m
+[0;32m[0m
+[0;32m        ──────────────────────────────────────────────────────────────────────────[0m
+[0;32m         Installed Components[0m
+[0;32m        ──────────────────────────────────────────────────────────────────────────[0m
+[0;32m          NAMESPACE                   TOTAL   RUNNING   PENDING   FAILED    STATUS[0m
+[0;32m          ──────────────────────────  ──────  ────────  ────────  ────────  ────────[0m
+[0;32m          agent-sandbox-system        8       8         0         0         ✓ Healthy[0m
+[0;32m          cert-manager                4       4         0         0         ✓ Healthy[0m
+[0;32m          cnpg-system                 1       1         0         0         ✓ Healthy[0m
+[0;32m          envoy-ai-gateway-system     1       1         0         0         ✓ Healthy[0m
+[0;32m          envoy-gateway-system        3       3         0         0         ✓ Healthy[0m
+[0;32m          istio-system                3       3         0         0         ✓ Healthy[0m
+[0;32m          keycloak                    3       2         0         0         ✓ Healthy[0m
+[0;32m          kserve                      2       2         0         0         ✓ Healthy[0m
+[0;32m          langfuse                    4       4         0         0         ✓ Healthy[0m
+[0;32m          litellm                     2       2         0         0         ✓ Healthy[0m
+[0;32m          llm-inference               4       4         0         0         ✓ Healthy[0m
+[0;32m          lws-system                  1       1         0         0         ✓ Healthy[0m
+[0;32m          monitoring                  15      15        0         0         ✓ Healthy[0m
+[0;32m          node-feature-discovery      3       3         0         0         ✓ Healthy[0m
+[0;32m          pgvector                    1       1         0         0         ✓ Healthy[0m
+[0;32m          postgresql                  1       1         0         0         ✓ Healthy[0m
+[0;32m          redis                       1       1         0         0         ✓ Healthy[0m
+[0;32m[0m
+[0;32m        ──────────────────────────────────────────────────────────────────────────[0m
+[0;32m         Endpoints[0m
+[0;32m        ──────────────────────────────────────────────────────────────────────────[0m
+[0;32m          Gateway:     https://solutions.ai[0m
+[0;32m          Keycloak:    https://keycloak.solutions.ai[0m
+[0;32m          LiteLLM:     https://litellm.solutions.ai[0m
+[0;32m          Grafana:     https://grafana.solutions.ai[0m
+[0;32m        ══════════════════════════════════════════════════════════════════════════[0m
+
+PLAY RECAP *********************************************************************
+[0;32mlocalhost[0m                  : [0;32mok=6   [0m changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

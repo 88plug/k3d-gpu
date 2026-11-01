@@ -64,7 +64,7 @@ spec:
       containers:
         - name: open-webui
           # ghcr.io/open-webui/open-webui:v0.12.2
-          image: ghcr.io/open-webui/open-webui@sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+          image: ghcr.io/open-webui/open-webui:v0.12.2@sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
           imagePullPolicy: IfNotPresent
           # The image runs as root and writes under /app/backend at runtime.
           securityContext:

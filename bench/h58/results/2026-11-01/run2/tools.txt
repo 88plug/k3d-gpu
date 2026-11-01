@@ -1,0 +1,15 @@
+k3d-gpu: k3d-gpu 0.1.83
+k3d: /home/devcloud/k3dgpu-bench/bin/k3d -> /home/devcloud/k3dgpu-bench/bin/k3d sha256 06d8f25bc3a971c4eb29e0ff08429b180402db0f4dec838c9eac427e296800a0
+kubectl: /home/devcloud/k3dgpu-bench/bin/kubectl -> /home/devcloud/k3dgpu-bench/bin/kubectl sha256 c04487523e7aa7d1493f7808174c899db93d7a9cf57531420cd76b9bd415f8f4
+helm: /home/devcloud/k3dgpu-bench/bin/helm -> /home/devcloud/k3dgpu-bench/bin/helm sha256 b66cb19f2b31f9d427632ea6c4b4a1ff89b74ecaeaee323cd166da41a7af53bd
+uv: /home/devcloud/k3dgpu-bench/bin/uv -> /home/devcloud/k3dgpu-bench/bin/uv sha256 23803452c0fbe125033054cd9ff245f1d649fb65b4b73f68429f4abda432436d
+stress-ng: /home/devcloud/k3dgpu-bench/bin/stress-ng -> /home/devcloud/k3dgpu-bench/opt/stress-ng-0.22.01/stress-ng sha256 046b798d18fa735225d86a38fea3846eada25fd8c11fda4892645b5e78647d04
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+version.BuildInfo{Version:"v4.3.1", GitCommit:"c0d08d0d6d9424d4a14febb5e8a3e51b0dd00dff", GitTreeState:"clean", GoVersion:"go1.27.2", KubeClientVersion:"v1.37"}
+uv 0.13.6 (x86_64-unknown-linux-gnu)
+stress-ng, version 0.22.01 (gcc 15.2.0, x86_64 Linux 7.0.0-31-generic)
+docker 29.8.0
+kernel 7.0.0-31-generic
+Python 3.14.4

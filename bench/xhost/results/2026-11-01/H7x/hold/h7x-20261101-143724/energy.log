@@ -1,0 +1,78 @@
+energy: zone=intel-rapl:0 (package-0) joules=132.314 seconds=1.018 avg_watts=129.983 command_seconds=1.002 samples=2 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2633.062 seconds=20.018 avg_watts=131.538 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.233s ttft_p90=0.238s latency_median=19.916s tok/s_median=12.9 aggregate_tok/s=12.9
+energy: zone=intel-rapl:0 (package-0) joules=17769.857 seconds=99.633 avg_watts=178.353 command_seconds=99.617 samples=21 exit=0
+concurrency=1 ok=5/5 ttft_median=3.159s ttft_p90=3.165s latency_median=4.329s tok/s_median=3.7 aggregate_tok/s=3.7
+energy: zone=intel-rapl:0 (package-0) joules=3866.614 seconds=21.733 avg_watts=177.915 command_seconds=21.716 samples=6 exit=0
+concurrency=4 ok=8/8 ttft_median=0.459s ttft_p90=0.476s latency_median=10.568s tok/s_median=12.1 aggregate_tok/s=48.4
+energy: zone=intel-rapl:0 (package-0) joules=3790.109 seconds=21.235 avg_watts=178.482 command_seconds=21.219 samples=6 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2635.437 seconds=20.018 avg_watts=131.654 command_seconds=20.002 samples=6 exit=0
+concurrency=1 ok=5/5 ttft_median=0.154s ttft_p90=0.165s latency_median=24.213s tok/s_median=10.6 aggregate_tok/s=10.5
+energy: zone=intel-rapl:0 (package-0) joules=21323.340 seconds=121.445 avg_watts=175.580 command_seconds=121.429 samples=26 exit=0
+concurrency=1 ok=5/5 ttft_median=2.078s ttft_p90=2.109s latency_median=3.574s tok/s_median=4.5 aggregate_tok/s=4.5
+energy: zone=intel-rapl:0 (package-0) joules=3207.328 seconds=17.986 avg_watts=178.325 command_seconds=17.969 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.378s ttft_p90=0.412s latency_median=12.968s tok/s_median=9.9 aggregate_tok/s=39.3
+energy: zone=intel-rapl:0 (package-0) joules=4576.122 seconds=26.116 avg_watts=175.221 command_seconds=26.100 samples=7 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2627.134 seconds=20.018 avg_watts=131.238 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.161s ttft_p90=0.166s latency_median=24.048s tok/s_median=10.6 aggregate_tok/s=10.6
+energy: zone=intel-rapl:0 (package-0) joules=21092.301 seconds=120.366 avg_watts=175.235 command_seconds=120.350 samples=26 exit=0
+concurrency=1 ok=5/5 ttft_median=2.086s ttft_p90=2.092s latency_median=3.544s tok/s_median=4.5 aggregate_tok/s=4.5
+energy: zone=intel-rapl:0 (package-0) joules=3167.053 seconds=17.801 avg_watts=177.916 command_seconds=17.785 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.366s ttft_p90=0.406s latency_median=13.129s tok/s_median=9.7 aggregate_tok/s=38.8
+energy: zone=intel-rapl:0 (package-0) joules=4633.129 seconds=26.439 avg_watts=175.241 command_seconds=26.422 samples=7 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2630.210 seconds=20.018 avg_watts=131.393 command_seconds=20.002 samples=6 exit=0
+concurrency=1 ok=5/5 ttft_median=0.230s ttft_p90=0.232s latency_median=19.907s tok/s_median=12.9 aggregate_tok/s=12.8
+energy: zone=intel-rapl:0 (package-0) joules=17723.931 seconds=99.698 avg_watts=177.776 command_seconds=99.682 samples=21 exit=0
+concurrency=1 ok=5/5 ttft_median=3.005s ttft_p90=3.017s latency_median=4.174s tok/s_median=3.8 aggregate_tok/s=3.8
+energy: zone=intel-rapl:0 (package-0) joules=3720.307 seconds=20.969 avg_watts=177.421 command_seconds=20.952 samples=6 exit=0
+concurrency=4 ok=8/8 ttft_median=0.455s ttft_p90=0.471s latency_median=10.536s tok/s_median=12.1 aggregate_tok/s=48.5
+energy: zone=intel-rapl:0 (package-0) joules=3782.998 seconds=21.191 avg_watts=178.521 command_seconds=21.175 samples=6 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2633.060 seconds=20.018 avg_watts=131.537 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.236s ttft_p90=0.240s latency_median=19.911s tok/s_median=12.9 aggregate_tok/s=12.9
+energy: zone=intel-rapl:0 (package-0) joules=17706.512 seconds=99.656 avg_watts=177.677 command_seconds=99.640 samples=21 exit=0
+concurrency=1 ok=5/5 ttft_median=3.012s ttft_p90=3.038s latency_median=4.182s tok/s_median=3.8 aggregate_tok/s=3.8
+energy: zone=intel-rapl:0 (package-0) joules=3713.169 seconds=21.006 avg_watts=176.766 command_seconds=20.990 samples=6 exit=0
+concurrency=4 ok=8/8 ttft_median=0.465s ttft_p90=0.473s latency_median=10.553s tok/s_median=12.1 aggregate_tok/s=48.5
+energy: zone=intel-rapl:0 (package-0) joules=3774.525 seconds=21.203 avg_watts=178.022 command_seconds=21.187 samples=6 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2627.289 seconds=20.019 avg_watts=131.243 command_seconds=20.003 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.162s ttft_p90=0.170s latency_median=24.202s tok/s_median=10.6 aggregate_tok/s=10.6
+energy: zone=intel-rapl:0 (package-0) joules=21258.347 seconds=121.224 avg_watts=175.364 command_seconds=121.208 samples=26 exit=0
+concurrency=1 ok=5/5 ttft_median=2.067s ttft_p90=2.076s latency_median=3.568s tok/s_median=4.5 aggregate_tok/s=4.5
+energy: zone=intel-rapl:0 (package-0) joules=3182.472 seconds=17.933 avg_watts=177.463 command_seconds=17.918 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.299s ttft_p90=0.421s latency_median=13.041s tok/s_median=9.8 aggregate_tok/s=39.1
+energy: zone=intel-rapl:0 (package-0) joules=4588.036 seconds=26.263 avg_watts=174.695 command_seconds=26.247 samples=7 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2631.145 seconds=20.019 avg_watts=131.433 command_seconds=20.002 samples=6 exit=0
+concurrency=1 ok=5/5 ttft_median=0.161s ttft_p90=0.171s latency_median=24.697s tok/s_median=10.4 aggregate_tok/s=10.4
+energy: zone=intel-rapl:0 (package-0) joules=21585.835 seconds=123.486 avg_watts=174.805 command_seconds=123.469 samples=26 exit=0
+concurrency=1 ok=5/5 ttft_median=2.061s ttft_p90=2.115s latency_median=3.561s tok/s_median=4.5 aggregate_tok/s=4.5
+energy: zone=intel-rapl:0 (package-0) joules=3191.562 seconds=17.939 avg_watts=177.915 command_seconds=17.924 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.376s ttft_p90=0.391s latency_median=13.074s tok/s_median=9.8 aggregate_tok/s=39.2
+energy: zone=intel-rapl:0 (package-0) joules=4592.266 seconds=26.230 avg_watts=175.074 command_seconds=26.214 samples=7 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2625.251 seconds=20.019 avg_watts=131.140 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.229s ttft_p90=0.234s latency_median=19.887s tok/s_median=12.9 aggregate_tok/s=12.9
+energy: zone=intel-rapl:0 (package-0) joules=17697.048 seconds=99.494 avg_watts=177.871 command_seconds=99.478 samples=21 exit=0
+concurrency=1 ok=5/5 ttft_median=2.984s ttft_p90=2.997s latency_median=4.154s tok/s_median=3.9 aggregate_tok/s=3.8
+energy: zone=intel-rapl:0 (package-0) joules=3708.118 seconds=20.858 avg_watts=177.781 command_seconds=20.842 samples=6 exit=0
+concurrency=4 ok=8/8 ttft_median=0.445s ttft_p90=0.460s latency_median=10.551s tok/s_median=12.1 aggregate_tok/s=48.5
+energy: zone=intel-rapl:0 (package-0) joules=3787.963 seconds=21.189 avg_watts=178.774 command_seconds=21.173 samples=6 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2629.843 seconds=20.019 avg_watts=131.370 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.237s ttft_p90=0.248s latency_median=19.905s tok/s_median=12.9 aggregate_tok/s=12.9
+energy: zone=intel-rapl:0 (package-0) joules=17683.562 seconds=99.577 avg_watts=177.588 command_seconds=99.560 samples=21 exit=0
+concurrency=1 ok=5/5 ttft_median=3.003s ttft_p90=3.020s latency_median=4.173s tok/s_median=3.8 aggregate_tok/s=3.8
+energy: zone=intel-rapl:0 (package-0) joules=3708.562 seconds=20.942 avg_watts=177.088 command_seconds=20.926 samples=6 exit=0
+concurrency=4 ok=8/8 ttft_median=0.465s ttft_p90=0.480s latency_median=10.564s tok/s_median=12.1 aggregate_tok/s=48.4
+energy: zone=intel-rapl:0 (package-0) joules=3780.882 seconds=21.238 avg_watts=178.028 command_seconds=21.222 samples=6 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2636.602 seconds=20.018 avg_watts=131.713 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.161s ttft_p90=0.163s latency_median=24.134s tok/s_median=10.6 aggregate_tok/s=10.6
+energy: zone=intel-rapl:0 (package-0) joules=21222.023 seconds=121.083 avg_watts=175.268 command_seconds=121.067 samples=26 exit=0
+concurrency=1 ok=5/5 ttft_median=2.083s ttft_p90=2.092s latency_median=3.548s tok/s_median=4.5 aggregate_tok/s=4.5
+energy: zone=intel-rapl:0 (package-0) joules=3161.845 seconds=17.830 avg_watts=177.333 command_seconds=17.814 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.377s ttft_p90=0.409s latency_median=12.950s tok/s_median=9.9 aggregate_tok/s=39.5
+energy: zone=intel-rapl:0 (package-0) joules=4546.243 seconds=25.982 avg_watts=174.976 command_seconds=25.966 samples=7 exit=0
+energy: zone=intel-rapl:0 (package-0) joules=2630.178 seconds=20.018 avg_watts=131.389 command_seconds=20.002 samples=5 exit=0
+concurrency=1 ok=5/5 ttft_median=0.141s ttft_p90=0.148s latency_median=21.408s tok/s_median=12.0 aggregate_tok/s=11.9
+energy: zone=intel-rapl:0 (package-0) joules=18990.888 seconds=107.192 avg_watts=177.167 command_seconds=107.176 samples=23 exit=0
+concurrency=1 ok=5/5 ttft_median=1.816s ttft_p90=1.852s latency_median=3.107s tok/s_median=5.1 aggregate_tok/s=5.1
+energy: zone=intel-rapl:0 (package-0) joules=2805.017 seconds=15.660 avg_watts=179.116 command_seconds=15.644 samples=5 exit=0
+concurrency=4 ok=8/8 ttft_median=0.304s ttft_p90=0.359s latency_median=11.055s tok/s_median=11.6 aggregate_tok/s=46.2
+energy: zone=intel-rapl:0 (package-0) joules=3949.845 seconds=22.232 avg_watts=177.668 command_seconds=22.215 samples=6 exit=0

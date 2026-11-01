@@ -363,5 +363,71 @@ class H57dRecords(unittest.TestCase):
         self.assertEqual(r["verdict"], "REFUTED")
 
 
+class Report(unittest.TestCase):
+    """bench/h59/report.py: the reported, never gated figures (TTFT, prefix reuse, J/token, the
+    per-phase medians) read from the same records."""
+
+    def setUp(self):
+        import report
+        self.report = report
+        self.d = tempfile.mkdtemp()
+        write_holds(self.d, {"L": 20.0, "O": 8.0}, {"L": 48, "O": 47})
+        # Per perf hold and arm: an idle window at W watts, each phase's energy and output tokens,
+        # the TTFT phase's 4 requests and the prefix phase's record.
+        self.watts = {"L": 100.0, "O": 120.0}
+        for k in (1, 2, 3):
+            for arm in ("L", "O"):
+                ad = os.path.join(self.d, f"hold{k}", arm)
+                dump({"avg_watts": self.watts[arm], "joules": self.watts[arm] * 60, "seconds": 60}, os.path.join(ad, "energy-idle.json"))
+                for p, n in (("n1", 8), ("n4", 16)):
+                    with open(os.path.join(ad, f"load-{p}.json")) as f:
+                        j = json.load(f)
+                    j["phases"][0].update(output_tokens_total=256 * n, aggregate_tokens_per_s=10.0 * k)
+                    dump(j, os.path.join(ad, f"load-{p}.json"))
+                    dump({"joules": 1000.0 * k, "seconds": 5.0}, os.path.join(ad, f"energy-{p}.json"))
+                t = [{"ok": True, "ttft_s": 1.0 * k + i} for i in range(4)] + [{"ok": False, "ttft_s": 99.0}]
+                dump({"phases": [{"samples": t}]}, os.path.join(ad, "load-ttft.json"))
+                dump({"added_ttft_median_s": 0.5 * k + (0.1 if arm == "L" else 0.0)}, os.path.join(ad, "prefix.json"))
+
+    def tearDown(self):
+        shutil.rmtree(self.d)
+
+    def test_figures(self):
+        r = self.report.report(self.d)
+        for arm in ("L", "O"):
+            a = r[arm]
+            self.assertEqual(a["holds"], [1, 2, 3])
+            self.assertAlmostEqual(a["decode_pooled"]["n4"], statistics.median(n4_samples(self.d, arm)))
+            self.assertIsNone(a["decode_pooled"]["n16"])
+            self.assertEqual(a["aggregate"]["n4"], {1: 10.0, 2: 20.0, 3: 30.0})
+            # TTFT: failed requests dropped; per hold the median of 4, pooled over 12.
+            self.assertEqual(a["ttft_s"], {1: 2.5, 2: 3.5, 3: 4.5})
+            self.assertEqual(a["ttft_pooled_s"], statistics.median([k + i for k in (1, 2, 3) for i in range(4)]))
+            # J/token pooled: 6,000 J over 3 x 4,096 tokens; net less W x 5 s per hold.
+            j = a["j_per_token"]["n4"]
+            self.assertAlmostEqual(j["gross"], 6000.0 / (3 * 4096))
+            self.assertAlmostEqual(j["net"], (6000.0 - 3 * 5 * self.watts[arm]) / (3 * 4096))
+            self.assertEqual(j["tokens"], 3 * 4096)
+        self.assertAlmostEqual(r["L"]["prefix_added_ttft_median_s"], 1.1)
+        self.assertAlmostEqual(r["ratios_L_over_O"]["prefix_added_ttft"], 1.1)
+        self.assertAlmostEqual(r["ratios_L_over_O"]["decode_pooled"]["n4"],
+                               r["L"]["decode_pooled"]["n4"] / r["O"]["decode_pooled"]["n4"])
+
+    def test_spare_and_unmeasured_hold(self):
+        # Hold 2's O failed; spare 5 repeats it and stands in for it.
+        dump({"status": "failed"}, os.path.join(self.d, "hold2", "O", "status.json"))
+        self.assertEqual(self.report.report(self.d)["O"]["holds"], [1, 3])
+        shutil.copytree(os.path.join(self.d, "hold2"), os.path.join(self.d, "hold5"))
+        dump({"status": "measured"}, os.path.join(self.d, "hold5", "O", "status.json"))
+        put(os.path.join(self.d, "hold5", "repeats"), "2\n")
+        self.assertEqual(self.report.report(self.d)["O"]["holds"], [1, 2, 3])
+
+    def test_cli(self):
+        r = subprocess.run([sys.executable, os.path.join(HERE, "report.py"), self.d, "--arms", "L=L,O=O"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["L"]["holds"], [1, 2, 3])
+
+
 if __name__ == "__main__":
     unittest.main()

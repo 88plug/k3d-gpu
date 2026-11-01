@@ -15,6 +15,12 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 > VRAM or more) dropped the two just over half. After `k3d-gpu host-setup --apply`,
 > DSA reached a pod; IAA got no work queue, and the QAT plugin crash-looped and
 > advertised nothing [ledger:H52b]. The ledger scores H52 REFUTED and H52b REFUTED.
+> On that Xeon's CPU, llama.cpp with Google's QAT Q4_0 GGUF and its MTP drafter
+> out-decoded OVMS with OpenVINO's base-model int4 IR on Gemma 4 26B-A4B at four concurrent
+> requests, so it is now the default CPU engine for that CPU class [ledger:H59] (one model
+> measured; other models with an int4 GGUF follow the rule unmeasured), and llama.cpp
+> served a 125B MoE entirely from its DRAM, its share of the DRAM bandwidth ceiling inside
+> the pre-registered band around a smaller Gemma 4 control's [ledger:H60].
 > NPU and Gaudi 3 scheduling is still tested only against a simulated sysfs. See
 > **[docs/intel.md](docs/intel.md)** for the capability matrix, how P/E pinning
 > works, and how it compares with other local Kubernetes.
@@ -88,7 +94,7 @@ context, so `up` switches that file's current-context to `k3d-<cluster>`.
 ### Install
 
 Every package installs the same payload: the launcher at `bin/k3d-gpu`, the MCP server at `bin/k3d-gpu-mcp`,
-and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/` and `images.lock`
+and in `share/k3d-gpu/` the plugin manifests, `console/`, `bench/`, `oracle/`, `integrations/` (for `k3d-gpu eas`) and `images.lock`
 (`facts`, `plan`, `audit`, `tune`, `capacity` and `k3d-gpu-mcp` also need `python3`).
 The node image `cryptoandcoffee/k3d-gpu` is published for linux/amd64 only, so on arm64 the
 packages install but `k3d-gpu up` stops unless `K3D_GPU_IMAGE` names a k3s node image built for
@@ -919,7 +925,7 @@ that of every variant the trusted orgs publish of it, found by name and by
 - **QAT.** A model with unquantized QAT weights (Gemma 4 `-qat-q4_0-unquantized`,
   for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
   OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
-  (`console/convert-pins.json`, moved nightly to the newest compatible releases).
+  (`console/convert-pins.json`, moved by the Freshness workflow to the newest compatible releases).
   It ranks below the official IR until a quality row promotes it (H54q is that
   row, and its run did not promote it), and
   `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
@@ -1431,9 +1437,14 @@ EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer ins
 bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
 k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
 layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
-layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. It has
-not run end to end yet: F3 in [EXPERIMENTS.md](EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
-See [docs/intel/eas.md](docs/intel/eas.md).
+layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. F3 ran
+it once end to end on the i9-13900T and is REFUTED
+([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check` and the
+teardown passed, but enterprise-inference's Keycloak step put the Keycloak admin password on a
+process command line, where the run's secret scan found it.
+The commands are `k3d-gpu eas up` (`--agent-toolkit`, `--dry-run`, `--explain`), `eas status`,
+`eas check` and `eas down`. See [docs/intel/eas.md](docs/intel/eas.md), and
+[docs/intel.md](docs/intel.md#upstream-findings) for the upstream findings and issue drafts.
 
 ### Experimental features (auto-adapting)
 
@@ -1521,7 +1532,28 @@ That is placement, not isolation: package power, LLC and DRAM bandwidth stay sha
 and E-core load still slowed CPU-served prefill on the P-cores [ledger:H3].
 `up` waits for a warm sandbox, then runs `status`, which reads each sandbox's
 `Cpus_allowed_list` and fails if it is not inside the host's E-cores.
-`k3d-gpu sandbox down` removes it all.
+`k3d-gpu sandbox down` removes the profile, then the namespace `agent-sandbox-system`,
+the agent-sandbox CRDs and the controller, unless something else uses them.
+
+Other installers put agent-sandbox in the same namespace: Intel's Enterprise Agent
+Toolkit installs v0.5.0 into `agent-sandbox-system` with its own warm pool and router.
+k3d-gpu counts the controller as its own when the Deployment carries
+`app.kubernetes.io/managed-by=k3d-gpu` (`up` labels the Deployment, the namespace and
+the CRDs after it installs them) or runs the controller image k3d-gpu pins, with no
+other installer's `managed-by` label or Helm release on it.
+
+- `up` stops before applying anything when another installer's controller is there,
+  or a CRD carries another installer's `managed-by` label or Helm release, and names
+  the image or the CRDs.
+- `up --adopt` keeps that controller and applies only the E-core profile. The
+  SandboxTemplate and SandboxWarmPool CRDs must serve `extensions.agents.x-k8s.io/v1beta1`;
+  v0.5.0's do.
+- `down` keeps the namespace, the CRDs and the controller when the controller is
+  another installer's, when a CRD carries another installer's label or Helm release,
+  when a Sandbox, SandboxClaim, SandboxTemplate or SandboxWarmPool exists outside
+  namespace `agent-sandbox`, or when a pod other than the controller's runs in
+  `agent-sandbox-system`. It prints what it kept and why, and exits 0. Deleting a CRD
+  deletes every object of that kind in every namespace.
 
 ```bash
 k3d-gpu sandbox up
@@ -1655,7 +1687,7 @@ the fix:
   entries (it keeps at least 16) and add a 16-entry user WQ, through the same
   snapshot path, with the same revert.
 
-Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs. The PPA serves only its current build of each package, so the nightly check (`hack/ppa-pins`) moves the PPA pins to it.
+Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs. The PPA serves only its current build of each package, so the Freshness workflow (`hack/ppa-pins`, group `ppa`) moves the PPA pins to it.
 
 ---
 
@@ -1712,10 +1744,10 @@ hack/render-component --latest nri-balloons   # move the pins to upstream latest
 tests/render_test.sh
 ```
 
-CI fails when a committed manifest differs from its pinned render. The daily
-build-and-push workflow runs `--latest` for every component and opens one PR per
-component (branch `autobump/<name>`); merging it changes `share/`, so auto-release cuts a
-launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
+CI fails when a committed manifest differs from its pinned render. The 6-hourly
+Freshness workflow (`pins/registry.toml`, group `nri`) runs `--latest` for the
+components and opens one PR for them (branch `autobump/nri`); merging it changes `share/`,
+so auto-release cuts a launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
 their own pull_request CI runs wait for approval; `hack/bot-ci-dispatch` runs `ci.yml` on
 the branch by workflow_dispatch instead, and that run is the PR's CI. The hourly bot sweep
 (`hack/bot-merge`) merges one such PR at a time when its pins policy says auto (or a

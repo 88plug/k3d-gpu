@@ -1,0 +1,34 @@
+MemAvailable 410 GiB
+== download 2026-11-01T13:47:32Z (+0s)
+MemAvailable after download 314 GiB
+== up 2026-11-01T14:02:18Z (+886s)
+== lg boot 2026-11-01T14:02:49Z (+917s)
+== lg ready 2026-11-01T14:03:18Z (+946s)
+== fn boot 2026-11-01T14:05:25Z (+1073s)
+== fn ready 2026-11-01T14:06:12Z (+1120s)
+== quality 2026-11-01T14:12:30Z (+1498s)
+{
+ "active_bytes": 5941706240,
+ "stream_gbs": 305.0,
+ "ceiling_tok_s": 51.33,
+ "why": [],
+ "gsm8k_correct": 50,
+ "control": "same-hold Lg",
+ "fn_n1_decode_median": 16.002,
+ "e_fn_median": 0.3117,
+ "lg_n1_decode_median": 48.52,
+ "e_lg_median": 0.3786,
+ "stat": "e_fn / e_lg",
+ "ratio_median": 0.8233,
+ "band": [
+  0.7,
+  1.3
+ ],
+ "ci95": [
+  0.8192,
+  0.8315
+ ],
+ "verdict": "SUPPORTED"
+}
+== cleanup 2026-11-01T14:20:57Z (+2005s)
+== finished 2026-11-01T14:20:59Z (+2007s)

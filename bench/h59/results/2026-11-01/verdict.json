@@ -1,0 +1,75 @@
+{
+ "arms": {
+  "L": {
+   "name": "L",
+   "n4_per_hold": {
+    "1": 25.122395072997662,
+    "2": 25.950328449132797,
+    "3": 25.35136239331745
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 49,
+    "n": 50
+   },
+   "n4_total": 48,
+   "median": {
+    "n1": 45.95844167649105,
+    "n4": 25.31377979631734,
+    "n16": 8.602800907340349
+   },
+   "n4_requests": 48
+  },
+  "O": {
+   "name": "O",
+   "n4_per_hold": {
+    "1": 7.6276339846338885,
+    "2": 7.056624427641259,
+    "3": 7.28364090919813
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 50,
+    "n": 50
+   },
+   "n4_total": 48,
+   "median": {
+    "n1": 21.926164429883222,
+    "n4": 7.234924037785637,
+    "n16": 4.120339543841414
+   },
+   "n4_requests": 48
+  }
+ },
+ "load_gate": {
+  "matched": true,
+  "reason": "no N=4 phase void after its re-run (6 checked)",
+  "rule": "H54's void rule over the N=4 phases",
+  "checked": 6
+ },
+ "reported": {
+  "n1": 2.0960547761766386,
+  "n16": 2.087886402517185
+ },
+ "quality_gate": {
+  "L": 49,
+  "O": 50,
+  "need": 48,
+  "passed": true
+ },
+ "ratio": 3.4988314547757193,
+ "ci": [
+  3.422016378954337,
+  3.611715971524565
+ ],
+ "per_hold": {
+  "1": 3.2936025933608675,
+  "2": 3.677442198494179,
+  "3": 3.4805892697569067
+ },
+ "all_holds_faster": true,
+ "verdict": "SUPPORTED",
+ "reason": "N=4 CI lower bound >= 1.2, L faster in each performance hold, and the quality gate passed"
+}

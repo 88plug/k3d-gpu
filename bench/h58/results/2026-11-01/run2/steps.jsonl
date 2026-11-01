@@ -1,0 +1,11 @@
+{"cmd": ["k3d-gpu", "up"], "env_k3d_gpu": [], "kind": "user", "log": "up.log", "rc": 0, "t0": 1793529119.916132, "t1": 1793529169.7707725}
+{"cmd": ["k3d-gpu", "detect"], "env_k3d_gpu": [], "kind": "user", "log": "detect.txt", "rc": 0, "t0": 1793529240.2822115, "t1": 1793529245.4932249}
+{"cmd": ["k3d-gpu", "detect", "--json"], "env_k3d_gpu": [], "kind": "record", "log": "detect.json", "rc": 0, "t0": 1793529245.5468712, "t1": 1793529282.7906873}
+{"cmd": ["k3d-gpu", "plan", "--model", "google/gemma-4-26B-A4B-it", "--explain"], "env_k3d_gpu": [], "kind": "record", "log": "m-gemma/plan.txt", "rc": 0, "t0": 1793529282.8512545, "t1": 1793529324.6945755}
+{"cmd": ["k3d-gpu", "agent", "up", "--model", "google/gemma-4-26B-A4B-it"], "env_k3d_gpu": [], "kind": "user", "log": "m-gemma/agent-up.log", "rc": 1, "t0": 1793529324.755045, "t1": 1793529330.7664657}
+{"cmd": ["k3d-gpu", "plan", "--model", "Qwen/Qwen3.8-27B", "--explain"], "env_k3d_gpu": [], "kind": "record", "log": "m-qwen27b/plan.txt", "rc": 0, "t0": 1793529332.9914336, "t1": 1793529374.23455}
+{"cmd": ["k3d-gpu", "agent", "up", "--model", "Qwen/Qwen3.8-27B"], "env_k3d_gpu": [], "kind": "user", "log": "m-qwen27b/agent-up.log", "rc": 1, "t0": 1793529374.2975795, "t1": 1793529384.713732}
+{"cmd": ["k3d-gpu", "plan", "--model", "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound", "--explain"], "env_k3d_gpu": [], "kind": "record", "log": "m-flashnext/plan.txt", "rc": 0, "t0": 1793529386.922065, "t1": 1793529428.4684508}
+{"cmd": ["k3d-gpu", "agent", "up", "--model", "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound"], "env_k3d_gpu": [], "kind": "user", "log": "m-flashnext/agent-up.log", "rc": 1, "t0": 1793529428.5295136, "t1": 1793529445.95181}
+{"cmd": ["k3d-gpu", "agent", "down"], "env_k3d_gpu": [], "kind": "teardown", "log": "agent-down.log", "rc": 0, "t0": 1793529448.3001573, "t1": 1793529448.6065454}
+{"cmd": ["k3d-gpu", "down"], "env_k3d_gpu": [], "kind": "teardown", "log": "down.log", "rc": 0, "t0": 1793529448.661364, "t1": 1793529449.26826}

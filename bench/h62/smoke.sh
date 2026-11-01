@@ -3,25 +3,24 @@
 # setup.sh and before hold 1. It scores nothing, is not one of the 8 holds, and is disclosed in
 # the run section.
 #   1. B5 through EAS's own stack, in VM b, inside the bench lock: `es_auto_installer.sh validate
-#      agent-toolkit`, then integrations/eat/eat-check.sh in EAS mode (PR #260's interface) through
-#      EAS's gateway on gemma-4-26b: a chat, a get_weather tool call, and a sandbox run that
-#      prints 385
+#      agent-toolkit`, then eat-check.sh in EAS mode through EAS's gateway on gemma-4-26b: a chat,
+#      a get_weather tool call, and a sandbox run that prints 385. bench/h62/eat-check.sh is a
+#      byte copy of PR #260's integrations/eat/eat-check.sh at e67ebc52 (H62 amendment V1)
 #   2. one H62 hold with the pair-start guard past its end (pairs-hold.sh 0 smoke): both serving
 #      pods restart and answer through the harness's LiteLLM, both warm-ups answer, no pair starts
 # Exit 0 when both pass; 1 otherwise; 4 when the lock is not taken. Records: ~/k3dgpu-bench/smoke/H62.
 set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REPO=$(cd "${HERE}/../.." && pwd)
 P() { python3 "${HERE}/h62.py" "$@"; }
 B=${HOME}/k3dgpu-bench
 export H62_STATE=${H62_STATE:-${B}/h62}
 S=${B}/smoke/H62
 MODEL=$(P pin catalog_name)
-CHECK=${REPO}/integrations/eat/eat-check.sh
+CHECK=${HERE}/eat-check.sh
 mkdir -p "${S}"
 log() { echo "== smoke $* $(date -u +%FT%TZ)" | tee -a "${S}/smoke.log"; }
 G() { ssh -F "${H62_STATE}/ssh_config" h62-b "$@" 9>&-; }
-grep -qE '^[[:space:]]+eas\)' "${CHECK}" || { log "eat-check.sh at this commit has no EAS mode (PR #260): no smoke"; exit 1; }
+grep -qE '^[[:space:]]+eas\)' "${CHECK}" || { log "eat-check.sh has no EAS mode (PR #260): no smoke"; exit 1; }
 exec 9> "${HOME}/k3dgpu-bench.lock"
 flock -w 7200 9 || { log "lock not taken in 7200 s"; exit 4; }
 log "lock taken; step 1 in VM b"

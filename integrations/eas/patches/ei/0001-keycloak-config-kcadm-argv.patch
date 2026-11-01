@@ -1,0 +1,107 @@
+From: Andrew Mello <andrew@88plug.com>
+Date: Sun, 1 Nov 2026 12:00:00 -0800
+Subject: [PATCH] keycloak_config: keep the admin password and the client
+ secret off kcadm's command line
+
+kcadm runs in the Keycloak pod through k8s_exec, which execs the command's
+argv as a process in the container (kubernetes.core 6.3.0
+plugins/modules/k8s_exec.py#L192-L198: shlex.split, stdin=False). So
+`kcadm.sh config credentials ... --password <value>` and
+`kcadm.sh update clients/<id> -s secret=<value>` put the Keycloak admin
+password and the inference client secret on a process argument list, which
+any user on the node can read with ps. On a k3d cluster the node is a
+container on the host, so the host's ps lists them too. no_log keeps both
+out of Ansible's output only.
+
+- authenticate: kcadm takes the password from KC_CLI_PASSWORD when
+  --password is absent (Keycloak 26.6.0
+  integration/client-cli/admin-cli/.../BaseConfigCredentialsCmd.java#L104-L110;
+  the Server Administration Guide, admin-cli.adoc#L129, recommends not
+  passing passwords on the command line). The Keycloak operator already sets
+  KC_BOOTSTRAP_ADMIN_PASSWORD in the pod from keycloak-admin-secret
+  (operator/.../KeycloakDistConfigurator.java#L102-L113), so
+  `sh -c 'KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD" kcadm.sh ...'`
+  hands kcadm the same password through its environment.
+- client secret: Keycloak generates a new one
+  (`kcadm.sh create clients/<id>/client-secret`) and k8s stores the value
+  `kcadm.sh get clients/<id>/client-secret` prints, which converges the two
+  as pushing the generated value did.
+---
+--- a/roles/keycloak_config/tasks/install.yaml
++++ b/roles/keycloak_config/tasks/install.yaml
+@@ -129,14 +129,17 @@
+           | selectattr('status', 'eq', 'True')
+           | list | length > 0
+ 
+-    # ── Make Keycloak adopt our generated secret ─────────────────────────────────
++    # ── Converge the client secret ──────────────────────────────────────────────
+     # The realm-import Job is idempotent by realm name: on a realm that already
+     # exists (platform Keycloak survives an inference-layer teardown) it is a
+     # no-op and does NOT set the client secret. k8s would then store a freshly
+     # generated secret while Keycloak keeps its old one — they diverge and token
+-    # requests fail with "Invalid client credentials". Pushing our secret via
+-    # kcadm makes the k8s value authoritative and converges both every run. Runs
+-    # in-pod (kcadm against localhost), so no port-forward/curl/JSON parsing.
++    # requests fail with "Invalid client credentials". Keycloak generates a new
++    # secret through kcadm and k8s stores the value kcadm reads back, which
++    # converges both every run. Runs in-pod (kcadm against localhost), so no
++    # port-forward/curl. No secret goes on a kcadm command line: a process's
++    # arguments are readable by every user on the node (ps), and kcadm takes the
++    # admin password from KC_CLI_PASSWORD when --password is absent.
+ 
+     - name: "keycloak_config | Read Keycloak admin credentials"
+       kubernetes.core.k8s_info:
+@@ -163,15 +166,18 @@
+       ansible.builtin.set_fact:
+         keycloak_pod_name: "{{ _kcc_pod.resources[0].metadata.name }}"
+ 
++    # The Keycloak operator sets KC_BOOTSTRAP_ADMIN_PASSWORD in the pod from
++    # keycloak-admin-secret (spec.bootstrapAdmin.user.secret); the shell copies it
++    # into kcadm's environment, so the password is in no argument list.
+     - name: "keycloak_config | kcadm — authenticate (writes in-pod config)"
+       kubernetes.core.k8s_exec:
+         namespace: "{{ keycloak_namespace }}"
+         pod: "{{ keycloak_pod_name }}"
+         command: >-
++          /bin/sh -c 'KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD"
+           /opt/keycloak/bin/kcadm.sh config credentials
+           --server {{ keycloak_admin_server_url }} --realm master
+-          --user {{ _kcc_admin_sec.resources[0].data.username | b64decode }}
+-          --password {{ _kcc_admin_sec.resources[0].data.password | b64decode }}
++          --user {{ _kcc_admin_sec.resources[0].data.username | b64decode }}'
+       no_log: "{{ secure_logs | default(true) }}"
+ 
+     - name: "keycloak_config | kcadm — resolve client UUID"
+@@ -195,13 +201,29 @@
+         that: (_kcc_client_uuid.stdout | default('') | trim) != ""
+         fail_msg: "Client {{ keycloak_client_id }} not found in realm {{ keycloak_realm }}: {{ _kcc_client_uuid.stderr | default('') }}"
+ 
+-    - name: "keycloak_config | kcadm — set client secret to our generated value"
++    - name: "keycloak_config | kcadm — generate a new client secret"
+       kubernetes.core.k8s_exec:
+         namespace: "{{ keycloak_namespace }}"
+         pod: "{{ keycloak_pod_name }}"
+         command: >-
+-          /opt/keycloak/bin/kcadm.sh update clients/{{ _kcc_client_uuid.stdout | trim }}
+-          -r {{ keycloak_realm }} -s secret={{ _kcc_client_secret }}
++          /opt/keycloak/bin/kcadm.sh create clients/{{ _kcc_client_uuid.stdout | trim }}/client-secret
++          -r {{ keycloak_realm }}
++      no_log: "{{ secure_logs | default(true) }}"
++
++    - name: "keycloak_config | kcadm — read the client secret back"
++      kubernetes.core.k8s_exec:
++        namespace: "{{ keycloak_namespace }}"
++        pod: "{{ keycloak_pod_name }}"
++        command: >-
++          /opt/keycloak/bin/kcadm.sh get clients/{{ _kcc_client_uuid.stdout | trim }}/client-secret
++          -r {{ keycloak_realm }}
++      register: _kcc_client_secret_read
++      changed_when: false
++      no_log: "{{ secure_logs | default(true) }}"
++
++    - name: "keycloak_config | Keycloak's client secret is the one to store"
++      ansible.builtin.set_fact:
++        _kcc_client_secret: "{{ (_kcc_client_secret_read.stdout | from_json).value }}"
+       no_log: "{{ secure_logs | default(true) }}"
+ 
+     # ── Store client secret in K8s Secret ───────────────────────────────────────

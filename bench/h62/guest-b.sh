@@ -6,10 +6,12 @@
 # inventory EAS ships (Option A, localhost: Kubespray installs Kubernetes here).
 #   - prerequisites.md "Node Kernel Settings", verbatim
 #   - clone, D1 (the layer manifest's two branch revs pinned to the commits Intel's comments on
-#     those lines name, before init), configure, init agent-toolkit
+#     those lines name, before init), configure (its y/N prompt answered y on a terminal,
+#     amendment V2), init agent-toolkit
 #   - the documented edit (gemma-4-26b in llm_services_autodeploy_models) and D2 (gemma-4-26b's
 #     model_id is the QAT checkpoint), then install agent-toolkit
-#   - wait for the gemma-4-26b workload pod, then the records
+#   - wait for the gemma-4-26b workload pod, then the records; if the install fails, the
+#     cluster's nodes, pods, events and the pods that are not Ready (amendment V4)
 # Nothing else is changed: guardrail, hybrid router, observability, NRI balloons, Istio, MetalLB
 # and the agent sandbox are EAS's and EAT's defaults. Records: ~/h62/records (no kubeconfig, no
 # secret file).
@@ -35,9 +37,10 @@ cd "${E}"
 step d1
 python3 "${G}/h62.py" eas-pin configs/repos/repos.agent-toolkit.yaml > "${R}/d1.diff"
 step configure
-# --force answers configure's one y/N prompt (es_auto_installer.sh usage: "required in CI, where
-# there is no terminal"); configure's own steps are unchanged.
-./es_auto_installer.sh configure --force > "${R}/configure.log" 2>&1
+# configure takes no option (v1.2.0-rc.1 refuses `configure --force`) and its one y/N prompt
+# refuses a stdin that is not a terminal, so it runs on a terminal that answers y, as a person
+# at one would (amendment V2); configure's own steps are unchanged.
+python3 "${G}/h62.py" on-tty "${R}/configure.log" y ./es_auto_installer.sh configure
 step init
 ./es_auto_installer.sh init agent-toolkit > "${R}/init.log" 2>&1
 for pair in "enterprise.ai-inference $(P pin ei_sha)" "enterprise.agent-toolkit $(P pin eat_sha)"; do
@@ -53,7 +56,23 @@ for f in global_config.yaml config.agent-toolkit.yaml config.inference.yaml mode
     [ ! -f "env/local/${f}" ] || cp "env/local/${f}" "${R}/env-${f//\//-}"
 done
 step install
-./es_auto_installer.sh install agent-toolkit > "${R}/install.log" 2>&1
+if ! ./es_auto_installer.sh install agent-toolkit > "${R}/install.log" 2>&1; then
+    # Amendment V4: the cluster's state when Intel's install fails, read before teardown removes
+    # the guest. Records only; the install still counts as failed.
+    step install-failed
+    export KUBECONFIG=${E}/env/local/kubeconfig.yaml
+    { kubectl get nodes -o wide; kubectl describe nodes; } > "${R}/fail-nodes.txt" 2>&1 || true
+    kubectl get pods -A -o wide > "${R}/fail-pods.txt" 2>&1 || true
+    kubectl get events -A --sort-by=.lastTimestamp > "${R}/fail-events.txt" 2>&1 || true
+    kubectl get pods -A --no-headers 2>/dev/null \
+        | awk '{split($3, r, "/"); if (r[1] != r[2] && $4 != "Completed") print $1, $2}' \
+        | while read -r ns pod; do
+            echo "=== ${ns}/${pod}"
+            kubectl -n "${ns}" describe pod "${pod}"
+            kubectl -n "${ns}" logs "${pod}" --all-containers --tail=50
+        done > "${R}/fail-describe.txt" 2>&1 || true
+    exit 1
+fi
 step ready
 export KUBECONFIG=${E}/env/local/kubeconfig.yaml
 printf 'export KUBECONFIG=%s\n' "${KUBECONFIG}" > "${G}/env"

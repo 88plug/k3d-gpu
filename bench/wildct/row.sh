@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# row.sh ROW [HOLD MODE [ARM...]]: one wildct row's command as the wildct pre-registration lists it ("Per
+# row.sh ROW [ARGS...]: one wildct row's command as the wildct pre-registration lists it ("Per
 # row") with amendment R1, run as bench/wildct/hold.sh's CMD (hold.sh exports
 # K3D_GPU_RAPL_EXEC, rule W4, and WILDCT_HOLD, the hold's name) from the shipped repository
 # archive. The release's node image and the models are staged first (bench/wildct/RESUME.md).
@@ -19,6 +19,11 @@
 #   h57w-convert H57d's bench/h57d/convert.sh (drafter GGUF, Od's graph.pbtxt) under the host
 #                lock, not in a hold; at most 3600 s
 #   h57wb        H57wb's start reading (/ available, MemAvailable) and its decision; not a hold
+#   h59w HOLD [REPEATS]  H59w: bench/h59/hold.sh wildct (inner lock; H59 amendment R1): holds 1-3
+#                perf and 4 quality in their registered orders; a spare 5 or 6 names the failed
+#                hold it repeats
+#   h59w-prep    bench/h59/prep.sh wildct: the downloads, then the drafter conversion under the
+#                host lock; not in a hold
 # Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h52w and h57wb)
 #      OUT    output directory (default ~/k3dgpu-bench-wildct/runs/${WILDCT_HOLD:-ROW}/out)
 #      WILDCT_ROW_PRINT=1  print the environment (one NAME=value per line) and the command, run nothing
@@ -95,6 +100,21 @@ case ${row} in
         ARGV=(timeout -k 30 3600 bash "${REPO}/bench/h57d/convert.sh") ;;
     h57wb)
         ARGV=(h57wb) ;;
+    h59w)
+        need_image
+        case ${2:-}:${3:-}:$# in
+            [1234]::2 | [56]:[1234]:3) ;;
+            *) echo "row.sh: h59w ${*:2}: holds 1-3 perf and 4 quality take no other argument; a spare 5 or 6 names the hold it repeats" >&2; exit 2 ;;
+        esac
+        E=(G="${W}/h59" LOCK="${W}/inner.lock" K3D_REAL="${W}/bin/k3d" H59_IMAGE="${IMAGE}")
+        ARGV=(bash "${REPO}/bench/h59/hold.sh" wildct "${@:2}")
+        [ "${WILDCT_ROW_PRINT:-0}" = 1 ] || cmp -s "${REPO}/bench/h59/k3d-shim.sh" "${W}/h59/bin/k3d" \
+            || { echo "row.sh: ${W}/h59/bin/k3d is not bench/h59/k3d-shim.sh (install it first)" >&2; exit 2; } ;;
+    h59w-prep)
+        # prep.sh takes the host lock itself for the conversion, so it never runs inside hold.sh.
+        [ -z "${WILDCT_HOLD:-}" ] || { echo "row.sh: h59w-prep runs outside hold.sh" >&2; exit 2; }
+        E=(G="${W}/h59" LOCK="${W}/live.lock" PY_HF="${W}/hfvenv/bin/python")
+        ARGV=(bash "${REPO}/bench/h59/prep.sh" wildct) ;;
     *) echo "row.sh: unknown row ${row}" >&2; exit 2 ;;
 esac
 [ "${WILDCT_ROW_CHECK:-0}" != 1 ] || exit 0

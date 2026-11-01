@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# release-tags: the image tags a release build pushes, for build-and-push.yml.
+#
+#   hack/release-tags <version X.Y.Z> <k3s tag vX.Y.Z-k3sN>
+#
+# Prints one line per tag:
+#   <variant> versioned <ref>          pushed by the build of every release
+#   <variant> floating <ref> <source>  copied from <source> after both builds
+# variant is 26.04 (the default image) or 24.04. Versioned: <repo>:<ver>,
+# <repo>:<ver>-ubuntu26.04, <repo>:<ver>-ubuntu24.04. Floating: <repo>:latest,
+# <repo>:ubuntu26.04, <repo>:<k3s>-ubuntu26.04, <repo>:ubuntu24.04,
+# <repo>:<k3s>-ubuntu24.04. Floating tags are printed only when <version> is the
+# highest aur-v* tag on $REMOTE now (git ls-remote, sort -V), so an older release
+# that builds late never moves them back. An unreadable remote is an error.
+#
+# Env: RELEASE_REPOS (default "cryptoandcoffee/k3d-gpu ghcr.io/88plug/k3d-gpu"),
+#      REMOTE (default origin).
+set -euo pipefail
+
+[ $# -eq 2 ] || { echo "usage: hack/release-tags <version> <k3s tag>" >&2; exit 2; }
+VER=$1 K3S=$2
+[[ "$VER" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "release-tags: version '$VER' is not X.Y.Z" >&2; exit 2; }
+[[ "$K3S" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-k3s[0-9]+$ ]] || { echo "release-tags: k3s tag '$K3S' is not vX.Y.Z-k3sN" >&2; exit 2; }
+read -r -a REPOS <<< "${RELEASE_REPOS:-cryptoandcoffee/k3d-gpu ghcr.io/88plug/k3d-gpu}"
+
+refs=$(git ls-remote --tags "${REMOTE:-origin}" 'aur-v*')
+highest=$(sed -n 's|^[0-9a-f]*[[:space:]]*refs/tags/aur-v\([0-9]*\.[0-9]*\.[0-9]*\)$|\1|p' <<< "$refs" | sort -V | tail -n 1)
+
+for r in "${REPOS[@]}"; do
+    echo "26.04 versioned $r:$VER"
+    echo "26.04 versioned $r:$VER-ubuntu26.04"
+    echo "24.04 versioned $r:$VER-ubuntu24.04"
+done
+[ "$VER" = "$highest" ] || exit 0
+for r in "${REPOS[@]}"; do
+    for t in latest ubuntu26.04 "$K3S-ubuntu26.04"; do echo "26.04 floating $r:$t $r:$VER"; done
+    for t in ubuntu24.04 "$K3S-ubuntu24.04"; do echo "24.04 floating $r:$t $r:$VER-ubuntu24.04"; done
+done

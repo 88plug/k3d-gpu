@@ -55,14 +55,14 @@
   },
   {
    "id": "H59",
-   "verdict": "PENDING",
+   "verdict": "SUPPORTED",
    "classes": [
     "6741p"
    ]
   },
   {
    "id": "H59d",
-   "verdict": "PENDING",
+   "verdict": "INCONCLUSIVE",
    "classes": [
     "i9-13900t"
    ]

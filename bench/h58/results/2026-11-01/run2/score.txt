@@ -1,0 +1,14 @@
+{
+ "verdict": "REFUTED",
+ "valid": true,
+ "invalid_why": [],
+ "clauses": {
+  "a": "holds",
+  "b": "fails",
+  "c": "fails",
+  "d": "fails",
+  "e": "fails",
+  "f_kills": "inconclusive",
+  "f_guard": "inconclusive"
+ }
+}

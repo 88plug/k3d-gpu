@@ -155,7 +155,10 @@ class Eas:
         self._text = {}
         self._tmp = tempfile.TemporaryDirectory(prefix="eas-overlay-")
         self.index = os.path.join(self._tmp.name, "index")
-        self.git("read-tree", "--index-output=" + self.index, self.sha)
+        # GIT_INDEX_FILE, not --index-output: git renames --index-output's file in from a
+        # lock next to the checkout's own index, so it must share the checkout's
+        # filesystem, and a tmpfs /tmp or the bastion's /tmp does not.
+        self.git("read-tree", self.sha, env={"GIT_INDEX_FILE": self.index})
 
     def git(self, *args, env=None, check=True):
         e = dict(os.environ, **(env or {}))

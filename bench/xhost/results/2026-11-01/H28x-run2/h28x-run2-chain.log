@@ -1,0 +1,20 @@
+prep start 2026-11-01T15:34:28Z
+prep rc=0 2026-11-01T15:41:48Z
+h28-model:r12 8973d360cddf 2.15GB
+h28-model:r11 45d551a913d2 2.15GB
+h28-model:r10 be9519d0522d 2.15GB
+h28-model:r9 f73297e8c25c 2.15GB
+h28-model:r8 f62b5ef7458d 2.15GB
+h28-model:r7 6987edbc584f 2.15GB
+h28-model:r6 784a3b731819 2.15GB
+h28-model:r5 ce6e9bf02f1d 2.15GB
+h28-model:r4 5ddcd70cb74a 2.15GB
+h28-model:r3 a68f90a8874f 2.15GB
+h28-model:r2 67150061343f 2.15GB
+h28-model:r1 35e2af25742f 2.15GB
+h28-model:r0 d2adacd3b032 2.15GB
+== H28x-run2 waiting for the lock 2026-11-01T15:41:49Z
+== H28x-run2 lock taken 2026-11-01T15:41:49Z
+== H28x-run2 start: env WORK=/home/devcloud/k3dgpu-xhost/runs/H28x-run2/work PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f IMAGE=cryptoandcoffee/k3d-gpu:0.1.61 CLUSTER=k3dgpu-x-h28 LEVELS=typical HOLD=1440 LOCK=/home/devcloud/k3dgpu-xhost/inner.lock K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% bash /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/zero-copy-models/probe.sh run 2026-11-01T15:41:49Z
+== H28x-run2 rc=0; clusters deleted: none; now:  2026-11-01T15:48:16Z
+hold rc=0 2026-11-01T15:48:16Z

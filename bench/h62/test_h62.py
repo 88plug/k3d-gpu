@@ -335,6 +335,20 @@ class EasEditTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             h62.set_autodeploy(CONFIG.replace("llm_services_autodeploy_models: [\"qwen", "#x: [\"qwen"), "gemma-4-26b")
 
+    def test_d2_reads_name_lines_with_an_inline_comment(self):
+        # Amendment V3: EI release-1.1's catalog opens with
+        # "  - name: qwen3-0-6b      # deploy name + the "model" id used in API requests".
+        commented = ('models:\n  - name: qwen3-0-6b                    # deploy name + the "model" id used in API requests\n'
+                     '    model_id: Qwen/Qwen3-0.6B\n\n' + MODELS)
+        out = h62.set_model_id(commented, "gemma-4-26b", "google/gemma-4-26B-A4B-it",
+                               "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized")
+        self.assertEqual(sum(1 for a, b in zip(commented.splitlines(), out.splitlines()) if a != b), 1)
+        self.assertIn("model_id: Qwen/Qwen3-0.6B\n", out)
+        self.assertIn("model_id: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized\n", out)
+        out2 = h62.set_model_id(commented.replace("- name: qwen3-0-6b ", "- name: gemma-4-26b "), "gemma-4-26b",
+                                "Qwen/Qwen3-0.6B", "x/y")                          # a commented entry matches by name
+        self.assertTrue(out2.split("\n\n")[0].endswith("model_id: x/y"))
+
     def test_d2_moves_only_gemma_4_26b_to_the_qat_weights(self):
         out = h62.set_model_id(MODELS, "gemma-4-26b", "google/gemma-4-26B-A4B-it",
                                "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized")
@@ -634,11 +648,44 @@ class ArmScriptTest(unittest.TestCase):
         self.assertIn("kill", read(self.log).splitlines()[-1])
 
 
+class OnTtyTest(unittest.TestCase):
+    """Amendment V2: configure takes no option, and its y/N prompt refuses a stdin that is not a
+    terminal, so guest-b.sh answers it the way a person at a terminal does."""
+
+    def run_on_tty(self, script, reply="y"):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        log = os.path.join(tmp, "out.log")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "h62.py"), "on-tty", log, reply,
+                            "bash", "-c", script], capture_output=True, text=True, timeout=30)
+        with open(log) as f:
+            return r.returncode, f.read()
+
+    def test_stdin_is_a_terminal_and_the_reply_answers_the_prompt(self):
+        rc, out = self.run_on_tty('[ -t 0 ] || { echo notty; exit 3; }; read -rp "Proceed? [y/N] " r; '
+                                  'echo "reply=$r"; exit 5')
+        self.assertEqual(rc, 5)
+        self.assertIn("reply=y", out)
+        self.assertNotIn("notty", out)
+
+    def test_a_second_read_sees_end_of_input_rather_than_hanging(self):
+        rc, out = self.run_on_tty('read -r a; read -r b || echo eof; echo "a=$a"')
+        self.assertEqual(rc, 0)
+        self.assertIn("eof", out)
+        self.assertIn("a=y", out)
+
+    def test_output_and_errors_go_to_the_log(self):
+        rc, out = self.run_on_tty("echo to-out; echo to-err >&2; exit 1", reply="n")
+        self.assertEqual(rc, 1)
+        self.assertIn("to-out", out)
+        self.assertIn("to-err", out)
+
+
 class ScriptsTest(unittest.TestCase):
     """The shell scripts: syntax, and what each one is pinned to run."""
 
     SCRIPTS = ("arm.sh", "vm.sh", "guest-a.sh", "guest-b.sh", "setup.sh", "smoke.sh", "pairs-hold.sh",
-               "campaign.sh", "teardown.sh", "upstream.sh")
+               "campaign.sh", "teardown.sh", "upstream.sh", "eat-check.sh")
 
     def test_syntax(self):
         for s in self.SCRIPTS:
@@ -693,11 +740,22 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn('LIVE_REMOTE_A="${HERE}/arm-A1"', sh)
         self.assertIn('LIVE_REMOTE_B="${HERE}/arm-B5"', sh)
 
+    def test_guest_b_records_the_cluster_when_the_install_fails(self):
+        # Amendment V4: records only, and the failed install still fails the script.
+        sh = read(HERE, "guest-b.sh")
+        i = sh.index('if ! ./es_auto_installer.sh install agent-toolkit > "${R}/install.log" 2>&1; then')
+        block = sh[i:sh.index("\nfi\n", i)]
+        for f in ("fail-nodes.txt", "fail-pods.txt", "fail-events.txt", "fail-describe.txt"):
+            self.assertIn(f, block)
+        self.assertTrue(block.rstrip().endswith("exit 1"))
+        self.assertIn("export KUBECONFIG=${E}/env/local/kubeconfig.yaml", block)    # set only after the install
+        self.assertNotIn("KUBECONFIG", sh[:i])
+
     def test_guest_b_is_intels_documented_path(self):
         sh = read(HERE, "guest-b.sh")
         steps = ['git clone -q -b "${TAG}" https://github.com/intel/enterprise-ai-solutions.git',
                  'h62.py" eas-pin configs/repos/repos.agent-toolkit.yaml',
-                 "./es_auto_installer.sh configure --force",
+                 'h62.py" on-tty "${R}/configure.log" y ./es_auto_installer.sh configure',
                  "./es_auto_installer.sh init agent-toolkit",
                  'h62.py" eas-edit env/local',
                  "./es_auto_installer.sh install agent-toolkit"]
@@ -741,6 +799,13 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn("EAT_MODE=eas", sh)
         self.assertIn("MODEL=$(P pin catalog_name)", sh)
         self.assertIn("EAT_MODE=eas EAT_MODEL=${MODEL}", sh)
+        # Amendment V1: the smoke's check is #260's eat-check.sh, copied byte for byte.
+        self.assertIn("CHECK=${HERE}/eat-check.sh", sh)
+        check = read(HERE, "eat-check.sh")
+        self.assertRegex(check, r"(?m)^\s+eas\)")
+        import hashlib
+        self.assertEqual(hashlib.sha256(check.encode()).hexdigest(),
+                         "36de6abd267a0aaf80ad505138a096d8e5b9d5202dd1241c053e5110dafd7268")
         self.assertIn('"${HERE}/pairs-hold.sh" 0 smoke', sh)
         hold = read(HERE, "pairs-hold.sh")
         self.assertIn("smoke) name=H62-smoke", hold)

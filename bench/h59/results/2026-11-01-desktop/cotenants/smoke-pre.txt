@@ -1,0 +1,19 @@
+== smoke pre 2026-11-01T17:12:31Z
+loadavg: 3.21 3.79 3.52 3/20422 4168842
+pkg_temp_c: 75
+memavailable_kb: 59535016
+power_profile: performance
+qwen35-9b: running=true restarts=0 started=2026-10-20T18:32:45.182626468Z image=vllm/vllm-openai:v0.19.1
+gpustack-worker: running=true restarts=5305 started=2026-11-01T17:03:09.420433367Z image=100.65.68.53:5000/gpuharness-plus:v2.2.23
+qwen35-9b vllm counters:
+vllm:prompt_tokens_total{engine="0",model_name="qwen3.5-9b"} 26.0
+vllm:generation_tokens_total{engine="0",model_name="qwen3.5-9b"} 11.0
+vllm:request_success_total{engine="0",finished_reason="stop",model_name="qwen3.5-9b"} 1.0
+vllm:request_success_total{engine="0",finished_reason="length",model_name="qwen3.5-9b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="abort",model_name="qwen3.5-9b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="error",model_name="qwen3.5-9b"} 0.0
+vllm:request_success_total{engine="0",finished_reason="repetition",model_name="qwen3.5-9b"} 0.0
+nvidia-smi:
+0, NVIDIA RTX 4000 SFF Ada Generation, 5206 MiB, 0 %, 25.19 W
+1, NVIDIA RTX 2000E Ada Generation, 13530 MiB, 0 %, 7.02 W
+k3d clusters: []

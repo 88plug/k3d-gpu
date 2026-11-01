@@ -190,6 +190,12 @@ another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF, a va
 `k3d-gpu plan --model M --explain` names the row that decided. A GPU placement is not
 affected: these are CPU rows.
 
+As of 2026-11-01 one row of the family is SUPPORTED: H59, for the Xeon 6741P's class
+(`6741p`) [ledger:H59]. On that class, with no backend set and no variant named,
+`agent up --model google/gemma-4-26B-A4B-it` serves llama.cpp with Google's QAT Q4_0 GGUF
+and the QAT MTP drafter. H59d (the i9-13900T) is INCONCLUSIVE and H59w (the i7-13700) is
+PENDING, so those classes, and every class with no row, keep OVMS.
+
 ## The llama.cpp backend
 
 llama-server (ggml-org/llama.cpp v0.8.0, image tags `*-b11960`, pinned by digest) runs in

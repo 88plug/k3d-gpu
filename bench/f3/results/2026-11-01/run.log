@@ -1,0 +1,19 @@
+[2026-11-01T03:59:53-08:00] step 1-up: start (timeout 1800s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu up
+[2026-11-01T04:00:53-08:00] step 1-up: rc=0 wall=60s
+[2026-11-01T04:00:53-08:00] step 2-dry-run: start (timeout 900s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu eas up --agent-toolkit --dry-run
+[2026-11-01T04:00:59-08:00] step 2-dry-run: rc=0 wall=6s
+[2026-11-01T04:00:59-08:00] step 3-eas-up: start (timeout 6000s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu eas up --agent-toolkit
+[2026-11-01T04:41:52-08:00] step 3-eas-up: rc=0 wall=2453s
+[2026-11-01T04:41:52-08:00] step 4-wait: start (timeout 1800s): env KUBECONFIG=/home/andrew/.cache/k3dgpu-f3/f3-scored/out/state/kubeconfig-k3dgpu-f3-eas kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+[2026-11-01T04:41:59-08:00] step 4-wait: rc=0 wall=7s
+[2026-11-01T04:41:59-08:00] step 5-check: start (timeout 900s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu eas check
+[2026-11-01T04:46:37-08:00] step 5-check: rc=0 wall=278s
+[2026-11-01T04:46:37-08:00] step 6-status: start (timeout 600s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu eas status
+[2026-11-01T04:46:50-08:00] step 6-status: rc=0 wall=13s
+[2026-11-01T04:46:50-08:00] step 7-scan: start (timeout 600s): bash -c bash "$1" read "$2" "$3" && bash "$1" count "$2" step7 "$4" "$4/steps" "$4/run.log" "$4/ps-samples.gz" "$5/logs" _ /home/andrew/.cache/k3dgpu-f3/f3-scored/bin/scan.sh /home/andrew/.cache/k3dgpu-f3/f3-scored/bin/.vals-k3dgpu-f3-eas /home/andrew/.cache/k3dgpu-f3/f3-scored/out/state/kubeconfig-k3dgpu-f3-eas /home/andrew/.cache/k3dgpu-f3/f3-scored/out /home/andrew/.cache/k3dgpu-f3/f3-scored/out/state/eas-k3dgpu-f3-eas
+[2026-11-01T04:46:58-08:00] step 7-scan: rc=0 wall=8s
+[2026-11-01T04:46:58-08:00] step 8-eas-down: start (timeout 1200s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu eas down
+[2026-11-01T04:50:26-08:00] step 8-eas-down: rc=0 wall=208s
+[2026-11-01T04:50:27-08:00] step 9-down: start (timeout 600s): /home/andrew/.cache/k3dgpu-f3/f3-scored/src/scripts/k3d-gpu down
+[2026-11-01T04:50:36-08:00] step 9-down: rc=0 wall=9s
+[2026-11-01T04:50:37-08:00] run.sh done (rc 0)

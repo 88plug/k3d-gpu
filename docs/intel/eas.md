@@ -1,11 +1,16 @@
 # Intel EAS on k3d-gpu (`k3d-gpu eas`)
 
-> **Status: built from upstream source, not yet run end to end.** The scored run is
-> F3 in [EXPERIMENTS.md](../../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29),
-> pre-registered on 2026-10-29 and PENDING. Until F3 has run, nothing on this page says
-> that EAS works on k3d-gpu. The EAT 2.0 layer has never run on k3s or k3d in this
-> repo's records: Gate 2 covered EAS's platform and inference layers only
-> ([upstream-eat.md](upstream-eat.md#test-plan)).
+> **Status: run end to end once, F3 REFUTED.** The scored run is F3 in
+> [EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01), pre-registered on
+> 2026-10-29 and run on 2026-11-01 on the i9-13900T. `eas up --agent-toolkit` installed
+> the platform, inference and agent-toolkit layers on a fresh default cluster with
+> `failed=0`, and every choice and patch decision matched the pre-registered table.
+> `eas check` passed through the EAS gateway (chat, tool call, the guard's block, the
+> sandbox run), and `eas down` tore it down. F3 is still REFUTED: its secret scan found
+> the Keycloak admin password once, in a `ps` sample of `kcadm.sh`'s command line, which
+> enterprise-inference's `keycloak_config` role builds
+> ([State and secrets](#state-and-secrets)). `eas up` now patches that role; no live run
+> has checked the patch yet.
 
 Intel® AI for Enterprise Solutions ([intel/enterprise-ai-solutions](https://github.com/intel/enterprise-ai-solutions),
 EAS) installs Intel's AI stack in layers with one script, `es_auto_installer.sh`. Since
@@ -67,6 +72,10 @@ k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes i
 - Arguments after `--` go to `ansible-playbook`, for example
   `k3d-gpu eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'` to
   install without EAT's chat model.
+- `eas down` gives the teardown the same image pins and overrides as `eas up` gave the
+  install. EAS picks teardown components by the same `enabled` flags as install
+  ([resolve_components.py](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/filter_plugins/resolve_components.py#L245)),
+  so components `eas up` left to k3d-gpu, such as its NFD, stay.
 
 What `eas up` does, in order:
 
@@ -116,6 +125,7 @@ Each row is one line of `choices.txt`. Sources are pinned to the commits in [Pin
 | No AMXBF16 label | `require_amx: false`, so model pods are not left Pending on the AMX node affinity | [EI core/renderer.py#L90-L104](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/model_manager/core/renderer.py#L90-L104); Gate 2 probe 5 |
 | No AMX | `VLLM_CPU_SGL_KERNEL` left as shipped: vLLM v0.28.0 checks AMX itself | [vLLM utils.py#L238-L244](https://github.com/vllm-project/vllm/blob/2cf0a6915ce544dc493a0990f2ea38d81601128a/vllm/model_executor/layers/utils.py#L238-L244) |
 | No `--cluster-cidr` or `--service-cidr` in `k3s.io/node-args` | `kubernetes_cluster_cidr: 10.42.0.0/16`, `kubernetes_service_cidr: 10.43.0.0/16` (EI's LiteLLM falls back to `10.233.64.0/18` for the pod network it admits, which EAT turns on with OpenShell and asks for on a BYO cluster) | [k3s server.go#L139-L144 at v1.37.1+k3s1](https://github.com/k3s-io/k3s/blob/356c025475bbefaa09cf0d7e48e8e2adbbde57db/pkg/cli/cmds/server.go#L139-L144); [EI litellm defaults#L65](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/litellm/defaults/main.yaml#L65); [EAT config.yaml#L61-L64](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/config.yaml#L61-L64) |
+| EI's model deploy hands model-manager the LiteLLM master key through ansible `environment:`, which lands in the deploy's `/bin/sh -c` command line while each model deploys | `_deploy_litellm_secret: ""` in the overrides, so model-manager reads Secret `litellm/litellm-master-key` itself. Before the install, `eas up` checks that EI's `deploy_models.yaml` takes the key from that variable alone, and stops if it does not | [EI deploy_models.yaml#L240](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L240) |
 | A BYO cluster | `kata_containers_enabled: false`, set explicitly (EAS's default is already `false`): the role fails on BYO | [EAS kata_containers/tasks/install.yaml#L9-L22](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/kata_containers/tasks/install.yaml#L9-L22) |
 | `gpu.intel.com/*` or `habana.ai/gaudi` allocatable | `kubernetes_accelerator: cpu` stays, and the line says "serve the device with k3d-gpu agent up" | [EAT README.md#L36](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/README.md#L36); [EAS nvidia_gpu_operator install.yaml#L20](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/nvidia_gpu_operator/tasks/install.yaml#L20) |
 | `--agent-toolkit`, no agent-sandbox CRDs | `agent_sandbox_enabled: true`: EAT installs agent-sandbox `v0.5.0` | [EAT config.yaml#L54-L56](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/config.yaml#L54-L56) |
@@ -183,7 +193,7 @@ Open EAS PRs that change a decision when they merge (`overlay.py --watch`, check
 | EAS PR | Effect on the overlay |
 |---|---|
 | [#50](https://github.com/intel/enterprise-ai-solutions/pull/50) and [#52](https://github.com/intel/enterprise-ai-solutions/pull/52) (OpenShift) | 0006 no longer applies: the selector moves into `_eg_k8s_provider`, still `control-plane: ""`. That is a STOP naming #50. Once a k3s vars file lands, 0006 becomes drop-fixed |
-| [#61](https://github.com/intel/enterprise-ai-solutions/pull/61) (Headlamp SSO) | 0002 fails on its `global_config.yaml` hunk context: a STOP naming #61, so 0002 needs regenerating. 0004 (skipped on one node) and 0005 (docs, never applied) fail there too. 0006 still applies |
+| [#61](https://github.com/intel/enterprise-ai-solutions/pull/61) (Headlamp SSO), merged 2026-10-30 | 0002 fails on its `global_config.yaml` hunk context: a STOP naming #61, so 0002 needs regenerating. 0004 (skipped on one node) and 0005 (docs, never applied) fail there too. 0006 still applies. EAS `main` is `0f7bc2b` since (read 2026-11-01); the pin stays `97f6157`, where the decisions above hold, and moving it past #61 needs 0002 regenerated first (read from #61's head, not re-checked on the merge) |
 
 ## Pins
 
@@ -214,6 +224,7 @@ Bastion tools (each binary checked against its upstream checksum file at build t
 | kubectl | v1.37.2 | the minor of the node's k3s (`K3S_TAG` v1.37.1-k3s1); EAS's own v1.34.3 ([#L52](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L52)) is three minors off, outside the [kubectl skew policy](https://kubernetes.io/releases/version-skew-policy/#kubectl) |
 | helm | v3.22.1 | latest v3; EAS's floor is v3.20.2 ([#L53](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L53)). Helm v4 is untested with `kubernetes.core` 6.3.0 |
 | yq | v4.54.1 | EAS's floor is v4.53.2 ([#L51](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L51)) |
+| jq | jq-1.8.2 | latest; enterprise-inference pipes yq into jq on the installer host to pick the models to deploy ([deploy_models.yaml#L108-L114](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L108-L114)), and EAS's `configure` installs no jq |
 | ansible, kubernetes (Python) | 12.3.0, 35.0.0, hashed | newest inside EAS's ranges `ansible>=10.0,<13.0`, `kubernetes>=29.0,<36.0` ([requirements.txt](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/requirements.txt)) |
 | kubernetes.core | 6.3.0 | EAS's [collections/requirements.yml](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/collections/requirements.yml) |
 
@@ -253,14 +264,46 @@ changes the host.
 | 48-core minimum | under it, CPU requests may not fit | warns; `eas status` lists Pending pods |
 | `--skip-models` in EI's docs ([config.yaml#L97](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/config.yaml#L97)) | EAS's installer has no such flag and stops on it ([#L1312](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1312)) | nothing to replace on the inference layer: EI's seeded config already has `llm_services_deploy_models: false` ([config.yaml#L98](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/config.yaml#L98)). With `--agent-toolkit`, EAT's chat model and the Qwen3Guard guard model deploy whatever that key says ([EI llm_services install.yaml#L143-L161](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/install.yaml#L143-L161)); `k3d-gpu eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'` skips the chat model ([EAT config.yaml#L34](https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/config.yaml#L34)), and the guard model stays while the guardrail is on |
 
+Findings that are not workarounds in `known-issues.json` (EI's stale guardrail docs, the
+master-key command line, EI's `cpu: auto` sizing that left EAT's sandbox
+router unschedulable in H62, and the EAT 1.1.x findings) are listed in
+[intel.md, Upstream findings](../intel.md#upstream-findings), with unsent issue drafts in
+[upstream-eat.md](upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent).
+
 ## State and secrets
 
 - State lives in `${STATE_DIR}/eas-<cluster>/` (mode 0700): the EAS checkout, `env/k3d-gpu`,
   logs, `choices.txt`, `overlay.txt` and the resolved pins.
 - The Keycloak admin password is generated by EAS
   ([keycloak defaults#L28](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/keycloak/defaults/main.yaml#L28)).
-  `HF_TOKEN` is passed to the bastion by name when it is set. No secret is put on a
-  command line or in a log.
+  `HF_TOKEN` is passed to the bastion by name when it is set. `k3d-gpu eas` puts no secret
+  on a command line or in a log, and keeps EI's LiteLLM master key off the model deploy's
+  command line (the `_deploy_litellm_secret` row in [Automatic choices](#automatic-choices)).
+- enterprise-inference's `keycloak_config` role, as it ships, runs
+  `kcadm.sh config credentials ... --password <value>` and
+  `kcadm.sh update clients/<id> -s secret=<value>` in the Keycloak pod
+  ([install.yaml#L166-L205](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L205)).
+  Its `no_log` keeps both values out of the logs, but while each kcadm JVM runs the value
+  is in its argv, which the host's `ps` lists, since a k3d node is a container on the
+  host. F3's secret scan caught the admin password in one 2 s sample
+  ([F3 run](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)); F3 did not scan for the
+  client secret.
+- Since F3, `eas up` patches that role right after `init`
+  ([`patches/ei/0001`](../../integrations/eas/patches/ei/0001-keycloak-config-kcadm-argv.patch),
+  applied by [`ei-kcadm.sh`](../../integrations/eas/ei-kcadm.sh)). kcadm reads the admin
+  password from `KC_CLI_PASSWORD`, as Keycloak 26.6.0 does when `--password` is absent
+  ([BaseConfigCredentialsCmd.java#L104-L110](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110)),
+  and a shell in the pod copies it from the `KC_BOOTSTRAP_ADMIN_PASSWORD` the Keycloak
+  operator sets from `keycloak-admin-secret`
+  ([KeycloakDistConfigurator.java#L102-L113](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/operator/src/main/java/org/keycloak/operator/controllers/KeycloakDistConfigurator.java#L102-L113)).
+  Keycloak generates the client secret, and the role stores the value kcadm prints.
+  `ei-kcadm.sh` stops the install when the task is not the one the patch was cut against,
+  or when any kcadm call in EI passes a secret as an argument, and takes the patch out
+  before `init` so that `init --upgrade` can move EI. `tests/eas_test.sh kcadm` runs the
+  role both ways under `ansible-playbook`, with a fake password and a fake kcadm, while
+  `ps` samples every argv: as shipped, both values are on kcadm's argv; patched, no sample
+  holds either. No live EAS run has checked the patch yet, and F3 stays REFUTED. The EI
+  issue is drafted and unsent ([upstream-eat.md](upstream-eat.md#ei-the-keycloak-admin-password-and-the-client-secret-are-kcadmsh-arguments)).
 - `eas check` (after `--agent-toolkit`, the layer that brings LiteLLM) mints a LiteLLM
   virtual key from the `litellm-master-key` Secret (namespace `litellm`), uses it once
   against the gateway, and deletes it.
@@ -285,16 +328,17 @@ changes the host.
   `model_manager/runtimes` (read 2026-10-29), so that flavour cannot run anywhere yet.
 - **One node.** Patch 0004 (topology labels) is only needed on more than one node, and
   `eas up` targets the single k3d-gpu server.
-- **Not yet observed.** The EAT 2.0 layer on k3s or k3d; agent-sandbox v0.5.0 on
+- **Observed once, in F3.** The EAT 2.0 layer on k3d; agent-sandbox v0.5.0 on
   Kubernetes 1.37 (EAS tests 1.34.3); the CPU requests of the whole stack on a 32-CPU
-  desktop; helm v3.22.1 with `kubernetes.core` 6.3.0; and whether any BYO task needs `sudo`
-  inside the bastion. The installer itself probes `sudo -n true` before every `install` and,
+  desktop; helm v3.22.1 with `kubernetes.core` 6.3.0; and no BYO task stopping on `sudo`
+  inside the bastion. None of them stopped a step of the
+  [F3 run](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01), one run on one host. The installer itself probes `sudo -n true` before every `install` and,
   without passwordless sudo, runs `ansible-playbook` with `--ask-become-pass`
   ([es_auto_installer.sh#L866-L875](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L866-L875),
   [#L1179](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1179),
   [#L1423](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1423)),
-  which a bastion with no terminal cannot answer. The `eas` CLI PR's wiring smoke settles
-  these on a throwaway cluster; F3 is the scored run.
+  which a bastion with no terminal cannot answer. The `eas` CLI PR's wiring smokes ran on a
+  throwaway cluster; F3 is the scored run.
 
 ## Related
 
@@ -304,3 +348,4 @@ changes the host.
 | See the upstream patch drafts and their checks | [upstream-eat.md](upstream-eat.md) |
 | See EAT's PR history and pins | [platforms.md](../platforms.md#intel-enterprise-agent-toolkit-eat) |
 | See the F3 pre-registration | [EXPERIMENTS.md](../../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) |
+| See the F3 run and its records | [EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01), [bench/f3/](../../bench/f3/) |

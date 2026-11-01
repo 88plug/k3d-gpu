@@ -1,0 +1,73 @@
+{
+ "arms": {
+  "L": {
+   "name": "L",
+   "n4_per_hold": {
+    "2": 5.830193338516956
+   },
+   "holds_measured": 1,
+   "not_deliverable": 2,
+   "quality": {
+    "correct": 50,
+    "n": 50
+   },
+   "n4_total": 16,
+   "median": {
+    "n1": 12.488831122417169,
+    "n4": 5.830193338516956,
+    "n16": null
+   },
+   "n4_requests": 16
+  },
+  "O": {
+   "name": "O",
+   "n4_per_hold": {
+    "1": 5.598150591519552,
+    "2": 5.5594632268672814,
+    "3": 5.544889502120811
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 49,
+    "n": 50
+   },
+   "n4_total": 48,
+   "median": {
+    "n1": 10.477664990062374,
+    "n4": 5.556868633105598,
+    "n16": null
+   },
+   "n4_requests": 48
+  }
+ },
+ "load_gate": {
+  "matched": true,
+  "spread": 0.12983333333333347,
+  "tolerance": 2.0,
+  "reason": "matched",
+  "means": {
+   "L": 2.135076923076923,
+   "O": 2.0052435897435896
+  },
+  "rule": "H57d's load gate over each arm's 60 s idle window (H59 amendment R2)",
+  "n4": {
+   "matched": true,
+   "spread": 1.5103830001833853,
+   "tolerance": 2.0,
+   "reason": "matched",
+   "means": {
+    "L": 1.5897105263157896,
+    "O": 0.07932752613240417
+   },
+   "rule": "H57d's load gate over the N=4 phases",
+   "gates": false
+  }
+ },
+ "reported": {
+  "n1": 1.1919479325080828,
+  "n16": null
+ },
+ "verdict": "INCONCLUSIVE",
+ "reason": "L not deliverable in two holds"
+}

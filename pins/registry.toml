@@ -1,0 +1,1353 @@
+# Every pin of class ours or eat-stock the freshness bumper (hack/bump) moves, where
+# it comes from and where it lives. Read by hack/pins, hack/bump and the Freshness
+# workflow (.github/workflows/freshness.yml). How to add a pin, group, hold or known
+# issue: pins/README.md. `hack/pins check` (CI) proves every site below resolves in
+# the tree, that derived values equal their parents and that every pinned image,
+# requirements pin and Hugging Face revision in an ours or eat-stock file has an owner.
+#
+# Regexes are TOML literal strings ('...'): no escaping. Named groups are the spans.
+
+# ---- groups: one PR each, on branch autobump/<group> ---------------------------
+# tests: suites hack/bump runs after the rewrite (CI runs them all again on the PR).
+# hooks: built-in steps hack/bump runs after the rewrite, in order (pins/README.md).
+# outputs: files the hooks write (hack/pin-only-diff accepts any change there).
+
+[groups.k3s]
+tests = ["tests/image_pins_test.sh"]
+hooks = ["lock", "readme-history"]
+outputs = ["images.lock"]
+
+[groups.nvidia-plugin]
+tests = ["tests/image_pins_test.sh", "tests/detect_test.sh"]
+hooks = ["lock", "readme-history"]
+outputs = ["images.lock"]
+
+[groups.intel-plugins]
+tests = ["tests/image_pins_test.sh", "tests/detect_test.sh"]
+hooks = ["lock", "readme-history"]
+outputs = ["images.lock"]
+
+[groups.gaudi-plugin]
+tests = ["tests/image_pins_test.sh", "tests/detect_test.sh"]
+hooks = ["lock", "readme-history"]
+outputs = ["images.lock"]
+
+[groups.cuda-test]
+tests = ["tests/image_pins_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.nvctk]
+tests = ["tests/host_setup_test.sh"]
+hooks = ["readme-history"]
+
+[groups.ppa]
+tests = ["tests/host_setup_test.sh"]
+hooks = ["ppa-write"]
+
+[groups.nri]
+tests = ["tests/render_test.sh", "tests/image_pins_test.sh"]
+hooks = ["render-latest", "lock"]
+outputs = ["hack/components/nri-balloons/component.conf", "hack/components/nri-balloons-guard/component.conf",
+           "share/nri-balloons.yml", "share/nri-balloons-guard.yml", "images.lock"]
+
+[groups.llama-cpp]
+tests = ["tests/image_pins_test.sh", "tests/llamacpp_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.vllm-cpu]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.vllm-xpu]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/model_opt_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.llm-scaler]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.gaudi-vllm]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.ovms]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
+hooks = ["lock", "ledger-rules"]
+outputs = ["images.lock", "console/ledger-rules.json"]
+
+[groups.npu-umd]
+tests = ["tests/image_pins_test.sh", "tests/detect_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.dlstreamer]
+tests = ["tests/image_pins_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.sglang]
+tests = ["tests/console_test.sh"]
+hooks = ["ledger-rules"]
+outputs = ["console/ledger-rules.json"]
+
+[groups.hf-qwen3-4b]
+tests = ["tests/detect_test.sh"]
+
+[groups.hf-qwen3-ov]
+tests = ["tests/detect_test.sh"]
+
+[groups.hf-console-fallback]
+tests = ["tests/model_opt_test.sh"]
+
+[groups.convert-pins]
+tests = ["tests/console_test.sh", "tests/model_opt_test.sh"]
+hooks = ["convert-pins"]
+outputs = ["console/convert-pins.json"]
+
+[groups.gguf-convert-pip]
+tests = ["tests/llamacpp_test.sh"]
+
+[groups.host-intel]
+tests = ["tests/host_setup_test.sh"]
+
+[groups.telemetry]
+tests = ["tests/telemetry_test.sh", "tests/image_pins_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.opt-in-manifests]
+tests = ["tests/image_pins_test.sh", "tests/chat_ui_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.tools]
+tests = ["tests/render_test.sh", "tests/packaging_test.sh"]
+
+[groups.packaging-images]
+tests = ["tests/packaging_test.sh"]
+
+[groups.devcontainer]
+tests = []
+
+[groups.docs-build]
+tests = ["tests/docs_test.sh"]
+hooks = ["docs-lock"]
+outputs = ["docs-build/requirements.txt"]
+
+[groups.flake]
+tests = ["tests/packaging_test.sh"]
+hooks = ["flake-update"]
+outputs = ["flake.lock"]
+
+[groups.examples]
+tests = ["tests/kserve_test.sh"]
+hooks = ["constraints"]
+outputs = ["examples/agents/*/constraints.txt"]
+
+[groups.eat-stock]
+tests = ["tests/eat_test.sh", "tests/image_pins_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.images]
+tests = ["tests/image_pins_test.sh"]
+hooks = ["lock"]
+outputs = ["images.lock"]
+
+[groups.digests]
+tests = ["tests/image_pins_test.sh", "tests/audit_test.sh", "tests/render_test.sh"]
+hooks = ["repin", "lock"]
+outputs = ["images.lock"]
+
+# ---- images.default ------------------------------------------------------------
+# Owns every pinned image reference in an ours or eat-stock file that no [[pin]]
+# below names: source oci, scheme docker-suffix, the newest tag shaped like the
+# current one. Its group is the first glob that matches the file.
+[images.default]
+family = "base-image"
+groups = [
+  { glob = "integrations/eat/*", group = "eat-stock" },
+  { glob = "integrations/eas/*", group = "eat-stock" },
+  { glob = "examples/kuberay/*", group = "eat-stock" },
+  { glob = "examples/agents/litellm-gateway/*", group = "eat-stock" },
+  { glob = "contrib/eat/*", group = "eat-stock" },
+  { glob = "packaging/*", group = "packaging-images" },
+  { glob = ".devcontainer/*", group = "devcontainer" },
+  { glob = "docs-build/*", group = "docs-build" },
+  { glob = "examples/*", group = "examples" },
+  { glob = "tests/*", group = "examples" },
+  { glob = "*", group = "images" },
+]
+# Exact references the default rule never moves, each with why. `hack/pins check`
+# fails on an entry its file no longer holds.
+frozen = [
+  { file = "scripts/k3d-gpu", ref = "registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.7", reason = "SANDBOX_UNLABELLED_IMAGES: the controller an earlier k3d-gpu release installed before the managed-by label; sandbox ownership matches it exactly" },
+]
+
+# =============================================================================
+# k3s
+# =============================================================================
+[[pin]]
+id = "k3s"
+class = "ours"
+group = "k3s"
+family = "k3s"
+component = "rancher/k3s"
+scheme = "k8s"
+# The highest non-prerelease release by version (all minors release within
+# seconds, so GitHub's "latest" flag is not the newest), "+k3s" read as "-k3s".
+source = { kind = "github-release", repo = "k3s-io/k3s", select = "highest", tag = "{v}", tag_map = { "+" = "-" }, image = "rancher/k3s", image_tag = "{v}" }
+# Docker Hub must serve the tag (rancher stopped per-arch -amd64 tags after v1.34.1).
+confirm = { kind = "oci", image = "rancher/k3s", tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "Dockerfile", arg = "K3S_TAG" },
+  { file = "Dockerfile", arg = "K3S_DIGEST", key = "digest" },
+  { file = "README.md", regex = '^\| `K3S_TAG` +\| `(?P<v>v[0-9.]+-k3s[0-9]+)` ' },
+]
+derived = [
+  { file = "README.md", regex = '^\| `K3S_DIGEST` \| `(?P<v>sha256:[0-9a-f]{8})…` ', from = "{digest:.15}" },
+]
+
+# =============================================================================
+# Device plugins and the CTK
+# =============================================================================
+[[pin]]
+id = "nvidia-device-plugin"
+class = "ours"
+group = "nvidia-plugin"
+family = "plugin"
+scheme = "semver"
+source = { kind = "github-release", repo = "NVIDIA/k8s-device-plugin", tag = "{v}" }
+confirm = { kind = "oci", image = "nvcr.io/nvidia/k8s-device-plugin", tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "share/nvidia-device-plugin.yml", ref = "nvcr.io/nvidia/k8s-device-plugin" },
+]
+
+[[pin]]
+id = "intel-device-plugins"
+class = "ours"
+group = "intel-plugins"
+family = "plugin"
+scheme = "semver"
+source = { kind = "github-release", repo = "intel/intel-device-plugins-for-kubernetes", tag = "v{v}" }
+confirm = { kind = "oci", image = "intel/intel-gpu-plugin", tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "share/intel-gpu-plugin.yml", ref = "intel/intel-gpu-plugin" },
+  { file = "share/intel-gpu-wsl-plugin.yml", ref = "intel/intel-gpu-plugin" },
+  { file = "share/intel-gpu-wsl-plugin.yml", ref = "intel/intel-gpu-levelzero" },
+  { file = "share/intel-npu-plugin.yml", ref = "intel/intel-npu-plugin" },
+  { file = "share/intel-dsa-plugin.yml", ref = "intel/intel-dsa-plugin" },
+  { file = "share/intel-iaa-plugin.yml", ref = "intel/intel-iaa-plugin" },
+  { file = "share/intel-qat-plugin.yml", ref = "intel/intel-qat-plugin" },
+  { file = "scripts/k3d-gpu", var = "NPU_PLUGIN_TAG" },
+  # The NodeFeatureRules baked with NFD come from the same release.
+  { file = "share/node-feature-discovery.yml", regex = '^# Node Feature Discovery v[0-9.]+ \+ Intel device-plugin NodeFeatureRules v(?P<v>[0-9.]+)$' },
+  { file = "share/node-feature-discovery.yml", regex = 'intel-device-plugins-for-kubernetes/tree/v(?P<v>[0-9.]+)/deployments/nfd' },
+  { file = "share/node-feature-discovery.yml", regex = 'intel-device-plugins-for-kubernetes-(?P<v>[0-9.]+)/deployments/nfd' },
+]
+
+[[pin]]
+id = "gaudi-device-plugin"
+class = "ours"
+group = "gaudi-plugin"
+family = "plugin"
+scheme = "apt"
+source = { kind = "oci", image = "docker.io/intel/gaudi-device-plugin", tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "share/gaudi-device-plugin.yml", ref = "docker.io/intel/gaudi-device-plugin" },
+]
+
+[[pin]]
+id = "cuda-test-image"
+class = "ours"
+group = "cuda-test"
+family = "base-image"
+scheme = "semver"
+source = { kind = "oci", image = "nvidia/cuda", tag = "{v}-base-ubuntu26.04" }
+sites = [
+  { file = "scripts/k3d-gpu", ref = "nvidia/cuda", tag = "{v}-base-ubuntu26.04" },
+]
+
+[[pin]]
+id = "nvctk"
+class = "ours"
+group = "nvctk"
+family = "plugin"
+scheme = "apt"
+# The toolkit, its base and the libnvidia-container libraries share one version.
+source = { kind = "apt-index", url = "https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages", package = "nvidia-container-toolkit", also = ["nvidia-container-toolkit-base", "libnvidia-container-tools", "libnvidia-container1"] }
+canary = ["node"]
+sites = [
+  { file = "Dockerfile", arg = "NVIDIA_CTK_VERSION" },
+]
+derived = [
+  { file = "scripts/k3d-gpu", regex = '^HS_NVCTK=(?P<v>\S+)$', from = "{v}" },
+  { file = "scripts/k3d-gpu", regex = '^#   nvidia-container-toolkit (?P<v>\S+) \(NVIDIA', from = "{v}" },
+]
+
+[[pin]]
+id = "nvidia-container-runtime"
+class = "ours"
+group = "nvctk"
+family = "plugin"
+scheme = "apt"
+source = { kind = "apt-index", url = "https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages", package = "nvidia-container-runtime" }
+canary = ["node"]
+sites = [
+  { file = "Dockerfile", arg = "NVIDIA_CONTAINER_RUNTIME_VERSION" },
+]
+
+# =============================================================================
+# Host setup: the kobuk-team PPA builds (hack/ppa-pins writes them) and Intel's
+# GitHub .debs and archives
+# =============================================================================
+[[pin]]
+id = "ppa-media"
+class = "ours"
+group = "ppa"
+family = "host-ppa"
+scheme = "apt"
+writer = "hook"
+source = { kind = "cmd", run = ["hack/ppa-pins"], parse = "kv", key = "HS_PPA_MEDIA" }
+sites = [{ file = "scripts/k3d-gpu", var = "HS_PPA_MEDIA" }]
+
+[[pin]]
+id = "ppa-gmm"
+class = "ours"
+group = "ppa"
+family = "host-ppa"
+scheme = "apt"
+writer = "hook"
+source = { kind = "cmd", run = ["hack/ppa-pins"], parse = "kv", key = "HS_PPA_GMM" }
+sites = [{ file = "scripts/k3d-gpu", var = "HS_PPA_GMM" }]
+
+[[pin]]
+id = "ppa-libva"
+class = "ours"
+group = "ppa"
+family = "host-ppa"
+scheme = "apt"
+writer = "hook"
+source = { kind = "cmd", run = ["hack/ppa-pins"], parse = "kv", key = "HS_PPA_LIBVA" }
+sites = [{ file = "scripts/k3d-gpu", var = "HS_PPA_LIBVA" }]
+
+[[pin]]
+id = "compute-runtime"
+class = "ours"
+group = "host-intel"
+family = "host-driver"
+scheme = "docker-suffix"
+# The compute-runtime release notes name the IGC release it is built with (followed
+# for its build number and .debs); every sha256 is a GitHub release asset digest.
+source = { kind = "github-release", repo = "intel/compute-runtime", tag = "{v}", body = { igc = 'intel-graphics-compiler/releases/tag/v([0-9.]+)' }, assets = { sha_ocl = "intel-opencl-icd_{v}-0_amd64.deb", sha_ze = "libze-intel-gpu1_{v}-0_amd64.deb" }, follow = [{ repo = "intel/intel-graphics-compiler", tag = "v{igc}", asset_match = { igc_build = 'intel-igc-core-2_[0-9.]+\+([0-9]+)_amd64\.deb' }, assets = { sha_igc_core = "intel-igc-core-2_{igc}+{igc_build}_amd64.deb", sha_igc_opencl = "intel-igc-opencl-2_{igc}+{igc_build}_amd64.deb" } }] }
+sites = [
+  { file = "scripts/k3d-gpu", var = "HS_CR" },
+  { file = "scripts/k3d-gpu", regex = '^intel-opencl-icd_\$\{HS_CR\}-0_amd64\.deb (?P<sha_ocl>[0-9a-f]{64}) ' },
+  { file = "scripts/k3d-gpu", regex = '^libze-intel-gpu1_\$\{HS_CR\}-0_amd64\.deb (?P<sha_ze>[0-9a-f]{64}) ' },
+  { file = "scripts/k3d-gpu", regex = 'intel-graphics-compiler/releases/download/v(?P<igc>[0-9.]+)"$' },
+  { file = "scripts/k3d-gpu", regex = '^intel-igc-core-2_(?P<igc>[0-9.]+)\+(?P<igc_build>[0-9]+)_amd64\.deb (?P<sha_igc_core>[0-9a-f]{64}) ' },
+  { file = "scripts/k3d-gpu", regex = '^intel-igc-opencl-2_(?P<igc>[0-9.]+)\+(?P<igc_build>[0-9]+)_amd64\.deb (?P<sha_igc_opencl>[0-9a-f]{64}) ' },
+]
+derived = [
+  { file = "scripts/k3d-gpu", regex = '^#   intel/compute-runtime (?P<v>[0-9.]+) with', from = "{v}" },
+  { file = "scripts/k3d-gpu", regex = '^#   intel/compute-runtime [0-9.]+ with intel-graphics-compiler v(?P<v>[0-9.]+)$', from = "{igc}" },
+  { file = "README.md", regex = 'sha256-checked: compute-runtime (?P<v>[0-9.]+), IGC', from = "{v}" },
+  { file = "README.md", regex = 'compute-runtime [0-9.]+, IGC (?P<v>[0-9.]+);', from = "{igc}" },
+]
+
+[[pin]]
+id = "level-zero"
+class = "ours"
+group = "host-intel"
+family = "host-driver"
+scheme = "semver"
+source = { kind = "github-release", repo = "oneapi-src/level-zero", tag = "v{v}", assets = { sha = "libze1_{v}+u24.04_amd64.deb" } }
+sites = [
+  { file = "scripts/k3d-gpu", regex = '^HS_ZE_DEB="libze1_(?P<v>[0-9.]+)\+u24\.04_amd64\.deb (?P<sha>[0-9a-f]{64}) https://github\.com/oneapi-src/level-zero/releases/download/v(?P=v)"$' },
+]
+derived = [
+  { file = "scripts/k3d-gpu", regex = '^#   oneapi-src/level-zero v(?P<v>[0-9.]+) \(libze1', from = "{v}" },
+]
+
+[[pin]]
+id = "npu-driver"
+class = "ours"
+group = "host-intel"
+family = "host-driver"
+scheme = "semver"
+source = { kind = "github-release", repo = "intel/linux-npu-driver", tag = "v{v}", asset_match = { build = '^linux-npu-driver-v([0-9.]+-[0-9]+)-ubuntu2404\.tar\.gz$' }, assets = { sha_2404 = "linux-npu-driver-v{build}-ubuntu2404.tar.gz", sha_2604 = "linux-npu-driver-v{build}-ubuntu2604.tar.gz" } }
+sites = [
+  { file = "scripts/k3d-gpu", var = "HS_NPU_REL", key = "tag" },
+  { file = "scripts/k3d-gpu", var = "HS_NPU_BUILD", key = "build" },
+  { file = "scripts/k3d-gpu", regex = '^        24\.04\) echo "linux-npu-driver-v\$\{HS_NPU_BUILD\}-ubuntu2404\.tar\.gz (?P<sha_2404>[0-9a-f]{64})"' },
+  { file = "scripts/k3d-gpu", regex = '^        26\.04\) echo "linux-npu-driver-v\$\{HS_NPU_BUILD\}-ubuntu2604\.tar\.gz (?P<sha_2604>[0-9a-f]{64})"' },
+  { file = "scripts/k3d-gpu", regex = '^#   intel/linux-npu-driver v(?P<v>[0-9.]+) \(UMD' },
+]
+
+[[pin]]
+id = "linux-tools"
+class = "ours"
+group = "host-intel"
+family = "tools"
+scheme = "semver"
+notes = "intel-speed-select, built in the node image from this kernel release's tools/."
+source = { kind = "json", url = "https://www.kernel.org/releases.json", path = "latest_stable.version", regex = '^(?P<v>[0-9]+\.[0-9]+(\.[0-9]+)?)$', sums = { sha = { url = "https://cdn.kernel.org/pub/linux/kernel/v{v_major}.x/sha256sums.asc", name = "linux-{v}.tar.xz" } } }
+canary = ["node"]
+sites = [
+  { file = "Dockerfile", arg = "LINUX_TOOLS_VERSION" },
+  { file = "Dockerfile", arg = "LINUX_TOOLS_SHA256", key = "sha" },
+]
+
+# =============================================================================
+# Rendered components (hack/render-component --latest moves and renders them)
+# =============================================================================
+[[pin]]
+id = "nri-balloons"
+class = "ours"
+group = "nri"
+family = "plugin"
+scheme = "zerover"
+writer = "hook"
+source = { kind = "helm", repo = "https://containers.github.io/nri-plugins", chart = "nri-resource-policy-balloons" }
+canary = ["node"]
+sites = [
+  { file = "hack/components/nri-balloons/component.conf", var = "CHART_VERSION" },
+  { file = "hack/components/nri-balloons-guard/component.conf", var = "CHART_VERSION" },
+  { file = "hack/components/nri-balloons/component.conf", ref = "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons" },
+  { file = "hack/components/nri-balloons-guard/component.conf", ref = "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons" },
+  { file = "share/nri-balloons.yml", ref = "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons" },
+  { file = "share/nri-balloons-guard.yml", ref = "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons" },
+]
+
+# =============================================================================
+# Engines
+# =============================================================================
+[[pin]]
+id = "llama-cpp"
+class = "ours"
+group = "llama-cpp"
+family = "runtime-engine"
+component = "llama.cpp"
+scheme = "llama"
+# releases/latest vX.Y.Z; its images are tagged with the bNNNNN build of the same commit.
+source = { kind = "llama", repo = "ggml-org/llama.cpp" }
+patterns = { build = 'b[0-9]+' }
+canary = ["llama-cpu", "llama-sycl", "llama-vulkan", "llama-full"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-intel-{build}" },
+  { file = "scripts/k3d-gpu", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-{build}" },
+  { file = "scripts/k3d-gpu", ref = "ghcr.io/ggml-org/llama.cpp", tag = "full-{build}" },
+  { file = "scripts/k3d-gpu", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-vulkan-{build}" },
+  { file = "scripts/k3d-gpu", regex = 'llama\.cpp:server-vulkan-(?P<build>b[0-9]+), the multi-arch' },
+  { file = "scripts/k3d-gpu", regex = '^# index built from release (?P<v>v[0-9.]+) \(tag (?P<build>b[0-9]+), commit (?P<commit>[0-9a-f]{40})\)\.$' },
+  { file = "scripts/k3d-gpu", regex = '^# The llama\.cpp agent backend: release (?P<v>v[0-9.]+) \(tag (?P<build>b[0-9]+), commit$' },
+  { file = "bench/competitors.lock", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-{build}" },
+  { file = "console/moe_predict.py", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-{build}" },
+  { file = "console/moe_predict.py", ref = "ghcr.io/ggml-org/llama.cpp", tag = "server-intel-{build}" },
+  { file = "console/moe_predict.py", regex = '^# llama\.cpp names the agent.s own llama\.cpp pins \(release (?P<v>v[0-9.]+), tag (?P<build>b[0-9]+)\)' },
+]
+derived = [
+  { file = "scripts/k3d-gpu", regex = '^# (?P<v>[0-9a-f]{40})\), the latest release on', from = "{commit}" },
+  { file = "bench/competitors.lock", regex = 'github\.com/ggml-org/llama\.cpp/blob/(?P<v>v[0-9.]+)/common/arg\.cpp', from = "{v}" },
+  { file = "console/model_opt.py", regex = 'github\.com/ggml-org/llama\.cpp/blob/(?P<v>v[0-9.]+)/', from = "{v}", count = "any" },
+  { file = "console/fit.py", regex = 'llama\.cpp (?P<v>v[0-9.]+).s convert_hf_to_gguf\.py', from = "{v}", count = "any" },
+]
+
+[[pin]]
+id = "vllm-cpu"
+class = "ours"
+group = "vllm-cpu"
+family = "runtime-engine"
+component = "vllm-openai-cpu"
+scheme = "zerover"
+source = { kind = "github-release", repo = "vllm-project/vllm", tag = "{v}" }
+confirm = { kind = "oci", image = "vllm/vllm-openai-cpu", tag = "{v}" }
+canary = ["vllm-cpu"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "vllm/vllm-openai-cpu" },
+  { file = "console/moe_predict.py", ref = "vllm/vllm-openai-cpu" },
+]
+
+[[pin]]
+id = "vllm-xpu"
+class = "ours"
+group = "vllm-xpu"
+family = "static-engine"
+component = "vllm-openai-xpu"
+scheme = "zerover"
+source = { kind = "oci", image = "vllm/vllm-openai-xpu", tag = "{v}" }
+canary = ["vllm-xpu"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "vllm/vllm-openai-xpu" },
+  { file = "scripts/k3d-gpu", regex = '^ +# vllm/vllm-openai-xpu:(?P<v>v[0-9.]+) \(' },
+]
+derived = [
+  { file = "console/plan.py", regex = '^AGENT_VLLM_VERSION = \{"HPU": "[0-9.]+", "GPU": "(?P<v>[0-9.]+)"\}', from = "{v_bare}" },
+  { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION\.get\(device, "(?P<v>[0-9.]+)"\)', from = "{v_bare}" },
+  { file = "console/model_opt.py", regex = 'o\.get\("vllm_version"\) or "(?P<v>[0-9.]+)"', from = "{v_bare}" },
+  { file = "console/model_opt.py", regex = '^VLLM_[A-Z_]+ = "https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/', from = "{v}", count = 3 },
+  { file = "console/model_opt.py", regex = '"--language-model-only [^\n]*"https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/vllm/engine/arg_utils\.py', from = "{v}" },
+]
+
+[[pin]]
+id = "llm-scaler"
+class = "ours"
+group = "llm-scaler"
+family = "static-engine"
+component = "llm-scaler"
+scheme = "semver"
+# The release notes name the vLLM baseline the image carries.
+source = { kind = "github-release", repo = "intel/llm-scaler", select = "highest", tag = "vllm-{v}", body = { vllm = 'vLLM baseline \| ([0-9]+\.[0-9]+\.[0-9]+)', equiv = 'intel/llm-scaler-vllm:([0-9][0-9A-Za-z.-]*)\*\*' } }
+canary = ["llm-scaler"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "intel/llm-scaler-vllm" },
+  { file = "scripts/k3d-gpu", regex = '^ +# intel/llm-scaler-vllm:(?P<v>[0-9.]+) = (?P<equiv>[0-9][0-9A-Za-z.-]*) \(vLLM' },
+  { file = "console/moe_predict.py", ref = "intel/llm-scaler-vllm" },
+  { file = "console/plan.py", regex = '"(?P<vllm>[0-9.]+)" if backend == "llm-scaler"' },
+]
+
+[[pin]]
+id = "gaudi-vllm"
+class = "ours"
+group = "gaudi-vllm"
+family = "static-engine"
+component = "gaudi-vllm"
+scheme = "semver"
+source = { kind = "habana", os = "ubuntu24.04" }
+canary = ["gaudi-vllm"]
+sites = [
+  { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="vault\.habana\.ai/gaudi-docker/(?P<v>[0-9.]+)/ubuntu24\.04/habanalabs/(?P<repo>vllm-[0-9.]+-ptupstream-[0-9.]+):(?P<tag>(?P=v)-[0-9]+)@(?P<digest>sha256:[0-9a-f]{64})"' },
+  { file = "scripts/k3d-gpu", regex = '^ +# Intel.s vllm-gaudi v(?P<vllm>[0-9.]+) \+ vLLM v(?P=vllm) on Gaudi software (?P<tag>[0-9.]+-[0-9]+)$' },
+  { file = "scripts/k3d-gpu", regex = '^ +# \(PyTorch (?P<pt>[0-9.]+)\), the release of the baked gaudi-device-plugin' },
+]
+derived = [
+  { file = "console/plan.py", regex = '^AGENT_VLLM_VERSION = \{"HPU": "(?P<v>[0-9.]+)"', from = "{vllm}" },
+]
+
+[[pin]]
+id = "ovms"
+class = "ours"
+group = "ovms"
+family = "runtime-engine"
+component = "openvino/model_server"
+scheme = "calver"
+source = { kind = "github-release", repo = "openvinotoolkit/model_server", tag = "v{v}" }
+confirm = { kind = "oci", image = "openvino/model_server", tag = "{v}-gpu" }
+canary = ["ovms-cpu", "ovms"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "openvino/model_server", tag = "{v}-gpu", line = '^AGENT_OVMS_IMAGE=' },
+  { file = "scripts/k3d-gpu", regex = '^# openvino/model_server:(?P<v>[0-9.]+)-gpu \(CPU, GPU and NPU plugins' },
+  { file = "share/npu-embeddings.yml", ref = "openvino/model_server", tag = "{v}-gpu" },
+  { file = "examples/kserve/openvino-runtime.yaml", ref = "openvino/model_server", tag = "{v}-gpu" },
+  { file = "console/moe_predict.py", ref = "openvino/model_server", tag = "{v}" },
+  { file = "console/moe_predict.py", ref = "openvino/model_server", tag = "{v}-gpu" },
+  { file = "bench/competitors.lock", ref = "openvino/model_server", tag = "{v}-gpu" },
+]
+derived = [
+  { file = "bench/competitors.lock", regex = 'github\.com/openvinotoolkit/model_server/blob/v(?P<v>[0-9.]+)/docs/parameters\.md', from = "{v}" },
+]
+
+[[pin]]
+id = "npu-umd"
+class = "ours"
+group = "npu-umd"
+family = "static-engine"
+component = "npu-umd"
+scheme = "calver"
+notes = "NPU_UMD_FW_DATE is the build date of the firmware that driver release verified: set it from the release by hand."
+source = { kind = "github-release", repo = "openvinotoolkit/model_server", tag = "v{v}" }
+canary = ["npu-umd"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "openvino/model_server", tag = "{v}-gpu", line = '^NPU_UMD_IMAGE=' },
+]
+
+[[pin]]
+id = "dlstreamer"
+class = "ours"
+group = "dlstreamer"
+family = "static-engine"
+component = "dlstreamer"
+scheme = "calver"
+source = { kind = "oci", image = "intel/dlstreamer", tag = "{v}-ubuntu24" }
+canary = ["dlstreamer"]
+sites = [
+  { file = "scripts/k3d-gpu", ref = "intel/dlstreamer", tag = "{v}-ubuntu24" },
+  { file = "scripts/k3d-gpu", regex = '^# intel/dlstreamer:(?P<v>[0-9.]+)-ubuntu24 \(GStreamer' },
+]
+
+[[pin]]
+id = "sglang-xeon"
+class = "ours"
+group = "sglang"
+family = "static-engine"
+component = "sglang-xeon"
+scheme = "zerover"
+source = { kind = "oci", image = "lmsysorg/sglang", tag = "{v}-xeon" }
+canary = ["sglang-xeon"]
+sites = [
+  { file = "console/moe_predict.py", ref = "lmsysorg/sglang", tag = "{v}-xeon" },
+]
+
+# =============================================================================
+# Hugging Face revisions
+# =============================================================================
+[[pin]]
+id = "hf-qwen3-4b"
+class = "ours"
+group = "hf-qwen3-4b"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "Qwen/Qwen3-4B" }
+sites = [
+  { file = "scripts/k3d-gpu", regex = '^ +AGENT_DEFAULT_MODEL="Qwen/Qwen3-4B"\n +AGENT_DEFAULT_REVISION="(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-qwen3-4b-int4-ov"
+class = "ours"
+group = "hf-qwen3-ov"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "OpenVINO/Qwen3-4B-int4-ov", lfs = { sha = "openvino_model.bin" } }
+sites = [
+  { file = "scripts/k3d-gpu", regex = 'model=OpenVINO/Qwen3-4B-int4-ov rev=(?P<v>[0-9a-f]{40})' },
+  { file = "bench/competitors.lock", regex = '"model_revision": "OpenVINO/Qwen3-4B-int4-ov@(?P<v>[0-9a-f]{40})"' },
+  { file = "bench/competitors.lock", regex = '"artifact_path": "/models/OpenVINO/Qwen3-4B-int4-ov/openvino_model\.bin",\n +"artifact_sha256": "(?P<sha>[0-9a-f]{64})"' },
+]
+
+[[pin]]
+id = "hf-qwen3-1.7b-int4-ov"
+class = "ours"
+group = "hf-qwen3-ov"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "OpenVINO/Qwen3-1.7B-int4-ov" }
+sites = [
+  { file = "scripts/k3d-gpu", regex = 'model=OpenVINO/Qwen3-1\.7B-int4-ov rev=(?P<v>[0-9a-f]{40})' },
+]
+
+[[pin]]
+id = "hf-qwen3-8b-int4-ov"
+class = "ours"
+group = "hf-qwen3-ov"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "OpenVINO/Qwen3-8B-int4-ov" }
+sites = [
+  { file = "scripts/k3d-gpu", regex = 'model=OpenVINO/Qwen3-8B-int4-ov rev=(?P<v>[0-9a-f]{40})' },
+]
+
+[[pin]]
+id = "hf-gemma4-26b-qat-assistant"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant" }
+sites = [
+  { file = "scripts/k3d-gpu", regex = 'google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@(?P<v>[0-9a-f]{40})' },
+]
+
+[[pin]]
+id = "hf-gemma4-26b"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "google/gemma-4-26B-A4B-it" }
+sites = [
+  { file = "console/model_opt.py", regex = '^    "google/gemma-4-26B-A4B-it": \{\n        "revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-gemma4-26b-int4-ov"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "OpenVINO/gemma-4-26b-a4b-it-int4-ov" }
+sites = [
+  { file = "console/model_opt.py", regex = '"OpenVINO/gemma-4-26b-a4b-it-int4-ov": \{"revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-gemma4-26b-qat"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized" }
+sites = [
+  { file = "console/model_opt.py", regex = '"google/gemma-4-26B-A4B-it-qat-q4_0-unquantized": \{"revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-gemma4-26b-assistant"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "google/gemma-4-26B-A4B-it-assistant" }
+sites = [
+  { file = "console/model_opt.py", regex = '"google/gemma-4-26B-A4B-it-assistant": \{"revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-qwen3.8-27b"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "Qwen/Qwen3.8-27B" }
+sites = [
+  { file = "console/model_opt.py", regex = '^    "Qwen/Qwen3\.8-27B": \{\n        "revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-qwen3.8-27b-int4-ov"
+class = "ours"
+group = "hf-console-fallback"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "OpenVINO/Qwen3.8-27B-int4-ov" }
+sites = [
+  { file = "console/model_opt.py", regex = '"OpenVINO/Qwen3\.8-27B-int4-ov": \{"revision": "(?P<v>[0-9a-f]{40})"' },
+]
+
+[[pin]]
+id = "hf-qwen3-4b-gguf"
+class = "ours"
+group = "llama-cpp"
+family = "hf"
+scheme = "hf-sha"
+notes = "The llama.cpp competitor stack's weights; artifact_sha256 is the Q4_K_M file's LFS sha256 at the revision."
+source = { kind = "hf", model = "Qwen/Qwen3-4B-GGUF", lfs = { sha = "Qwen3-4B-Q4_K_M.gguf" } }
+sites = [
+  { file = "bench/competitors.lock", regex = '"model_revision": "Qwen/Qwen3-4B-GGUF@(?P<v>[0-9a-f]{40})"' },
+  { file = "bench/competitors.lock", regex = 'huggingface\.co/Qwen/Qwen3-4B-GGUF/resolve/(?P<v>[0-9a-f]{40})/Qwen3-4B-Q4_K_M\.gguf' },
+  { file = "bench/competitors.lock", regex = '"artifact_path": "/root/\.cache/llama\.cpp/Qwen3-4B-Q4_K_M\.gguf",\n +"artifact_sha256": "(?P<sha>[0-9a-f]{64})"' },
+]
+
+# =============================================================================
+# PyPI sets
+# =============================================================================
+[[pin]]
+id = "gguf-transformers"
+class = "ours"
+group = "gguf-convert-pip"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "transformers" }
+sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\btransformers==(?P<v>[0-9][^ "]*)' }]
+
+[[pin]]
+id = "gguf-huggingface-hub"
+class = "ours"
+group = "gguf-convert-pip"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "huggingface-hub" }
+sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\bhuggingface-hub==(?P<v>[0-9][^ "]*)' }]
+
+[[pin]]
+id = "gguf-tokenizers"
+class = "ours"
+group = "gguf-convert-pip"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "tokenizers" }
+sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\btokenizers==(?P<v>[0-9][^ "]*)' }]
+
+[[pin]]
+id = "gguf-safetensors"
+class = "ours"
+group = "gguf-convert-pip"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "safetensors" }
+sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\bsafetensors==(?P<v>[0-9][^ "]*)' }]
+
+[[pin]]
+id = "convert-pins"
+class = "ours"
+group = "convert-pins"
+family = "pypi"
+scheme = "pep440"
+writer = "hook"
+notes = "hack/bump-convert-pins moves every pin of console/convert-pins.json together (torch with torchvision)."
+source = { kind = "cmd", run = ["hack/bump-convert-pins", "--dry-run"], parse = "moved", key = "optimum-intel" }
+sites = [{ file = "console/convert-pins.json", regex = '"optimum-intel": "(?P<v>[0-9][^"]*)"' }]
+
+# =============================================================================
+# Telemetry and opt-in manifests
+# =============================================================================
+[[pin]]
+id = "prometheus"
+class = "ours"
+group = "telemetry"
+family = "telemetry"
+scheme = "semver"
+# CI's promtool (hack/ci-tools.env) checks the rules with the release the image runs.
+source = { kind = "github-release", repo = "prometheus/prometheus", tag = "{v}", assets = { promsha = "prometheus-{v_bare}.linux-amd64.tar.gz" } }
+sites = [
+  { file = "share/telemetry/prometheus.yml", ref = "quay.io/prometheus/prometheus" },
+  { file = "share/telemetry/prometheus.yml", regex = '^# Source: https://github\.com/prometheus/prometheus \(image quay\.io/prometheus/prometheus:(?P<v>v[0-9.]+)\)\.$' },
+  { file = "hack/ci-tools.env", var = "PROMETHEUS_SHA256", key = "promsha" },
+]
+derived = [{ file = "hack/ci-tools.env", regex = '^PROMETHEUS_VERSION=(?P<v>\S+)$', from = "{v_bare}" }]
+
+[[pin]]
+id = "node-exporter"
+class = "ours"
+group = "telemetry"
+family = "telemetry"
+scheme = "semver"
+source = { kind = "github-release", repo = "prometheus/node_exporter", tag = "{v}" }
+sites = [{ file = "share/telemetry/node-exporter.yml", ref = "quay.io/prometheus/node-exporter" }]
+
+[[pin]]
+id = "dcgm-exporter"
+class = "ours"
+group = "telemetry"
+family = "telemetry"
+scheme = "apt"
+# Tags are <DCGM>-<exporter>; the rendered chart labels carry the exporter release.
+source = { kind = "oci", image = "nvcr.io/nvidia/k8s/dcgm-exporter", tag = "{v}-distroless", derive = { exporter = { from = "v", regex = '-([0-9.]+)$' } } }
+sites = [
+  { file = "share/telemetry/dcgm-exporter.yml", regex = 'helm\.sh/chart: dcgm-exporter-(?P<exporter>[0-9.]+)$', count = "any" },
+  { file = "share/telemetry/dcgm-exporter.yml", regex = 'app\.kubernetes\.io/version: "(?P<exporter>[0-9.]+)"$', count = "any" },
+  { file = "share/telemetry/dcgm-exporter.yml", ref = "nvcr.io/nvidia/k8s/dcgm-exporter", tag = "{v}-distroless" },
+  { file = "share/telemetry/dcgm-exporter.yml", regex = '^# image nvcr\.io/nvidia/k8s/dcgm-exporter:(?P<v>[0-9.]+-[0-9.]+)-distroless, DCGM' },
+]
+
+[[pin]]
+id = "xpumd"
+class = "ours"
+group = "telemetry"
+family = "telemetry"
+scheme = "semver"
+source = { kind = "github-release", repo = "intel/xpumanager", tag = "{v}" }
+sites = [
+  { file = "share/telemetry/optional/intel-xpumd.yml", ref = "ghcr.io/intel/xpumanager/xpumd" },
+  { file = "share/telemetry/optional/intel-xpumd.yml", regex = 'image ghcr\.io/intel/xpumanager/xpumd:(?P<v>v[0-9.]+)\),$' },
+]
+
+[[pin]]
+id = "drm-exporter"
+class = "ours"
+group = "telemetry"
+family = "telemetry"
+scheme = "semver"
+source = { kind = "oci", image = "ghcr.io/home-operations/drm-exporter", tag = "{v}" }
+sites = [
+  { file = "share/telemetry/intel-gpu-exporter.yml", ref = "ghcr.io/home-operations/drm-exporter" },
+  { file = "share/telemetry/intel-gpu-exporter.yml", regex = '^# oci://ghcr\.io/home-operations/charts/drm-exporter (?P<v>[0-9.]+), image pinned by digest\),$' },
+  { file = "share/telemetry/intel-gpu-exporter.yml", regex = 'helm\.sh/chart: drm-exporter-(?P<v>[0-9.]+)$', count = "any" },
+  { file = "share/telemetry/intel-gpu-exporter.yml", regex = 'app\.kubernetes\.io/version: "(?P<v>[0-9.]+)"$', count = "any" },
+]
+
+[[pin]]
+id = "open-webui"
+class = "ours"
+group = "opt-in-manifests"
+family = "opt-in"
+scheme = "semver"
+source = { kind = "github-release", repo = "open-webui/open-webui", tag = "{v}" }
+sites = [
+  { file = "share/agent-chat-ui.yml", ref = "ghcr.io/open-webui/open-webui" },
+  { file = "share/agent-chat-ui.yml", regex = '^ +# ghcr\.io/open-webui/open-webui:(?P<v>v[0-9.]+)$' },
+  { file = "share/agent-chat-ui.yml", regex = '^# Source: https://github\.com/open-webui/open-webui (?P<v>v[0-9.]+)\. The image' },
+]
+
+[[pin]]
+id = "node-feature-discovery"
+class = "ours"
+group = "opt-in-manifests"
+family = "opt-in"
+scheme = "semver"
+source = { kind = "github-release", repo = "kubernetes-sigs/node-feature-discovery", tag = "{v}", image = "registry.k8s.io/nfd/node-feature-discovery", image_tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "share/node-feature-discovery.yml", ref = "registry.k8s.io/nfd/node-feature-discovery" },
+  { file = "share/node-feature-discovery.yml", regex = '^#     newTag: (?P<v>v[0-9.]+)@(?P<digest>sha256:[0-9a-f]{64})$' },
+  { file = "share/node-feature-discovery.yml", regex = '^# Node Feature Discovery (?P<v>v[0-9.]+) \+ Intel' },
+  { file = "share/node-feature-discovery.yml", regex = 'node-feature-discovery/tree/(?P<v>v[0-9.]+)/deployment/overlays/default' },
+]
+
+[[pin]]
+id = "intel-gpu-dra"
+class = "ours"
+group = "opt-in-manifests"
+family = "opt-in"
+scheme = "semver"
+source = { kind = "github-release", repo = "intel/intel-resource-drivers-for-kubernetes", select = "highest", tag = "gpu-{v}", commit = true }
+canary = ["node"]
+sites = [
+  { file = "share/intel-gpu-dra.yml", ref = "ghcr.io/intel/intel-gpu-resource-driver" },
+  { file = "share/intel-gpu-dra.yml", regex = '^# Intel GPU DRA driver \(intel-resource-drivers-for-kubernetes gpu-(?P<v>v[0-9.]+)\)' },
+  { file = "share/intel-gpu-dra.yml", regex = '^# gpu-(?P<v>v[0-9.]+) = (?P<commit>[0-9a-f]{40})\), rendered' },
+]
+
+[[pin]]
+id = "agent-sandbox"
+class = "ours"
+group = "opt-in-manifests"
+family = "opt-in"
+scheme = "semver"
+source = { kind = "github-release", repo = "kubernetes-sigs/agent-sandbox", tag = "{v}" }
+canary = ["node"]
+sites = [
+  { file = "share/agent-sandbox.yml", ref = "registry.k8s.io/agent-sandbox/agent-sandbox-controller" },
+  { file = "share/agent-sandbox-k3d.yml", ref = "registry.k8s.io/agent-sandbox/python-runtime-sandbox" },
+  { file = "share/agent-sandbox.yml", regex = '^# kubernetes-sigs/agent-sandbox (?P<v>v[0-9.]+): controller' },
+  { file = "scripts/k3d-gpu", var = "SANDBOX_VERSION" },
+]
+
+# =============================================================================
+# Tools
+# =============================================================================
+[[pin]]
+id = "helm"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "helm/helm", select = "highest", tag = "{v}", sums = { sha = { url = "https://get.helm.sh/helm-{v}-linux-amd64.tar.gz.sha256sum", name = "helm-{v}-linux-amd64.tar.gz" } } }
+hold = { max = "v4.0.0", reason = "helm v4 render output differs", review_by = "2027-01-31" }
+sites = [
+  { file = "hack/tools.env", var = "HELM_VERSION" },
+  { file = "hack/tools.env", var = "HELM_SHA256", key = "sha" },
+]
+
+# ---- hack/ci-tools.env: the tool versions the CI and release workflows install ----
+# (PROMETHEUS_* moves with the prometheus pin above.)
+[[pin]]
+id = "ci-kubeconform"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "zerover"
+source = { kind = "github-release", repo = "yannh/kubeconform", tag = "{v}", assets = { sha = "kubeconform-linux-amd64.tar.gz" } }
+sites = [
+  { file = "hack/ci-tools.env", var = "KUBECONFORM_VERSION" },
+  { file = "hack/ci-tools.env", var = "KUBECONFORM_SHA256", key = "sha" },
+  { file = "hack/ci-tools.env", ref = "ghcr.io/yannh/kubeconform" },
+]
+
+[[pin]]
+id = "ci-chrome"
+class = "ours"
+group = "tools"
+family = "chrome"
+scheme = "pep440"
+notes = "Chrome for Testing's last known good Stable (report.html's offline load test)."
+source = { kind = "json", url = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json", path = "channels.Stable.version", regex = '^(?P<v>[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)$' }
+sites = [{ file = "hack/ci-tools.env", var = "CHROME_VERSION" }]
+
+[[pin]]
+id = "ci-jsonschema"
+class = "ours"
+group = "tools"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "jsonschema" }
+sites = [{ file = "hack/ci-tools.env", var = "JSONSCHEMA_VERSION" }]
+
+[[pin]]
+id = "ci-helm4"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+notes = "The KServe example's helm v4 (rendering share/ uses the v3 line in hack/tools.env)."
+source = { kind = "github-release", repo = "helm/helm", select = "highest", tag = "{v}" }
+sites = [{ file = "hack/ci-tools.env", var = "HELM4_VERSION" }]
+
+[[pin]]
+id = "ci-shellcheck"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "zerover"
+source = { kind = "github-release", repo = "koalaman/shellcheck", tag = "{v}" }
+sites = [{ file = "hack/ci-tools.env", var = "SHELLCHECK_VERSION" }]
+
+[[pin]]
+id = "ci-packaging"
+class = "ours"
+group = "tools"
+family = "pypi"
+scheme = "pep440"
+notes = "hack/bump-convert-pins reads PyPI requirements with it (the Freshness bump job, ci.yml's pins job)."
+source = { kind = "pypi", package = "packaging" }
+sites = [{ file = "hack/ci-tools.env", var = "PACKAGING_VERSION" }]
+
+[[pin]]
+id = "k3d"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "k3d-io/k3d", tag = "{v}", sums = { amd64 = { url = "https://github.com/k3d-io/k3d/releases/download/{v}/checksums.txt", name = "k3d-linux-amd64" }, arm64 = { url = "https://github.com/k3d-io/k3d/releases/download/{v}/checksums.txt", name = "k3d-linux-arm64" } } }
+sites = [
+  { file = "packaging/install.sh", var = "K3D_VERSION" },
+  { file = "packaging/install.sh", var = "K3D_SHA256_AMD64", key = "amd64" },
+  { file = "packaging/install.sh", var = "K3D_SHA256_ARM64", key = "arm64" },
+]
+
+[[pin]]
+id = "kubectl"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "json", url = "https://api.github.com/repos/kubernetes/kubernetes/releases/latest", path = "tag_name", regex = '^(?P<v>v[0-9]+\.[0-9]+\.[0-9]+)$', sums = { amd64 = { url = "https://dl.k8s.io/release/{v}/bin/linux/amd64/kubectl.sha256" }, arm64 = { url = "https://dl.k8s.io/release/{v}/bin/linux/arm64/kubectl.sha256" } } }
+sites = [
+  { file = "packaging/install.sh", var = "KUBECTL_VERSION" },
+  { file = "packaging/install.sh", var = "KUBECTL_SHA256_AMD64", key = "amd64" },
+  { file = "packaging/install.sh", var = "KUBECTL_SHA256_ARM64", key = "arm64" },
+]
+
+[[pin]]
+id = "kserve"
+class = "ours"
+group = "examples"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "kserve/kserve", tag = "{v}" }
+sites = [{ file = "examples/kserve/install.sh", var = "KSERVE_VERSION" }]
+
+[[pin]]
+id = "cert-manager"
+class = "ours"
+group = "examples"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "cert-manager/cert-manager", tag = "{v}" }
+sites = [{ file = "examples/kserve/install.sh", var = "CERT_MANAGER_VERSION" }]
+
+
+# =============================================================================
+# Agent framework examples (examples/agents/*/requirements.txt; the constraints hook
+# re-freezes each changed example's constraints.txt)
+# =============================================================================
+[[pin]]
+id = "examples-crewai"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "crewai" }
+sites = [{ file = "examples/agents/crewai/requirements.txt", regex = '^crewai==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`crewai==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-langgraph"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "langgraph" }
+sites = [{ file = "examples/agents/langgraph/requirements.txt", regex = '^langgraph==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`langgraph==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-langchain-openai"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "langchain-openai" }
+sites = [{ file = "examples/agents/langgraph/requirements.txt", regex = '^langchain-openai==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`langchain-openai==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-langchain-core"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "langchain-core" }
+sites = [{ file = "examples/agents/langgraph/requirements.txt", regex = '^langchain-core==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`langchain-core==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-llama-index-core"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "llama-index-core" }
+sites = [{ file = "examples/agents/llamaindex/requirements.txt", regex = '^llama-index-core==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`llama-index-core==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-llama-index-llms-openai-like"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "llama-index-llms-openai-like" }
+sites = [{ file = "examples/agents/llamaindex/requirements.txt", regex = '^llama-index-llms-openai-like==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`llama-index-llms-openai-like==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-openai-agents"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "openai-agents" }
+sites = [{ file = "examples/agents/openai-agents/requirements.txt", regex = '^openai-agents==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`openai-agents==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-openai"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "openai" }
+sites = [{ file = "examples/agents/openai-agents/requirements.txt", regex = '^openai==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`openai==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+[[pin]]
+id = "examples-mcp"
+class = "ours"
+group = "examples"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "mcp" }
+sites = [{ file = "examples/agents/openai-agents/requirements.txt", regex = '^mcp==(?P<v>[^\s;#]+)$' }]
+derived = [{ file = "examples/agents/README.md", regex = '`mcp==(?P<v>[^`]+)`', from = "{v}", count = "any" }]
+
+# =============================================================================
+# Docs site toolchain (docs-build/requirements.in; the docs-lock hook re-locks
+# requirements.txt with hashes in the docs-build/Dockerfile image)
+# =============================================================================
+[[pin]]
+id = "docs-mkdocs"
+class = "ours"
+group = "docs-build"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "mkdocs" }
+hold = { max = "2.0.0", reason = "MkDocs 2.0 drops the plugin and theme system mkdocs-material is built on", review_by = "2027-01-31" }
+sites = [{ file = "docs-build/requirements.in", regex = '^mkdocs==(?P<v>[^\s;#]+)$' }]
+
+[[pin]]
+id = "docs-mkdocs-material"
+class = "ours"
+group = "docs-build"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "mkdocs-material" }
+sites = [{ file = "docs-build/requirements.in", regex = '^mkdocs-material==(?P<v>[^\s;#]+)$' }]
+
+[[pin]]
+id = "docs-pymdown-extensions"
+class = "ours"
+group = "docs-build"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "pymdown-extensions" }
+sites = [{ file = "docs-build/requirements.in", regex = '^pymdown-extensions==(?P<v>[^\s;#]+)$' }]
+
+[[pin]]
+id = "docs-pip-tools"
+class = "ours"
+group = "docs-build"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "pip-tools" }
+sites = [{ file = "docs-build/lock.sh", regex = '^PIP_TOOLS="pip-tools==(?P<v>[^"]+)"$' }]
+
+# =============================================================================
+# Devcontainer toolchain (.devcontainer/Dockerfile)
+# =============================================================================
+[[pin]]
+id = "dev-shellcheck"
+class = "ours"
+group = "devcontainer"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "koalaman/shellcheck", tag = "v{v}", assets = { amd64 = "shellcheck-v{v}.linux.x86_64.tar.xz", arm64 = "shellcheck-v{v}.linux.aarch64.tar.xz" } }
+sites = [
+  { file = ".devcontainer/Dockerfile", arg = "SHELLCHECK_VERSION" },
+  { file = ".devcontainer/Dockerfile", regex = 'amd64\) sc_arch=x86_64;[^\n]*\n(?:[^\n]*\n)*? +sc_sum=(?P<amd64>[0-9a-f]{64});' },
+  { file = ".devcontainer/Dockerfile", regex = 'arm64\) sc_arch=aarch64;[^\n]*\n(?:[^\n]*\n)*? +sc_sum=(?P<arm64>[0-9a-f]{64});' },
+]
+
+[[pin]]
+id = "dev-hadolint"
+class = "ours"
+group = "devcontainer"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "hadolint/hadolint", tag = "v{v}", assets = { amd64 = "hadolint-linux-x86_64", arm64 = "hadolint-linux-arm64" } }
+sites = [
+  { file = ".devcontainer/Dockerfile", arg = "HADOLINT_VERSION" },
+  { file = ".devcontainer/Dockerfile", regex = 'amd64\) sc_arch=x86_64;[^\n]*\n(?:[^\n]*\n)*? +hl_sum=(?P<amd64>[0-9a-f]{64});' },
+  { file = ".devcontainer/Dockerfile", regex = 'arm64\) sc_arch=aarch64;[^\n]*\n(?:[^\n]*\n)*? +hl_sum=(?P<arm64>[0-9a-f]{64});' },
+]
+
+[[pin]]
+id = "dev-kubeconform"
+class = "ours"
+group = "devcontainer"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "yannh/kubeconform", tag = "v{v}", assets = { amd64 = "kubeconform-linux-amd64.tar.gz", arm64 = "kubeconform-linux-arm64.tar.gz" } }
+sites = [
+  { file = ".devcontainer/Dockerfile", arg = "KUBECONFORM_VERSION" },
+  { file = ".devcontainer/Dockerfile", regex = 'amd64\) sc_arch=x86_64;[^\n]*\n(?:[^\n]*\n)*? +kc_sum=(?P<amd64>[0-9a-f]{64});' },
+  { file = ".devcontainer/Dockerfile", regex = 'arm64\) sc_arch=aarch64;[^\n]*\n(?:[^\n]*\n)*? +kc_sum=(?P<arm64>[0-9a-f]{64});' },
+]
+
+[[pin]]
+id = "dev-actionlint"
+class = "ours"
+group = "devcontainer"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "rhysd/actionlint", tag = "v{v}", assets = { amd64 = "actionlint_{v}_linux_amd64.tar.gz", arm64 = "actionlint_{v}_linux_arm64.tar.gz" } }
+sites = [
+  { file = ".devcontainer/Dockerfile", arg = "ACTIONLINT_VERSION" },
+  { file = ".devcontainer/Dockerfile", regex = 'amd64\) sc_arch=x86_64;[^\n]*\n(?:[^\n]*\n)*? +al_sum=(?P<amd64>[0-9a-f]{64});' },
+  { file = ".devcontainer/Dockerfile", regex = 'arm64\) sc_arch=aarch64;[^\n]*\n(?:[^\n]*\n)*? +al_sum=(?P<arm64>[0-9a-f]{64});' },
+]
+
+[[pin]]
+id = "dev-helm"
+class = "ours"
+group = "devcontainer"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "helm/helm", tag = "v{v}", sums = { amd64 = { url = "https://get.helm.sh/helm-v{v}-linux-amd64.tar.gz.sha256sum", name = "helm-v{v}-linux-amd64.tar.gz" }, arm64 = { url = "https://get.helm.sh/helm-v{v}-linux-arm64.tar.gz.sha256sum", name = "helm-v{v}-linux-arm64.tar.gz" } } }
+sites = [
+  { file = ".devcontainer/Dockerfile", arg = "HELM_VERSION" },
+  { file = ".devcontainer/Dockerfile", regex = 'amd64\) sc_arch=x86_64;[^\n]*\n(?:[^\n]*\n)*? +hm_sum=(?P<amd64>[0-9a-f]{64}) ;;' },
+  { file = ".devcontainer/Dockerfile", regex = 'arm64\) sc_arch=aarch64;[^\n]*\n(?:[^\n]*\n)*? +hm_sum=(?P<arm64>[0-9a-f]{64}) ;;' },
+]
+
+# =============================================================================
+# Nix
+# =============================================================================
+[[pin]]
+id = "nixpkgs"
+class = "ours"
+group = "flake"
+family = "tools"
+scheme = "hf-sha"
+writer = "hook"
+notes = "The nixos-26.05 branch head; the flake-update hook runs `nix flake update` in the pinned nix image."
+source = { kind = "github-branch", repo = "NixOS/nixpkgs", branch = "nixos-26.05" }
+sites = [
+  { file = "flake.lock", regex = '"owner": "NixOS",\n +"repo": "nixpkgs",\n +"rev": "(?P<v>[0-9a-f]{40})"' },
+]
+
+# =============================================================================
+# Intel EAT stock (always review)
+# =============================================================================
+[[pin]]
+id = "eat"
+class = "eat-stock"
+group = "eat-stock"
+family = "eat-stock"
+scheme = "eat"
+source = { kind = "eat", what = "tag" }
+sites = [
+  { file = "integrations/eat/eat-up.sh", regex = '^EAT_TAG="(?P<v>release-[0-9.]+(?:-[a-z0-9]+)?)"$' },
+  { file = "integrations/eat/eat-up.sh", var = "EAT_COMMIT", key = "commit" },
+]
+
+[[pin]]
+id = "eat-vllm-cpu"
+class = "eat-stock"
+group = "eat-stock"
+family = "eat-stock"
+scheme = "zerover"
+notes = "The tag EAT's core/helm-charts/vllm/xeon-values.yaml names at EAT's latest release."
+source = { kind = "eat", file = "core/helm-charts/vllm/xeon-values.yaml", repository = "vllm/vllm-openai-cpu" }
+canary = ["eat-vllm-cpu"]
+sites = [
+  { file = "integrations/eat/vllm-values.yaml", ref = "vllm/vllm-openai-cpu", values = true },
+]
+
+[[pin]]
+id = "eat-litellm"
+class = "eat-stock"
+group = "eat-stock"
+family = "eat-stock"
+scheme = "docker-suffix"
+# The gateway example's litellm client is the release of EAT's litellm image.
+source = { kind = "eat", file = "core/helm-charts/genai-gateway/values.yaml", repository = "docker.litellm.ai/berriai/litellm", derive = { pypi = { from = "v", regex = '^v([0-9]+\.[0-9]+\.[0-9]+)' } } }
+sites = [
+  { file = "integrations/eat/gateway-values.yaml", ref = "docker.litellm.ai/berriai/litellm", values = true },
+  { file = "examples/agents/litellm-gateway/requirements.txt", regex = '^litellm==(?P<pypi>[0-9.]+)$' },
+]
+derived = [{ file = "examples/agents/README.md", regex = '`litellm==(?P<v>[^`]+)`', from = "{pypi}", count = "any" }]
+
+# =============================================================================
+# Base images with a line policy of their own
+# =============================================================================
+[[pin]]
+id = "ubuntu-node-base"
+class = "ours"
+group = "images"
+family = "base-image"
+scheme = "docker-suffix"
+notes = "The node image tracks the newest Ubuntu LTS (YY.04); interim releases are skipped."
+source = { kind = "oci", image = "ubuntu", tag = "{v}" }
+patterns = { v = '[0-9]{2}\.04' }
+canary = ["node"]
+sites = [{ file = "Dockerfile", regex = '^ARG UBUNTU_IMAGE="ubuntu:(?P<v>[0-9]{2}\.04)@(?P<digest>sha256:[0-9a-f]{64})"$' }]
+
+[[pin]]
+id = "ubuntu-2404-variant"
+class = "ours"
+group = "images"
+family = "base-image"
+scheme = "docker-suffix"
+notes = "The 24.04 variant stays on 24.04: only its digest moves."
+source = { kind = "oci", image = "ubuntu", tag = "{v}" }
+patterns = { v = '24\.04' }
+canary = ["node"]
+sites = [{ file = "Dockerfile", regex = '^ARG UBUNTU_2404_IMAGE="ubuntu:(?P<v>24\.04)@(?P<digest>sha256:[0-9a-f]{64})"$' }]
+
+[[pin]]
+id = "packaging-fedora"
+class = "ours"
+group = "packaging-images"
+family = "base-image"
+scheme = "docker-suffix"
+notes = "The Fedora image packaging/check.sh installs the rpm in. Fedora tags its branched and rawhide images with their release numbers before they ship; `latest` is the released one."
+source = { kind = "oci", image = "fedora", tag = "{v}", released = "latest" }
+sites = [{ file = "packaging/check.sh", ref = "fedora" }]
+
+[[pin]]
+id = "examples-python"
+class = "ours"
+group = "examples"
+family = "base-image"
+scheme = "docker-suffix"
+notes = "The image the agent examples run in, and that their constraints.txt files are frozen in."
+source = { kind = "oci", image = "python", tag = "{v}-slim-trixie" }
+# crewai (examples/agents/crewai) requires Python <3.14, through 1.15.33 (its PyPI
+# requires_python), so its constraints.txt cannot be frozen on 3.14 or later.
+hold = { max = "3.14.0", reason = "crewai requires Python <3.14 (1.15.33)", review_by = "2027-01-31" }
+patterns = { v = '[0-9]+\.[0-9]+\.[0-9]+' }
+sites = [
+  { file = "tests/agent_examples_test.sh", ref = "python", tag = "{v}-slim-trixie" },
+  { file = "tests/agent_examples_test.sh", regex = '^# python:(?P<v>[0-9.]+)-slim-trixie \(multi-arch index digest\)$' },
+]

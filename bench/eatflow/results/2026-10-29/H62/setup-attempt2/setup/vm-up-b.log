@@ -1,0 +1,8 @@
+Total translation table size: 0
+Total rockridge attributes bytes: 331
+Total directory bytes: 0
+Path table size(bytes): 10
+Max brk space used 0
+183 extents written (0 MB)
+Formatting '/h62/b/disk.qcow2', fmt=qcow2 cluster_size=65536 extended_l2=off compression_type=zlib size=429496729600 backing_file=/h62/base.img backing_fmt=qcow2 lazy_refcounts=off refcount_bits=16
+3c009a93f1460a637cab0b13cd8f93e8a6875d7b362a99ac3b4ecc8c2cc8d987

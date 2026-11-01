@@ -1,0 +1,11 @@
+== start: commit e0a48ad6178af5a82d7702928b23ffd55f481c74 2026-11-01T10:13:45Z
+== user: k3d-gpu up rc=0 2026-11-01T10:18:04Z
+== user: k3d-gpu detect rc=0 2026-11-01T10:19:19Z
+== record: k3d-gpu detect --json rc=0 2026-11-01T10:19:58Z
+== record: k3d-gpu plan --model google/gemma-4-26B-A4B-it --explain rc=0 2026-11-01T10:20:40Z
+== user: k3d-gpu agent up --model google/gemma-4-26B-A4B-it rc=0 2026-11-01T10:23:38Z
+== google/gemma-4-26B-A4B-it: {"accel": [], "blocked": true, "device": null, "fit": null, "fit_summary": "fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AMX) via ovms, context 262144 x 5 seqs", "landed": false, "placement": null, "rc": 0, "served": null, "why": null} 2026-11-01T10:23:40Z
+== teardown (rc 143) 2026-11-01T10:24:22Z
+== teardown: k3d-gpu agent down rc=0 2026-11-01T10:24:22Z
+== teardown: k3d-gpu down rc=0 2026-11-01T10:24:25Z
+== done: REFUTED 2026-11-01T10:24:37Z

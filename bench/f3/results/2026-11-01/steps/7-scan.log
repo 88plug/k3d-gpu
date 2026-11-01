@@ -1,0 +1,14 @@
+not counted: keycloak-admin-secret.keycloak.username (an account name, amendment R2)
+read: keycloak-admin-secret.keycloak.password (24 bytes)
+read: litellm-master-key (35 bytes)
+read: sandbox-router-auth (64 bytes)
+# scan step7: 10 files
+  step7 keycloak-admin-secret.keycloak.password raw hit process x1: java -cp /opt/keycloak/bin/client/keycloak-admin-cli-26.6.0.jar --add-opens=java.base/java.security=ALL-UNNAMED --enable-native-access=ALL-UNNAMED -Dkc.lib.dir=/opt/keycloak/bin/client/lib
+step7 keycloak-admin-secret.keycloak.password raw: 1
+step7 keycloak-admin-secret.keycloak.password base64: 0
+step7 litellm-master-key raw: 0
+step7 litellm-master-key base64: 0
+step7 sandbox-router-auth raw: 0
+step7 sandbox-router-auth base64: 0
+step7 total: 1
+step7 hit file deleted: /home/andrew/.cache/k3dgpu-f3/f3-scored/out/ps-samples.gz

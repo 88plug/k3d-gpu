@@ -239,7 +239,7 @@ shellcheck --severity=error es_auto_installer.sh
 
 **Gate 2. Live probes on one throwaway k3d cluster.** **Status: all six ran on 2026-10-20 (UTC) on one i9-13900T host. Probes 1 and 2 found a defect in 0005, now fixed; probe 5 needed one deviation.** EAS `main` `e8f3ebc` with all five patches applied, from an Ubuntu 24.04 bastion container on the host network (`configure` supports Ubuntu and RHEL only; this host runs Manjaro). Each run took the shared live lock, used one cluster named `k3dgpu-gate2`, and deleted it afterwards.
 
-Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. EAT 2.0 on k3d stays unverified until F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29)) has run: `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered.
+Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)) then ran `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered, and is REFUTED: the agent-toolkit layer installed, `eas check` passed through the EAS gateway and `eas down` tore it down, but enterprise-inference's `keycloak_config` role passes the Keycloak admin password on `kcadm.sh`'s command line, and the run's `ps` samples caught it once. `k3d-gpu eas up` now patches that role ([the EI issue draft below](#ei-the-keycloak-admin-password-and-the-client-secret-are-kcadmsh-arguments)); no live run has checked the patch yet.
 
 | # | Probe | Cluster | Result |
 |---|---|---|---|
@@ -341,6 +341,131 @@ does not change the hardware prerequisites.
 Refs intel/enterprise-ai-solutions#<issue>.
 ```
 
+## EI issue draft: a guardrail block is HTTP 200 on LiteLLM v1.105.1 (unsent)
+
+Drafted 2026-11-01 from one live run on k3d-gpu (EAS `97f6157`, EI `3e8a244`, EAT `036b662`). Not sent. `k3d-gpu eas check` had read EI's docs and treated an HTTP 200 as "not screened"; it now accepts either block shape (k3d-gpu #261), so nothing on our side waits on this issue.
+
+**Title:** docs: content-safety guardrail blocks come back as HTTP 200 `content_filter` on LiteLLM v1.105.1, not HTTP 500
+
+**Versions:** intel/enterprise-inference `3e8a244`, which pins `litellm_version: "v1.105.1"` (`roles/litellm/defaults/main.yaml:22`). The docs describe LiteLLM `v1.83.14-stable.patch.2`, the pin before.
+
+**What the docs say:** `docs/customize/guardrails.md:25-27`, `:57-58`, `:356-361` and `:462-463`, and `docs/reference/request_flow.md:161`, say that a blocked request gets HTTP 500 with the reason in `error.message`. The end-to-end test reads `jq '.error.message'`.
+
+**What v1.105.1 does:** a `block()` from a `pre_call` `custom_code` guardrail raises `ModifyResponseException` (`custom_code_guardrail.py:417-419`, `raise_passthrough_exception`). `chat_completion` turns that into HTTP 200 (`proxy_server.py:12025-12038`): `finish_reason: "content_filter"`, and the reason as the assistant message. A fail-closed block (guard unreachable) has the same shape.
+
+**Repro:** the docs' "Test Safety Filtering End to End" request, through the public gateway with a virtual key:
+
+```
+HTTP 200
+{"finish_reason": "content_filter",
+ "content": "Blocked by the content-safety guardrail: unsafe content (categories: Non-violent Illegal Acts).",
+ "error": null}
+```
+
+The docs' `jq '.error.message'` prints `null`.
+
+**Evidence that the guardrail did run** (same run): the guard model's `vllm:request_success_total` went up by one for each probe. The probes were a virtual key as-is, a virtual key with `"guardrails": ["content_safety"]`, and the master key. LiteLLM at `LITELLM_LOG=DEBUG` logged `should_run_guardrail ... requested_guardrails= [] self.default_on= True`, then `Custom code guardrail 'content_safety': Blocking request`. The guardrail row reads `guardrail: custom_code`, `mode: pre_call`, `default_on: true`. It was still loaded from the DB after the Langfuse role restarted LiteLLM. A benign prompt got `finish_reason: stop`.
+
+**Suggested fix:** in those docs lines, describe a block as HTTP 200 with `finish_reason: "content_filter"` and the reason in `choices[0].message.content`. Have the end-to-end test print `{finish_reason: .choices[0].finish_reason, content: .choices[0].message.content}`. Mention that clients which look only at the status code will treat a block as an answer.
+
+## Issue drafts from the 2026-11-01 runs (unsent)
+
+Drafted 2026-11-01 from F3 (EAS `97f6157`, EI `3e8a244`, EAT `036b662`, on the i9-13900T),
+H62 (EAS `v1.2.0-rc.1` `5c27fb3`, EI `release-1.1` `170eb3a`, EAT `036b662`, on the Xeon
+6741P) and the crescent rows on EAT `release-1.1.0` (`0c726f5`). None is sent. Each is
+written to help the toolkit install cleanly; none depends on k3d-gpu, and none carries a
+performance number. The guardrail-docs draft is the section above.
+
+### EI: the Keycloak admin password and the client secret are `kcadm.sh` arguments
+
+`k3d-gpu eas up` applies the patch below ([`integrations/eas/ei-kcadm.sh`](../../integrations/eas/ei-kcadm.sh)), so nothing on our side waits on this issue.
+
+**Title:** keycloak_config: the Keycloak admin password and the client secret are on kcadm's command line while it runs
+
+**Versions:** intel/enterprise-inference `3e8a244`, `roles/keycloak_config/tasks/install.yaml`; EAS `97f6157`, which installs Keycloak 26.6.0 ([keycloak defaults#L6](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/keycloak/defaults/main.yaml#L6)); kubernetes.core 6.3.0.
+
+**What happens:** `k8s_exec` execs `shlex.split(command)` as a process in the Keycloak container, with no shell and no stdin ([k8s_exec.py#L191-L199](https://github.com/ansible-collections/kubernetes.core/blob/80c33c5573aa63c7fdb315c72d4d7bfac725c337/plugins/modules/k8s_exec.py#L191-L199)). Two of the role's commands carry a secret as an argument: `kcadm.sh config credentials ... --password <admin password>` ([#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175)) and `kcadm.sh update clients/<id> ... -s secret=<client secret>` ([#L198-L205](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L198-L205)). While each kcadm JVM runs, the value is in its `/proc/<pid>/cmdline`, which `ps` shows to any user on the node. `no_log` keeps the values out of Ansible's output; it does not keep them out of the process table.
+
+**How we saw it:** on a one-node k3d cluster the node is a container on the host, so the host's `ps` lists the pod's processes. A `ps -eo args` sample taken on the host every 2 s during `es_auto_installer.sh install agent-toolkit` caught the admin password once, in the argv of the kcadm JVM (`keycloak-admin-cli-26.6.0.jar`). The same holds on any node where other users or agents can list processes.
+
+**Suggested change** (the patch k3d-gpu applies, [0001-keycloak-config-kcadm-argv.patch](../../integrations/eas/patches/ei/0001-keycloak-config-kcadm-argv.patch); checked with a `ps` sampler against a stand-in for kcadm, not yet on a live cluster):
+
+- Authenticate without `--password`. kcadm reads `KC_CLI_PASSWORD` when `--password` is absent ([BaseConfigCredentialsCmd.java#L104-L110](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110)), and the Admin CLI guide recommends not passing passwords on the command line ([admin-cli.adoc#L129](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/docs/documentation/server_admin/topics/admin-cli.adoc#L129)). The Keycloak operator already sets `KC_BOOTSTRAP_ADMIN_PASSWORD` in the pod from `keycloak-admin-secret` ([EAS keycloak.yaml.j2#L22-L24](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/keycloak/templates/keycloak.yaml.j2#L22-L24), [KeycloakDistConfigurator.java#L102-L113](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/operator/src/main/java/org/keycloak/operator/controllers/KeycloakDistConfigurator.java#L102-L113)), so a shell in the pod can hand it over:
+
+    ```yaml
+    command: >-
+      /bin/sh -c 'KC_CLI_PASSWORD="$KC_BOOTSTRAP_ADMIN_PASSWORD"
+      /opt/keycloak/bin/kcadm.sh config credentials
+      --server {{ keycloak_admin_server_url }} --realm master
+      --user {{ _kcc_admin_sec.resources[0].data.username | b64decode }}'
+    ```
+
+    The shell's argv holds the variable's name, and kcadm's argv holds no password.
+
+- Let Keycloak generate the client secret: `kcadm.sh create clients/<id>/client-secret`, then `kcadm.sh get clients/<id>/client-secret` ([admin-cli.adoc#L906-L926](https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/docs/documentation/server_admin/topics/admin-cli.adoc#L906-L926)), and store the `value` it prints in `keycloak-client-secret`. The value comes back on kcadm's stdout, and Keycloak and the Secret still converge on every run, as the comment at #L131-L139 intends.
+
+The realm import, the Secret names and the block's conditions stay as they are.
+
+### EI: the LiteLLM master key is in the model deploy's command line
+
+**Where:** `roles/llm_services/tasks/deploy_models.yaml`, `MM_LITELLM_MASTER_KEY` in the
+deploy task's `environment:` ([#L240](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L240);
+line 223 on `main` `40bd169`).
+
+**What happens:** Ansible writes a task's `environment:` into the `/bin/sh -c` command line it
+runs the module under, so the master key is in that process's argv while each model deploys.
+model-manager can read the Secret `litellm/litellm-master-key` itself when the variable is
+empty.
+
+**Suggested fix:** leave the key out of `environment:` and let model-manager read the Secret.
+`k3d-gpu eas up` does this today with one extra var, `_deploy_litellm_secret: ""`, and a check
+that stops the install if the key arrives any other way; the install, `eas check` and the
+teardown passed with it in F3.
+
+### EI: `cpu: auto` can leave no CPU for components installed after the models
+
+**Where:** `model_manager/core/nri_policy.py` `auto_cpu`
+([`release-1.1` `170eb3a` #L569](https://github.com/intel/enterprise-inference/blob/170eb3a/model_manager/core/nri_policy.py#L569)).
+
+**What happens:** a TP 1 `cpu: auto` model is sized to one NUMA node's capacity, minus the
+reserved CPUs and the CPUs balloon pods already use. Pods outside the balloons (the platform,
+the gateway, Langfuse, KServe) are not subtracted. In H62, Intel's documented single-node
+install (EAS `v1.2.0-rc.1` with Kubespray in a 96-vCPU, one-NUMA KVM guest) gave
+`gemma-4-26b` 76 of 95.4 allocatable CPUs and Qwen3Guard 8; the rest of the stack requested
+about 11.2. EAT 2.0's sandbox router, applied after the models, then stayed Pending with
+`Insufficient cpu`, in two of two attempts
+([H62 run](../../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)).
+
+**Suggested fix:** subtract the CPU already requested on the node by non-balloon pods, and
+keep back the requests of the layers the installer has still to apply (the agent toolkit's
+router asks for 2 x 250m), or install the router before the models.
+
+### EAT `release-1.1.0`: the OVMS chart's `2025.4` image cannot load Gemma 4 26B-A4B
+
+**Where:** `core/helm-charts/ovms/values.yaml`, `tag: "2025.4"`
+([#L18-L20](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/ovms/values.yaml#L18-L20)).
+
+**What happens:** with `OpenVINO/gemma-4-26b-a4b-it-int4-ov` as its model source, the server
+exits 139 (SIGSEGV) about one second after its first log line, every start, inside a k3d
+cluster and outside it ([H50o run](../../EXPERIMENTS.md#h50o-run-xeon-6741p-2026-10-29)).
+OVMS 2026.4.1 serves the same IR.
+
+**Suggested fix:** move the chart's default tag to a release that loads Gemma 4, and pin it
+by digest.
+
+### EAT `release-1.1.0`: the XPU command sources a file the v0.28.0 XPU image lacks
+
+**Where:** `core/helm-charts/vllm/xpu-values.yaml`
+([#L23-L26](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/vllm/xpu-values.yaml#L23-L26)): image
+`vllm/vllm-openai-xpu:v0.28.0`, command `source /opt/intel/oneapi/setvars.sh --force && ...`.
+
+**What happens:** that image has no `/opt/intel/oneapi/setvars.sh`, so the container exits at
+once with `No such file or directory`, on any host (read from the image, then seen in
+[H53's wiring smoke](../../EXPERIMENTS.md#h53-run-arc-pro-b70-2026-10-30)). The image ships its
+own Level Zero and oneAPI runtime.
+
+**Suggested fix:** drop the `source`, or guard it (`[ -f ... ] && source ...`).
+
 ## What this draft does not claim
 
 - That the toolkit is supported on any Intel client CPU. The data points are three runs on one i9-13900T: H1 INCONCLUSIVE [ledger:H1] and one SUPPORTED run, n=1 [ledger:H1b].
@@ -354,4 +479,5 @@ Refs intel/enterprise-ai-solutions#<issue>.
 | See the patch pack and its static checks | [integrations/eat/upstream/README.md](../../integrations/eat/upstream/README.md) |
 | Install EAS (EAT 2.0) on k3d-gpu with these patches as an overlay | [eas.md](eas.md) |
 | See what was measured and how | [technical-report.md](technical-report.md) |
+| See what we can hand over, in one list | [partner-update-2026-11.md](partner-update-2026-11.md) |
 | See EAT on k3d-gpu today | [docs/intel.md](../intel.md) |

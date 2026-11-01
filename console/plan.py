@@ -101,6 +101,15 @@ def check_overrides(overrides):
     return out
 
 
+def image_id(ref):
+    """name@sha256:<digest> for a ref that carries a digest, its tag dropped (the digest
+    is the image, so name:tag@sha256:X and name@sha256:X are one pin); else ref."""
+    name, at, digest = ref.partition("@")
+    if at and ":" in name.rsplit("/", 1)[-1]:
+        name = name.rsplit(":", 1)[0]
+    return name + at + digest
+
+
 def cell_status(row, pins):
     """("green" | "amber" | "grey", reasons)."""
     if row["source"] == "community":
@@ -116,7 +125,7 @@ def cell_status(row, pins):
     pin = pins.get(row["engine"]["name"])
     if pin is None:
         reasons.append("this release pins no %s image" % row["engine"]["name"])
-    elif pin != row["engine"]["image"]:
+    elif image_id(pin) != image_id(row["engine"]["image"]):
         reasons.append("engine pin moved since the measurement (cell %s, release %s)" % (row["engine"]["image"], pin))
     return ("grey" if reasons else "green"), reasons
 

@@ -1,0 +1,24 @@
+== download 2026-11-01T13:47:32Z (+0s)
+== up 2026-11-01T14:02:18Z (+886s)
+== lg boot 2026-11-01T14:02:49Z (+917s)
+== lg ready 2026-11-01T14:03:18Z (+946s)
+energy: zone=intel-rapl:0 (package-0) joules=7853.161 seconds=60.018 avg_watts=130.847 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.282s ttft_p90=0.284s latency_median=5.539s tok/s_median=46.2 aggregate_tok/s=46.3
+energy: zone=intel-rapl:0 (package-0) joules=4363.343 seconds=16.660 avg_watts=261.905 command_seconds=16.644 samples=5 exit=0
+concurrency=1 ok=8/8 ttft_median=0.280s ttft_p90=0.286s latency_median=5.534s tok/s_median=46.3 aggregate_tok/s=46.2
+energy: zone=intel-rapl:0 (package-0) joules=11892.387 seconds=44.453 avg_watts=267.526 command_seconds=44.437 samples=10 exit=0
+== fn boot 2026-11-01T14:05:25Z (+1073s)
+== fn ready 2026-11-01T14:06:12Z (+1120s)
+energy: zone=intel-rapl:0 (package-0) joules=7833.333 seconds=60.018 avg_watts=130.517 command_seconds=60.002 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=0.634s ttft_p90=0.640s latency_median=16.576s tok/s_median=15.4 aggregate_tok/s=15.5
+energy: zone=intel-rapl:0 (package-0) joules=12968.010 seconds=49.770 avg_watts=260.557 command_seconds=49.755 samples=11 exit=0
+concurrency=1 ok=8/8 ttft_median=0.629s ttft_p90=0.642s latency_median=16.568s tok/s_median=15.5 aggregate_tok/s=15.5
+energy: zone=intel-rapl:0 (package-0) joules=35093.645 seconds=132.630 avg_watts=264.598 command_seconds=132.614 samples=28 exit=0
+concurrency=4 ok=16/16 ttft_median=1.676s ttft_p90=1.735s latency_median=27.653s tok/s_median=9.3 aggregate_tok/s=37.0
+energy: zone=intel-rapl:0 (package-0) joules=30389.659 seconds=110.902 avg_watts=274.021 command_seconds=110.887 samples=24 exit=0
+concurrency=1 ok=4/4 ttft_median=5.002s ttft_p90=5.283s latency_median=5.963s tok/s_median=2.7 aggregate_tok/s=2.7
+energy: zone=intel-rapl:0 (package-0) joules=6946.781 seconds=24.181 avg_watts=287.277 command_seconds=24.165 samples=6 exit=0
+== quality 2026-11-01T14:12:30Z (+1498s)
+gsm8k 50/50 errors=0 wall=496.8s
+== cleanup 2026-11-01T14:20:57Z (+2005s)
+== finished 2026-11-01T14:20:59Z (+2007s)

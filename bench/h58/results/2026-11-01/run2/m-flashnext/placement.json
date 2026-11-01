@@ -1,0 +1,1 @@
+{"accel": [], "blocked": false, "device": null, "fit": null, "landed": false, "placement": "refused", "rc": 1, "served": "Intel/Qwen3.8-Flash-Next-W4A16-AutoRound", "why": "DRAM bandwidth unknown (no STREAM run cached, SMBIOS unreadable)"}

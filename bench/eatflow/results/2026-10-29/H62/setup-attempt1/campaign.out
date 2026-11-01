@@ -1,0 +1,9 @@
+== campaign start at 0086363cf18399912e998e191dbe288fc976d0b1 2026-11-01T06:59:22Z
+== setup lock taken 2026-11-01T06:59:22Z
+== setup host gate passed 2026-11-01T06:59:23Z
+== setup guests 2026-11-01T06:59:35Z
+== setup guest-a (cap 2700 s) and guest-b (cap 7200 s) 2026-11-01T07:00:36Z
+== setup guest-a exit 255, guest-b exit 1 2026-11-01T07:11:44Z
+== campaign setup exit 1: no hold 2026-11-01T07:11:44Z
+== campaign teardown exit 0 2026-11-01T07:11:49Z
+campaign-exit=1 2026-11-01T07:11:49Z

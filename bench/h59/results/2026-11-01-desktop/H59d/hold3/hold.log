@@ -1,0 +1,5 @@
+2026-11-01T18:12:55Z O start perf (4437 s of the hold left)
+2026-11-01T18:13:44Z O ready after 46 s
+2026-11-01T18:25:36Z O status measured: perf phases recorded
+2026-11-01T18:25:53Z L start perf (3659 s of the hold left)
+2026-11-01T18:41:02Z L status not_deliverable: no model list and 16-token chat within 900 s

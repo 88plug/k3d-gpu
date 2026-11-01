@@ -63,6 +63,15 @@ def image_registry(ref: str) -> str | None:
     return None
 
 
+def untagged(ref: str) -> str:
+    """name@sha256:<digest> for a ref that carries a digest, its tag dropped. A bundle
+    records the server image by digest alone; the launcher pins name:tag@sha256:..."""
+    name, at, digest = ref.partition("@")
+    if at and ":" in name.rsplit("/", 1)[-1]:
+        name = name.rsplit(":", 1)[0]
+    return name + at + digest
+
+
 def public_image(ref: str) -> bool:
     host = image_registry(ref)
     return host is None or host in PUBLIC_REGISTRIES

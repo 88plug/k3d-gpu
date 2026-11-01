@@ -1,0 +1,12 @@
+# diag/nftexpr.sh.txt on wildct as root at about 2026-10-29T21:23Z, after step 1's H10 read `NFPROBE missing: NFLOG limit`
+# (runs/resume-health-r4.txt): a diagnostic. In a throwaway network namespace (unshare --net) the host's nft adds one
+# rule per native nftables expression. iptables-nft writes `-m limit` as nftables' limit expression and `-j NFLOG` as its
+# log expression; nf_tables answers ENOENT for an expression type it does not have (nft_limit, alias nft-expr-limit, and
+# nft_log, alias nft-expr-log, both on disk for 6.6.156-2-MANJARO, not loaded). /proc/modules identical before and after.
+ok nft counter
+ok nft meta-mark
+FAIL nft limit :: Error: Could not process rule: No such file or directory
+FAIL nft log-group :: Error: Could not process rule: No such file or directory
+unshare rc=0
+modules unchanged
+modprobe=[]

@@ -1,0 +1,13 @@
+{
+ "arch": "qwen4exp",
+ "expert_used_count": 10,
+ "expert_count": 512,
+ "tied_output": false,
+ "bytes": {
+  "routed_experts": 67947724800,
+  "lookup_tables": 29475568640,
+  "rest": 4614602240
+ },
+ "file_bytes": 102037895680,
+ "active_bytes": 5941706240
+}

@@ -148,6 +148,53 @@ check "nix installs share/telemetry/*.yml" \
 check "nix installs share/telemetry/optional/*.yml" \
     grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/telemetry/optional" share/telemetry/optional/*.yml' "${NIXPKG}"
 check "nix points K3D_GPU_SHARE at the store" grep -qF -- '--set-default K3D_GPU_SHARE "$out/share/k3d-gpu"' "${NIXPKG}"
+# 'k3d-gpu eas' reads ${SHARE_DIR}/integrations/eas: the repo's integrations/ layout, since
+# overlay.py finds its patch drafts (integrations/eat/upstream/patches) relative to the dir
+# above integrations/, and eat-check.sh is ../eat/eat-check.sh from eas/.
+check "nfpm ships integrations/eas as a tree to /usr/share/k3d-gpu/integrations/eas" \
+    grep -Pzq 'src: integrations/eas/\n +dst: /usr/share/k3d-gpu/integrations/eas\n +type: tree\n' "${NFPM}"
+check "nfpm ships the overlay's patch drafts to integrations/eat/upstream/patches/" \
+    grep -Pzq 'src: integrations/eat/upstream/patches/\*\.patch\n +dst: /usr/share/k3d-gpu/integrations/eat/upstream/patches/\n' "${NFPM}"
+check "nfpm ships eat-check.sh executable" \
+    grep -Pzq 'src: integrations/eat/eat-check\.sh\n +dst: /usr/share/k3d-gpu/integrations/eat/eat-check\.sh\n +file_info:\n +mode: 0755' "${NFPM}"
+for d in integrations integrations/eat integrations/eat/upstream integrations/eat/upstream/patches; do
+    check "nfpm rpm owns /usr/share/k3d-gpu/${d}" \
+        grep -Pzq -- "- dst: /usr/share/k3d-gpu/${d//\//\\/}\n +type: dir\n +packager: rpm\n" "${NFPM}"
+done
+check "formula installs integrations/eas" grep -qF '(pkgshare/"integrations/eas").install Dir["integrations/eas/*"]' "${FORMULA}"
+check "formula installs the overlay's patch drafts" \
+    grep -qF '(pkgshare/"integrations/eat/upstream/patches").install Dir["integrations/eat/upstream/patches/*.patch"]' "${FORMULA}"
+check "formula installs eat-check.sh" grep -qF '(pkgshare/"integrations/eat").install "integrations/eat/eat-check.sh"' "${FORMULA}"
+# No formula test for integrations/eas: packaging/check.sh brew installs the formula's url,
+# the last release tarball, which has no integrations/eas until the next release.
+for f in integrations/eas integrations/eat/upstream/patches integrations/eat/eat-check.sh; do
+    check "nix source includes ${f}" grep -qF "(root + \"/${f}\")" "${NIXPKG}"
+done
+check "nix installs integrations/eas" grep -qF 'cp -r integrations/eas "$out/share/k3d-gpu/integrations/eas"' "${NIXPKG}"
+check "nix installs the overlay's patch drafts" \
+    grep -qF 'install -Dm644 -t "$out/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch' "${NIXPKG}"
+check "nix installs eat-check.sh" grep -qF 'install -Dm755 integrations/eat/eat-check.sh "$out/share/k3d-gpu/integrations/eat/eat-check.sh"' "${NIXPKG}"
+check "PKGBUILD installs integrations/eas" grep -qF 'cp -r integrations/eas "$pkgdir/usr/share/k3d-gpu/integrations/eas"' "${PKGBUILD}"
+check "PKGBUILD installs the overlay's patch drafts" \
+    grep -qF 'install -Dm644 -t "$pkgdir/usr/share/k3d-gpu/integrations/eat/upstream/patches" integrations/eat/upstream/patches/*.patch' "${PKGBUILD}"
+check "PKGBUILD installs eat-check.sh" grep -qF 'install -Dm755 integrations/eat/eat-check.sh "$pkgdir/usr/share/k3d-gpu/integrations/eat/eat-check.sh"' "${PKGBUILD}"
+check "packaging/check.sh compares the installed integrations/ with the source" \
+    grep -qF 'for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eas/patches/ei/* /src/integrations/eat/upstream/patches/*.patch; do' "${ROOT}/packaging/check.sh"
+check "README Install names integrations/ in the shared payload" \
+    grep -qF '`console/`, `bench/`, `oracle/`, `integrations/` (for `k3d-gpu eas`) and `images.lock`' "${ROOT}/README.md"
+# The launcher finds the packaged copy: with no checkout next to it, eas_dir is
+# ${SHARE_DIR}/integrations/eas, and overlay.json's patch_dirs resolve under ${SHARE_DIR}.
+eas_pkg=$(mktemp -d)
+mkdir -p "${eas_pkg}/bin" "${eas_pkg}/share/integrations/eas"
+cp "${ROOT}/scripts/k3d-gpu" "${eas_pkg}/bin/k3d-gpu"
+: > "${eas_pkg}/share/integrations/eas/eas.sh"
+check "a packaged launcher finds K3D_GPU_SHARE/integrations/eas" test "$(K3D_GPU_SHARE="${eas_pkg}/share" HOME="${eas_pkg}" bash -c \
+    'source <(sed "/^case \"\\\${1:-help}\" in\$/,\$d" "$1"); eas_dir' _ "${eas_pkg}/bin/k3d-gpu")" = "${eas_pkg}/share/integrations/eas"
+rm -rf "${eas_pkg}"
+check "overlay.json's patch_dirs are under integrations/, which the packages keep" python3 -c '
+import json, sys
+dirs = json.load(open(sys.argv[1]))["patch_dirs"]
+sys.exit(not dirs or not all(d.startswith("integrations/") for d in dirs))' "${ROOT}/integrations/eas/overlay.json"
 check "flake.lock pins nixpkgs to a rev" \
     grep -Eq '"rev": "[0-9a-f]{40}"' "${ROOT}/flake.lock"
 
@@ -161,20 +208,33 @@ check "packages.yml dry_run skips the upload" \
     grep -Pzq -- '- name: Publish to the GitHub release\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
 check "packages.yml dry_run skips the formula commit" \
     grep -Pzq -- '- name: Commit to main\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
-# The NVIDIA device-plugin step takes only a vX.Y.Z tag: its output lands in later run
-# scripts and in share/nvidia-device-plugin.yml. Run the step with curl stubbed to a tag.
-nvstep=$(python3 -c 'import sys, yaml
-for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
-    if s.get("id") == "nvidia_plugin": print(s["run"])' "${BAP}")
-check "build-and-push has the nvidia_plugin step" test -n "${nvstep}"
-# nvstep_out <tag>: the step's GITHUB_OUTPUT when the release API answers <tag>; fails when the step fails.
+# The registry's NVIDIA device-plugin pin (pins/registry.toml, group nvidia-plugin)
+# takes only a vX.Y.Z release tag: its value lands in share/nvidia-device-plugin.yml.
+# Resolve the pin with the release API answering a given tag (recorded responses,
+# no network).
+# nvstep_out <tag>: "latest=<v>" when the pin resolves to <tag>; fails when the source refuses it.
 nvstep_out() {
     local d rc=0
     d=$(mktemp -d)
-    jq -n --arg t "$1" '{tag_name: $t}' > "${d}/release.json"
-    printf '#!/bin/sh\ncat "%s/release.json"\n' "${d}" > "${d}/curl"
-    chmod +x "${d}/curl"
-    if PATH="${d}:${PATH}" GITHUB_OUTPUT="${d}/out" GH_TOKEN=x bash -euc "${nvstep}" >/dev/null 2>&1; then
+    python3 - "$1" "${d}/fix.json" <<'PY'
+import json, sys
+tag, out = sys.argv[1], sys.argv[2]
+rel = {"tag_name": tag, "prerelease": False, "draft": False, "published_at": "2026-10-29T00:00:00Z",
+       "html_url": "https://github.com/NVIDIA/k8s-device-plugin/releases", "assets": []}
+hub = "https://nvcr.io/v2/nvidia/k8s-device-plugin/"
+json.dump({"https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest": {"status": 200, "json": rel},
+           hub + "tags/list?n=1000": {"status": 200, "json": {"tags": [tag]}},
+           hub + "manifests/" + tag: {"status": 200, "body": "",
+                                      "headers": {"Docker-Content-Digest": "sha256:" + "1" * 64}}}, open(out, "w"))
+PY
+    if PINLIB_FIXTURES="${d}/fix.json" python3 - "${ROOT}" > "${d}/out" 2>/dev/null <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/hack")
+from pinlib import registry, sources
+pin = next(p for p in registry.load(sys.argv[1] + "/pins/registry.toml")["pin"] if p["id"] == "nvidia-device-plugin")
+print("latest=" + sources.resolve(pin, "v0.20.1").v)
+PY
+    then
         cat "${d}/out"
     else
         rc=1
@@ -183,10 +243,11 @@ nvstep_out() {
     return "${rc}"
 }
 nvstep_refuses() { ! nvstep_out "$1" >/dev/null; }
-check "nvidia_plugin step takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
-check "nvidia_plugin step refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
-check "nvidia_plugin step refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
-check "nvidia_plugin step refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
+check "nvidia-device-plugin pin takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
+check "nvidia-device-plugin pin refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
+check "nvidia-device-plugin pin refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
+check "nvidia-device-plugin pin refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
+check "nvidia-device-plugin pin refuses an older release" nvstep_refuses v0.19.0
 check "packages.yml builds with packaging/check.sh nfpm" grep -q 'packaging/check.sh nfpm' "${PKGS}"
 check "packages.yml uploads to the aur-v release" grep -q 'gh release upload' "${PKGS}"
 # gh uploads create-time assets to a draft and publishes only once they are all up, so a

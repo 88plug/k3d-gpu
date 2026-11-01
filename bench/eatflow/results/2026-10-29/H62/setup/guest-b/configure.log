@@ -1,0 +1,21 @@
+[0;33mWARN: configure: this WILL make permanent changes to your system[0m
+
+    This command will, using sudo:
+    - install Python ≥ 3.11 (deadsnakes PPA on Ubuntu 22.04, base pkgs elsewhere)
+    - install the matching python<ver>-venv package
+    - install a UTF-8 locale (en_US.UTF-8)
+    - install yq, kubectl, and helm into /usr/local/bin
+    - create the installer's Python venv under .venv/
+
+    configure makes the PERMANENT system changes listed above. Proceed? [y/N] Updating package index....
+Installing Python 3 (Ubuntu 24.04)...
+Configuring UTF-8 locale
+Installing yq v4.53.2 (amd64)
+Installing kubectl v1.34.3 (amd64)
+Installing helm v3.20.2 (amd64)
+Creating venv.
+Installing Python dependencies..........
+Installing Ansible collections....
+[0;32mAnsible ansible [core 2.19.14][0m
+[0;32mconfigure: done.[0m
+Next:  ./es_auto_installer.sh init <layer>  (see README.md for details)
