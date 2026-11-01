@@ -1,0 +1,132 @@
+{
+  "arch": "gemma4",
+  "card_bytes": [],
+  "ckpt_bytes": 0,
+  "ctx": 262144,
+  "degraded": false,
+  "dram_tok_s": null,
+  "engine": "ovms",
+  "explain": [
+    "model OpenVINO/gemma-4-26b-a4b-it-int4-ov: openvino (gemma4) weights, 14.2 GiB to serve",
+    "  embed    0.7 GiB (lookup table)",
+    "  vision   0.5 GiB",
+    "  other    13.0 GiB",
+    "context cap: 262144 (max_position_embeddings)",
+    "host RAM: MemTotal 503.3 GiB, MemAvailable 409.5 GiB (others already hold 93.9 GiB)",
+    "host reserve = max(10% x MemTotal, 4.0 GiB) = 50.3 GiB",
+    "host budget = 409.5 GiB - 50.3 GiB = 359.1 GiB",
+    "GPUs:",
+    "  card1 (0000:12:00.0): VRAM 31.9 GiB, in use 16.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.2 GiB; BUSY (others hold >= 50%), not used",
+    "  card2 (0000:48:00.0): VRAM 31.9 GiB, in use 15.4 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.9 GiB",
+    "  card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 15.8 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 14.5 GiB",
+    "  card4 (0000:96:00.0): VRAM 31.9 GiB, in use 15.1 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 15.2 GiB",
+    "CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)",
+    "engine ovms: OVMS 2026.4.0 release notes: Gemma-4-26B-a4B on CPU and GPU",
+    "  KV cache (2 B per element):",
+    "    full attention: 5 layers x 2 (K, V) x 2 kv heads x 512 head dim x 2 B = 20480 B/token",
+    "      attention_k_eq_v: global layers share K and V; counted as two tensors (upper bound)",
+    "    sliding window: 25 layers x 2 x 8 kv heads x 256 head dim x 2 B = 204800 B/token, for the whole context: OpenVINO GenAI 2026.4 has no sliding-window cache type (continuous_batching/cache/cache_type.hpp), every attention layer gets every token",
+    "placements, target: 4 seqs at >= 32768 tokens:",
+    "  ovms/cpu: FITS",
+    "    host budget / 1.10 slack 325.5 GiB - weights 14.2 GiB - activations 0.0 GiB - runtime 2.0 GiB = 309.2 GiB for KV",
+    "    KV: 5 seqs x 56320.0 MiB at 262144 tokens = 275.0 GiB",
+    "k8s: memory request = limit = ceil(291.3 GiB x 1.10) = 321Gi",
+    "guard rungs (seqs x context): 5x262144, 2x262144, 1x262144, 1x131072, 1x65536, 1x32768, 1x16384, 1x8192, 1x4096",
+    "engine flags: --max_num_seqs=5 --cache_size=275"
+  ],
+  "fits": true,
+  "flags": [
+    "--max_num_seqs=5",
+    "--cache_size=275"
+  ],
+  "format": "openvino",
+  "gpu_bytes": 0,
+  "gpus": 0,
+  "guard": {
+    "calm_samples": 60,
+    "calm_some_avg60": 5.0,
+    "cooldown_samples": 12,
+    "emergency_samples": 3,
+    "full_avg10": 5.0,
+    "host_bytes": 312749608049,
+    "mem_available_floor": 27021677772,
+    "placement": "cpu",
+    "rung_kv_bytes": [
+      295279001600,
+      118111600640,
+      59055800320,
+      30064771072,
+      15032385536,
+      7516192768,
+      4294967296,
+      2147483648,
+      1073741824
+    ],
+    "rung_memory_limit": [
+      "321Gi",
+      "139Gi",
+      "79Gi",
+      "49Gi",
+      "34Gi",
+      "26Gi",
+      "23Gi",
+      "21Gi",
+      "19Gi"
+    ],
+    "rungs": [
+      [
+        5,
+        262144
+      ],
+      [
+        2,
+        262144
+      ],
+      [
+        1,
+        262144
+      ],
+      [
+        1,
+        131072
+      ],
+      [
+        1,
+        65536
+      ],
+      [
+        1,
+        32768
+      ],
+      [
+        1,
+        16384
+      ],
+      [
+        1,
+        8192
+      ],
+      [
+        1,
+        4096
+      ]
+    ],
+    "some_avg10": 20.0
+  },
+  "host_bytes": 312749608049,
+  "host_reserve": 54043355545,
+  "k8s": {
+    "memory_limit": "321Gi",
+    "memory_request": "321Gi"
+  },
+  "kv_bytes": 295279001600,
+  "model": "OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+  "note": "OVMS 2026.4.0 release notes: Gemma-4-26B-a4B on CPU and GPU",
+  "placement": "cpu",
+  "schema": "k3d-gpu.fit/v1",
+  "seqs": 5,
+  "source": "OpenVINO/gemma-4-26b-a4b-it-int4-ov@4e5885c3f03844f5887982def09708bdc9f53f7a",
+  "summary": "fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AMX) via ovms, context 262144 x 5 seqs, host 291.3 GiB (pod limit 321Gi), host reserve 50.3 GiB",
+  "tp": 1,
+  "weight_bytes": 15295859825
+}

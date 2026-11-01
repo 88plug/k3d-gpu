@@ -83,7 +83,6 @@ class InterlockTest(unittest.TestCase):
         self.assertEqual(H.accel_keys(deployment(gpu=True)["spec"]["template"]["spec"]), ["gpu.intel.com/xe"])
         self.assertEqual(H.accel_keys(deployment()["spec"]["template"]["spec"]), [])
         self.assertEqual(H.accel_keys({"containers": [{}], "resourceClaims": [{"name": "g"}]}), ["resourceClaims"])
-        self.assertEqual(H.accel_keys({"volumes": [{"hostPath": {"path": "/dev/dri"}}]}), ["hostPath:/dev/dri"])
         self.assertEqual(H.accel_keys({"containers": [{"resources": {"requests": {"nvidia.com/gpu": 1}}}]}),
                          ["nvidia.com/gpu"])
 
@@ -115,6 +114,23 @@ class InterlockTest(unittest.TestCase):
         self.assertEqual(len(H.read_jsonl(os.path.join(d, "events.jsonl"))), 2)
         with open(os.path.join(d, "beat")) as f:
             self.assertTrue(f.read().endswith("ok\n"))
+
+    def test_device_plugins_and_hostpath_mounts_are_left_alone(self):
+        # Amendment R2: run 1's interlock deleted the Intel GPU plugin pod (kube-system, /dev/dri
+        # hostPath, no resource) 958 times, so the node advertised no card. k3d-gpu's own pods are
+        # never targets; only workloads that ask for an accelerator resource or claim are.
+        plugin = {"kind": "Pod", "metadata": {"name": "intel-gpu-plugin-wgblj", "namespace": "kube-system", "uid": "p1"},
+                  "spec": {"containers": [{"name": "intel-gpu-plugin", "volumeMounts": [{"name": "dri-renderd129"}]}],
+                           "volumes": [{"name": "dri-renderd129", "hostPath": {"path": "/dev/dri/renderD129"}},
+                                       {"name": "dri-by-path", "hostPath": {"path": "/dev/dri/by-path"}}]}}
+        exporter = {"kind": "Pod", "metadata": {"name": "intel-gpu-exporter-x", "namespace": "k3d-gpu-telemetry", "uid": "p2"},
+                    "spec": {"containers": [{"name": "e"}], "volumes": [{"name": "d", "hostPath": {"path": "/dev/dri"}}]}}
+        ks_gpu = {"kind": "Pod", "metadata": {"name": "probe", "namespace": "kube-system", "uid": "p3"},
+                  "spec": {"containers": [{"resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}
+        self.assertEqual(H.interlock_targets([plugin, exporter, ks_gpu]), [])
+        self.assertEqual(H.accel_keys(plugin["spec"]), [])
+        gpu = deployment("ovms", fit="gpu 4x20480", device="GPU", gpu=True, uid="g")
+        self.assertEqual([t[2] for t in H.interlock_targets([plugin, gpu])], ["ovms"])
 
     def test_pass_unreachable_cluster(self):
         d = tempfile.mkdtemp()
@@ -245,6 +261,18 @@ class SqueezeMathTest(unittest.TestCase):
         out = H.outside_ours(kills)
         self.assertEqual(len(out), 1)
         self.assertIn("task=python3", out[0])
+
+
+class RedactTest(unittest.TestCase):
+    def test_secret_labels_are_blanked(self):
+        ev = json.dumps({"Type": "container", "Action": "start", "Actor": {"ID": "x", "Attributes": {
+            "name": "k3d-gpu-server-0", "k3d.cluster.token": "toyjlBfSsecret", "image": "k3s"}}})
+        out = H.redact_events(ev + "\nnot json\n")
+        self.assertNotIn("toyjlBfS", out)
+        e = json.loads(out)
+        self.assertEqual(e["Actor"]["Attributes"]["k3d.cluster.token"], "REDACTED")
+        self.assertEqual(e["Actor"]["Attributes"]["name"], "k3d-gpu-server-0")
+        self.assertEqual(out.count("\n"), 1)
 
 
 class FakeProc:
@@ -455,6 +483,17 @@ class ScoreTest(unittest.TestCase):
         self.assertEqual(r["clauses"]["a"], "fails")
         self.assertEqual(r["a"]["flags"], ["K3D_GPU_CLUSTER on k3d-gpu up"])
 
+    def test_an_interlock_deletion_outside_the_agent_namespace_voids_the_run(self):
+        o = self.out()
+        write(os.path.join(o, "interlock", "events.jsonl"),
+              json.dumps({"kind": "Pod", "namespace": "kube-system", "name": "intel-gpu-plugin-wgblj"}) + "\n")
+        r = H.score(o)
+        self.assertEqual(r["verdict"], "NOT VALID")
+        self.assertIn("the GPU interlock deleted 1 object(s) outside k3d-gpu-agent (k3d-gpu's own)", r["invalid_why"])
+        write(os.path.join(o, "interlock", "events.jsonl"),
+              json.dumps({"kind": "Deployment", "namespace": "k3d-gpu-agent", "name": "ovms"}) + "\n")
+        self.assertTrue(H.score(o)["valid"])
+
     def test_not_valid(self):
         o = self.out()
         write(os.path.join(o, "commit-end.txt"), "def\n")
@@ -546,6 +585,8 @@ if rest[:1] == ["version"]:
 if not os.path.exists(os.path.join(S, "cluster")):
     print('error: context "k3d-gpu" does not exist', file=sys.stderr); sys.exit(1)
 deps = [json.load(open(os.path.join(D, f))) for f in sorted(os.listdir(D))] if os.path.isdir(D) else []
+plugin = {"kind": "Pod", "metadata": {"name": "intel-gpu-plugin-a", "namespace": "kube-system", "uid": "plugin"},
+          "spec": {"containers": [{"name": "intel-gpu-plugin"}], "volumes": [{"name": "d", "hostPath": {"path": "/dev/dri/renderD129"}}]}}
 if rest[:2] == ["get", "node"]:
     if any(x.startswith("jsonpath") for x in rest):
         sys.stdout.write("2"); sys.exit(0)
@@ -554,7 +595,9 @@ if rest[:2] == ["get", "node"]:
     sys.exit(0)
 if rest[:2] == ["get", "deployments,pods"] and os.environ.get("H58T_BLIND"):
     print("error: the server is unreachable", file=sys.stderr); sys.exit(1)
-if rest[:2] == ["get", "deployments,pods"] or rest[:2] == ["get", "deployments"]:
+if rest[:2] == ["get", "deployments,pods"]:
+    print(json.dumps({"items": deps + [plugin]})); sys.exit(0)
+if rest[:2] == ["get", "deployments"]:
     print(json.dumps({"items": deps})); sys.exit(0)
 if rest[:2] == ["get", "pods"]:
     print("NAMESPACE NAME READY"); sys.exit(0)
@@ -562,6 +605,8 @@ if rest[:1] == ["scale"]:
     sys.exit(0)
 if rest[:1] == ["delete"]:
     kind, _, name = rest[1].partition("/")
+    if name.startswith("intel-gpu-plugin"):
+        open(os.path.join(S, "plugin-deleted"), "a").write(name + "\n")
     p = os.path.join(D, name + ".json")
     if kind == "deployment" and os.path.exists(p):
         os.remove(p)
@@ -587,6 +632,8 @@ elif a[:1] == ["inspect"]:
     print(json.dumps([{"Name": "/qwen38-a-hr", "Id": "c1" * 8, "Config": {"Image": "sglang"}, "RestartCount": 0,
                        "State": {"StartedAt": "2026-10-30", "Running": True, "OOMKilled": False}}]))
 elif a[:1] == ["events"] and "--until" not in a:
+    print(json.dumps({"Type": "container", "Action": "create", "Actor": {"ID": "n", "Attributes": {
+        "name": "k3d-gpu-server-0", "k3d.cluster.token": "SECRETTOKEN"}}}), flush=True)
     time.sleep(600)
 elif a[:1] == ["version"]:
     print("docker 29.8.0")
@@ -703,6 +750,10 @@ class RunShTest(unittest.TestCase):
         self.assertEqual(pl[H.GEMMA]["placement"], "refused")
         self.assertEqual(pl[H.QWEN27]["placement"], "refused")
         self.assertEqual((pl[H.FLASH]["placement"], pl[H.FLASH]["blocked"]), ("gpu", True))
+        self.assertFalse(os.path.exists(os.path.join(self.state, "plugin-deleted")))
+        ev = rd(os.path.join(self.out, "docker-events.jsonl"))
+        self.assertIn('"k3d.cluster.token": "REDACTED"', ev)
+        self.assertNotIn("SECRETTOKEN", ev)
         ev = H.read_jsonl(os.path.join(self.out, "interlock", "events.jsonl"))
         self.assertEqual([(e["kind"], e["name"], e["keys"]) for e in ev], [("Deployment", "ovms", ["gpu.intel.com/xe"])])
         self.assertFalse(rj(os.path.join(self.out, "b24", "status.json"))["ran"])

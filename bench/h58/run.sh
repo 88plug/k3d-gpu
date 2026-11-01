@@ -141,6 +141,7 @@ teardown() {
     dmesg_oom "${OUT}/dmesg-oom-post.txt"
     cat /proc/meminfo > "${OUT}/meminfo-post.txt"
     kill "${EV_PID}" 2>/dev/null
+    ${H} redact-events "${OUT}/docker-events.jsonl"    # k3d's node labels carry the cluster's join token
     # The run's own k3d-gpu cache and state (metadata, fit records, guard logs) into OUT, then
     # the ones set aside before the run back in place.
     local d n=0

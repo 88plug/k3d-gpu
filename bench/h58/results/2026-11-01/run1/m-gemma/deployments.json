@@ -1,0 +1,177 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "deployment.kubernetes.io/revision": "1",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"labels\":{\"app\":\"ovms\"},\"name\":\"ovms\",\"namespace\":\"k3d-gpu-agent\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"ovms\"}},\"strategy\":{\"type\":\"Recreate\"},\"template\":{\"metadata\":{\"annotations\":{\"k3d-gpu.io/agent-device\":\"CPU\",\"k3d-gpu.io/agent-fit\":\"cpu 5x262144\"},\"labels\":{\"app\":\"ovms\"}},\"spec\":{\"containers\":[{\"args\":[\"--rest_port=8000\",\"--model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov\",\"--model_name=gemma-4-26B-A4B-it\",\"--cache_dir=/models/.ov_cache\",\"--log_level=INFO\"],\"image\":\"openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"ovms\",\"ports\":[{\"containerPort\":8000,\"name\":\"http\"}],\"readinessProbe\":{\"httpGet\":{\"path\":\"/v2/health/ready\",\"port\":\"http\"},\"periodSeconds\":5},\"resources\":{\"limits\":{\"memory\":\"321Gi\"},\"requests\":{\"cpu\":\"48\",\"memory\":\"321Gi\"}},\"volumeMounts\":[{\"mountPath\":\"/models\",\"name\":\"models\"}]}],\"initContainers\":[{\"args\":[\"--pull\",\"--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov\",\"--model_repository_path=/models\",\"--model_name=gemma-4-26B-A4B-it\",\"--task=text_generation\",\"--target_device=CPU\",\"--tool_parser=gemma4\",\"--reasoning_parser=gemma4\",\"--max_num_seqs=5\",\"--cache_size=275\"],\"image\":\"openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58\",\"imagePullPolicy\":\"IfNotPresent\",\"name\":\"pull\",\"volumeMounts\":[{\"mountPath\":\"/models\",\"name\":\"models\"}]}],\"nodeSelector\":{\"feature.node.kubernetes.io/cpu-cpuid.AMXTILE\":\"true\"},\"securityContext\":{\"fsGroup\":5000,\"runAsGroup\":5000,\"runAsUser\":5000},\"volumes\":[{\"name\":\"models\",\"persistentVolumeClaim\":{\"claimName\":\"ovms-models\"}}]}}}}\n"
+                },
+                "creationTimestamp": "2026-11-01T10:20:43Z",
+                "generation": 1,
+                "labels": {
+                    "app": "ovms"
+                },
+                "name": "ovms",
+                "namespace": "k3d-gpu-agent",
+                "resourceVersion": "12228",
+                "uid": "f8359d19-9592-46dc-b4c5-f51f3b84d05d"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "app": "ovms"
+                    }
+                },
+                "strategy": {
+                    "type": "Recreate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "k3d-gpu.io/agent-device": "CPU",
+                            "k3d-gpu.io/agent-fit": "cpu 5x262144"
+                        },
+                        "labels": {
+                            "app": "ovms"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "args": [
+                                    "--rest_port=8000",
+                                    "--model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+                                    "--model_name=gemma-4-26B-A4B-it",
+                                    "--cache_dir=/models/.ov_cache",
+                                    "--log_level=INFO"
+                                ],
+                                "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "ovms",
+                                "ports": [
+                                    {
+                                        "containerPort": 8000,
+                                        "name": "http",
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "readinessProbe": {
+                                    "failureThreshold": 3,
+                                    "httpGet": {
+                                        "path": "/v2/health/ready",
+                                        "port": "http",
+                                        "scheme": "HTTP"
+                                    },
+                                    "periodSeconds": 5,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 1
+                                },
+                                "resources": {
+                                    "limits": {
+                                        "memory": "321Gi"
+                                    },
+                                    "requests": {
+                                        "cpu": "48",
+                                        "memory": "321Gi"
+                                    }
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/models",
+                                        "name": "models"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "initContainers": [
+                            {
+                                "args": [
+                                    "--pull",
+                                    "--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+                                    "--model_repository_path=/models",
+                                    "--model_name=gemma-4-26B-A4B-it",
+                                    "--task=text_generation",
+                                    "--target_device=CPU",
+                                    "--tool_parser=gemma4",
+                                    "--reasoning_parser=gemma4",
+                                    "--max_num_seqs=5",
+                                    "--cache_size=275"
+                                ],
+                                "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "pull",
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/models",
+                                        "name": "models"
+                                    }
+                                ]
+                            }
+                        ],
+                        "nodeSelector": {
+                            "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true"
+                        },
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {
+                            "fsGroup": 5000,
+                            "runAsGroup": 5000,
+                            "runAsUser": 5000
+                        },
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "name": "models",
+                                "persistentVolumeClaim": {
+                                    "claimName": "ovms-models"
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-11-01T10:23:36Z",
+                        "lastUpdateTime": "2026-11-01T10:23:36Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-11-01T10:20:43Z",
+                        "lastUpdateTime": "2026-11-01T10:23:36Z",
+                        "message": "ReplicaSet \"ovms-594dcb77dd\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 1,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "terminatingReplicas": 0,
+                "updatedReplicas": 1
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

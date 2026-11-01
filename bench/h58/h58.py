@@ -18,6 +18,7 @@ amendment R1 defines them. Python 3 standard library only.
                                          guard's floor by SQUEEZE_MARGIN
   h58.py squeeze DIR APP PRE.json        clause (f): the squeeze, its stop rule and its records
                                          (PRE.json: the containers running when the run started)
+  h58.py redact-events FILE              blank secret-looking labels in a docker events JSONL, in place
   h58.py score OUT                       the clause table and the verdict, written to OUT/score.json
 
 Decode tok/s (clause (c)): over an arm's turn records with status 200, no error, at least 2
@@ -137,7 +138,9 @@ def env_flags(environ):
 
 def accel_keys(podspec):
     """What a pod spec asks for that would put work on an accelerator: extended resources of a
-    GPU/NPU vendor, resource claims (DRA) and /dev/dri host paths."""
+    GPU/NPU vendor and resource claims (DRA). A /dev/dri hostPath is not one: k3d-gpu's Intel GPU
+    plugin mounts its cards that way to advertise them and runs no work on them, and k3d-gpu's
+    agents reach a card only through the plugin's resource (amendment R2)."""
     keys = set()
     for c in (podspec.get("containers") or []) + (podspec.get("initContainers") or []):
         res = c.get("resources") or {}
@@ -145,20 +148,22 @@ def accel_keys(podspec):
             keys.update(k for k in (res.get(part) or {}) if ACCEL.match(k))
     if podspec.get("resourceClaims"):
         keys.add("resourceClaims")
-    for v in podspec.get("volumes") or []:
-        p = (v.get("hostPath") or {}).get("path", "")
-        if p.startswith("/dev/dri"):
-            keys.add("hostPath:" + p)
     return sorted(keys)
 
 
+SYSTEM_NS = ("kube-system",)   # k3d-gpu's own components (device plugins): never touched
+AGENT_NS = "k3d-gpu-agent"     # where agent up deploys
+
+
 def interlock_targets(items):
-    """[(kind, namespace, name, uid, keys, obj)] of the Deployments and pods that ask for an
-    accelerator. A pod owned by a ReplicaSet is caught through its Deployment too."""
+    """[(kind, namespace, name, uid, keys, obj)] of the Deployments and pods outside kube-system
+    that ask for an accelerator. A pod owned by a ReplicaSet is caught through its Deployment too."""
     out = []
     for o in items:
         kind = o.get("kind")
         md = o.get("metadata") or {}
+        if md.get("namespace") in SYSTEM_NS:
+            continue
         if kind == "Deployment":
             spec = ((o.get("spec") or {}).get("template") or {}).get("spec") or {}
         elif kind == "Pod":
@@ -543,8 +548,28 @@ def run_squeeze(d, app, sn, state, pre_names, hold_s=420, pre_s=120, step=5.0, p
     ev = run(["docker", "events", "--since", "%d" % int(t0), "--until", "%d" % int(clock()), "--filter",
               "type=container", "--format", "{{json .}}"], capture_output=True, text=True).stdout
     with open(os.path.join(d, "docker-events.jsonl"), "w") as f:
-        f.write(ev)
+        f.write(redact_events(ev))
     return done()
+
+
+SECRET_KEY = re.compile(r"(?i)token|secret|passw|api_?key|credential")
+
+
+def redact_events(text):
+    """docker events JSON lines with every label whose name looks like a secret blanked (k3d
+    labels its node containers with the cluster's join token, k3d.cluster.token)."""
+    out = []
+    for line in text.splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        attrs = (e.get("Actor") or {}).get("Attributes") or {}
+        for k in list(attrs):
+            if SECRET_KEY.search(k):
+                attrs[k] = "REDACTED"
+        out.append(json.dumps(e, sort_keys=True))
+    return "".join(x + "\n" for x in out)
 
 
 OOM_LINE = re.compile(r"oom-kill:.*task_memcg=(?P<memcg>[^,\s]*).*task=(?P<task>[^,\s]+)")
@@ -616,6 +641,11 @@ def validity(out):
         why.append("the commit changed during the run, or was not recorded")
     if read_text(os.path.join(out, "dirty.txt")).strip():
         why.append("the checkout had local changes")
+    # Amendment R2: the interlock may remove only what agent up deployed. Anything else it removed
+    # was k3d-gpu's own, so the run would measure the harness, not k3d-gpu.
+    other = [e for e in read_jsonl(os.path.join(out, "interlock", "events.jsonl")) if e.get("namespace") != AGENT_NS]
+    if other:
+        why.append("the GPU interlock deleted %d object(s) outside %s (k3d-gpu's own)" % (len(other), AGENT_NS))
     return (not why), why
 
 
@@ -782,6 +812,11 @@ def main(argv):
         st = run_squeeze(rest[0], rest[1], os.path.join(bench, "bin", "stress-ng"), state, pre)
         print(json.dumps(st, sort_keys=True))
         return 0 if st.get("ran") or st.get("why") else 1
+    if cmd == "redact-events" and len(rest) == 1:
+        text = read_text(rest[0])
+        with open(rest[0], "w") as f:
+            f.write(redact_events(text))
+        return 0
     if cmd == "score" and len(rest) == 1:
         res = score(rest[0])
         print(json.dumps({k: res[k] for k in ("verdict", "valid", "invalid_why", "clauses")}, indent=1))
