@@ -1325,6 +1325,16 @@ canary = ["node"]
 sites = [{ file = "Dockerfile", regex = '^ARG UBUNTU_2404_IMAGE="ubuntu:(?P<v>24\.04)@(?P<digest>sha256:[0-9a-f]{64})"$' }]
 
 [[pin]]
+id = "packaging-fedora"
+class = "ours"
+group = "packaging-images"
+family = "base-image"
+scheme = "docker-suffix"
+notes = "The Fedora image packaging/check.sh installs the rpm in. Fedora tags its branched and rawhide images with their release numbers before they ship; `latest` is the released one."
+source = { kind = "oci", image = "fedora", tag = "{v}", released = "latest" }
+sites = [{ file = "packaging/check.sh", ref = "fedora" }]
+
+[[pin]]
 id = "examples-python"
 class = "ours"
 group = "examples"
@@ -1332,6 +1342,9 @@ family = "base-image"
 scheme = "docker-suffix"
 notes = "The image the agent examples run in, and that their constraints.txt files are frozen in."
 source = { kind = "oci", image = "python", tag = "{v}-slim-trixie" }
+# crewai (examples/agents/crewai) requires Python <3.14, through 1.15.33 (its PyPI
+# requires_python), so its constraints.txt cannot be frozen on 3.14 or later.
+hold = { max = "3.14.0", reason = "crewai requires Python <3.14 (1.15.33)", review_by = "2027-01-31" }
 patterns = { v = '[0-9]+\.[0-9]+\.[0-9]+' }
 sites = [
   { file = "tests/agent_examples_test.sh", ref = "python", tag = "{v}-slim-trixie" },

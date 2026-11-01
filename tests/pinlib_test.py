@@ -143,6 +143,34 @@ class Oci(Fixtures):
         self.assertEqual(r.v, "1.38")
         self.assertEqual(r.values["digest"], D1)
 
+    def test_released_caps_at_the_tag_that_shares_latests_digest(self):
+        # Fedora numbers its branched (45) and rawhide (46) images before they ship;
+        # `latest` is the released one (44): source.released = "latest" stops there
+        d3 = "sha256:" + "3" * 64
+        pin = {"id": "fedora", "scheme": "docker-suffix",
+               "source": {"kind": "oci", "image": "fedora", "tag": "{v}", "released": "latest"}}
+        recs = {
+            HUB + "library/fedora/tags/list?n=1000": ok({"tags": ["42", "43", "44", "45", "46", "latest", "rawhide"]}),
+            HUB + "library/fedora/manifests/latest": manifest(D1),
+            HUB + "library/fedora/manifests/46": manifest(d3),
+            HUB + "library/fedora/manifests/45": manifest(D2),
+            HUB + "library/fedora/manifests/44": manifest(D1),
+        }
+        self.serve(recs)
+        r = sources.resolve(pin, "43")
+        self.assertEqual((r.v, r.values["digest"]), ("44", D1))
+        http.reset_fixtures()
+        recs[HUB + "library/fedora/manifests/45"] = manifest(D1)  # 45 released: latest moves to it
+        recs[HUB + "library/fedora/manifests/latest"] = manifest(D1)
+        recs[HUB + "library/fedora/manifests/44"] = manifest(D2)
+        self.serve(recs)
+        self.assertEqual(sources.resolve(pin, "44").v, "45")
+        http.reset_fixtures()
+        recs[HUB + "library/fedora/manifests/latest"] = manifest("sha256:" + "9" * 64)  # no numbered tag matches
+        self.serve(recs)
+        with self.assertRaises(sources.SourceError):
+            sources.resolve(pin, "44")
+
     def test_ghcr_anonymous_token(self):
         pin = {"id": "owui", "scheme": "semver",
                "source": {"kind": "oci", "image": "ghcr.io/open-webui/open-webui", "tag": "{v}"}}

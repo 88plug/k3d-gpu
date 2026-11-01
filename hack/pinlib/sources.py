@@ -7,7 +7,9 @@ sorts below the current one is an error, and so is a source that cannot find the
 tag shape it expects (it never falls back to the current value).
 
 Kinds (the `source` table of a pins/registry.toml entry)
-  oci             image, tag ("{v}" template; candidates share the current tag's shape)
+  oci             image, tag ("{v}" template; candidates share the current tag's shape),
+                  [exclude = [globs], released = <tag>: the newest is the tag sharing
+                  that tag's digest, for an image that numbers unreleased builds]
   github-release  repo, tag template, select = latest | highest, [image, image_tag,
                   commit, assets = {key = name template}, body = {key = regex}]
   pypi            package
@@ -230,6 +232,16 @@ def oci_source(pin, current):
     if hold:
         found = {v: t for v, t in found.items() if _below(scheme, v, hold)}
     best = _newest(scheme, found, current)
+    if src.get("released") and best is not None:
+        # an image that numbers a release before it ships (Fedora's branched and
+        # rawhide): the newest tag is the one that shares the `released` tag's digest
+        want = oci.digest(name, src["released"])
+        while best is not None and oci.digest(name, found[best]) != want:
+            if best == current:
+                raise SourceError("%s: no tag of %s at or above %s shares the digest of %s:%s" % (
+                    pin["id"], src["image"], current, src["image"], src["released"]))
+            del found[best]
+            best = _newest(scheme, found, current)
     if best is None:
         raise SourceError("%s: no stable tag of %s matches %s%s" % (
             pin["id"], src["image"], src.get("tag", "{v}"), " shaped like %s" % current if current else ""))
