@@ -74,10 +74,10 @@ historical-ref bench/h54/h54.py "ovms_eat": "2025.4@sha256:c370720007564bbdcbca1
 
 # --- Ledger rows: runners of PENDING rows and their finished siblings ----------------
 bench/eatflow/agent.lock                ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H50,H50o,H53,H56 amend=Crescent  the agent lock: H40-H48, then crescent M1's Gemma 4 and H53's Qwen3.8 sampling
-bench/eatflow/live.sh                   ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the agent-flow runner (desktop rows, then crescent)
+bench/eatflow/live.sh                   ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58,H62 amend=Crescent,H52,H62  the agent-flow runner (desktop rows, then crescent)
 bench/eatflow/crescent/serving.py       ledger H50,H50o,H51,H52,H52b,H53,H56,H58,H59,H7x,H25x,H27x,H28x,H34x,H60 amend=Crescent,H52,H59,Cross-host  crescent's serving sampler; the cross-host holds and H59's crescent holds run it
-bench/eatflow/crescent/**               ledger H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the crescent wrappers, setup and holds
-bench/eatflow/**                        ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58 amend=Crescent,H52  the agent-flow harness (pairs, solo, BFCL, tasks)
+bench/eatflow/crescent/**               ledger H50,H50o,H51,H52,H52b,H53,H56,H58,H62 amend=Crescent,H52,H62  the crescent wrappers, setup and holds
+bench/eatflow/**                        ledger H40,H41,H42,H43,H44,H45,H46,H47,H48,H47b,H49,H49b,H50,H50o,H51,H52,H52b,H53,H56,H58,H62 amend=Crescent,H52,H62  the agent-flow harness (pairs, solo, BFCL, tasks)
 bench/apb/h7x*                          ledger H7x amend=Cross-host  H7x's runner
 bench/apb/test_h7x.py                   ledger H7x amend=Cross-host  H7x's runner tests
 bench/xhost/fetch_models.py             ledger H7x,H25x,H27x,H28x,H34x,H60,H18w,H25w,H28w,H34w,H52w,H57wa,H57wm,H57wb,H59w amend=Cross-host,Wildct  the cross-host model fetch; wildct's setup-models.sh runs it
@@ -89,6 +89,7 @@ bench/h54/**                            ledger H54a,H54q amend=H54  the H54 runn
 bench/h57d/h57d.py                      ledger H57da,H57dm,H57db,H57dp,H57de,H57wa,H57wm,H57wb,H59,H59d,H59w amend=H57d,Wildct,H59  H57d's scorer: H59's scorer imports its load gate
 bench/h57d/**                           ledger H57da,H57dm,H57db,H57dp,H57de,H57wa,H57wm,H57wb amend=H57d,Wildct  the H57d runner; wildct's H57w rows run it (bench/wildct/row.sh h57w)
 bench/h59/**                            ledger H59,H59d,H59w amend=H59  H59's scorer
+bench/h62/**                            ledger H62 amend=H62  H62's runner (the EAS and EAT 2.0 VM pairs on crescent)
 bench/flashnext/**                      ledger H60 amend=H60  H60's runner
 bench/admission/**                      ledger H55 amend=H55  H55's SLO-gated admission harness
 bench/models/**                         ledger H50,H50o,H57da,H57dm,H57db,H57dp,H57de amend=Crescent,H57d  the Gemma 4 QAT export and grid (crescent amendment M1, H57d)
