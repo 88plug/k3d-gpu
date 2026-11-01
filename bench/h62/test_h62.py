@@ -638,7 +638,7 @@ class ScriptsTest(unittest.TestCase):
     """The shell scripts: syntax, and what each one is pinned to run."""
 
     SCRIPTS = ("arm.sh", "vm.sh", "guest-a.sh", "guest-b.sh", "setup.sh", "smoke.sh", "pairs-hold.sh",
-               "campaign.sh", "teardown.sh", "upstream.sh")
+               "campaign.sh", "teardown.sh", "upstream.sh", "eat-check.sh")
 
     def test_syntax(self):
         for s in self.SCRIPTS:
@@ -741,6 +741,13 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn("EAT_MODE=eas", sh)
         self.assertIn("MODEL=$(P pin catalog_name)", sh)
         self.assertIn("EAT_MODE=eas EAT_MODEL=${MODEL}", sh)
+        # Amendment V1: the smoke's check is #260's eat-check.sh, copied byte for byte.
+        self.assertIn("CHECK=${HERE}/eat-check.sh", sh)
+        check = read(HERE, "eat-check.sh")
+        self.assertRegex(check, r"(?m)^\s+eas\)")
+        import hashlib
+        self.assertEqual(hashlib.sha256(check.encode()).hexdigest(),
+                         "36de6abd267a0aaf80ad505138a096d8e5b9d5202dd1241c053e5110dafd7268")
         self.assertIn('"${HERE}/pairs-hold.sh" 0 smoke', sh)
         hold = read(HERE, "pairs-hold.sh")
         self.assertIn("smoke) name=H62-smoke", hold)

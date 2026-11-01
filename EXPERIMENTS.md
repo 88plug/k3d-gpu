@@ -4558,6 +4558,41 @@ Records go to `~/k3dgpu-bench/results/H62/`, with the hold records in
 `~/k3dgpu-bench/runs/H62-hold<n>/` and the smoke in `~/k3dgpu-bench/smoke/H62/`. They come back
 under `bench/eatflow/results/2026-10-29/H62/`.
 
+### H62 amendment V1: the wiring smoke's EAS check without the rest of #260 (2026-11-01)
+
+Written 2026-11-01 and pushed on the run branch `claude/h62-run` before any H62 step on crescent:
+no guest exists, nothing has been installed for H62, and nothing below is a measurement. It
+changes mechanics only. No arm, prediction, statistic, gate, threshold, cap or verdict rule
+changes.
+
+- **What the pre-registration says.** Deploy-commit item 2: every step runs at an `origin/main`
+  commit "with #260 (whose `integrations/eat/eat-check.sh` has the EAS mode the smoke uses)". If
+  #260 has not merged, "a run branch merges #260's head into main".
+- **What was found, 2026-11-01.** #260 is still open (head `e67ebc52`). `origin/main` is
+  `ef639c1d` (k3d-gpu 0.1.83). Merging `e67ebc52` into it conflicts in `scripts/k3d-gpu` (the
+  usage text and `sandbox_up`, which both sides changed) and in 13 audit goldens under
+  `tests/console/audit/` (image counts). Resolving them would mean writing part of #260 in this
+  run, and would change `scripts/k3d-gpu`, the tool A1 runs in VM a.
+- **The change.** The run branch does not merge #260. It carries only the file the smoke uses:
+  `bench/h62/eat-check.sh` is a byte copy of #260's `integrations/eat/eat-check.sh` at
+  `e67ebc52` (sha256 `36de6abd...7268`), and `bench/h62/smoke.sh` runs that copy. The smoke's
+  checks, model and order are unchanged: `validate agent-toolkit`, then `EAT_MODE=eas` through
+  EAS's gateway on `gemma-4-26b` (a chat, a get_weather tool call, a sandbox run that prints
+  385), then `H62-smoke`. `integrations/eat/eat-check.sh` on main is not touched, so #260 merges
+  as it would have.
+- **Deploy commit.** The run branch's head after this amendment: `origin/main` `ef639c1d` plus
+  this commit. It is pushed before it is deployed to `~/k3dgpu-bench/k3d-gpu-h62`, and every
+  record names it. A1's `scripts/k3d-gpu` is main's.
+- **Re-run trigger, read before setup (2026-11-01).** `bench/h62/upstream.sh`: `fired: none`.
+  EAS `release-1.2` and `v1.2.0-rc.1` are still `5c27fb39`, and EAT `release-2.0.0` is still
+  `036b6623`. The QEMU pins (`qemu-system-x86` 1:10.2.1+ds-1ubuntu3.3, genisoimage 9:1.1.11-5)
+  are still the candidates in the pinned `ubuntu:26.04` image. Docker CE 5:29.9.2 and
+  containerd.io 2.4.2-3 are still in Docker's noble repository. The cloud image still serves
+  621284352 bytes.
+- **Tests.** `ScriptsTest.test_smoke_gates_b5_through_eas_itself` (`bench/h62/test_h62.py`)
+  now pins the copy's path, its EAS branch and its sha256, and `ScriptsTest` runs `bash -n` and
+  shellcheck on it.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
