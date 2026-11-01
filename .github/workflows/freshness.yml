@@ -1,0 +1,436 @@
+name: Freshness
+
+# Moves every pin of class ours or eat-stock (pins/registry.toml) to its newest stable
+# upstream release, one PR per group on branch autobump/<group> (pins/README.md):
+#   plan    hack/pins outdated: the groups with a pin behind (plus digests, the
+#           same-tag respins), or the one group a dispatch names
+#   bump    hack/bump <group>, read-only and without push credentials: rewrite the
+#           sites, run the group's hooks, substitute the goldens, run the group's
+#           tests and compute the policy verdict (hack/pins policy) from the diff;
+#           the patch, its summary and the PR body are an artifact
+#   pr      a fresh checkout of main applies that patch, then per PR:
+#           hack/autobump-branch-reset, create-pull-request, hack/bot-ci-dispatch
+#           (ci.yml, and canary.yml when it exists). A known-issue fix whose entry
+#           has workarounds also opens autobump/ki-<id> on top: the removal, for review
+#   report  the issue 'Freshness dashboard', edited in place, and the lag tripwire:
+#           an ours pin behind for over 72 h (auto-eligible) or 7 days, with no open
+#           PR, opens ci-alarm blind-spot:<pin>
+#   propose-amendment (a human's dispatch only): a PENDING ledger row's runner image
+#           pins under a dated amendment stub, on autobump/amend-<row> (never bot-merged)
+# Bot-sweep's known-issues job dispatches `-f group=<g> -f reason=known-issue:<id>`
+# when hack/known-issues poll finds a fix released. No registry login and no
+# secret: the GITHUB_TOKEN only, written to disk only in the pr and
+# propose-amendment jobs, after the bump ran.
+
+# The run's title names its group as group=<g> (hack/bot-merge counts a group's
+# regenerations by it); a run over every group names none.
+run-name: >-
+  ${{ inputs.propose_amendment && format('Freshness amendment {0} group=amend-{0}', inputs.propose_amendment)
+      || inputs.group && format('Freshness group={0}{1}', inputs.group, inputs.reason && format(' {0}', inputs.reason) || '')
+      || 'Freshness (every group)' }}
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      group:
+        description: 'one pins/registry.toml group to bump (default: every group with a pin behind)'
+        type: string
+        default: ''
+      reason:
+        description: 'known-issue:<id> to record that issue''s fix (bot-sweep sets it)'
+        type: string
+        default: ''
+      propose_amendment:
+        description: 'a PENDING ledger row (e.g. H53): open its runner-pin amendment PR instead'
+        type: string
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: freshness-${{ inputs.group || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    if: ${{ !inputs.propose_amendment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      groups: ${{ steps.plan.outputs.groups }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Pins behind upstream
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GROUP: ${{ inputs.group }}
+        run: |
+          hack/pins outdated --json --all > "$RUNNER_TEMP/outdated-all.json"
+          # a pin no source resolves, or whose second source disagrees, never moves: say so
+          jq -r '.[] | select(.error or .unconfirmed) | "::warning::\(.id): \(.error // .note)"' \
+            "$RUNNER_TEMP/outdated-all.json"
+          groups=$(hack/pins plan --outdated "$RUNNER_TEMP/outdated-all.json" --group "$GROUP")
+          echo "groups=$groups" >> "$GITHUB_OUTPUT"
+          echo "groups: $groups"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: outdated
+          path: ${{ runner.temp }}/outdated-all.json
+          retention-days: 7
+
+  bump:
+    name: Bump ${{ matrix.group }}
+    needs: plan
+    if: ${{ needs.plan.outputs.groups != '' && needs.plan.outputs.groups != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    env:
+      GROUP: ${{ matrix.group }}
+      REASON: ${{ inputs.reason }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Tool versions (hack/ci-tools.env)
+        run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
+
+      # packaging for hack/bump-convert-pins; the pinned helm for the render-latest
+      # hook and the render tests.
+      - name: The bumper's tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}"
+          hack/install-helm "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out="$RUNNER_TEMP/out"
+          mkdir -p "$out"
+          case "$REASON" in ''|known-issue:*) ;; *) echo "::error::reason must be empty or known-issue:<id>"; exit 2;; esac
+          "$RUNNER_TEMP/venv/bin/python" hack/bump "$GROUP" ${REASON:+--reason "$REASON"} \
+            --summary "$out/summary.json" --body "$out/body.md"
+          git add -A
+          git diff --cached --binary > "$out/bump.patch"
+          ki=$(jq -r '.followup // empty' "$out/summary.json")
+          if [ -n "$ki" ]; then
+            git -c user.name=freshness -c user.email=freshness@localhost commit -qm bump
+            "$RUNNER_TEMP/venv/bin/python" hack/bump --remove-workaround "$ki" --body "$out/followup.md"
+            git add -A
+            git diff --cached --binary > "$out/followup.patch"
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bump-${{ matrix.group }}
+          path: ${{ runner.temp }}/out
+          retention-days: 7
+          if-no-files-found: error
+
+  pr:
+    name: PR ${{ matrix.group }}
+    needs: [plan, bump]
+    if: ${{ !cancelled() && needs.plan.outputs.groups != '' && needs.plan.outputs.groups != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
+    env:
+      GROUP: ${{ matrix.group }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Fetch the bump
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bump-${{ matrix.group }}
+          path: ${{ runner.temp }}/out
+
+      - name: Apply the bump
+        id: s
+        if: steps.dl.outcome == 'success'
+        run: |
+          out="$RUNNER_TEMP/out"
+          changed=$(jq -r '.changed' "$out/summary.json")
+          if [ "$changed" = true ]; then
+            git apply --3way --index "$out/bump.patch"
+            [ -z "$(git status --porcelain -- .github)" ] || { echo "::error::the bump patch touches .github/"; exit 1; }
+            # the scripts the next steps run with this job's write token come from main
+            [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+              || { echo "::error::the bump patch changes a script this job runs next"; exit 1; }
+          fi
+          {
+            echo "changed=$changed"
+            echo "title=$(jq -r '.title' "$out/summary.json")"
+            echo "labels=$(jq -r '.labels // [] | join(",")' "$out/summary.json")"
+            echo "followup=$(jq -r '.followup // empty' "$out/summary.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      # create-pull-request force-pushes an existing bump branch, which GitHub refuses
+      # from GITHUB_TOKEN once main's workflow files differ from the branch's: delete
+      # such a branch first (its PR closes; a fresh one opens).
+      - name: Delete a bump branch whose workflows differ from main's
+        if: steps.s.outputs.changed == 'true'
+        run: hack/autobump-branch-reset "autobump/${GROUP}"
+
+      - name: Open or update the bump PR
+        if: steps.s.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: autobump/${{ matrix.group }}
+          delete-branch: true
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          commit-message: ${{ steps.s.outputs.title }}
+          title: ${{ steps.s.outputs.title }}
+          body-path: ${{ runner.temp }}/out/body.md
+          labels: ${{ steps.s.outputs.labels }}
+
+      # The PR's own pull_request runs wait for approval (a GITHUB_TOKEN PR); a
+      # workflow_dispatch run does not. One bot run in flight at a time; a deferred
+      # branch is picked up by Bot sweep's ci-fill.
+      - name: Dispatch CI (and the Canary) on the bump PR's branch
+        if: steps.s.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          hack/bot-ci-dispatch --branch "autobump/${GROUP}"
+          if [ -f .github/workflows/canary.yml ]; then
+            hack/bot-ci-dispatch --branch "autobump/${GROUP}" --workflow canary.yml
+          else
+            echo "no .github/workflows/canary.yml: no canary to dispatch"
+          fi
+
+      # A known-issue fix whose entry lists workarounds: their removal is a second PR,
+      # cut from the bump branch, labelled for review (it changes defaults).
+      - name: Check out the bump branch for the workaround removal
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
+        run: |
+          git fetch -q origin "autobump/${GROUP}"
+          git checkout -q -B "autobump/${GROUP}" FETCH_HEAD
+          git apply --index "$RUNNER_TEMP/out/followup.patch"
+          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+            || { echo "::error::the workaround removal patch changes a script this job runs next"; exit 1; }
+
+      - name: Delete a removal branch whose workflows differ from main's
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
+        env:
+          KI: ${{ steps.s.outputs.followup }}
+        run: hack/autobump-branch-reset "autobump/ki-${KI}"
+
+      - name: Open or update the workaround removal PR
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: autobump/ki-${{ steps.s.outputs.followup }}
+          base: autobump/${{ matrix.group }}
+          delete-branch: true
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          commit-message: Remove the workaround for known issue ${{ steps.s.outputs.followup }}
+          title: Remove the workaround for known issue ${{ steps.s.outputs.followup }}
+          body-path: ${{ runner.temp }}/out/followup.md
+          labels: autobump,needs-review,changes-defaults
+
+      - name: Dispatch CI on the removal PR's branch
+        if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KI: ${{ steps.s.outputs.followup }}
+        run: hack/bot-ci-dispatch --branch "autobump/ki-${KI}"
+
+  report:
+    name: Dashboard
+    needs: [plan, bump, pr]
+    if: ${{ always() && !inputs.propose_amendment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Fetch the plan's outdated list
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: outdated
+          path: ${{ runner.temp }}
+
+      - name: Edit the Freshness dashboard
+        run: |
+          t="$RUNNER_TEMP"
+          [ -s "$t/outdated-all.json" ] || hack/pins outdated --json --all > "$t/outdated-all.json"
+          gh pr list --state open --limit 100 --json number,title,headRefName,labels,author \
+            --jq '[.[] | select(.headRefName | startswith("autobump/"))
+                   | {number, title, headRefName,
+                      verdict: ([.labels[].name | select(startswith("verdict:")) | ltrimstr("verdict:")] | first // "?"),
+                      blocking: (if any(.labels[]; .name == "needs-review") then "a human approval at the head"
+                                 elif any(.labels[]; .name == "canary-drift") then "canary drift: a human approval"
+                                 else "" end)}]' > "$t/prs.json"
+          hack/ci_alarm list > "$t/alarms.txt" || echo "(hack/ci_alarm list failed)" > "$t/alarms.txt"
+          hack/pins report --outdated "$t/outdated-all.json" --prs "$t/prs.json" --alarms "$t/alarms.txt" \
+            --lag-alarms "$t/lag.json" > "$t/dashboard.md"
+          # an issue body holds at most 65536 characters
+          if [ "$(wc -c < "$t/dashboard.md")" -gt 60000 ]; then
+            head -c 60000 "$t/dashboard.md" > "$t/cut.md"
+            printf '\n\n(cut at 60000 characters: the full dashboard is in the run log)\n' >> "$t/cut.md"
+            cat "$t/dashboard.md"
+            mv "$t/cut.md" "$t/dashboard.md"
+          fi
+          n=$(gh issue list --state open --limit 100 --search 'in:title "Freshness dashboard"' --json number,title \
+                --jq '[.[] | select(.title == "Freshness dashboard")][0].number // empty')
+          if [ -z "$n" ]; then
+            gh label create freshness-dashboard --color 0e8a16 --description "The Freshness workflow's dashboard" --force
+            url=$(gh issue create --title "Freshness dashboard" --label freshness-dashboard --body-file "$t/dashboard.md")
+            n=${url##*/}
+          else
+            gh issue edit "$n" --body-file "$t/dashboard.md"
+          fi
+          gh issue pin "$n" 2>/dev/null || echo "issue #$n: not pinned (no permission); find it by its freshness-dashboard label"
+
+      - name: Lag tripwire
+        run: |
+          t="$RUNNER_TEMP"
+          [ -f "$t/lag.json" ] || { echo "no lag list"; exit 0; }
+          keys=$(jq -r '.[].key' "$t/lag.json")
+          for i in $(seq 0 $(( $(jq length "$t/lag.json") - 1 ))); do
+            key=$(jq -r ".[$i].key" "$t/lag.json")
+            jq -r ".[$i].body" "$t/lag.json" > "$t/body.md"
+            hack/ci_alarm open "$key" "$(jq -r ".[$i].title" "$t/lag.json")" "$t/body.md"
+          done
+          # a pin that caught up closes its alarm
+          for key in $(hack/ci_alarm list | grep '^blind-spot:' || true); do
+            grep -qxF "$key" <<< "$keys" || hack/ci_alarm close "$key" "The pin is no longer behind without an open PR."
+          done
+
+  propose-amendment:
+    name: Propose an amendment for ${{ inputs.propose_amendment }}
+    if: ${{ inputs.propose_amendment != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      ROW: ${{ inputs.propose_amendment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: work
+          persist-credentials: false
+
+      - name: The open PRs, their files and the ledger headings they add
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: work
+        run: |
+          [[ $ROW =~ ^H[0-9]+[a-z]{0,3}$ ]] || { echo "::error::'$ROW' is not a ledger row id"; exit 2; }
+          t="$RUNNER_TEMP"
+          gh pr list --state open --limit 200 --json number,files \
+            --jq '[.[] | {number, files: [.files[].path]}]' > "$t/prs.json"
+          jq -c '.[]' "$t/prs.json" | while read -r pr; do
+            n=$(jq -r .number <<< "$pr")
+            if jq -e '.files | index("EXPERIMENTS.md")' <<< "$pr" > /dev/null; then
+              heads=$(gh pr diff "$n" | sed -n 's/^+\(###[^#].*\)$/\1/p' | jq -R . | jq -sc .)
+            else
+              heads='[]'
+            fi
+            jq -c --argjson h "$heads" '. + {added_headings: $h}' <<< "$pr"
+          done | jq -s . > "$t/open-prs.json"
+
+      - name: Move the row's runner pins under a dated amendment stub
+        working-directory: work
+        run: |
+          t="$RUNNER_TEMP"
+          hack/pins propose-amendment "$ROW" --open-prs "$t/open-prs.json" --write > "$t/stub.md"
+          git add -A
+          git diff --cached --binary > "$t/amend.patch"
+          {
+            echo "Moves the runner image pins of $ROW, a PENDING ledger row with no run section, to their"
+            echo "newest same-shape tags, under this dated amendment in EXPERIMENTS.md:"
+            echo
+            cat "$t/stub.md"
+            echo
+            echo "Opened by a human's dispatch of the Freshness workflow (propose_amendment=$ROW). Never"
+            echo "bot-merged: the owner confirms the amendment by merging it, before any measurement."
+          } > "$t/body.md"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: pr
+
+      - name: Apply the amendment
+        working-directory: pr
+        run: |
+          git apply --index "$RUNNER_TEMP/amend.patch"
+          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+            || { echo "::error::the amendment patch changes a script this job runs next"; exit 1; }
+
+      - name: Delete an amendment branch whose workflows differ from main's
+        working-directory: pr
+        run: hack/autobump-branch-reset "autobump/amend-${ROW}"
+
+      - name: Open or update the amendment PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          path: pr
+          branch: autobump/amend-${{ inputs.propose_amendment }}
+          delete-branch: true
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          commit-message: Ledger amendment for ${{ inputs.propose_amendment }}, the runner image pins at their newest tags
+          title: Ledger amendment for ${{ inputs.propose_amendment }}, the runner image pins at their newest tags
+          body-path: ${{ runner.temp }}/body.md
+          labels: ledger-amendment,needs-review
+
+      - name: Dispatch CI on the amendment PR's branch
+        working-directory: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch --branch "autobump/amend-${ROW}"

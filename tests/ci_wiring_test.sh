@@ -63,19 +63,42 @@ else
     fail "the 'tracked files already at' tag-HEAD fallback is still present"
 fi
 
-# build-and-push.yml repin-images: its GITHUB_TOKEN push cannot create or update
-# .github/workflows/ files (no `workflows` permission), so the job never writes
-# there, and it stops before the push when a workflow file changed anyway.
+# A GITHUB_TOKEN push cannot create or update .github/workflows/ files (no
+# `workflows` permission), so no bumper writes there: hack/bump refuses a bump
+# that changed .github/ (its digests hook repins only files a bumper may write),
+# and freshness.yml's pr job stops before the push when the patch touches .github/.
 BP="${ROOT}/.github/workflows/build-and-push.yml"
-if grep -qF "scripts/images-lock repin --exclude '.github/workflows/*'" "${BP}"; then
-    ok "repin-images runs repin with --exclude '.github/workflows/*'"
+FR="${ROOT}/.github/workflows/freshness.yml"
+if grep -qF 'the bump changed .github/: a bumper never writes a workflow' "${ROOT}/hack/bump" \
+   && grep -qF 'not path.startswith(".github/") and classes.writable(root, path)' "${ROOT}/hack/bump"; then
+    ok "hack/bump never writes .github/ and refuses a bump that changed it"
 else
-    fail "repin-images does not run scripts/images-lock repin --exclude '.github/workflows/*'"
+    fail "hack/bump lacks its .github/ refusal or its path_writable rule"
 fi
-if grep -qF 'git status --porcelain -- .github/workflows/' "${BP}"; then
-    ok "repin-images checks that no workflow file changed before opening the PR"
+if grep -qF 'git status --porcelain -- .github)' "${FR}"; then
+    ok "freshness.yml's pr job checks that the patch touches no .github/ file before opening the PR"
 else
-    fail "repin-images has no 'git status --porcelain -- .github/workflows/' check"
+    fail "freshness.yml has no 'git status --porcelain -- .github' check before the PR"
+fi
+# A freshness.yml job that applies a patch then runs hack/autobump-branch-reset and
+# hack/bot-ci-dispatch (and through it hack/pins) from that tree, with a write token:
+# every step that applies a patch refuses one that changes those scripts.
+if python3 - "${FR}" <<'PY'
+import sys, yaml
+guard = "git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)"
+bad = []
+for jid, job in (yaml.safe_load(open(sys.argv[1])).get("jobs") or {}).items():
+    for s in job.get("steps") or []:
+        run = s.get("run", "")
+        if "git apply" in run and guard not in run:
+            bad.append("%s: %s" % (jid, s.get("name")))
+if bad:
+    sys.exit("steps applying a patch without the script guard: %s" % "; ".join(bad))
+PY
+then
+    ok "freshness.yml refuses a patch that changes a script its write jobs run"
+else
+    fail "freshness.yml applies a patch without refusing changes to the scripts it then runs"
 fi
 # Every create-pull-request step (a GITHUB_TOKEN PR) sits between two steps under
 # its if:. Before it, hack/autobump-branch-reset deletes the branch when its
@@ -112,8 +135,16 @@ for path in sorted(glob.glob(os.path.join(root, ".github/workflows/*.yml"))):
                 errs.append(f"{where}: the job lacks permissions actions: write (bot-ci-dispatch dispatches)")
             if len(reset) != 1:
                 continue
-            # A matrix branch (autobump/${{ matrix.component }}) runs as component "comp".
-            sub = lambda v: str(v).replace("${{ matrix.component }}", "comp")
+            # A branch built from an expression runs with a stand-in value: a matrix
+            # group "grp", a known-issue follow-up "ki", an amendment row "row".
+            stand_in = {"${{ matrix.component }}": "comp", "${{ matrix.group }}": "grp",
+                        "${{ steps.s.outputs.followup }}": "ki", "${{ inputs.propose_amendment }}": "row"}
+
+            def sub(v):
+                v = str(v)
+                for expr, val in stand_in.items():
+                    v = v.replace(expr, val)
+                return v
             branch = sub(s["with"]["branch"])
             env = {k: sub(v) for k, v in {**(job.get("env") or {}), **(reset[0].get("env") or {})}.items()}
             script = sub(reset[0]["run"])
@@ -134,7 +165,7 @@ then
 else
     fail "create-pull-request wiring: $(tr '\n' ';' < "${T}/cpr.err")"
 fi
-for b in autobump/image-digests autobump/convert-pins autobump/comp; do
+for b in autobump/grp autobump/ki-ki autobump/amend-row; do
     if cut -f2 "${T}/cases" | grep -qxF "$b"; then ok "a reset step covers ${b}"; else fail "no reset step covers ${b}"; fi
 done
 # $1: absent (no branch), same (main moved, no workflow change), differ (main
@@ -317,6 +348,42 @@ alarm_case gh_down '[]' '[]' '[]' issues workflows runs
 if [ "$ARC" -eq 0 ] && [ "$(grep -c '^::warning::' <<<"$AOUT")" -eq 2 ]; then ok "alarms: gh failing warns and still exits 0"
 else fail "alarms gh_down: rc=$ARC out=$(tr '\n' ';' <<<"$AOUT")"; fi
 
+# bot-sweep.yml job merge runs hack/bot-merge after ci-fill. Its token can merge,
+# so it checks out main only (never a PR's code), and the script never checks out,
+# switches to or resets onto another ref.
+BS="${ROOT}/.github/workflows/bot-sweep.yml"
+if python3 - "${BS}" 2>/dev/null <<'PY'
+import sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+needs = jobs["merge"].get("needs", [])
+sys.exit(0 if "ci-fill" in jobs and "ci-fill" in ([needs] if isinstance(needs, str) else needs) else 1)
+PY
+then
+    ok "bot-sweep.yml job merge needs ci-fill"
+else
+    fail "bot-sweep.yml has no job merge that needs ci-fill"
+fi
+if python3 - "${BS}" 2>/dev/null <<'PY'
+import sys, yaml
+steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["merge"]["steps"]
+co = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout@")]
+text = yaml.safe_dump(steps)
+sys.exit(0 if co and all((s.get("with") or {}).get("ref") == "main" for s in co)
+         and not any(k in text for k in ("github.head_ref", "github.event", "refs/pull/", "pull_request"))
+         and any("hack/bot-merge" in s.get("run", "") for s in steps) else 1)
+PY
+then
+    ok "bot-sweep.yml job merge checks out main only and runs hack/bot-merge"
+else
+    fail "bot-sweep.yml job merge checks out a ref other than main, reads a PR ref, or does not run hack/bot-merge"
+fi
+if [ -f "${ROOT}/hack/bot-merge" ] && ! grep -qE 'git (checkout|switch|worktree|reset)|gh pr checkout' "${ROOT}/hack/bot-merge"; then
+    ok "hack/bot-merge never checks out a ref"
+else
+    fail "hack/bot-merge is missing or runs git checkout/switch/worktree/reset or gh pr checkout"
+fi
+
+
 # No version literal in a workflow: every tool pin lives in hack/ci-tools.env (or
 # another file outside .github/workflows/), where a token without the `workflows`
 # permission can move it. Outside `uses:` lines (action SHAs) and comments, a
@@ -395,6 +462,125 @@ PY
 else
     fail "hack/ci-tools.env wiring"; sed 's/^/  | /' <<< "${out}"
 fi
+
+# ─── Freshness ───────────────────────────────────────────────────────────────
+# Pins move only through PRs: build-and-push.yml is release-only (no schedule, no
+# push to main), Dependabot keeps only github-actions (pins/registry.toml owns the
+# rest), and neither freshness.yml nor bot-sweep.yml reads a secret.
+if python3 - "${BP}" <<'PY'
+import sys, yaml
+wf = yaml.safe_load(open(sys.argv[1]))
+on = wf.get("on", wf.get(True)) or {}
+text = open(sys.argv[1]).read()
+sys.exit(0 if "schedule" not in on and list(wf["jobs"]) == ["release"] and "HEAD:main" not in text else 1)
+PY
+then ok "build-and-push.yml is release-only: no schedule, only the release job, no push to main"
+else fail "build-and-push.yml still has a schedule, a job besides release, or a push to main"; fi
+if [ "$(sed -n 's/^ *- *package-ecosystem: *//p' "${ROOT}/.github/dependabot.yml" | tr -d '"'"'" | sort -u)" = github-actions ]; then
+    ok "dependabot.yml holds only the github-actions ecosystem"
+else fail "dependabot.yml has an ecosystem besides github-actions (one updater per pin)"; fi
+for f in freshness.yml bot-sweep.yml; do
+    if ! grep -q 'secrets\.' "${WF}/${f}"; then ok "${f} reads no secret"
+    else fail "${f} references secrets.*: $(grep -n 'secrets\.' "${WF}/${f}" | head -3 | tr '\n' ' ')"; fi
+done
+# freshness.yml: 'Freshness', every 6 h at :23, one queue per group; the bump job
+# is read-only with no persisted credentials; every PR job resets, opens, dispatches.
+if python3 - "${FR}" <<'PY'
+import sys, yaml
+wf = yaml.safe_load(open(sys.argv[1]))
+on = wf.get("on", wf.get(True)) or {}
+jobs = wf["jobs"]
+bump, pr = jobs["bump"], jobs["pr"]
+co = [s for s in bump["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")]
+checks = {
+    "name": wf.get("name") == "Freshness",
+    # hack/bot-merge counts a group's regenerations by group=<g> in the run title; a
+    # run over every group names none (so it counts for every group)
+    "run-name": "format('Freshness group={0}" in str(wf.get("run-name"))
+                and "group=amend-{0}" in str(wf.get("run-name"))
+                and str(wf.get("run-name")).rstrip().endswith("|| 'Freshness (every group)' }}"),
+    "cron": [c["cron"] for c in on.get("schedule") or []] == ["23 */6 * * *"],
+    "inputs": set((on.get("workflow_dispatch") or {}).get("inputs") or {}) == {"group", "reason", "propose_amendment"},
+    "concurrency": wf.get("concurrency") == {"group": "freshness-${{ inputs.group || 'all' }}", "cancel-in-progress": False},
+    "top permissions": wf.get("permissions") == {},
+    "jobs": set(jobs) == {"plan", "bump", "pr", "report", "propose-amendment"},
+    "timeouts and permissions": all(isinstance(j.get("timeout-minutes"), int) and "permissions" in j for j in jobs.values()),
+    "bump read-only": bump["permissions"] == {"contents": "read"} and co and co[0]["with"].get("persist-credentials") is False,
+    "bump runs hack/bump": any("hack/bump " in s.get("run", "") for s in bump["steps"]),
+    "bump matrix": bump["strategy"].get("fail-fast") is False and bump["strategy"].get("max-parallel") == 2
+                   and bump["timeout-minutes"] == 45,
+    "no PR from the bump": not any("create-pull-request" in str(s.get("uses", "")) for s in bump["steps"]),
+    "pr permissions": pr["permissions"] == {"contents": "write", "pull-requests": "write", "actions": "write"},
+    "report always": "always()" in str(jobs["report"].get("if", "")),
+    "amendment on dispatch only": jobs["propose-amendment"].get("if") == "${{ inputs.propose_amendment != '' }}",
+}
+bad = [k for k, v in checks.items() if not v]
+print(", ".join(bad))
+sys.exit(1 if bad else 0)
+PY
+then ok "freshness.yml: Freshness, cron 23 */6, queue per group, read-only bump, PR jobs with actions: write"
+else fail "freshness.yml wiring"; fi
+# The pr job dispatches CI, and the Canary only when canary.yml exists on the branch.
+python3 - "${FR}" > "${T}/canary_step.sh" <<'PY'
+import sys, yaml
+steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["pr"]["steps"]
+print(next(s["run"] for s in steps if s.get("name") == "Dispatch CI (and the Canary) on the bump PR's branch"))
+PY
+canary_case() {  # canary_case <with|without>: the bot-ci-dispatch calls the step makes
+    local d="${T}/canary-$1"
+    mkdir -p "${d}/hack" "${d}/.github/workflows"
+    printf '#!/bin/sh\necho "$*" >> "%s/calls"\n' "${d}" > "${d}/hack/bot-ci-dispatch"
+    chmod +x "${d}/hack/bot-ci-dispatch"
+    [ "$1" = with ] && : > "${d}/.github/workflows/canary.yml"
+    (cd "${d}" && GROUP=grp bash -eo pipefail "${T}/canary_step.sh" > /dev/null 2>&1) || echo "step-failed"
+    cat "${d}/calls" 2>/dev/null
+}
+if [ "$(canary_case with | tr '\n' ';')" = "--branch autobump/grp;--branch autobump/grp --workflow canary.yml;" ]; then
+    ok "pr job: ci.yml and canary.yml dispatched when canary.yml exists"
+else fail "pr job with canary.yml: $(canary_case with | tr '\n' ';')"; fi
+if [ "$(canary_case without | tr '\n' ';')" = "--branch autobump/grp;" ]; then
+    ok "pr job: only ci.yml dispatched when there is no canary.yml"
+else fail "pr job without canary.yml: $(canary_case without | tr '\n' ';')"; fi
+# bot-sweep's known-issues job: hourly with the sweep, actions write; for each newly
+# fixed issue (hack/pins issue-groups) it dispatches Freshness once per group,
+# unless an open autobump/<group> PR already records that issue. (KI is assembled so
+# that this file carries no marker hack/known-issues would read.)
+KI=known-issue
+python3 - "${WF}/bot-sweep.yml" > "${T}/ki_step.sh" <<'PY'
+import sys, yaml
+job = yaml.safe_load(open(sys.argv[1]))["jobs"]["known-issues"]
+ok = job.get("permissions") == {"actions": "write", "contents": "read", "pull-requests": "read"} \
+    and isinstance(job.get("timeout-minutes"), int)
+print([s for s in job["steps"] if "run" in s][-1]["run"] if ok else "exit 9")
+PY
+ki_case() {  # ki_case <name> <issue-groups output> <open PR bodies JSON>: the dispatches made
+    local d="${T}/ki-$1"
+    mkdir -p "${d}/hack" "${d}/bin"
+    printf '#!/bin/sh\necho "[]"\n' > "${d}/hack/known-issues"
+    printf '#!/bin/sh\nprintf "%s"\n' "$2" > "${d}/hack/pins"
+    cat > "${d}/bin/gh" <<GH
+#!/usr/bin/env bash
+case "\$1 \$2" in
+  "pr list") q=; while [ \$# -gt 0 ]; do case \$1 in --jq) q=\$2; shift 2;; *) shift;; esac; done
+             echo '$3' | jq -r "\$q";;
+  "workflow run") shift 2; echo "\$*" >> "${d}/dispatched";;
+esac
+GH
+    chmod +x "${d}/hack/known-issues" "${d}/hack/pins" "${d}/bin/gh"
+    (cd "${d}" && PATH="${d}/bin:${PATH}" RUNNER_TEMP="${d}" bash -eo pipefail "${T}/ki_step.sh" > "${d}/log" 2>&1) \
+        || echo "step-failed: $(cat "${d}/log")"
+    cat "${d}/dispatched" 2>/dev/null
+}
+got=$(ki_case new 'vllm-45844 vllm-cpu\nvllm-45844 llama-cpp\n' '[]' | tr '\n' ';')
+if [ "${got}" = "freshness.yml --ref main -f group=vllm-cpu -f reason=${KI}:vllm-45844;freshness.yml --ref main -f group=llama-cpp -f reason=${KI}:vllm-45844;" ]; then
+    ok "bot-sweep known-issues: one Freshness dispatch per group of a newly fixed issue"
+else fail "bot-sweep known-issues dispatches: ${got}"; fi
+got=$(ki_case open 'vllm-45844 vllm-cpu\n' "[{\"body\":\"Moves ... reason \`${KI}:vllm-45844\`\"}]" | tr '\n' ';')
+if [ -z "${got}" ]; then ok "bot-sweep known-issues: no dispatch while an open PR records the issue"
+else fail "bot-sweep known-issues dispatched despite an open PR: ${got}"; fi
+got=$(ki_case none '' '[]' | tr '\n' ';')
+if [ -z "${got}" ]; then ok "bot-sweep known-issues: nothing newly fixed, no dispatch"
+else fail "bot-sweep known-issues with nothing to do: ${got}"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

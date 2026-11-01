@@ -6,7 +6,19 @@ name: Bot sweep
 #   ci-fill: hack/bot-ci-dispatch runs ci.yml by workflow_dispatch on each bot PR
 #            branch with no run at its head, and re-runs a first-attempt failure
 #            once, one bot run in flight at a time and none while a human PR's CI
-#            is queued. It fills in what the nightly deferred.
+#            is queued. It fills in what the nightly deferred. Then the same for
+#            canary.yml (engines=auto), on heads whose pins policy maps canary
+#            engines.
+#   merge:   hack/bot-merge merges at most one bot PR whose evidence is green at
+#            its head (policy, CI, canary, current base, circuit breaker, daily
+#            cap), dispatches ci.yml on main after it, and dispatches a batched
+#            auto-release. It runs after ci-fill even when ci-fill had an error:
+#            it reads every piece of evidence itself.
+#   known-issues: hack/known-issues poll finds the release that fixes each entry of
+#            pins/known-issues.toml; for an entry newly fixed (released, nothing
+#            recorded on main yet) it dispatches Freshness for each group whose ours
+#            pins its sites read (hack/pins issue-groups), with reason
+#            known-issue:<id>, unless an open autobump/<group> PR already carries it.
 
 on:
   schedule:
@@ -33,9 +45,77 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
+          fetch-depth: 0 # the canary step's pins policy diffs a PR head against main
           persist-credentials: false
 
       - name: Dispatch CI on bot PRs that have none at their head
         env:
           GH_TOKEN: ${{ github.token }}
         run: hack/bot-ci-dispatch
+
+      - name: Dispatch the canary on bot PRs whose policy maps canary engines
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch --workflow canary.yml
+
+  merge:
+    name: Merge one auto-eligible bot PR, batch the release
+    needs: ci-fill
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      issues: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0 # base_ok, today's Bot-merge commits and the aur-v* tags
+          persist-credentials: false
+
+      - name: Merge, then batch the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-merge
+
+  known-issues:
+    name: Dispatch Freshness for newly fixed known issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Poll the known issues, dispatch Freshness per newly fixed one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          t="$RUNNER_TEMP"
+          hack/known-issues poll --json > "$t/poll.json" \
+            || echo "::warning::hack/known-issues poll could not read every entry (the rest still count)"
+          jq -e 'type == "array"' "$t/poll.json" > /dev/null || { echo "::error::poll printed no JSON list"; exit 1; }
+          hack/pins issue-groups "$t/poll.json" > "$t/todo"
+          [ -s "$t/todo" ] || { echo "no newly fixed known issue"; exit 0; }
+          while read -r id group; do
+            open=$(gh pr list --state open --head "autobump/$group" --json body \
+                     --jq "[.[] | select(.body | contains(\"known-issue:$id\"))] | length")
+            if [ "$open" != 0 ]; then
+              echo "$id: the open autobump/$group PR already records it"
+              continue
+            fi
+            gh workflow run freshness.yml --ref main -f group="$group" -f reason="known-issue:$id"
+            echo "$id: dispatched Freshness for group $group"
+          done < "$t/todo"

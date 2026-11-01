@@ -124,10 +124,10 @@ Include relevant details:
   reads the registries) to add the digest; `tests/image_pins_test.sh`
   (`scripts/images-lock pins`) fails on a tag-only, `:latest` or digest-only
   reference that `images.unpinned` does not list with a reason. A rendered
-  component's image pins live in its `component.conf` (`IMAGE_PINS`). The nightly
-  `repin-images` job opens a PR when a registry moves a digest under an unchanged
-  tag. Its token cannot push `.github/workflows/`, so it runs `repin --exclude
-  '.github/workflows/*'` and a workflow keeps no version of its own: it reads image
+  component's image pins live in its `component.conf` (`IMAGE_PINS`). The
+  Freshness workflow's `digests` group opens a PR when a registry moves a digest
+  under an unchanged tag. Its token cannot push `.github/workflows/`, so it runs
+  `repin --exclude '.github/workflows/*'` and a workflow keeps no version of its own: it reads image
   pins from the Dockerfile, `docs-build/Dockerfile` or `hack/ci-images.env`, and
   tool versions from `hack/ci-tools.env` (`tests/image_pins_test.sh` and
   `tests/ci_wiring_test.sh` fail on a pin or version written in a workflow).
@@ -140,6 +140,12 @@ Include relevant details:
   `hack/pin-guard` on every PR (`tests/pin_guard_test.sh` shows each rule) and
   `hack/pin-classes coverage`, which fails on a pin-bearing file under `bench/` or
   `oracle/` that no line classifies: add one for a new bench directory.
+- `pins/registry.toml` names the source, sites and group of every `ours` and
+  `eat-stock` pin; the Freshness workflow (every 6 h) opens one PR per group that
+  moved, and `hack/pins policy` judges each from its diff. A new pin goes there
+  (`pins/README.md`); CI's `pins` job (`hack/pins check`) fails on a pinned image,
+  `==` requirement or Hugging Face revision in an ours or eat-stock file that no
+  entry owns.
 - `tests/console_mcp_test.sh` checks that the MCP tools `hardware` and
   `plan_launch` return the CLI `facts --json` and `plan --json` bytes on every
   fixture, and that the MCP `apply` tool writes nothing without a plan hash the

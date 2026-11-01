@@ -8,8 +8,8 @@
 #
 # each with its Ubuntu release taken out (26.3.5-1~24.04~ppa1 -> 26.3.5-1~ppa1);
 # host-setup puts it back per release. The PPA serves only its current build of a
-# package, so a pin it has superseded no longer installs: the nightly check in
-# build-and-push.yml runs this and, when a build moved, --write.
+# package, so a pin it has superseded no longer installs: the Freshness workflow
+# (group ppa, pins/registry.toml) runs this and, when a build moved, --write.
 #
 # Exits 1, naming the package, when an index lacks one, its noble (24.04) and
 # resolute (26.04) builds differ, the four libva packages differ (one pin covers

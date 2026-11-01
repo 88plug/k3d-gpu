@@ -1,0 +1,77 @@
+{
+  "bandwidth": {
+    "gbs": 409.6,
+    "label": "theoretical (8 DIMMs x 6400 MT/s x their data width, one DIMM per channel assumed)",
+    "source": "/sys/firmware/dmi/entries/17-*/raw"
+  },
+  "cgroup": {
+    "current": null,
+    "limit": null,
+    "path": "/user.slice"
+  },
+  "cpu": {
+    "amx": true,
+    "avx2": true,
+    "avx512": true,
+    "cpus": 192,
+    "flags": [
+      "amx_bf16",
+      "amx_int8",
+      "amx_tile",
+      "avx2",
+      "avx512_bf16",
+      "avx512f",
+      "avx_vnni"
+    ],
+    "model": "Intel(R) Xeon(R) 6741P"
+  },
+  "gpus": [],
+  "hugepages": {
+    "pools": {
+      "1073741824": {
+        "free": 0,
+        "total": 0
+      },
+      "2097152": {
+        "free": 0,
+        "total": 0
+      }
+    },
+    "thp": "madvise"
+  },
+  "numa": [
+    {
+      "cpulist": "0-47,96-143",
+      "free": 246960619520,
+      "node": 0,
+      "total": 274877906944
+    },
+    {
+      "cpulist": "48-95,144-191",
+      "free": 249108103168,
+      "node": 1,
+      "total": 274877906944
+    }
+  ],
+  "psi": {
+    "full": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    },
+    "some": {
+      "avg10": 0.0,
+      "avg300": 0.0,
+      "avg60": 0.0,
+      "total": 0
+    }
+  },
+  "ram": {
+    "available": 440587235328,
+    "swap_free": 0,
+    "swap_total": 0,
+    "total": 540433555456
+  },
+  "schema": "k3d-gpu.host/v1"
+}

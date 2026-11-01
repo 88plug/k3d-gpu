@@ -925,7 +925,7 @@ that of every variant the trusted orgs publish of it, found by name and by
 - **QAT.** A model with unquantized QAT weights (Gemma 4 `-qat-q4_0-unquantized`,
   for Q4_0: symmetric int4, blocks of 32) also gets a self-built candidate: an
   OpenVINO IR at INT4_SYM group 32, made by a pinned one-time conversion
-  (`console/convert-pins.json`, moved nightly to the newest compatible releases).
+  (`console/convert-pins.json`, moved by the Freshness workflow to the newest compatible releases).
   It ranks below the official IR until a quality row promotes it (H54q is that
   row, and its run did not promote it), and
   `K3D_GPU_AGENT_VARIANT=qat-convert` forces it. `plan --explain` prints the
@@ -1687,7 +1687,7 @@ the fix:
   entries (it keeps at least 16) and add a 16-entry user WQ, through the same
   snapshot path, with the same revert.
 
-Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs. The PPA serves only its current build of each package, so the nightly check (`hack/ppa-pins`) moves the PPA pins to it.
+Downloads go to `${XDG_CACHE_HOME:-~/.cache}/k3d-gpu/host-setup` (override: `K3D_GPU_SETUP_DIR`), which must be a directory you own; it is set to mode 0700. On Ubuntu an apt pin keeps the PPA's `intel-opencl-icd`/`libze*`/`libigc*` builds from replacing the GitHub .debs. The PPA serves only its current build of each package, so the Freshness workflow (`hack/ppa-pins`, group `ppa`) moves the PPA pins to it.
 
 ---
 
@@ -1744,12 +1744,16 @@ hack/render-component --latest nri-balloons   # move the pins to upstream latest
 tests/render_test.sh
 ```
 
-CI fails when a committed manifest differs from its pinned render. The daily
-build-and-push workflow runs `--latest` for every component and opens one PR per
-component (branch `autobump/<name>`); merging it changes `share/`, so auto-release cuts a
-launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
+CI fails when a committed manifest differs from its pinned render. The 6-hourly
+Freshness workflow (`pins/registry.toml`, group `nri`) runs `--latest` for the
+components and opens one PR for them (branch `autobump/nri`); merging it changes `share/`,
+so auto-release cuts a launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
 their own pull_request CI runs wait for approval; `hack/bot-ci-dispatch` runs `ci.yml` on
-the branch by workflow_dispatch instead, and that run is the PR's CI.
+the branch by workflow_dispatch instead, and that run is the PR's CI. The hourly bot sweep
+(`hack/bot-merge`) merges one such PR at a time when its pins policy says auto (or a
+maintainer approved its head), its CI and canary are green, its base is current and main's
+CI is green; it then dispatches CI on main and a batched release. Any other bot PR stays
+open with one comment that says what blocks it.
 
 ---
 

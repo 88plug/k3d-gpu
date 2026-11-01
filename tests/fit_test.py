@@ -4,7 +4,7 @@ fixture hosts and models, and the memory guard under simulated PSI pressure.
 
 Fixtures (tests/fixtures/fit/SOURCES says where each came from):
   hosts/   desktop i9 with no GPU; Xeon 6741P, 512 GB, 4x Arc Pro B70 32 GB with two
-           cards busy; a 16 GB laptop
+           cards busy; a 16 GB laptop; H59d's i9-13900T and H59's Xeon 6741P as recorded
   models/  per-repo config.json, tokenizer_config.json and weights.json (per tensor
            class bytes from the real safetensors/GGUF headers at a pinned revision),
            plus one synthetic model too large for any fixture host
@@ -1057,6 +1057,167 @@ class LlamaSplit(unittest.TestCase):
     def test_too_much_for_any_split_is_refused(self):
         d = plan("xeon6741p-4xb70", "google__gemma-4-26B-A4B-it-qat-q4_0-gguf", ctx=262144, seqs=12, device="gpu")
         self.assertFalse(d["fits"])
+
+
+# H59d (EXPERIMENTS.md "H59d run"): llama.cpp b11960's server with Gemma 4 26B-A4B QAT Q4_0 and
+# its MTP drafter, -c 1048576 -np 4, --cache-ram 0 -ctxcp 4, --load-mode mmap+mlock, on the
+# i9-13900T (AVX2, no AVX-512, no AMX). The fit sized it at 40.3 GiB (limit 45Gi); the container
+# was OOMKilled 7 times in each of the two holds where L followed O. H59 on the Xeon 6741P
+# (crescent, AMX) rendered 48 x 262,144 at 358Gi and served.
+QAT = "google__gemma-4-26B-A4B-it-qat-q4_0-gguf"
+QAT_DRAFTER = "google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant"
+# The Q4_0 drafter GGUF H59d's and crescent's prep built (sha256 f6f80c36..., EXPERIMENTS.md "H59d run").
+QAT_DRAFTER_BYTES = 321145312
+# Bytes of the QAT GGUF's Q4_0 tensors of 2 or 3 dimensions whose ne[1] is a multiple of 8 (every
+# attention, dense FFN and expert weight), read from its header at d1c082be: the CPU backend
+# copies these into CPU_REPACK buffers on an AVX2 CPU (ggml/src/ggml-cpu/repack.cpp:4979-4984).
+QAT_Q4_0_REPACKED = 13771929600
+# token_embd.weight, Q6_K, 262144 x 2816: Gemma ties its output to it (TENSOR_DUPLICATED).
+QAT_EMBED = 605552640
+
+
+def h59_need(ctx, seqs, cpu="avx2", draft=False):
+    """Host bytes llama-server b11960 holds for the QAT GGUF on a CPU placement at ctx tokens x
+    seqs slots, counted from the llama.cpp source, without the activation estimate:
+      - the GGUF, mapped and mlocked: grow_to locks from the mapping's start to the end of the
+        furthest tensor in the mapped buffer (src/llama-model-loader.cpp:1735-1737), the last F32
+        norms, so the copied tensors' pages stay locked too; only the range before the first
+        mapped tensor is unmapped (:1853-1860);
+      - the copies of the repacked tensors (anonymous memory), plus on AMX the tied output (Q6_K,
+        2-D: ggml/src/ggml-cpu/amx/amx.cpp:145-187);
+      - the KV cache: 5 global layers x 2 x 2 heads x 512 x 2 B per token, 25 SWA layers x 2 x 8
+        heads x 256 x 2 B over GGML_PAD(1024 + 512, 256) = 1536 cells, per slot;
+      - 4 context checkpoints per slot, each the slot's SWA cache;
+      - the f16 KQ masks of the reserved graph, n_kv x n_ubatch x 2 B for the full and the SWA
+        cache (src/llama-graph.cpp:30-46), in the target's context and, drafting, the drafter's;
+      - the drafter's GGUF, mapped and locked, and its copies (at most the file);
+      - the 1 GiB runtime."""
+    swa = 25 * 2 * 8 * 256 * 2 * min(ctx, 1536)
+    kv = seqs * (5 * 2 * 2 * 512 * 2 * ctx + swa)
+    ckpt = seqs * 4 * swa
+    masks = (ctx * 512 * 2 + 1536 * 512 * 2) * (2 if draft else 1)
+    copies = QAT_Q4_0_REPACKED + (QAT_EMBED if cpu == "amx" else 0)
+    w = weights(QAT)
+    m = fit.model_profile(config(QAT), w)
+    return (m["serve_bytes"] + copies + kv + ckpt + masks + fit.HOST_RUNTIME["llama.cpp"]
+            + (2 * QAT_DRAFTER_BYTES if draft else 0))
+
+
+class LlamaHostBuffers(unittest.TestCase):
+    """What llama-server b11960 holds in host RAM on a CPU placement beyond the weights and KV the
+    fit counted before H59d: the repacked copies of the mapped weights, the mlock of the mapping,
+    the compute buffers and the drafter."""
+
+    def drafted(self, hname, **kw):
+        return plan(hname, QAT, device="cpu", engine="llama.cpp", draft=mdir(QAT_DRAFTER),
+                    draft_bytes=QAT_DRAFTER_BYTES, **kw)
+
+    def limit(self, d):
+        return int(d["k8s"]["memory_limit"][:-2]) * GIB
+
+    def test_header_records_the_matmul_weight_types(self):
+        # The QAT GGUF's header: every Q4_0 weight whose ne[1] is a multiple of 8 and 32, the Q6_K
+        # token embedding, the F32 router (ffn_gate_inp) and norms.
+        mm = weights(QAT)["gguf_mm"]
+        q4 = sum(b for c, t, nd, a1, a0, b in mm if t == "Q4_0" and a1 >= 8)
+        self.assertEqual(q4, QAT_Q4_0_REPACKED)
+        self.assertIn(["embed", "Q6_K", 2, 32, 256, QAT_EMBED], mm)
+
+    def test_copies_follow_the_cpu(self):
+        m = fit.model_profile(config(QAT), weights(QAT))
+        avx2 = {"amx": False, "avx512": False, "avx2": True}
+        self.assertEqual(fit.llama_cpu_copies(m, avx2)[0], QAT_Q4_0_REPACKED)
+        self.assertEqual(fit.llama_cpu_copies(m, dict(avx2, avx2=False))[0], 0)
+        # AMX takes the 2-D Q4_0 weights and the Q6_K tied output; the 3-D experts go to CPU_REPACK.
+        self.assertEqual(fit.llama_cpu_copies(m, dict(avx2, amx=True, avx512=True))[0], QAT_Q4_0_REPACKED + QAT_EMBED)
+
+    def test_amx_buffers_hold_the_packed_size(self):
+        # The AMX buffer allocates the packed size (ggml/src/ggml-cpu/amx/mmq.cpp get_row_size):
+        # Q8_0 blocks carry a 4 B compensation term (34 -> 38 B), Q4_K and Q5_K 4 B more per
+        # 256-value block (144 -> 148, 176 -> 180), IQ4_XS 2 B (136 -> 138). Q4_0 and Q6_K pack
+        # at their file size, and CPU_REPACK allocates ggml_nbytes (repack.cpp get_alloc_size).
+        rows = 4096
+        m = {"gguf_mm": [["other", "Q8_0", 2, 32, 256, 34 * rows], ["other", "Q4_K", 2, 32, 256, 144 * rows],
+                         ["other", "Q5_K", 2, 32, 256, 176 * rows], ["other", "IQ4_XS", 2, 32, 256, 136 * rows],
+                         ["other", "Q4_0", 2, 32, 256, 18 * rows], ["experts", "Q4_K", 3, 32, 256, 144 * rows]],
+             "bytes": {"embed": 0, "lm_head": 1}}
+        amx = {"amx": True, "avx512": True, "avx2": True}
+        self.assertEqual(fit.llama_cpu_copies(m, amx)[0], (38 + 148 + 180 + 138 + 18 + 144) * rows)
+        # A Q8_0 conversion on an AMX host: the bound covers the packed size.
+        q8 = dict(fit.model_profile(config("Qwen__Qwen3.8-Flash-Next-FP8"), weights("Qwen__Qwen3.8-Flash-Next-FP8")),
+                  gguf_conv="Q8_0")
+        n2d = q8["serve_bytes"] - q8["lookup_bytes"] - q8["bytes"]["experts"] + fit.llama_output_copy(q8)
+        self.assertGreaterEqual(fit.llama_cpu_copies(q8, amx)[0], n2d * 38 // 34)
+
+    def test_converted_weights_copied_by_their_gguf_type(self):
+        # A safetensors model llama.cpp serves after the agent's conversion: no header to read,
+        # so the conversion's output type decides. BF16 has no x86 extra buffer type; the FP8
+        # checkpoint's Q8_0 has AMX's (2-D only), and no AVX2 CPU_REPACK one.
+        for model, conv in (("Qwen__Qwen3.8-Flash-Next", "BF16"), ("Qwen__Qwen3.8-Flash-Next-FP8", "Q8_0")):
+            d = plan("xeon6741p-h59", model, device="cpu", engine="llama.cpp")
+            math = "\n".join(d["explain"])
+            self.assertIn("the conversion's %s weights stay mapped" % conv if conv == "BF16"
+                          else "the conversion's 2-D Q8_0 weights into AMX buffers", math)
+        m = dict(fit.model_profile(config("Qwen__Qwen3.8-Flash-Next-FP8"), weights("Qwen__Qwen3.8-Flash-Next-FP8")),
+                 gguf_conv="Q8_0")
+        self.assertEqual(fit.llama_cpu_copies(m, {"amx": False, "avx512": True, "avx2": True})[0], 0)
+
+    def test_h59d_as_asked_counts_what_the_server_holds(self):
+        # H59d's render: 262,144 tokens x 4 slots. 45Gi did not hold it.
+        d = plan("desktop-i9-13900t-h59d", QAT, device="cpu", engine="llama.cpp", ctx=262144, seqs=4)
+        need = h59_need(262144, 4)
+        self.assertGreater(need, 45 * GIB)
+        if d["fits"]:
+            self.assertGreaterEqual(d["host_bytes"], need, d["summary"])
+            self.assertGreaterEqual(self.limit(d), need)
+
+    def test_h59d_fit_holds_its_need(self):
+        d = self.drafted("desktop-i9-13900t-h59d")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertGreaterEqual(d["host_bytes"], h59_need(d["ctx"], d["seqs"], draft=True), "\n".join(d["explain"]))
+        self.assertGreaterEqual(self.limit(d), h59_need(d["ctx"], d["seqs"], draft=True))
+        budget, _, _ = fit.host_budget(host("desktop-i9-13900t-h59d"))
+        self.assertLessEqual(self.limit(d), budget)
+        self.assertNotEqual((d["ctx"], d["seqs"]), (262144, 4))
+        # every guard rung's limit holds that rung too
+        for r, (rs, rc) in enumerate(d["guard"]["rungs"]):
+            self.assertGreaterEqual(int(d["guard"]["rung_memory_limit"][r][:-2]) * GIB, h59_need(rc, rs, draft=True), r)
+
+    def test_drafter_counted(self):
+        bare = plan("desktop-i9-13900t-h59d", QAT, device="cpu", engine="llama.cpp", ctx=65536, seqs=2)
+        d = self.drafted("desktop-i9-13900t-h59d", ctx=65536, seqs=2)
+        self.assertTrue(bare["fits"] and d["fits"])
+        # its GGUF mapped and locked, its copies, its own KQ masks over the target's caches;
+        # no KV of its own: Gemma4Assistant shares the target's (src/llama-model.cpp:3276-3304)
+        self.assertGreaterEqual(d["host_bytes"] - bare["host_bytes"],
+                                2 * QAT_DRAFTER_BYTES + 65536 * 512 * 2 + 1536 * 512 * 2)
+        self.assertLess(d["host_bytes"] - bare["host_bytes"], GIB)
+        self.assertIn("drafter", "\n".join(d["explain"]))
+
+    def test_h59_xeon_still_serves_the_native_context(self):
+        # crescent's L served 48 x 262,144 at 358Gi: the fit keeps the native context and refuses nothing
+        d = self.drafted("xeon6741p-h59")
+        self.assertTrue(d["fits"], d["summary"])
+        self.assertEqual(d["ctx"], 262144)
+        self.assertGreaterEqual(d["seqs"], 40)
+        self.assertLessEqual(d["seqs"], 48)
+        self.assertGreaterEqual(self.limit(d), h59_need(262144, d["seqs"], cpu="amx", draft=True))
+        budget, _, _ = fit.host_budget(host("xeon6741p-h59"))
+        self.assertLessEqual(self.limit(d), budget)
+
+    def test_checkpoints_and_prompt_cache(self):
+        # --cache-ram 0: no host prompt cache (tools/server/server-context.cpp:1594-1605); -ctxcp 4:
+        # at most 4 checkpoints per slot (:2746-2753), each the slot's SWA cache; the drafter's
+        # cache shares the target's cells and writes no state of its own (src/llama-kv-cache.cpp:2051)
+        d = self.drafted("desktop-i9-13900t-h59d", ctx=65536, seqs=2)
+        i = d["flags"].index("-ctxcp")
+        self.assertEqual(d["flags"][i - 2:i + 2], ["--cache-ram", "0", "-ctxcp", "4"])
+        self.assertEqual(d["ckpt_bytes"], 2 * 4 * 25 * 2 * 8 * 256 * 2 * 1536)
+
+    def test_gpu_placement_unchanged_without_a_drafter(self):
+        # The new host buffers are a CPU placement's: a GPU fit without a drafter is as before.
+        d = plan("xeon6741p-4xb70", QAT)
+        self.assertEqual((d["placement"], d["ctx"], d["seqs"]), ("gpu", 131072, 5))
 
 
 if __name__ == "__main__":
