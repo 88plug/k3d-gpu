@@ -1,0 +1,4 @@
+2026-10-29T19:43:45Z OVQ start (2110 s before the item stop)
+2026-10-29T19:44:19Z OVQ ready after 34 s
+q-smoke: {"todo": 2, "answered": 2, "errors": 0, "discarded": 0, "cut": 0, "not_asked": 0, "stopped": null, "end": "queue empty", "t0": 1793303059.921, "t1": 1793303069.424}
+2026-10-29T19:44:29Z OVQ status smoke: ready; wiring check in smoke-items.jsonl (rc 0)

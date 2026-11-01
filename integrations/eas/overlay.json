@@ -105,15 +105,16 @@
       "fixed_probe": [
         {
           "glob": "roles/envoy_gateway/**",
-          "regex": "(?s)\\A(?!.*node-role\\.kubernetes\\.io/control-plane:[ \\t]*(?:\"\"|''))(?=.*?(?P<at>matchExpressions:\\s*-[ \\t]*key:[ \\t]*[\"']?node-role\\.kubernetes\\.io/control-plane[\"']?\\s+operator:[ \\t]*[\"']?Exists))",
+          "regex": "matchExpressions:\\s*-[ \\t]*key:[ \\t]*[\"']?node-role\\.kubernetes\\.io/control-plane[\"']?\\s+operator:[ \\t]*[\"']?Exists",
+          "absent": "node-role\\.kubernetes\\.io/control-plane[\"']?[ \\t]*:[ \\t]*(?:\"\"|'')",
           "knob": null,
-          "what": "a file selects control-plane nodes with a matchExpressions Exists term and has no exact \"\" selector"
+          "what": "a file of the role selects control-plane nodes with a matchExpressions Exists term, and no file of the role keeps an exact \"\" selector"
         },
         {
           "glob": "roles/envoy_gateway/vars/k3s.yaml",
-          "regex": "(?m)^_envoy_gateway_proxy_shape:",
+          "regex": "(?m)^_envoy_gateway_proxy_shape:[ \\t]*(?![\"']?controlplane_daemonset\\b)\\S",
           "knob": null,
-          "what": "a k3s entry in the per-distribution vars layout of EAS #50"
+          "what": "a k3s entry in the per-distribution vars layout of EAS #50 that selects a shape other than controlplane_daemonset, the one with the exact \"\" selector"
         }
       ],
       "moved": [

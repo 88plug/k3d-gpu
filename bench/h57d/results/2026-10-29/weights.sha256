@@ -1,0 +1,10 @@
+3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf  hub-lfs-match
+c082cc581c3ec90d70285c1a41c81544ff56cbc96650f16c900a280940655801  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/model.safetensors  hub-lfs-match
+75a6583c1a418e2bbd79c60d95d28e0f5bf549ad3f2990b5bdb5238c6c2bf70c  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/tokenizer.json  hub-lfs-match
+461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_detokenizer.bin  hub-lfs-match
+0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin  hub-lfs-match
+2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin  hub-lfs-match
+57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin  hub-lfs-match
+72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_tokenizer.bin  hub-lfs-match
+13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382  OpenVINO/gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin  hub-lfs-match
+cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f  OpenVINO/gemma-4-26b-a4b-it-int4-ov/tokenizer.json  hub-lfs-match

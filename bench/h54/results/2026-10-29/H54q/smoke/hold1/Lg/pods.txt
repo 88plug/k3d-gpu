@@ -1,0 +1,9 @@
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS   AGE     IP           NODE                                NOMINATED NODE   READINESS GATES
+h54                      lg-64c55654d8-4xv56                       1/1     Running     0          34s     10.42.0.11   k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+kube-system              coredns-577d995dff-zfwv6                  1/1     Running     0          4m18s   10.42.0.4    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-k27dk        0/1     Completed   0          4m18s   10.42.0.7    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-fx6g2   1/1     Running     0          4m18s   10.42.0.5    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-skfpw           1/1     Running     0          4m18s   10.42.0.8    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-7d6955597d-5cnqq                   1/1     Running     0          4m18s   10.42.0.2    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b6cfb7df-n95f5               1/1     Running     0          4m18s   10.42.0.3    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-4jjcc                          1/1     Running     0          4m18s   10.42.0.6    k3d-k3dgpu-g-h54smokeq-1-server-0   <none>           <none>

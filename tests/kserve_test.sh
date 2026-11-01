@@ -75,8 +75,8 @@ render_node "${SYS}" renderD128 0x8086 i915
 gid=$(stat -c %g "${SYS}/dev/dri/renderD128")
 
 check "install.sh exits 0 with a render node" is "$(run_install "${SYS}")" 0
-check "cert-manager chart pinned to v1.21.2 with CRDs" has \
-    '^helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager --version v1.21.2 .*--set crds.enabled=true' "${CALLS}"
+check "cert-manager chart pinned to v1.21.3 with CRDs" has \
+    '^helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager --version v1.21.3 .*--set crds.enabled=true' "${CALLS}"
 check "kserve-crd chart pinned to v0.21.0" has \
     '^helm upgrade --install kserve-crd oci://ghcr.io/kserve/charts/kserve-crd --version v0.21.0 ' "${CALLS}"
 check "kserve-resources chart pinned to v0.21.0 with example values" has \
@@ -144,7 +144,7 @@ else
     pull() { helm pull "$1" --version "$2" --untar --untardir "${CH}" >/dev/null; }
     check "pull kserve-crd v0.21.0" pull oci://ghcr.io/kserve/charts/kserve-crd v0.21.0
     check "pull kserve-resources v0.21.0" pull oci://ghcr.io/kserve/charts/kserve-resources v0.21.0
-    check "pull cert-manager v1.21.2" pull oci://quay.io/jetstack/charts/cert-manager v1.21.2
+    check "pull cert-manager v1.21.3" pull oci://quay.io/jetstack/charts/cert-manager v1.21.3
 
     helm template kserve-crd "${CH}/kserve-crd" -n kserve --include-crds > "${WORK}/crds.yaml"
     helm template kserve-resources "${CH}/kserve-resources" -n kserve \

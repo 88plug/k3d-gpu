@@ -1,0 +1,10 @@
+2026-10-29T20:22:44Z OVB start (2248 s before the item stop)
+2026-10-29T20:23:19Z OVB ready after 35 s
+2026-10-29T20:23:19Z OVB items: 150 to ask
+2026-10-29T20:41:37Z OVB status measured: 150 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T20:41:54Z Lg start (1098 s before the item stop)
+2026-10-29T20:42:28Z Lg ready after 34 s
+2026-10-29T20:42:28Z Lg items: 150 to ask
+2026-10-29T20:53:40Z Lg status measured: 150 answered, 0 errored, 0 cut, 0 not asked (queue empty)
+2026-10-29T20:53:57Z Vi start (375 s before the item stop)
+2026-10-29T20:59:21Z Vi status not_reached: not ready within the 315 s the hold left (boot limit 900 s)

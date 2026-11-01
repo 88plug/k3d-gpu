@@ -14,7 +14,9 @@
 #          -e @k3d-gpu-overrides.yaml [args]: extra vars load last in es_auto_installer.sh
 #          main(), so the overrides win
 #   eas.sh overlay-check     steps 1-2 without applying: the overlay decisions only
-#   eas.sh down              es_auto_installer.sh teardown platform --env k3d-gpu --force
+#   eas.sh down              es_auto_installer.sh teardown platform --env k3d-gpu --force -- -e
+#                            @k3d-gpu-images.yaml -e @k3d-gpu-overrides.yaml: install's extra
+#                            vars, so teardown skips what install skipped (k3d-gpu's NFD)
 #   eas.sh status            es_auto_installer.sh status --env k3d-gpu
 #
 # `configure` is never run: it needs a terminal or --force, sudo and apt
@@ -161,9 +163,17 @@ cmd_up() {
 
 cmd_down() {
     [ -d "${CHECKOUT}/env/${ENV_NAME}" ] || err "no env/${ENV_NAME} in ${CHECKOUT}: nothing was installed from this state dir"
+    # Teardown picks its components by the same enabled flags as install
+    # (filter_plugins/resolve_components.py), so it gets install's extra vars. Without the
+    # overrides, nfd_enabled is true again and EI's nfd teardown deletes k3d-gpu's own NFD.
+    [ -f "${EAS_STATE}/k3d-gpu-overrides.yaml" ] \
+        || err "${EAS_STATE}/k3d-gpu-overrides.yaml missing: without it teardown also removes what eas up left to k3d-gpu (its NFD); run 'k3d-gpu eas up --dry-run' to write it again"
+    local vars=()
+    [ ! -f "${EAS_STATE}/k3d-gpu-images.yaml" ] || vars+=(-e "@${EAS_STATE}/k3d-gpu-images.yaml")
+    vars+=(-e "@${EAS_STATE}/k3d-gpu-overrides.yaml")
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
     # teardown's confirm refuses a non-terminal stdin without --force (#L129-L137, #L1486).
-    installer teardown platform --env "${ENV_NAME}" --force
+    installer teardown platform --env "${ENV_NAME}" --force -- "${vars[@]}"
 }
 
 cmd_status() {

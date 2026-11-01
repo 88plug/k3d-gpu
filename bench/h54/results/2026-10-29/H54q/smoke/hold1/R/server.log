@@ -1,0 +1,137 @@
+With `vllm serve`, you should provide the model as a positional argument or in a config file instead of via the `--model` option. The `--model` option will be removed in a future version.
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347] 
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347]        █     █     █▄   ▄█
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347]  ▄▄ ▄█ █     █     █ ▀▄▀ █  version 0.32.0
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347]   █▄█▀ █     █     █     █  model   /data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347]    ▀▀  ▀▀▀▀▀ ▀▀▀▀▀ ▀     ▀
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:347] 
+(APIServer pid=1) INFO 10-29 19:42:22 [api_utils.py:286] non-default args: {'model_tag': '/data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized', 'chat_template': '/workspace/vllm/examples/tool_chat_template_gemma4.jinja', 'enable_auto_tool_choice': True, 'tool_call_parser': 'gemma4', 'port': 2080, 'model': '/data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized', 'dtype': 'bfloat16', 'max_model_len': 8192, 'enforce_eager': True, 'served_model_name': ['google/gemma-4-26B-A4B-it'], 'attention_backend': 'CPU_ATTN', 'distributed_executor_backend': 'mp', 'block_size': 128, 'enable_prefix_caching': True, 'enable_chunked_prefill': True}
+(APIServer pid=1) WARNING 10-29 19:42:22 [interface.py:1457] Unknown vLLM environment variable detected: VLLM_RPC_TIMEOUT
+(APIServer pid=1) WARNING 10-29 19:42:22 [interface.py:1457] Unknown vLLM environment variable detected: VLLM_ENGINE_ITERATION_TIMEOUT_S
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] Error saving model info cache.
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm/modelinfos'
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] 
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] 
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] FileNotFoundError: [Errno 2] No such file or directory: '/.cache/vllm'
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] 
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] During handling of the above exception, another exception occurred:
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] 
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] Traceback (most recent call last):
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/venv/lib/python3.12/site-packages/vllm/model_executor/models/registry.py", line 1036, in _save_modelinfo_to_cache
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     cache_dir.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     self.parent.mkdir(parents=True, exist_ok=True)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]   File "/opt/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041]     os.mkdir(self, mode)
+(APIServer pid=1) ERROR 10-29 19:42:28 [registry.py:1041] OSError: [Errno 30] Read-only file system: '/.cache'
+(APIServer pid=1) INFO 10-29 19:42:28 [model.py:733] Resolved architecture: Gemma4ForConditionalGeneration
+(APIServer pid=1) INFO 10-29 19:42:28 [model.py:2152] Using max model len 8192
+(APIServer pid=1) INFO 10-29 19:42:30 [arg_utils.py:3154] Raising max_num_batched_tokens from 2048 to 2496 to accommodate 'video' input for prefix-LM model /data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized.
+(APIServer pid=1) INFO 10-29 19:42:30 [scheduler.py:307] Chunked prefill is enabled with max_num_batched_tokens=2496.
+(APIServer pid=1) WARNING 10-29 19:42:30 [vllm.py:1703] Enforce eager set, disabling torch.compile, CUDAGraphs, and JIT kernel warmup. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none and --kernel_config.enable_jit_warmup=False
+(APIServer pid=1) WARNING 10-29 19:42:30 [vllm.py:1727] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(APIServer pid=1) INFO 10-29 19:42:30 [kernel.py:467] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['native'])
+(APIServer pid=1) WARNING 10-29 19:42:30 [cpu.py:317] Reset SSM cache type to float32 for accelerated GDN mamba backend 'none'.
+(APIServer pid=1) INFO 10-29 19:42:30 [compilation.py:317] Enabled custom fusions: norm_quant, act_quant
+(EngineCore pid=464) INFO 10-29 19:42:38 [core.py:133] Initializing a V1 LLM engine (v0.32.0) with config: model='/data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized', speculative_config=None, tokenizer='/data/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=True, quantization=None, quantization_config=None, enforce_eager=True, aux_output_config=AuxOutputConfig(enable_return_routed_experts=False, max_bytes=None), kv_cache_dtype=auto, device_config=cpu, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, per_request_spec_decode_metrics='none', kv_cache_metrics=False, kv_cache_metrics_sample=0.01, custom_histogram_buckets=None, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=google/gemma-4-26B-A4B-it, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'cudagraph_decoder_replay': True, 'decoder_replay_cudagraph_capture_sizes': [], 'decoder_replay_trim_threshold': 768, 'compile_sizes': None, 'compile_ranges_endpoints': [2496], 'inductor_compile_config': {'enable_auto_functionalized_v2': False}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': None, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['native']), enable_flashinfer_autotune=True, enable_rocm_segmented_attn_autotune=False, enable_cutedsl_warmup=True, enable_jit_warmup=False, moe_backend='auto', sparse_indexer_topk_backend='auto', linear_backend='auto', linear_backend_per_quant=None)
+(EngineCore pid=464) INFO 10-29 19:42:38 [multiproc_executor.py:153] DP group leader: node_rank=0, node_rank_within_dp=0, master_addr=127.0.0.1, mq_connect_ip=10.42.0.9 (local), world_size=1, local_world_size=1
+(EngineCore pid=464) INFO 10-29 19:42:38 [ompmultiprocessing.py:185] OpenMP thread binding info: 
+(EngineCore pid=464) INFO 10-29 19:42:38 [ompmultiprocessing.py:185] 	VLLM_CPU_OMP_THREADS_BIND='0-47', auto_setup=False, skip_setup=False
+(EngineCore pid=464) INFO 10-29 19:42:38 [ompmultiprocessing.py:185] 	local_world_size=1, reserve_cpu_num=1
+(EngineCore pid=464) INFO 10-29 19:42:38 [ompmultiprocessing.py:185] 	local_rank=0, core ids=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]
+(EngineCore pid=464) INFO 10-29 19:42:38 [ompmultiprocessing.py:185] 	reserved_cpus=[]
+[W1029 19:42:44.842802838 utils.cpp:41] Warning: numa_migrate_pages failed. errno: 1 (function init_cpu_memory_env)
+[W1029 19:42:44.842824439 utils.cpp:68] Warning: NUMA binding: Using MEMBIND policy for memory allocation on the NUMA nodes (0). Memory allocations will be strictly bound to these NUMA nodes. (function init_cpu_memory_env)
+(Worker pid=695) INFO 10-29 19:42:44 [parallel_state.py:1906] world_size=1 rank=0 local_rank=0 distributed_init_method=file:///tmp/vllm_dist_9dd2e75a18ab4c509bb046c5318b745e backend=gloo
+(Worker pid=695) INFO 10-29 19:42:44 [parallel_state.py:2350] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, ETP rank 0, EP rank 0, EPLB rank N/A
+(Worker pid=695) INFO 10-29 19:42:44 [cpu_worker.py:162] Using V2 Model Runner
+(Worker pid=695) INFO 10-29 19:42:45 [model_runner.py:392] Loading model from scratch...
+(Worker pid=695) INFO 10-29 19:42:49 [unquantized.py:364] Using CPU Unquantized MoE backend out of potential backends: ['CPU'].
+(Worker pid=695) INFO 10-29 19:42:50 [base_loader.py:82] Initializing model took 4.986430 seconds
+(Worker pid=695) INFO 10-29 19:42:50 [weight_utils.py:1108] Filesystem type for checkpoints: EXT4. Checkpoint size: 48.07 GiB. Available RAM: 349.78 GiB.
+(Worker pid=695) INFO 10-29 19:42:50 [weight_utils.py:1131] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Loading safetensors checkpoint shards:   0% Completed | 0/2 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:  50% Completed | 1/2 [00:03<00:03,  3.01s/it]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:03<00:00,  1.35s/it]
+Loading safetensors checkpoint shards: 100% Completed | 2/2 [00:03<00:00,  1.60s/it]
+
+(Worker pid=695) INFO 10-29 19:42:53 [default_loader.py:501] Loading weights took 3.20 seconds
+(Worker pid=695) INFO 10-29 19:42:53 [unquantized.py:528] Using MoEPrepareAndFinalizeNoDPEPModular
+(Worker pid=695) INFO 10-29 19:42:53 [unquantized.py:529] Using X86CPUUnquantizedExperts MoE backend
+(Worker pid=695) INFO 10-29 19:42:55 [model_runner.py:424] Model loading took 51.77 GiB memory and 10.250113 seconds
+(Worker pid=695) WARNING 10-29 19:42:55 [torch_utils.py:283] OMP_NUM_THREADS=48 is set; leaving Torch threads at 48 for serving. Multi-threaded torch CPU ops during serving can degrade performance through spin-wait contention and cgroup CPU-quota throttling.
+(EngineCore pid=464) INFO 10-29 19:42:55 [torch_utils.py:295] Reducing Torch threads from 48 to 1 for serving. Set OMP_NUM_THREADS in the external environment to override.
+(EngineCore pid=464) INFO 10-29 19:42:55 [utils.py:347] Using LBHNC KV cache layout.
+(Worker pid=695) INFO 10-29 19:42:55 [cpu_worker.py:260] Explicitly set (40.0/503.32) GiB for KV cache on node 0.
+(EngineCore pid=464) INFO 10-29 19:42:55 [kv_cache_utils.py:2327] CPU KV cache size: 379,146 tokens, Maximum concurrency for 8,192 tokens per request: 46.28x
+(EngineCore pid=464) INFO 10-29 19:42:55 [kv_cache_utils.py:853] kv cache group sizes (128, 128, 128, 128, 128, 256)
+(EngineCore pid=464) INFO 10-29 19:42:55 [kv_cache_utils.py:854] kv lcm block sizes 256
+(EngineCore pid=464) INFO 10-29 19:42:57 [core.py:402] init engine (profile, create kv cache, warmup model) took 1.84 s
+(EngineCore pid=464) WARNING 10-29 19:42:58 [vllm.py:1703] Enforce eager set, disabling torch.compile, CUDAGraphs, and JIT kernel warmup. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none and --kernel_config.enable_jit_warmup=False
+(EngineCore pid=464) WARNING 10-29 19:42:58 [vllm.py:1727] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(EngineCore pid=464) INFO 10-29 19:42:58 [kernel.py:467] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'], gelu_and_mul_sparse=['native'])
+(EngineCore pid=464) INFO 10-29 19:42:58 [compilation.py:317] Enabled custom fusions: norm_quant, act_quant
+(APIServer pid=1) INFO 10-29 19:43:07 [base.py:280] Multi-modal warmup completed in 34.203s
+(APIServer pid=1) INFO 10-29 19:43:07 [entry.py:136] Supported tasks: ['generate']
+(APIServer pid=1) INFO 10-29 19:43:07 [factories.py:89] Scale-out endpoints are disabled. Restart vllm serve with --enable-scale-out to enable them.
+(APIServer pid=1) INFO 10-29 19:43:07 [parser_manager.py:38] "auto" tool choice has been enabled.
+(APIServer pid=1) INFO 10-29 19:43:08 [hf.py:648] Detected the chat template content format to be 'openai'. You can set `--chat-template-content-format` to override this.
+(APIServer pid=1) WARNING 10-29 19:43:08 [model.py:1893] Default vLLM sampling parameters have been overridden by the model's `generation_config.json`: `{'temperature': 1.0, 'top_k': 64, 'top_p': 0.95}`. If this is not intended, please relaunch vLLM instance with `--generation-config vllm`.
+(APIServer pid=1) INFO 10-29 19:43:08 [entry.py:140] Starting vLLM server on http://0.0.0.0:2080
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:186] Available routes are:
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /openapi.json, Methods: GET, HEAD
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /docs, Methods: GET, HEAD
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /docs/oauth2-redirect, Methods: GET, HEAD
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /redoc, Methods: GET, HEAD
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /load, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /version, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /kv_event_sources, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /health, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /metrics, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /tokenize, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /detokenize, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/models, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/systemone, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /ping, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /ping, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /invocations, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/chat/completions, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/chat/completions/batch, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/responses, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/responses/{response_id}, Methods: GET
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/responses/{response_id}/cancel, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/completions, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/messages, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/messages/count_tokens, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /generative_scoring, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /scale_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /is_scaling_elastic_ep, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/chat/completions/render, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/messages/render, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/completions/render, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/responses/render, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/chat/completions/derender, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /v1/completions/derender, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /inference/v1/generate, Methods: POST
+(APIServer pid=1) INFO 10-29 19:43:08 [launcher.py:195] Route: /inference/v1/abort_requests, Methods: POST
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:35832 - "GET /v1/models HTTP/1.1" 200 OK
+INFO:     10.42.0.1:60136 - "GET /health HTTP/1.1" 200 OK
+INFO:     10.42.0.1:60138 - "GET /health HTTP/1.1" 200 OK
+(APIServer pid=1) INFO 10-29 19:43:18 [loggers.py:335] Engine 000: Avg prompt throughput: 0.8 tokens/s, Avg generation throughput: 0.1 tokens/s, Running: 1 reqs, Waiting: 0 reqs, CPU KV cache usage: 0.1%, Prefix cache hit rate: 0.0%
+INFO:     127.0.0.1:35834 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     10.42.0.1:43774 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48204 - "POST /v1/chat/completions HTTP/1.1" 200 OK
+INFO:     10.42.0.1:43790 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48190 - "POST /v1/chat/completions HTTP/1.1" 200 OK

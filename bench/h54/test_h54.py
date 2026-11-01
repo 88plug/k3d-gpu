@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Tests for bench/h54 (EXPERIMENTS.md "H54 amendment R1"): the arm renders and their flags, the
 GSM8K grader, the void rule, the tensor-table byte counts, the bootstrap, the chosen-arm source
-rule and the H54a verdicts. No cluster, no network."""
+rule and the H54a verdicts; and H54q's runner (amendments Q1 and Q2): its renders, item records,
+hold plan, item client (against fakes and a local stub server) and scorer. No cluster, no network
+beyond 127.0.0.1."""
 import hashlib
 import json
 import os
@@ -361,6 +363,363 @@ class Shim(unittest.TestCase):
             self.assertNotIn("--volume", out)
             out = subprocess.run([shim, "cluster", "list"], capture_output=True, text=True, env=env).stdout
             self.assertEqual(out.split(), ["cluster", "list"])
+
+
+# ---- H54q (amendments Q1 and Q2) ----------------------------------------------------------------
+
+def q_row(seq, idx, ok=True, error=None, prior=0):
+    return {"seq": seq, "idx": idx, "ok": ok and error is None, "gold": "1", "reply": "", "usage": {},
+            "error": error, "prior_errors": prior, "t0": 0, "t1": 1, "s": 1}
+
+
+def q_write(root, hold, arm, rows, status="measured", reason=""):
+    d = os.path.join(root, f"hold{hold}", arm)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "items.jsonl"), "a") as f:
+        for r in rows:
+            f.write(json.dumps(r) + "\n")
+    with open(os.path.join(d, "status.json"), "w") as f:
+        json.dump({"status": status, "reason": reason}, f)
+    return d
+
+
+def fake_h54a(root, correct=None):
+    """H54a records for the three imported arms: items 0-49, all correct unless listed wrong."""
+    for arm in ("OVQ", "OVB", "Lg"):
+        d = os.path.join(root, h54.Q_ARMS[arm]["h54a"])
+        os.makedirs(d, exist_ok=True)
+        wrong = (correct or {}).get(arm, set())
+        with open(os.path.join(d, "quality.json"), "w") as f:
+            json.dump({"rows": [{"idx": i, "ok": i not in wrong, "error": None} for i in range(50)]}, f)
+
+
+def q_full(root, arm, wrong=(), hold=1):
+    first = h54.Q_ARMS[arm]["first"]
+    q_write(root, hold, arm, [q_row(n, i, ok=i not in wrong) for n, i in enumerate(range(first, h54.Q_N), 1)])
+
+
+class QRecords(unittest.TestCase):
+    def test_h54a_items_are_score_a_records(self):
+        # Q1 item 2: OVQ = A1g hold 3 (49/50), OVB = A1o hold 3 (49/50), Lg = Lg hold 2 (50/50).
+        with tempfile.TemporaryDirectory() as d:
+            arms = h54.score_q(d)["arms"]
+        self.assertEqual({a: (arms[a]["answered"], arms[a]["correct"], arms[a]["from_h54a"]) for a in ("OVQ", "OVB", "Lg")},
+                         {"OVQ": (50, 49, 50), "OVB": (50, 49, 50), "Lg": (50, 50, 50)})
+        self.assertEqual(arms["R"]["answered"], 0)
+        self.assertEqual(arms["Vi"]["answered"], 0)
+
+    @unittest.skipUnless(HAVE_YAML, "PyYAML")
+    def test_renders_are_h54as(self):
+        import yaml
+        with tempfile.TemporaryDirectory() as d:
+            for arm, rec in (("OVQ", "hold3/A1g"), ("OVB", "hold3/A1o"), ("Lg", "hold2/Lg")):
+                out = os.path.join(d, arm + ".yaml")
+                h54.q_render(arm, out)
+                with open(out, "rb") as a, open(os.path.join(h54.H54A, rec, "deploy.yaml"), "rb") as b:
+                    self.assertEqual(hashlib.sha256(a.read()).hexdigest(), hashlib.sha256(b.read()).hexdigest())
+            with open(os.path.join(h54.H54A, "hold2/B1g/deploy.yaml")) as f:
+                b1g = [x for x in yaml.safe_load_all(f) if x]
+            for arm, base in (("R", "Vq"), ("Vi", "Vi")):
+                out = os.path.join(d, arm + ".yaml")
+                h54.q_render(arm, out)
+                with open(out) as f:
+                    got = [x for x in yaml.safe_load_all(f) if x]
+                self.assertEqual(got, h54.derive_vllm(base, b1g))
+                c = [x for x in got if x["kind"] == "Deployment"][0]["spec"]["template"]["spec"]["containers"][0]
+                self.assertEqual(c["image"], h54.IMG["vllm032"])
+                model = c["args"][c["args"].index("--model") + 1]
+                self.assertEqual(model, f"/data/{h54.AUTOROUND if arm == 'Vi' else h54.QAT}")
+                self.assertNotIn("--speculative-config", c["args"])
+
+    def test_bases(self):
+        self.assertEqual({a: h54.Q_ARMS[a]["base"] for a in h54.Q_ORDER},
+                         {"R": "Vq", "OVQ": "A1g", "OVB": "A1o", "Lg": "Lg", "Vi": "Vi"})
+        self.assertEqual(h54.Q_ORDER, ["R", "OVQ", "OVB", "Lg", "Vi"])
+        for a in h54.Q_ORDER:
+            self.assertIn(h54.Q_ARMS[a]["base"], h54.ARMS)
+        self.assertEqual(h54.ARMS["Vq"]["boot"], 1500)   # R is a bf16 vLLM load
+
+
+class QState(unittest.TestCase):
+    def test_retry_first_second_error_wrong_and_discard(self):
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a)
+            q_write(r, 1, "OVQ", [q_row(1, 50), q_row(2, 51, error="HTTPError"), q_row(3, 52, ok=False),
+                                  q_row(4, 53, error="x"), q_row(5, 53, error="x", prior=1),
+                                  q_row(6, 54, error="x"), {"event": "stopped", "discard": [6], "reason": "r"}])
+            st = h54.q_state(r, "OVQ", a)
+            self.assertTrue(st[50]["ok"])
+            self.assertIsNone(st[51]["ok"])
+            self.assertEqual(st[51]["errors"], 1)
+            self.assertFalse(st[52]["ok"])
+            self.assertFalse(st[53]["ok"])
+            self.assertTrue(st[53]["final_error"])
+            self.assertNotIn(54, st)                       # discarded by the stopped event
+            todo = h54.q_todo(r, "OVQ", a)
+            self.assertEqual(todo[0], (51, 1))             # errored once: front of the next turn
+            self.assertEqual(todo[1], (54, 0))
+            self.assertEqual(len(todo), 150 - 3)
+            # hold 2 answers 51 on its second ask: the answer counts, not the error
+            q_write(r, 2, "OVQ", [q_row(1, 51, ok=True, prior=1)])
+            self.assertTrue(h54.q_state(r, "OVQ", a)[51]["ok"])
+
+    def test_first_answer_wins_and_range(self):
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a)
+            q_write(r, 1, "OVQ", [q_row(1, 60, ok=False), q_row(2, 7, ok=False)])   # 7 is H54a's
+            q_write(r, 2, "OVQ", [q_row(1, 60, ok=True)])
+            st = h54.q_state(r, "OVQ", a)
+            self.assertFalse(st[60]["ok"])
+            self.assertTrue(st[7]["ok"])
+            self.assertEqual(st[7]["src"], "H54a/hold3/A1g")
+            self.assertEqual(h54.q_todo(r, "R", a)[0], (0, 0))   # R answers 0-199
+
+    def test_cut_line_is_unanswered(self):
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a)
+            d = q_write(r, 1, "Lg", [q_row(1, 50)])
+            with open(os.path.join(d, "items.jsonl"), "a") as f:
+                f.write('{"seq": 2, "idx": 51, "ok": tr')        # killed mid-write
+            self.assertEqual(h54.q_todo(r, "Lg", a)[0], (51, 0))
+
+
+class QPlan(unittest.TestCase):
+    def test_order_done_and_lost(self):
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a)
+            self.assertEqual(h54.q_plan(r, a), ["R", "OVQ", "OVB", "Lg", "Vi"])
+            q_full(r, "R")
+            q_write(r, 1, "OVQ", [q_row(1, 50)])
+            self.assertEqual(h54.q_plan(r, a), ["OVQ", "OVB", "Lg", "Vi"])
+            # not deliverable or stopped once: carried; twice: dropped (R3 carries once)
+            q_write(r, 1, "OVB", [], status="failed", reason="server stopped answering: x")
+            self.assertIn("OVB", h54.q_plan(r, a))
+            q_write(r, 2, "OVB", [], status="not_deliverable")
+            self.assertNotIn("OVB", h54.q_plan(r, a))
+            # not reached costs nothing
+            q_write(r, 1, "Lg", [], status="not_reached")
+            q_write(r, 2, "Lg", [], status="not_reached")
+            self.assertIn("Lg", h54.q_plan(r, a))
+            # the probe-first Vi gets one boot attempt
+            q_write(r, 2, "Vi", [], status="not_deliverable")
+            self.assertEqual(h54.q_plan(r, a), ["OVQ", "Lg"])
+
+    def test_cli(self):
+        with tempfile.TemporaryDirectory() as r:
+            run = lambda *a: subprocess.run([sys.executable, os.path.join(HERE, "h54.py"), *a], capture_output=True, text=True)  # noqa: E731
+            self.assertEqual(run("q-plan", r).stdout.split(), ["R", "OVQ", "OVB", "Lg", "Vi"])
+            self.assertEqual(run("q-base", "OVB").stdout.strip(), "A1o")
+            self.assertEqual(run("q-todo", r, "OVQ").stdout.split()[:2], ["50", "51"])
+
+
+def item(i):
+    return {"idx": i, "question": f"q{i}", "answer": f"#### {i}"}
+
+
+class QAsk(unittest.TestCase):
+    def ask_with(self, todo, ask, probe=lambda t: True, stop=None, **kw):
+        import time
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "items.jsonl")
+            s = h54.q_ask(todo, out, stop or time.time() + 60, ask, probe, tick=0.01, **kw)
+            rows, discard = h54.q_rows(out)
+        return s, rows, discard
+
+    def test_answers_and_one_retry(self):
+        seen = {}
+
+        def ask(it, t):
+            seen[it["idx"]] = seen.get(it["idx"], 0) + 1
+            if it["idx"] == 3 and seen[3] == 1:
+                raise OSError("reset")
+            if it["idx"] == 4:
+                raise OSError("always")
+            return f"Answer: {it['idx'] if it['idx'] != 2 else 99}", {"completion_tokens": 5}
+        s, rows, _ = self.ask_with([(item(i), 0) for i in range(5)] + [(item(5), 1)], ask, workers=2)
+        self.assertEqual(seen, {0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 1})   # an error is asked once more
+        self.assertIsNone(s["stopped"])
+        self.assertEqual((s["answered"], s["errors"], s["cut"], s["not_asked"]), (5, 3, 0, 0))
+        by = {}
+        for r in rows:
+            by.setdefault(r["idx"], []).append(r)
+        self.assertEqual([r["ok"] for r in by[2]], [False])
+        self.assertEqual([bool(r["error"]) for r in by[3]], [True, False])
+        self.assertEqual([r["prior_errors"] for r in by[4]], [0, 1])
+        self.assertEqual(len(by[5]), 1)                     # errored before: its retry is this ask
+
+    def test_streak_stops_and_discards(self):
+        def ask(it, t):
+            raise ConnectionRefusedError("down")
+        probes = []
+
+        def probe(t):
+            probes.append(t)
+            return False
+        s, rows, discard = self.ask_with([(item(i), 0) for i in range(40)], ask, probe=probe, workers=4, streak_max=4)
+        self.assertTrue(s["stopped"].startswith(h54.STOPPED))
+        self.assertEqual(len(probes), 1)
+        self.assertTrue(30 <= probes[0] <= 300)            # bounded by probe_s and by the stop
+        self.assertEqual(discard, {r["seq"] for r in rows})   # every error of the run is discarded
+        self.assertGreater(s["not_asked"], 0)
+
+    def test_no_probe_near_the_item_stop(self):
+        import time
+
+        def ask(it, t):
+            raise ConnectionRefusedError("down")
+        probes = []
+        s, rows, discard = self.ask_with([(item(i), 1) for i in range(8)], ask, probe=lambda t: probes.append(t),
+                                         stop=time.time() + 20, workers=4, streak_max=4)
+        self.assertEqual(probes, [])                       # under 30 s before the stop: no probe
+        self.assertIsNone(s["stopped"])
+        self.assertEqual((s["errors"], discard), (8, set()))
+
+    def test_streak_with_answering_server_continues(self):
+        def ask(it, t):
+            if it["idx"] < 8:
+                raise OSError("bad request")
+            return f"Answer: {it['idx']}", {}
+        s, rows, discard = self.ask_with([(item(i), 1) for i in range(8)] + [(item(i), 0) for i in range(8, 12)],
+                                         ask, workers=4, streak_max=4)
+        self.assertIsNone(s["stopped"])
+        self.assertEqual(discard, set())
+        self.assertEqual((s["answered"], s["errors"]), (4, 8))
+
+    def test_trailing_error_probe(self):
+        def ask(it, t):
+            if it["idx"] == 2:
+                raise OSError("down")
+            return "Answer: 1", {}
+        s, _, discard = self.ask_with([(item(i), 0) for i in range(3)], ask, probe=lambda t: False, workers=1)
+        self.assertIn("ended on an error", s["stopped"])
+        self.assertEqual(len(discard), 2)                  # the item's ask and its retry
+
+    def test_item_stop_cuts(self):
+        import time
+
+        def ask(it, t):
+            time.sleep(min(t, 0.5) if it["idx"] else 0.0)
+            return f"Answer: {it['idx']}", {}
+        s, rows, _ = self.ask_with([(item(i), 0) for i in range(10)], ask, stop=time.time() + 0.3, workers=2)
+        self.assertEqual(s["end"], "item stop")
+        self.assertEqual(s["cut"], 2)
+        self.assertEqual(s["not_asked"], 7)
+        self.assertEqual([r["idx"] for r in rows], [0])
+
+    def test_stall_probe(self):
+        import time
+
+        def ask(it, t):
+            time.sleep(2)
+            return "x", {}
+        s, rows, _ = self.ask_with([(item(i), 0) for i in range(3)], ask, probe=lambda t: False, workers=3, stall_s=0.2)
+        self.assertIn("no request finished", s["stopped"])
+        self.assertEqual(rows, [])
+
+    def test_against_a_stub_server(self):
+        import http.server
+        import threading
+
+        class Stub(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def reply(self, body):
+                b = json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                self.wfile.write(b)
+
+            def do_GET(self):
+                self.reply({"data": [{"id": "gemma"}]})
+
+            def do_POST(self):
+                req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                q = req["messages"][0]["content"]
+                assert req.get("chat_template_kwargs") == {"enable_thinking": False} or req["max_tokens"] == 16
+                self.reply({"choices": [{"message": {"content": "Answer: 7" if "pens" in q else "Answer: 5"}}],
+                            "usage": {"completion_tokens": 3}})
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        url = f"http://127.0.0.1:{srv.server_address[1]}/v1"
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                self.assertTrue(h54.ready(url, "gemma"))
+                p = subprocess.run([sys.executable, os.path.join(HERE, "h54.py"), "q-smoke", url, "gemma", d,
+                                    str(__import__("time").time() + 60)], capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+                rows, _ = h54.q_rows(os.path.join(d, "smoke-items.jsonl"))
+                self.assertEqual(sorted((r["idx"], r["ok"]) for r in rows), [(1000, True), (1001, False)])
+                res, out = os.path.join(d, "res"), os.path.join(d, "res", "hold1", "Lg")
+                os.makedirs(out)
+                p = subprocess.run([sys.executable, os.path.join(HERE, "h54.py"), "q-items", url, "gemma", res, "Lg", out,
+                                    str(__import__("time").time() + 60)], capture_output=True, text=True)
+                self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+                q = json.load(open(os.path.join(out, "q.json")))
+                self.assertEqual((q["status"], q["todo"], q["answered"], q["first_items"][0]), ("measured", 150, 150, 50))
+                self.assertEqual(h54.q_todo(res, "Lg"), [])
+        finally:
+            srv.shutdown()
+        self.assertFalse(h54.ready("http://127.0.0.1:9/v1", "gemma", timeout=1))
+
+
+class ScoreQ(unittest.TestCase):
+    def score(self, wrong, h54a_wrong=None):
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a, h54a_wrong)
+            for arm, w in wrong.items():
+                q_full(r, arm, w)
+            return h54.score_q(r, a, n=2000)
+
+    def test_supported(self):
+        # OVQ = R; OVB misses 20 items OVQ answers
+        rep = self.score({"R": set(range(50, 200, 25)), "OVQ": set(range(50, 200, 25)), "OVB": set(range(51, 71))})
+        self.assertEqual(rep["verdict"], "SUPPORTED", rep)
+        self.assertEqual(rep["tests"]["OVQ-R"]["diff"], 0.0)
+        self.assertLess(rep["tests"]["OVB-OVQ"]["ci95"][1], 0)
+
+    def test_refuted_ovq_below_r(self):
+        rep = self.score({"R": set(), "OVQ": set(range(60, 100)), "OVB": set(range(60, 100))})
+        self.assertEqual(rep["verdict"], "REFUTED")
+        self.assertIn("OVQ - R", rep["reason"])
+
+    def test_refuted_ovb_above_ovq_with_one_test(self):
+        # R did not answer every item: OVQ - R is missing, and the OVB - OVQ test alone refutes
+        with tempfile.TemporaryDirectory() as r, tempfile.TemporaryDirectory() as a:
+            fake_h54a(a)
+            q_full(r, "OVQ", set(range(60, 90)))
+            q_full(r, "OVB", set())
+            q_write(r, 1, "R", [q_row(1, 0)])
+            rep = h54.score_q(r, a, n=2000)
+        self.assertIn("missing", rep["tests"]["OVQ-R"])
+        self.assertEqual(rep["verdict"], "REFUTED")
+        self.assertIn("OVB - OVQ", rep["reason"])
+
+    def test_missing_is_inconclusive(self):
+        rep = self.score({"OVQ": set(), "OVB": set(range(60, 90))})
+        self.assertEqual(rep["verdict"], "INCONCLUSIVE")
+        self.assertIn("OVQ-R", rep["reason"])
+        self.assertEqual(rep["tests"]["OVQ-R"]["missing"], "R did not answer all 200 items")
+
+    def test_neither(self):
+        rep = self.score({"R": set(), "OVQ": set(), "OVB": set()})
+        self.assertEqual(rep["verdict"], "INCONCLUSIVE")
+        self.assertEqual(rep["tests"]["OVB-OVQ"]["ci95"], [0.0, 0.0])
+
+    def test_imported_items_count(self):
+        rep = self.score({"R": set(), "OVQ": set(), "OVB": set()}, h54a_wrong={"OVQ": {3}})
+        self.assertEqual(rep["arms"]["OVQ"]["correct"], 199)
+        self.assertEqual(rep["tests"]["OVQ-R"]["b_only"], 1)
+
+    def test_paired_boot(self):
+        d = [1] * 10 + [0] * 180 + [-1] * 10
+        self.assertEqual(h54.paired_boot(d, 2000), h54.paired_boot(d, 2000))
+        lo, hi = h54.paired_boot(d, 2000)
+        self.assertLess(lo, 0)
+        self.assertGreater(hi, 0)
+        self.assertEqual(h54.paired_boot([0.5] * 7, 100), (0.5, 0.5))
 
 
 if __name__ == "__main__":

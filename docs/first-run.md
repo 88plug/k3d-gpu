@@ -126,9 +126,11 @@ Predicted: 25 to 45 min, including the kernel update and the 4.9 GB model.
 
 What differs: the LLM runs on the CPU with the 8B tier. The agent pod has no
 NUMA pinning (no `k3d-gpu.io/cores: replica` label), so on a multi-socket host
-it can span sockets. Every Xeon feature row (DSA, IAA, AMX, NUMA) is verified
-in simulation only. The EAT integration (`integrations/eat`) is verified on a
-hybrid client CPU only; its `performance` balloon does not exist on a non-hybrid
+it can span sockets. On one single-socket Xeon 6741P the AMX labels were set
+[ledger:H52], and after `host-setup --apply` DSA reached a pod while IAA got no
+work queue and the QAT plugin crash-looped [ledger:H52b]; NUMA placement is
+verified in simulation only. The EAT integration (`integrations/eat`) is
+verified on a hybrid client CPU only; its `performance` balloon does not exist on a non-hybrid
 Xeon. A QAT warning from doctor does not affect the agent.
 
 Predicted: 15 to 30 min on a fast datacenter link.
@@ -144,9 +146,9 @@ Predicted: 15 to 30 min on a fast datacenter link.
 
 What differs: both GPUs are advertised (`i915` for the UHD 770 iGPU, `xe` for
 the B580). The B580 has XMX, so the LLM runs on it (`gpu.intel.com/xe` at step
-3). `plan` has no B580 cell yet and says `unmeasured`. Battlemage on `xe` is
-verified in simulated sysfs only. `host-setup` proposes `pacman -Syu`; it is
-not needed for the first chat. Remove with `yay -R k3d-gpu`.
+3). `plan` has no B580 cell yet and says `unmeasured`. No B580 has run here;
+Battlemage on `xe` has run only as four Arc Pro B70s in a Xeon [ledger:H52].
+`host-setup` proposes `pacman -Syu`; it is not needed for the first chat. Remove with `yay -R k3d-gpu`.
 
 Predicted: 20 to 40 min.
 

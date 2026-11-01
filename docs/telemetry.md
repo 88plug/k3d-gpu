@@ -31,7 +31,7 @@ only for a supported Intel dGPU. Everything in the stack is pinned:
 | `node-exporter.yml` | Prometheus node_exporter | `quay.io/prometheus/node-exporter:v1.12.1` | 9100 (hostNetwork) | root, no capabilities |
 | `intel-gpu-exporter.yml` | home-operations drm-exporter | chart 0.3.4, image `ghcr.io/home-operations/drm-exporter@sha256:9b54…5e60` | 8081 | privileged |
 | `dcgm-exporter.yml` | NVIDIA dcgm-exporter | chart 4.8.4, `nvcr.io/nvidia/k8s/dcgm-exporter:4.6.1-4.8.4-distroless` | 9400 | root + `SYS_ADMIN`, RuntimeClass `nvidia` |
-| `prometheus.yml` | Prometheus server and recording rules | `quay.io/prometheus/prometheus:v3.15.0` | 9090 | uid 65534 |
+| `prometheus.yml` | Prometheus server and recording rules | `quay.io/prometheus/prometheus:v3.15.1` | 9090 | uid 65534 |
 | `optional/intel-xpumd.yml` | Intel XPU Manager daemon | chart 2.3.0, `ghcr.io/intel/xpumanager/xpumd:v2.3.0` | 8080 | privileged |
 
 Rendered charts carry their exact `helm template` values in their file header. Re-render
@@ -254,7 +254,7 @@ Run without a cluster:
   E-cores offline, non-hybrid), and the AUR `package()` function, which must install
   every manifest under `/usr/share/k3d-gpu/telemetry/`. When `promtool` is on PATH, it also runs
   `promtool check metrics` on the script output and `promtool test rules` on the
-  recording rules with `tests/telemetry-rules.test.yml`. CI's `telemetry-tests` job installs promtool 3.15.0 (sha256-checked) and runs it with the rules test.
+  recording rules with `tests/telemetry-rules.test.yml`. CI's `telemetry-tests` job installs promtool 3.15.1 (sha256-checked) and runs it with the rules test.
 - `kubeconform -kubernetes-version <k3s version in the Dockerfile> -strict share/telemetry share/telemetry/optional`
   (CI runs this in the same job): 29 resources valid.
 - `promtool check config` on the extracted `prometheus.yml`: valid, 3 rules.

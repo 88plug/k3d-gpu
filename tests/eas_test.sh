@@ -9,10 +9,17 @@
 #            - overlay.json resolves every patch, upstream drafts first-class, no copies
 #            - main: 0002 and 0006 apply, 0003 only for nri-balloons, 0004 only on
 #              more than one node, 0005 never; the recorded `verified` cases hold
+#            - the same decisions with TMPDIR (the scratch index) on another
+#              filesystem than the checkout
 #            - patches already in the tree: drop-merged (git apply -R --check)
 #            - the fix done another way with the knob present: drop-fixed
 #            - the fix done another way with the knob renamed: STOP
+#            - 0006: an Exists term counts only when no file of the role keeps the
+#              exact "" selector (any quoting), and a #50-layout vars/k3s.yaml only
+#              when it selects a shape other than controlplane_daemonset
 #            - the hunk moved as open EAS #50/#52 move it: STOP naming #50
+#            - a STOP names a `moved` hint only when the hint watches a file whose
+#              hunks fail, else the last commit on the failing files
 #            - release-1.2: 0006 variant b applies, 0006a and 0005 do not
 #            - --apply changes the checkout only when no row STOPs, and a re-run is a no-op
 #            - every decision prints as `fact -> choice [source]`; --explain gives permalinks
@@ -43,11 +50,13 @@
 #            - refs: a profile and a SHA go as given, any other ref through git ls-remote
 #            - no secret value in an argument list, a log, choices.txt or a state file
 #            - refusals stop before any change
-#            - down clears AIGatewayRoute finalizers before teardown platform --force
+#            - down clears AIGatewayRoute finalizers before teardown platform --force, and
+#              the teardown gets install's extra vars (refused without the overrides)
 #            - status prints the layer, pins, overlay, EAS status, gateway, pods not Ready,
 #              and eas-ready.py's report with the cause of each stack pod not Ready
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
-#            - the bastion pins what pins.json's bastion profile names
+#            - the bastion pins what pins.json's bastion profile names, and ships a
+#              sha256-checked jq (EI's deploy_models.yaml runs jq on the bastion)
 #   ready    integrations/eas/eas-ready.py, the stack check `k3d-gpu eas check` runs
 #            before its first request, on synthetic `kubectl get pods,daemonsets -A -o json`
 #            lists:
@@ -129,7 +138,10 @@ EOF
     }
     # brief <repo> <policy> <nodes> [overlay args]: "0002=apply:a 0003=skip ...". The exit
     # status goes to ${WORK}/rc (brief runs in a command substitution), text to d.txt.
+    # d.json is removed first, so a run that writes none prints nothing instead of the
+    # previous run's decisions.
     brief() {
+        rm -f "${WORK}/d.json"
         python3 "${OVERLAY}" --eas "$1" --policy "$2" --nodes "$3" --json "${WORK}/d.json" "${@:4}" > "${WORK}/d.txt" 2>&1
         echo "$?" > "${WORK}/rc"
         python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' \
@@ -172,6 +184,7 @@ for r in spec["rows"]:
             assert len(hits) == 1, (f, hits)
     for p in r["fixed_probe"] + r["moved"]:
         re.compile(p["regex"])
+        re.compile(p.get("absent") or "")
 names = [n for d in dirs for n in os.listdir(os.path.join(root, d)) if n.endswith(".patch")]
 assert len(names) == len(set(names)), "a patch is in both dirs"
 for v in spec["verified"]:
@@ -211,6 +224,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "main: 0002 resolves to the upstream draft" "${ROOT}/integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch" \
         "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][0]["files"][0]')")"
     check "main: 0002 names the generator knob it needs" istio_platform "$(jq_ 'd["decisions"][0]["knob"]')"
+    # The scratch index can sit on another filesystem than the checkout: a tmpfs /tmp
+    # with the state dir on disk, or the bastion's own /tmp with the state dir bind-mounted.
+    local xdev="" d
+    for d in /dev/shm /var/tmp; do
+        [ -d "${d}" ] && [ -w "${d}" ] || continue
+        [ "$(stat -c %d "${d}")" != "$(stat -c %d "${WORK}")" ] || continue
+        xdev=$(mktemp -d "${d}/eas-test-xdev.XXXXXX") && break
+    done
+    if [ -n "${xdev}" ]; then
+        got=$(TMPDIR="${xdev}" brief "${WORK}/main" best-effort 1)
+        check "main with the scratch index on another filesystem (TMPDIR ${d}): the same decisions" \
+            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" "${got}"
+        check "main with the scratch index on another filesystem: exit 0" 0 "$(cat "${WORK}/rc")"
+        rm -rf "${xdev}"
+    else
+        echo "skip no writable /dev/shm or /var/tmp on another filesystem than ${WORK}: the cross-filesystem case did not run"
+    fi
 
     # Text: one `fact -> choice [source]` line per row, sources at the checkout's sha.
     local sha sha7
@@ -301,6 +331,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     commit "${WORK}/both" "envoy: add affinity, keep the selector"
     got=$(brief "${WORK}/both" best-effort 1)
     check "affinity next to the exact \"\" selector is not a fix: STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    # The same with the selector in flow style, its key quoted: still not a fix.
+    cp -R "${WORK}/main" "${WORK}/flow"
+    replace "${WORK}/flow/roles/envoy_gateway/tasks/controller.yaml" \
+        $'                nodeSelector:\n                  node-role.kubernetes.io/control-plane: ""\n' \
+        $'                nodeSelector: {"node-role.kubernetes.io/control-plane": ""}\n                affinity:\n                  nodeAffinity:\n                    requiredDuringSchedulingIgnoredDuringExecution:\n                      nodeSelectorTerms:\n                        - matchExpressions:\n                            - key: node-role.kubernetes.io/control-plane\n                              operator: Exists\n'
+    commit "${WORK}/flow" "envoy: flow-style selector next to the affinity"
+    got=$(brief "${WORK}/flow" best-effort 1)
+    check "affinity next to a quoted-key \"\" selector is not a fix: STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    # An Exists term in another file of the role does not fix the EnvoyProxy, whose
+    # exact "" selector is still in controller.yaml: 0006 still applies.
+    cp -R "${WORK}/main" "${WORK}/elsewhere"
+    printf -- '---\n- name: "envoy_gateway | some other control-plane workload"\n  vars:\n    _affinity:\n      nodeAffinity:\n        requiredDuringSchedulingIgnoredDuringExecution:\n          nodeSelectorTerms:\n            - matchExpressions:\n                - key: node-role.kubernetes.io/control-plane\n                  operator: Exists\n' \
+        > "${WORK}/elsewhere/roles/envoy_gateway/tasks/other.yaml"
+    commit "${WORK}/elsewhere" "envoy: another workload with an Exists term"
+    got=$(brief "${WORK}/elsewhere" best-effort 1)
+    check "an Exists term in another file, the \"\" selector kept: 0006 still applies" "0006=apply:a" \
+        "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
 
     # 8. The fix done differently, knob renamed: STOP, nothing to write the old knob to.
     cp -R "${WORK}/main" "${WORK}/renamed"
@@ -340,8 +387,15 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     python3 "${OVERLAY}" --eas "${WORK}/pr50" --policy best-effort --nodes 1 --apply > /dev/null 2>&1
     check "#50 layout --apply: exit 3" 3 "$?"
     check "#50 layout --apply: nothing applied, 0002 included" "" "$(git -C "${WORK}/pr50" status --porcelain)"
-    # Once a k3s entry lands in #50's vars layout: drop-fixed.
+    # A k3s entry in #50's vars layout that keeps controlplane_daemonset, the shape
+    # with the exact "" selector, is not a fix: still the STOP naming #50.
     mkdir -p "${WORK}/pr50/roles/envoy_gateway/vars"
+    printf -- '---\n_envoy_gateway_proxy_shape: controlplane_daemonset\n' > "${WORK}/pr50/roles/envoy_gateway/vars/k3s.yaml"
+    commit "${WORK}/pr50" "envoy_gateway: k3s vars, kubeadm shape"
+    got=$(brief "${WORK}/pr50" best-effort 1)
+    check "#50 layout plus vars/k3s.yaml on controlplane_daemonset: 0006 STOP" "0006=STOP" "$(tr ' ' '\n' <<< "${got}" | grep '^0006=')"
+    has "#50 layout plus vars/k3s.yaml on controlplane_daemonset: names #50" "${GH}/pull/50" "$(cat "${WORK}/d.txt")"
+    # Once a k3s entry selects another shape: drop-fixed.
     printf -- '---\n_envoy_gateway_proxy_shape: controlplane_affinity\n' > "${WORK}/pr50/roles/envoy_gateway/vars/k3s.yaml"
     commit "${WORK}/pr50" "envoy_gateway: k3s vars"
     check "#50 layout plus vars/k3s.yaml: drop-fixed" "0006=drop-fixed" "$(brief "${WORK}/pr50" best-effort 1 | tr ' ' '\n' | grep '^0006=')"
@@ -364,6 +418,23 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "unknown move: 0002 STOP" "0002=STOP" "${got%% *}"
     has "unknown move: names the last upstream commit on the patch's files" \
         "$(git -C "${WORK}/moved" rev-parse --short=7 HEAD) istio: extra values files (#123)" "$(cat "${WORK}/d.txt")"
+    # A `moved` hint names its PR only when the file it watches is one whose hunk
+    # fails: here headlamp_enabled exists away from 0002's context (the hunk still
+    # applies) and the hunk that fails is in install.yaml, changed after it.
+    cp -R "${WORK}/main" "${WORK}/blame"
+    printf 'headlamp_enabled: false\n' >> "${WORK}/blame/configs/defaults/global_config.yaml"
+    commit "${WORK}/blame" "headlamp, away from 0002's context"
+    replace "${WORK}/blame/roles/istio/tasks/install.yaml" \
+        $'        values_files: "{{ [istio_helm_default_values_file] }}"\n        dependency_update: true' \
+        $'        values_files: "{{ [istio_helm_default_values_file] + istio_extra_values_files }}"\n        dependency_update: true'
+    commit "${WORK}/blame" "istio: extra values files (#124)"
+    replace "${WORK}/blame/configs/defaults/global_config.yaml" $'headlamp_enabled: false\n' $'headlamp_enabled: true\n'
+    commit "${WORK}/blame" "headlamp on"
+    got=$(brief "${WORK}/blame" best-effort 1)
+    check "hint off the failing file: 0002 STOP" "0002=STOP" "${got%% *}"
+    has "hint off the failing file: names the commit that changed the failing file" \
+        "$(git -C "${WORK}/blame" rev-parse --short=7 HEAD~1) istio: extra values files (#124)" "$(cat "${WORK}/d.txt")"
+    check "hint off the failing file: does not name #61" 0 "$(grep -c "pull/61" "${WORK}/d.txt")"
 
     # 11. --apply: only at HEAD, all or nothing, idempotent.
     cp -R "${WORK}/main" "${WORK}/app"
@@ -395,6 +466,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply on a conflicting local edit: no other file touched" roles/istio/tasks/install.yaml "$(git -C "${WORK}/dirty" diff --name-only)"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --apply > /dev/null 2>&1
     check "--apply with --rev other than HEAD: exit 2" 2 "$?"
+    rm -f "${WORK}/d.json"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --json "${WORK}/d.json" > /dev/null 2>&1
     check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" \
         "$(python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' "${WORK}/d.json")"
@@ -416,6 +488,15 @@ EOF
     python3 "${OVERLAY}" --spec "${WORK}/bad.json" --eas "${WORK}/main" --policy best-effort --nodes 1 > "${WORK}/a.txt" 2>&1
     check "a patch file that is in no patch dir: exit 2" 2 "$?"
     has "a missing patch is named" "0099-missing.patch" "$(cat "${WORK}/a.txt")"
+    python3 - "${SPEC}" "${WORK}/bad.json" <<'EOF'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["rows"][4]["fixed_probe"][0]["absent"] = "(unclosed"
+json.dump(s, open(sys.argv[2], "w"))
+EOF
+    python3 "${OVERLAY}" --spec "${WORK}/bad.json" --eas "${WORK}/main" --policy best-effort --nodes 1 > "${WORK}/a.txt" 2>&1
+    check "an absent regex that does not compile: exit 2" 2 "$?"
+    has "the bad absent regex is named" "'(unclosed'" "$(cat "${WORK}/a.txt")"
 
     # 13. --check-verified and --watch (what apply-check.sh --overlay runs on real clones).
     sha=$(git -C "${WORK}/main" rev-parse HEAD)
@@ -1084,7 +1165,7 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     local ES="${WORK}/cli/es"
     mkdir -p "${ES}"
     command cp -f "${STATE}"/k3d-gpu-overrides.yaml "${STATE}"/global_config.edit.yaml "${STATE}"/models.edit.yaml \
-        "${STATE}"/repos.agent-toolkit.yaml "${ES}/"
+        "${STATE}"/repos.agent-toolkit.yaml "${STATE}"/k3d-gpu-images.yaml "${ES}/"
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit -- -e x=1 2>&1); rc=$?
@@ -1132,6 +1213,20 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" down >/dev/null 2>&1
     cli_has    "cli: eas.sh down: teardown platform, forced (no terminal)" "$(cat "${LOG}")" "installer teardown platform --env k3d-gpu --force"
+    # Teardown resolves components by the same enabled flags as install (EAS
+    # filter_plugins/resolve_components.py), so it gets the same extra vars; without them
+    # nfd_enabled defaults to true and EI's nfd teardown deletes k3d-gpu's own NFD namespace.
+    cli_has    "cli: eas.sh down: teardown gets install's extra vars (the overrides last)" "$(cat "${LOG}")" \
+        "installer teardown platform --env k3d-gpu --force -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml"
+    command mv "${ES}/k3d-gpu-overrides.yaml" "${ES}/k3d-gpu-overrides.yaml.away"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" down 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'k3d-gpu-overrides.yaml' <<< "${out}" && ! grep -q 'installer teardown' "${LOG}"; then
+        ok "cli: eas.sh down refuses without the overrides, before any teardown"
+    else
+        fail "cli: eas.sh down without the overrides: rc=${rc} ${out}"
+    fi
+    command mv "${ES}/k3d-gpu-overrides.yaml.away" "${ES}/k3d-gpu-overrides.yaml"
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" status >/dev/null 2>&1
     cli_has    "cli: eas.sh status" "$(cat "${LOG}")" "installer status --env k3d-gpu"
@@ -1200,13 +1295,21 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     want=$(python3 - "${EAS_DIR}/pins.json" <<'PY'
 import json, sys
 rows = {r["name"]: r for r in json.load(open(sys.argv[1]))["pins"] if r["profile"] == "bastion"}
-print("FROM ubuntu:%s@sha256:%s kubectl %s helm %s yq %s kubernetes.core %s"
+print("FROM ubuntu:%s@sha256:%s kubectl %s helm %s yq %s jq %s kubernetes.core %s"
       % (rows["ubuntu"]["ref"], rows["ubuntu"]["sha"], rows["kubectl"]["ref"], rows["helm"]["ref"], rows["yq"]["ref"],
-         rows["kubernetes.core"]["ref"]))
+         rows["jq"]["ref"], rows["kubernetes.core"]["ref"]))
 PY
 )
-    got="$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile") kubectl $(sed -n 's/^ARG KUBECTL_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") helm $(sed -n 's/^ARG HELM_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") yq $(sed -n 's/^ARG YQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") kubernetes.core $(sed -n 's/^ARG KUBERNETES_CORE_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile")"
+    got="$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile") kubectl $(sed -n 's/^ARG KUBECTL_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") helm $(sed -n 's/^ARG HELM_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") yq $(sed -n 's/^ARG YQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") jq $(sed -n 's/^ARG JQ_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile") kubernetes.core $(sed -n 's/^ARG KUBERNETES_CORE_VERSION=//p' "${EAS_DIR}/bastion.Dockerfile")"
     cli_eq "cli: bastion.Dockerfile pins what pins.json's bastion profile names" "${got}" "${want}"
+    # EI's llm_services role pipes yq into jq on the installer host to pick the models to
+    # deploy (roles/llm_services/tasks/deploy_models.yaml); EAS's configure installs no jq.
+    if grep -q '^ARG JQ_SHA256=[0-9a-f]\{64\}$' "${EAS_DIR}/bastion.Dockerfile" \
+        && grep -q 'echo "${JQ_SHA256}  /usr/local/bin/jq" | sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile"; then
+        ok "cli: the bastion ships jq, checked by sha256 (EI's deploy_models.yaml runs it on the bastion)"
+    else
+        fail "cli: the bastion has no sha256-checked jq; EI's deploy_models.yaml fails with 'jq: command not found'"
+    fi
     cli_eq "cli: bastion FROM is the EAT bastion's digest" \
         "$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile")" "$(grep -m1 '^FROM ' "${ROOT}/integrations/eat/bastion.Dockerfile")"
     want=$(python3 -c 'import json, sys
@@ -1229,12 +1332,12 @@ PY
     else
         ok "cli: every pin in requirements.lock carries hashes"
     fi
-    if grep -E '^ARG [A-Z_]*_(SHA256|VERSION)=' "${EAS_DIR}/bastion.Dockerfile" | grep -Eqv '=(v?[0-9.]+|[0-9a-f]{64})$'; then
+    if grep -E '^ARG [A-Z_]*_(SHA256|VERSION)=' "${EAS_DIR}/bastion.Dockerfile" | grep -Eqv '=((v|jq-)?[0-9.]+|[0-9a-f]{64})$'; then
         fail "cli: bastion.Dockerfile has a version or sha256 ARG that is not exact"
     else
         ok "cli: bastion.Dockerfile pins every download by version and sha256"
     fi
-    cli_eq "cli: every bastion download is checked" "$(grep -c 'sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile")" 4
+    cli_eq "cli: every bastion download (kubectl, helm, yq, jq, kubernetes.core) is checked" "$(grep -c 'sha256sum -c -' "${EAS_DIR}/bastion.Dockerfile")" 5
     while read -r mode _ _ path; do
         if [ "${mode}" = 100755 ]; then ok "cli: executable in git: ${path}"; else fail "cli: not executable in git (${mode}): ${path}"; fi
     done < <(git -C "${ROOT}" ls-files -s -- 'integrations/eas/*.sh')

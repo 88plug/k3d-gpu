@@ -3,9 +3,11 @@
 #
 # Everything the installer's `configure` would install with sudo and apt is baked here
 # at a pinned version, so `k3d-gpu eas up` never runs `configure`:
-#   - kubectl, helm and yq from their release downloads, each checked by sha256. The
+#   - kubectl, helm, yq and jq from their release downloads, each checked by sha256. The
 #     sha256 values are the ones the upstream checksum files publish for these releases
-#     (dl.k8s.io <file>.sha256, get.helm.sh <file>.sha256sum, yq's `checksums` file).
+#     (dl.k8s.io <file>.sha256, get.helm.sh <file>.sha256sum, yq's `checksums` file,
+#     jq's sha256sum.txt). configure installs no jq, but enterprise-inference's
+#     roles/llm_services/tasks/deploy_models.yaml pipes yq into jq on the installer host.
 #   - the installer's Python requirements (requirements.txt at the EAS commit named in
 #     requirements.lock) as a hash-locked venv at /opt/eas-venv; the installer reuses a
 #     venv that has ansible-playbook (es_auto_installer.sh _ensure_venv).
@@ -16,7 +18,7 @@
 # kubectl is v1.37.2, the minor of the node image's K3S_TAG (Dockerfile): EAS's own
 # v1.34.3 is outside kubectl's +/-1 minor skew against a v1.37 API server
 # (https://kubernetes.io/releases/version-skew-policy/#kubectl). helm is the newest v3
-# (EAS asks for >= v3.20.2); yq the newest v4 (EAS asks for >= v4.53.2).
+# (EAS asks for >= v3.20.2); yq the newest v4 (EAS asks for >= v4.53.2); jq the newest.
 #
 # Runs as root: es_auto_installer.sh ensure_sudo runs `sudo -k` under `set -e` unless
 # EUID is 0, and this image has no sudo. eas.sh hands the state dir back to the
@@ -38,6 +40,8 @@ ARG HELM_VERSION=v3.22.1
 ARG HELM_SHA256=896cf63684a42a723d61c980369d6e588330927deb13676ca0d85006dd6da0ea
 ARG YQ_VERSION=v4.54.1
 ARG YQ_SHA256=8e34fc298390875de416e6a4afcb8cabeceb25d9aa8506c1a2f9353cf702ea5f
+ARG JQ_VERSION=jq-1.8.2
+ARG JQ_SHA256=b1c22172dd303f3be49e935aa56aa48a8b7a46e0bc838b4997d3bb451495870f
 RUN curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
     && echo "${KUBECTL_SHA256}  /usr/local/bin/kubectl" | sha256sum -c - \
     && curl -fsSL -o /tmp/helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
@@ -45,7 +49,9 @@ RUN curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VE
     && tar -xzf /tmp/helm.tgz -C /usr/local/bin --strip-components=1 linux-amd64/helm \
     && curl -fsSL -o /usr/local/bin/yq "https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_amd64" \
     && echo "${YQ_SHA256}  /usr/local/bin/yq" | sha256sum -c - \
-    && chmod 0755 /usr/local/bin/kubectl /usr/local/bin/helm /usr/local/bin/yq \
+    && curl -fsSL -o /usr/local/bin/jq "https://github.com/jqlang/jq/releases/download/${JQ_VERSION}/jq-linux-amd64" \
+    && echo "${JQ_SHA256}  /usr/local/bin/jq" | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/kubectl /usr/local/bin/helm /usr/local/bin/yq /usr/local/bin/jq \
     && rm /tmp/helm.tgz
 
 COPY requirements.lock /opt/eas-requirements.lock

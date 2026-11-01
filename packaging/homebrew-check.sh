@@ -15,6 +15,9 @@ git -C "${tap}" init -q
 git -C "${tap}" -c user.name=ci -c user.email=ci@localhost add -A
 git -C "${tap}" -c user.name=ci -c user.email=ci@localhost commit -qm formula
 brew tap 88plug/k3d-gpu "${tap}"
+# Homebrew 7.0.11 loads a non-official tap's formulae only for install commands
+# unless the tap is trusted; style, audit, test and linkage need the trust.
+brew trust --tap 88plug/k3d-gpu
 
 brew style 88plug/k3d-gpu/k3d-gpu
 brew audit --strict 88plug/k3d-gpu/k3d-gpu

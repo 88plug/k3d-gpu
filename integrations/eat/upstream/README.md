@@ -8,7 +8,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
   - It deletes the toolkit's own installer: `deploy-agentic-stack.sh`, `core/lib/brownfield/`, `core/playbooks/setup-bastion.yml`, `core/playbooks/deploy-istio.yml`, `core/roles/nri_cpu_balloons/`.
   - It moves the toolkit onto `es_auto_installer.sh install agent-toolkit` in [intel/enterprise-ai-solutions](https://github.com/intel/enterprise-ai-solutions) (EAS) and intel/enterprise-inference.
   - It depends on intel/enterprise-inference#22 and goes in ahead of intel/enterprise-ai-solutions#40. Both are open.
-  - Re-read 2026-10-29: #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it. intel/enterprise-inference#22 merged on 2026-10-22. intel/enterprise-ai-solutions#40 was closed unmerged on 2026-10-22, and intel/enterprise-ai-solutions#66 ("Integrate Agentic Toolkit"), opened a minute before, merged on 2026-10-29. Every patch here still passes `checks/apply-check.sh` on EAS `main` `5767995`, and on `97f6157` (#69), the `main` head later that day.
+  - Re-read 2026-10-29: #19 merged on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no tag carries it. intel/enterprise-inference#22 merged on 2026-10-22. intel/enterprise-ai-solutions#40 was closed unmerged on 2026-10-22, and intel/enterprise-ai-solutions#66 ("Integrate Agentic Toolkit"), opened a minute before, merged on 2026-10-29. Every patch here still passes `checks/apply-check.sh` on EAS `main` `5767995`, and on `97f6157` (#69), the `main` head later that day. On the EAT 2.0 pre-release `v1.2.0-rc.1` (`5c27fb3`), 0005 and 0006 fail: the `release-1.2` branch still has the EnvoyProxy task in `roles/envoy_gateway/tasks/install.yaml`, which the overlay's release-1.2 form of 0006 covers. Open EAS PRs #50 and #52 break 0006, and #61 breaks 0002, 0004 and 0005. `k3d-gpu eas` applies these drafts through [the k3d-gpu overlay](#the-k3d-gpu-overlay) ([docs/intel/eas.md](../../../docs/intel/eas.md#patch-overlay)).
 - The platform roles that matter for k3s (istio, envoy_gateway, kubernetes, nri_cpu_balloons) already live in EAS `main`. **EAS is the target for every patch here.**
 - There is no toolkit (EAT) patch. Its k3s platform-detection gap sits in `brownfield_deployment()`, which no entry point calls: it is sourced at [deploy-agentic-stack.sh#L631](https://github.com/intel/enterprise-agent-toolkit/blob/0ecf67a8331e8b502ef41e08bf6d2881416178c5/deploy-agentic-stack.sh#L631) and called only from inside itself, and #19 deletes the file. The issue draft lists it as an observation only.
 
@@ -56,9 +56,9 @@ Until upstream carries them, k3d-gpu applies these drafts itself to the EAS chec
 
 - `skip`: not needed on this cluster.
 - `drop-merged`: the patch reverse-applies.
-- `drop-fixed`: the probe matches and the knob is still there.
+- `drop-fixed`: the probe matches, no file it reads keeps what the probe rules out (for 0006, the exact `""` selector anywhere in the role), and the knob is still there.
 - `apply`: the first variant that applies.
-- `STOP`, before anything changes: it names the upstream change that moved the hunk and says to regenerate.
+- `STOP`, before anything changes: it names the upstream change that moved the hunk (a row's `moved` hint when the hint watches a file whose hunks fail, otherwise the last commit on those files) and says to regenerate.
 
 The drafts here stay the only copy. The one overlay-only patch is the release-1.2 form of 0006, [integrations/eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch](../../eas/patches/0006-release-1.2-envoy-control-plane-affinity.patch); on that branch the EnvoyProxy task is still in `install.yaml`.
 
