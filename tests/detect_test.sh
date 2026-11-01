@@ -4717,7 +4717,8 @@ first_calls() {
 [ -n "${PINNED}" ] || { FAILS=$((FAILS + 1)); echo "FAIL the controller image is readable from share/agent-sandbox.yml"; }
 
 sandbox_says "sandbox up on a fresh cluster installs agent-sandbox" "${r}" 0 'Installing agent-sandbox' up "${UP_OK[@]}"
-first_calls "sandbox up on a fresh cluster adds two reads (controller, CRDs) before today's apply" \
+first_calls "sandbox up on a fresh cluster reads EAS's router, the controller and the CRDs before today's apply" \
+    '^-n agent-sandbox-system get deployment sandbox-router-deployment -o name$' \
     '^-n agent-sandbox-system get deployment agent-sandbox-controller --ignore-not-found -o jsonpath=' \
     '^get crd sandboxes\.agents\.x-k8s\.io .* --ignore-not-found -o jsonpath=' \
     'apply -f .*/agent-sandbox\.yml$'
