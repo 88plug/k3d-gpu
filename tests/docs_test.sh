@@ -49,12 +49,13 @@ for page in "${ROOT}"/docs/*.md; do
     check "docs/${name}.md is published" "$d" test -f "$d/site/${name}/index.html"
 done
 
-# --- The docs interpreter pin is one Dependabot can bump ----------------------
-# Dependabot's docker ecosystem reads Dockerfiles, not a workflow's
+# --- The docs interpreter pin is one the Freshness workflow can bump ----------
+# The registry (pins/registry.toml) owns docs-build/Dockerfile's python pin and
+# the toolchain in docs-build/requirements.in, not a workflow's
 # `container: image:`. docs-build/Dockerfile holds the pin; the workflow and
 # docs-build/lock.sh must use the same image.
-# The workflow reads it from there (the nightly repin moves docs-build/Dockerfile
-# but cannot push a workflow file), so the pin has one home.
+# The workflow reads it from there (a bot can move docs-build/Dockerfile but
+# cannot push a workflow file), so the pin has one home.
 check "docs-build/Dockerfile pins python by digest" "" grep -qE '^FROM python:[^ ]+@sha256:[0-9a-f]{64}$' "${ROOT}/docs-build/Dockerfile"
 check "docs workflow reads its container image from docs-build/Dockerfile" "" \
     grep -qF "sed -n 's/^FROM \\(python:[^ ]*\\).*\$/\\1/p' docs-build/Dockerfile" "${ROOT}/.github/workflows/docs.yml"
@@ -62,9 +63,13 @@ check "docs build job runs in that image" "" \
     grep -qE '^ +image: \$\{\{ needs\.image\.outputs\.ref \}\}$' "${ROOT}/.github/workflows/docs.yml"
 check "docs workflow holds no python image pin of its own" "" \
     bash -c '! grep -qE "python:[^ ]+@sha256:[0-9a-f]{64}" "$1"' _ "${ROOT}/.github/workflows/docs.yml"
-check "Dependabot docker ecosystem watches docs-build/" "" \
-    python3 -c 'import sys,re; t=open(sys.argv[1]).read(); sys.exit(not re.search(r"package-ecosystem: docker\n\s+directory: /docs-build\n", t))' \
-    "${ROOT}/.github/dependabot.yml"
+check "the registry's docs-build group owns docs-build/ and re-locks it" "" \
+    python3 -c 'import sys, tomllib, fnmatch
+reg = tomllib.load(open(sys.argv[1], "rb"))
+default = next(g["group"] for g in reg["images"]["default"]["groups"] if fnmatch.fnmatchcase("docs-build/Dockerfile", g["glob"]))
+owned = {s["file"] for p in reg["pin"] if p["group"] == "docs-build" for s in p["sites"]}
+sys.exit(not (default == "docs-build" and "docs-lock" in reg["groups"]["docs-build"]["hooks"]
+              and {"docs-build/requirements.in", "docs-build/lock.sh"} <= owned))' "${ROOT}/pins/registry.toml"
 
 # --- Every root file the site renders triggers the Docs workflow -------------
 for src in README.md CONTRIBUTING.md; do

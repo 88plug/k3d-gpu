@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Golden substitution: each exact old pin string becomes its new one in tests/**.
+
+  hack/substitute-goldens [--root DIR] OLD=NEW... | --pairs FILE
+
+A test that names a pinned value (a golden transcript, a recorded image list)
+moves with the pin. Only tests/** is written: never a ledger, historical, arm or
+eat-stock path, nor .github/. A pair applies only once no file outside tests/
+holds its old string any more (one still pinned elsewhere may be what a test
+checks). Idempotent: a second run changes nothing, even when an old string is
+part of its new one (1.37 -> 1.37.1). hack/bump runs it after every bump.
+--pairs FILE: a JSON list of [old, new]. Prints the paths changed.
+"""
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from pinlib import goldens, registry  # noqa: E402
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="substitute-goldens", description=__doc__.split("\n")[0])
+    ap.add_argument("--root", default=registry.ROOT)
+    ap.add_argument("--pairs", help="JSON [[old, new], ...]")
+    ap.add_argument("pair", nargs="*", help="OLD=NEW")
+    a = ap.parse_args(argv[1:])
+    pairs = []
+    if a.pairs:
+        with open(a.pairs, encoding="utf-8") as f:
+            pairs += [tuple(p) for p in json.load(f)]
+    for p in a.pair:
+        old, sep, new = p.partition("=")
+        if not sep or not old:
+            ap.error("pair %r is not OLD=NEW" % p)
+        pairs.append((old, new))
+    for path in goldens.substitute(os.path.abspath(a.root), pairs):
+        print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

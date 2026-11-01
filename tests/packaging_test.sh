@@ -208,20 +208,33 @@ check "packages.yml dry_run skips the upload" \
     grep -Pzq -- '- name: Publish to the GitHub release\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
 check "packages.yml dry_run skips the formula commit" \
     grep -Pzq -- '- name: Commit to main\n +if: \$\{\{ !inputs\.dry_run \}\}\n' "${PKGS}"
-# The NVIDIA device-plugin step takes only a vX.Y.Z tag: its output lands in later run
-# scripts and in share/nvidia-device-plugin.yml. Run the step with curl stubbed to a tag.
-nvstep=$(python3 -c 'import sys, yaml
-for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
-    if s.get("id") == "nvidia_plugin": print(s["run"])' "${BAP}")
-check "build-and-push has the nvidia_plugin step" test -n "${nvstep}"
-# nvstep_out <tag>: the step's GITHUB_OUTPUT when the release API answers <tag>; fails when the step fails.
+# The registry's NVIDIA device-plugin pin (pins/registry.toml, group nvidia-plugin)
+# takes only a vX.Y.Z release tag: its value lands in share/nvidia-device-plugin.yml.
+# Resolve the pin with the release API answering a given tag (recorded responses,
+# no network).
+# nvstep_out <tag>: "latest=<v>" when the pin resolves to <tag>; fails when the source refuses it.
 nvstep_out() {
     local d rc=0
     d=$(mktemp -d)
-    jq -n --arg t "$1" '{tag_name: $t}' > "${d}/release.json"
-    printf '#!/bin/sh\ncat "%s/release.json"\n' "${d}" > "${d}/curl"
-    chmod +x "${d}/curl"
-    if PATH="${d}:${PATH}" GITHUB_OUTPUT="${d}/out" GH_TOKEN=x bash -euc "${nvstep}" >/dev/null 2>&1; then
+    python3 - "$1" "${d}/fix.json" <<'PY'
+import json, sys
+tag, out = sys.argv[1], sys.argv[2]
+rel = {"tag_name": tag, "prerelease": False, "draft": False, "published_at": "2026-10-29T00:00:00Z",
+       "html_url": "https://github.com/NVIDIA/k8s-device-plugin/releases", "assets": []}
+hub = "https://nvcr.io/v2/nvidia/k8s-device-plugin/"
+json.dump({"https://api.github.com/repos/NVIDIA/k8s-device-plugin/releases/latest": {"status": 200, "json": rel},
+           hub + "tags/list?n=1000": {"status": 200, "json": {"tags": [tag]}},
+           hub + "manifests/" + tag: {"status": 200, "body": "",
+                                      "headers": {"Docker-Content-Digest": "sha256:" + "1" * 64}}}, open(out, "w"))
+PY
+    if PINLIB_FIXTURES="${d}/fix.json" python3 - "${ROOT}" > "${d}/out" 2>/dev/null <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/hack")
+from pinlib import registry, sources
+pin = next(p for p in registry.load(sys.argv[1] + "/pins/registry.toml")["pin"] if p["id"] == "nvidia-device-plugin")
+print("latest=" + sources.resolve(pin, "v0.20.1").v)
+PY
+    then
         cat "${d}/out"
     else
         rc=1
@@ -230,10 +243,11 @@ nvstep_out() {
     return "${rc}"
 }
 nvstep_refuses() { ! nvstep_out "$1" >/dev/null; }
-check "nvidia_plugin step takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
-check "nvidia_plugin step refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
-check "nvidia_plugin step refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
-check "nvidia_plugin step refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
+check "nvidia-device-plugin pin takes a vX.Y.Z tag" test "$(nvstep_out v0.21.0)" = "latest=v0.21.0"
+check "nvidia-device-plugin pin refuses a tag with shell characters" nvstep_refuses 'v0.21.0";id;"'
+check "nvidia-device-plugin pin refuses a tag with a newline" nvstep_refuses $'v0.21.0\nx'
+check "nvidia-device-plugin pin refuses a tag with \$( )" nvstep_refuses 'v1$(id)'
+check "nvidia-device-plugin pin refuses an older release" nvstep_refuses v0.19.0
 check "packages.yml builds with packaging/check.sh nfpm" grep -q 'packaging/check.sh nfpm' "${PKGS}"
 check "packages.yml uploads to the aur-v release" grep -q 'gh release upload' "${PKGS}"
 # gh uploads create-time assets to a draft and publishes only once they are all up, so a

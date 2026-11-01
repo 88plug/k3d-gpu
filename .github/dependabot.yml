@@ -1,5 +1,8 @@
 version: 2
 updates:
+  # GitHub Actions only. Every other pin (images, PyPI, tools, Hugging Face
+  # revisions) belongs to the in-repo bumper: pins/registry.toml, moved by the
+  # Freshness workflow (.github/workflows/freshness.yml). One updater per pin.
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -7,34 +10,3 @@ updates:
     labels: [dependencies, automerge]
     commit-message:
       prefix: "deps"
-
-  - package-ecosystem: docker
-    directory: /
-    schedule:
-      interval: weekly
-    labels: [dependencies, automerge]
-    commit-message:
-      prefix: "deps"
-
-  # Docs interpreter pin (docs-build/Dockerfile). The Docs workflow reads its
-  # container image from that file, so the bump PR needs nothing else.
-  - package-ecosystem: docker
-    directory: /docs-build
-    schedule:
-      interval: weekly
-    labels: [dependencies]
-    commit-message:
-      prefix: "deps"
-
-  # Docs toolchain lock (docs-build/requirements.txt, from requirements.in).
-  - package-ecosystem: pip
-    directory: /docs-build
-    schedule:
-      interval: weekly
-    labels: [dependencies, automerge]
-    commit-message:
-      prefix: "deps"
-    ignore:
-      # MkDocs 2.0 drops the plugin and theme system mkdocs-material is built on.
-      - dependency-name: mkdocs
-        update-types: ["version-update:semver-major"]
