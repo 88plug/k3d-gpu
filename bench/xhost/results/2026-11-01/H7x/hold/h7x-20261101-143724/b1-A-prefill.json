@@ -1,0 +1,165 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-11-01T14:41:04Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18000/v3",
+    "model": "Qwen3-4B-fp16-ov",
+    "prompt": "The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. The harbour master logged each ship that entered the bay, noting its flag, its cargo, the depth of water under its keel and the hour the pilot boarded. ",
+    "max_tokens": 16,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 5,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 600.0,
+    "label": "h7x-A-b1-prefill",
+    "out": "/home/devcloud/k3dgpu-xhost/runs/H7x/h7x-20261101-143724/b1-A-prefill.json",
+    "run_id": "0b1272ef"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 5,
+      "ok": 5,
+      "errors": 0,
+      "wall_s": 21.654708037152886,
+      "output_tokens_total": 80,
+      "aggregate_tokens_per_s": 3.694346738027793,
+      "requests_per_s": 0.23089667112673706,
+      "stats": {
+        "first_chunk_s": {
+          "n": 5,
+          "median": 3.0683710942976177,
+          "p90": 3.0738455490209162,
+          "min": 3.065255668014288,
+          "max": 3.0738455490209162
+        },
+        "ttft_s": {
+          "n": 5,
+          "median": 3.1591499890200794,
+          "p90": 3.164654294960201,
+          "min": 3.156093135010451,
+          "max": 3.164654294960201
+        },
+        "latency_s": {
+          "n": 5,
+          "median": 4.328810144215822,
+          "p90": 4.334279695991427,
+          "min": 4.32745289709419,
+          "max": 4.334279695991427
+        },
+        "output_tokens": {
+          "n": 5,
+          "median": 16,
+          "p90": 16,
+          "min": 16,
+          "max": 16
+        },
+        "tokens_per_s": {
+          "n": 5,
+          "median": 3.6961657977491296,
+          "p90": 3.6973250502030246,
+          "min": 3.6915015001910594,
+          "max": 3.6973250502030246
+        },
+        "decode_tokens_per_s": {
+          "n": 5,
+          "median": 12.820170171950291,
+          "p90": 12.831572594273569,
+          "min": 12.784311483709523,
+          "max": 12.831572594273569
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 18,
+          "content_chunks": 15,
+          "text_chars": 58,
+          "finish_reason": "length",
+          "first_chunk_s": 3.065255668014288,
+          "ttft_s": 3.156093135010451,
+          "latency_s": 4.32745289709419,
+          "output_tokens": 16,
+          "tokens_per_s": 3.6973250502030246,
+          "decode_tokens_per_s": 12.805630247462494,
+          "prompt_tokens": 1870,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 18,
+          "content_chunks": 15,
+          "text_chars": 58,
+          "finish_reason": "length",
+          "first_chunk_s": 3.0683710942976177,
+          "ttft_s": 3.15877887327224,
+          "latency_s": 4.328810144215822,
+          "output_tokens": 16,
+          "tokens_per_s": 3.6961657977491296,
+          "decode_tokens_per_s": 12.820170171950291,
+          "prompt_tokens": 1870,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 18,
+          "content_chunks": 15,
+          "text_chars": 58,
+          "finish_reason": "length",
+          "first_chunk_s": 3.0738455490209162,
+          "ttft_s": 3.164654294960201,
+          "latency_s": 4.333866597153246,
+          "output_tokens": 16,
+          "tokens_per_s": 3.6918533695775952,
+          "decode_tokens_per_s": 12.829149994286828,
+          "prompt_tokens": 1870,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "error": null,
+          "chunks": 18,
+          "content_chunks": 15,
+          "text_chars": 58,
+          "finish_reason": "length",
+          "first_chunk_s": 3.0670643346384168,
+          "ttft_s": 3.1591499890200794,
+          "latency_s": 4.3281415440142155,
+          "output_tokens": 16,
+          "tokens_per_s": 3.696736771958826,
+          "decode_tokens_per_s": 12.831572594273569,
+          "prompt_tokens": 1870,
+          "finished": true
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "error": null,
+          "chunks": 18,
+          "content_chunks": 15,
+          "text_chars": 58,
+          "finish_reason": "length",
+          "first_chunk_s": 3.070680723991245,
+          "ttft_s": 3.160966606810689,
+          "latency_s": 4.334279695991427,
+          "output_tokens": 16,
+          "tokens_per_s": 3.6915015001910594,
+          "decode_tokens_per_s": 12.784311483709523,
+          "prompt_tokens": 1870,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}
