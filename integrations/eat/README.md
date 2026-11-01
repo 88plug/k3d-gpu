@@ -71,6 +71,7 @@ that off the host.
 | `agentic-config.cfg` | EAT's own component toggles: gateway, ingress, Redis, pgvector, agent sandbox on; Kubespray, observability, models, KubeRay, CPU balloons off; `release-1.1.0`'s guardrail, vLLM Semantic Router, OpenShell, Kata, Ceph and rack-scale mode written out `off` |
 | `vllm-values.yaml` | k3d-gpu values merged over EAT's `vllm/xeon-values.yaml` (memory limit, P-core balloon, the `v0.28.0` image by digest) |
 | `gateway-charts.py` | writes pinned copies of EAT's GenAI Gateway chart directories; `brownfield.sh` passes them to `deploy-genai-gateway.yml` |
+| `guard-values.py` | with `deploy_guardrails=on`, puts the guard's `vllm/vllm-openai-cpu` image at `vllm-values.yaml`'s digest in a copy of EAT's charts; `brownfield.sh` passes that copy to `deploy-guardrails.yml` |
 | `gateway-values.yaml` | the gateway chart's pins: postgresql and redis chart versions, LiteLLM, PostgreSQL, Redis and init images by digest |
 | `gateway-trace-values.yaml` | the Langfuse trace stack's pins: Langfuse web and worker, PostgreSQL, Valkey, ClickHouse, ZooKeeper, MinIO by digest |
 | `eat-check.sh` | the end-state check below |
@@ -276,6 +277,17 @@ except where an item says otherwise, and item 11 is new there. In
     `eat-up.sh` stops before touching the cluster when the config gives
     `deploy_guardrails` no value (a config written for `release-1.0.3-hotfix`
     has none) and asks for `off` or `on`.
+    With `on`, the guard's image is pinned too. `deploy-guardrails.yml` installs
+    EAT's `vllm` chart with `guardrail-values.yaml` (lines 115 and 133-135), which
+    names `vllm/vllm-openai-cpu:v0.28.0` by tag only. Before anything deploys,
+    `brownfield.sh` copies EAT's `core/helm-charts` to `~/k3d-gpu-guard-charts`,
+    and `guard-values.py` sets that copy's guard tag to the digest `vllm-values.yaml`
+    pins for the same image. That playbook alone gets the copy, as the extra var
+    `remote_helm_charts_base` (nothing else in it reads that variable). The deploy
+    stops if EAT's guard names another repository or tag, or if `EAT_VLLM_VALUES`
+    has no digest. Rendered with Helm v4.1.1 on 2026-10-29 (`helm template` on
+    `0c726f5`'s `vllm` chart, the playbook's values), the guard's manifests differ
+    from EAT's only in the `image:` line. The guard itself has not run here.
 12. **Release-1.1.0 settings that collide with a k3d-gpu cluster.** `eat-up.sh`
     stops before touching the cluster, reading each key as `read_config_file`
     does, on `compute_platform=xpu` (fresh-install.sh:219 applies
@@ -307,7 +319,7 @@ Pinned here (checked 2026-10-29):
 | EAT | `release-1.1.0`, commit `0c726f576595971c53cc45b94e08ba969beb4a4a`; `eat-up.sh` refuses any other HEAD | `eat-up.sh`; the latest EAT release ([releases](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0), published 2026-10-22) |
 | bastion base | `ubuntu:24.04` by digest | `bastion.Dockerfile` |
 | Helm in the bastion | v3.14.0 by sha256, the version `setup-bastion.yml` asks for | `bastion.Dockerfile` |
-| vLLM CPU | `vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6...df9647`, the tag `release-1.1.0`'s `xeon-values.yaml` names (line 34) | `vllm-values.yaml` |
+| vLLM CPU | `vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6...df9647`, the tag `release-1.1.0`'s `xeon-values.yaml` names (line 34); with `deploy_guardrails=on` the guard's image too (`guardrail-values.yaml`, line 30) | `vllm-values.yaml` |
 | GenAI Gateway | postgresql 18.12.4 and redis 28.3.1 charts; 11 images by digest (below) | `gateway-values.yaml`, `gateway-trace-values.yaml` |
 
 EAT itself pins ingress-nginx 4.12.2 (`ingress_controller` in
