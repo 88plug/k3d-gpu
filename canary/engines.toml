@@ -1,0 +1,257 @@
+# The engines the canary checks (.github/workflows/canary.yml, canary/README.md).
+#
+# Each [[engine]] names where its image is pinned in the tree, never the pin itself,
+# so a bump (bot or human) moves the canary with it. Fields:
+#   id            the engine id canary-result.json and `engines=` use
+#   kind          runtime: serve one real and one streamed completion (canary/run.sh), after
+#                          the surface check when it has a `surface`
+#                 surface: check the flags, env names and derived constants (canary/surface.py)
+#                 node:    build the node image and start a cluster on it (canary/node.sh)
+#   family        the canary/flags.sh engine family whose names apply to it
+#   informational a runtime engine whose result never fails the report (an EAT pin)
+#   locator       {file, regex}: the regex matches exactly one image reference in file,
+#                 as a named group `ref` (name@sha256 or name:tag@sha256), or as groups
+#                 `tag` and `digest` with a fixed `name`
+#   model, revision, files
+#                 the Hugging Face repo, its 40-hex commit and the files a runtime engine
+#                 serves (fetched at that commit, cached by actions/cache)
+#   args, env     the engine's arguments and environment, as the launcher (or the fit,
+#                 for vLLM on the CPU) sets them for this model; {name} is the served
+#                 model name, {mount} the model's path in the container, {model} the
+#                 repo id, {threads} the runner's CPU count
+#   mount         where the model directory is mounted (read-only); with `writable`, a copy
+#                 of it is, inside a writable directory mounted there
+#   prepare, prepare_env
+#                 a run before the server's, on the same mounts (OVMS: --pull writes graph.pbtxt)
+#   cap_add, shm_size
+#                 what the launcher's pod gets (IPC_LOCK for mlock, the shm emptyDir)
+#   api, port     the OpenAI API root and the container port
+#   golden        canary/goldens/<id>.json: prompt, the hard regex and the exact text
+#   version_probe how the engine reports its version: {path, key, regex} (a server
+#                 endpoint), {args[, entrypoint], regex} (a command in the image) or
+#                 {package} (the installed package); `tag` reads the expected version
+#                 from the pinned tag (a pin without a tag is not compared)
+#   surface       {driver, ...}: how canary/surface.py reads the image's flags (see there)
+#   flags_source  the canary/flags.sh sources (of `family`) whose names this image must accept
+#   derived       constants elsewhere in the tree that must equal a fact of the image
+#                 ({file, regex with group v, of}; `of` names the image fact: package,
+#                 deb, firmware)
+#   isa_signal    runtime: a log regex that, on a runner without avx512f, makes the
+#                 verdict isa-skip instead of fail (the image cannot run on this ISA)
+#   paths         node: files and directories whose change selects it
+
+[defaults]
+ready_timeout = 600        # seconds the server gets to list its model at {api}/models
+size_factor = 3.5          # pulled and unpacked bytes per compressed byte (too-big check)
+name = "canary"            # served model name
+
+# ---- runtime ---------------------------------------------------------------------
+
+[[engine]]
+id = "vllm-cpu"
+kind = "runtime"
+family = "vllm"
+locator = { file = "scripts/k3d-gpu", regex = 'AMX_TEST_IMAGE="\$\{K3D_GPU_AMX_TEST_IMAGE:-(?P<ref>vllm/vllm-openai-cpu(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+model = "Qwen/Qwen3-0.6B"
+revision = "c1899de289a04d12100db370d81485cdf75e47ca"
+files = ["config.json", "generation_config.json", "merges.txt", "model.safetensors", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
+mount = "/models/model"
+# vLLM on the CPU as the fit sizes it (console/fit.py _flags): --max-model-len,
+# --max-num-seqs and VLLM_CPU_KVCACHE_SPACE (GiB).
+args = ["{mount}", "--served-model-name={name}", "--port=8000", "--dtype=bfloat16", "--max-model-len=2048", "--max-num-seqs=1"]
+env = ["VLLM_CPU_KVCACHE_SPACE=1"]
+shm_size = "2g"            # the pod's shm emptyDir (vllm_manifest): worker IPC
+api = "/v1"
+port = 8000
+golden = "canary/goldens/vllm-cpu.json"
+version_probe = { path = "/version", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
+surface = { driver = "vllm" }
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide", "console/model_opt.py:eat_patch"]
+isa_signal = 'Illegal instruction|Failed to import from vllm\._C_AVX2'
+
+[[engine]]
+id = "ovms-cpu"
+kind = "runtime"
+family = "ovms"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_OVMS_IMAGE="(?P<ref>openvino/model_server(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+model = "OpenVINO/Qwen3-0.6B-int8-ov"
+revision = "ac8e917fb8350f528ada41b02c60ea3a2853955f"
+files = ["added_tokens.json", "config.json", "generation_config.json", "merges.txt", "openvino_detokenizer.bin", "openvino_detokenizer.xml", "openvino_model.bin", "openvino_model.xml", "openvino_tokenizer.bin", "openvino_tokenizer.xml", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
+# agent_manifest's pull init container and server, on the CPU plugin. The model is
+# already at {mount} (pinned revision), so --pull only writes graph.pbtxt; HF_ENDPOINT
+# points nowhere so it can never fetch another revision.
+mount = "/models/{model}"
+writable = "/models"
+prepare = ["--pull", "--source_model={model}", "--model_repository_path=/models", "--model_name={name}", "--task=text_generation", "--target_device=CPU"]
+prepare_env = ["HF_ENDPOINT=http://127.0.0.1:9"]
+args = ["--rest_port=8000", "--model_path={mount}", "--model_name={name}", "--cache_dir=/models/.ov_cache", "--log_level=INFO"]
+api = "/v3"
+port = 8000
+golden = "canary/goldens/ovms-cpu.json"
+version_probe = { path = "/v2", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^(?P<v>\d+\.\d+\.\d+)' }
+flags_source = ["scripts/k3d-gpu:agent_manifest", "scripts/k3d-gpu:agent_ovms_addon_manifest", "console/fit.py:_flags", "console/model_opt.py:spec_decide"]
+
+[[engine]]
+id = "llama-cpu"
+kind = "runtime"
+family = "llama.cpp"
+locator = { file = "scripts/k3d-gpu", regex = 'LLAMA_CPU_IMAGE="\$\{K3D_GPU_LLAMA_CPU_IMAGE:-(?P<ref>ghcr\.io/ggml-org/llama\.cpp(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+model = "ggml-org/Qwen3-0.6B-GGUF"
+revision = "13ac06624948e4d8589cb4b6f90100837342fcb8"
+files = ["Qwen3-0.6B-Q8_0.gguf"]
+mount = "/models"
+# llamacpp_manifest on a CPU placement: the fit's -c/-np/-ngl, threads, mmap+mlock
+# (with IPC_LOCK, as the pod gets), thinking off.
+args = ["--model", "{mount}/Qwen3-0.6B-Q8_0.gguf", "--alias", "{name}", "--host", "0.0.0.0", "--port", "8000", "--jinja", "--reasoning", "off", "-c", "2048", "-np", "1", "-ngl", "0", "--threads", "{threads}", "--threads-batch", "{threads}", "--load-mode", "mmap+mlock"]
+cap_add = ["IPC_LOCK"]
+api = "/v1"
+port = 8000
+golden = "canary/goldens/llama-cpu.json"
+version_probe = { path = "/props", key = "build_info", regex = '^b(?P<v>\d+)', tag = 'b(?P<v>\d+)$' }
+surface = { driver = "llama-server" }
+flags_source = ["scripts/k3d-gpu:llamacpp_manifest", "console/fit.py:_flags", "console/fit.py:fit_groups", "console/model_opt.py:spec_decide"]
+
+[[engine]]
+id = "eat-vllm-cpu"
+kind = "runtime"
+family = "vllm"
+informational = true
+locator = { file = "integrations/eat/vllm-values.yaml", name = "vllm/vllm-openai-cpu", regex = 'repository: vllm/vllm-openai-cpu\n  tag: "(?P<tag>[^"@]+)@(?P<digest>sha256:[0-9a-f]{64})"' }
+model = "Qwen/Qwen3-0.6B"
+revision = "c1899de289a04d12100db370d81485cdf75e47ca"
+files = ["config.json", "generation_config.json", "merges.txt", "model.safetensors", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
+mount = "/models/model"
+args = ["{mount}", "--served-model-name={name}", "--port=8000", "--dtype=bfloat16", "--max-model-len=2048", "--max-num-seqs=1"]
+env = ["VLLM_CPU_KVCACHE_SPACE=1"]
+shm_size = "2g"            # the pod's shm emptyDir (vllm_manifest): worker IPC
+api = "/v1"
+port = 8000
+golden = "canary/goldens/eat-vllm-cpu.json"
+version_probe = { path = "/version", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
+surface = { driver = "vllm" }
+# model_opt.py's eat_patch adds these to EAT's vLLM modelConfigs entry.
+flags_source = ["console/model_opt.py:eat_patch", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+isa_signal = 'Illegal instruction|Failed to import from vllm\._C_AVX2'
+
+# ---- node ------------------------------------------------------------------------
+
+[[engine]]
+id = "node"
+kind = "node"
+locator = { file = "Dockerfile", name = "rancher/k3s", regex = 'ARG K3S_TAG="(?P<tag>[^"]+)"\nARG K3S_DIGEST="(?P<digest>sha256:[0-9a-f]{64})"' }
+# Besides its k3s pin, the node is selected when these change.
+paths = ["Dockerfile", "share/", "packaging/install.sh"]
+
+# ---- surface ---------------------------------------------------------------------
+
+[[engine]]
+id = "vllm-xpu"
+kind = "surface"
+family = "vllm"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vllm/vllm-openai-xpu(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+version_probe = { package = "vllm", tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
+surface = { driver = "vllm" }
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+derived = [
+    { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"GPU": "(?P<v>[0-9.]+)"', of = "package" },
+    { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION\.get\(device, "(?P<v>[0-9.]+)"\)', of = "package" },
+    { file = "console/model_opt.py", regex = '\(o\.get\("vllm_version"\) or "(?P<v>[0-9.]+)"\)', of = "package" },
+    { file = "scripts/k3d-gpu", regex = 'device=\$\{AGENT_SEL%% \*\} vver=(?P<v>[0-9.]+) ', of = "package" },
+]
+
+[[engine]]
+id = "llm-scaler"
+kind = "surface"
+family = "vllm"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>intel/llm-scaler-vllm(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+version_probe = { package = "vllm" }
+surface = { driver = "vllm" }
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+derived = [
+    { file = "console/plan.py", regex = '"(?P<v>[0-9.]+)" if backend == "llm-scaler"', of = "package" },
+    { file = "scripts/k3d-gpu", regex = 'llm-scaler\) vver=(?P<v>[0-9.]+) ;;', of = "package" },
+]
+
+[[engine]]
+id = "gaudi-vllm"
+kind = "surface"
+family = "vllm"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vault\.habana\.ai/gaudi-docker/[^@":]+(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+version_probe = { package = "vllm" }
+surface = { driver = "vllm" }
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_HPU_ENV", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+derived = [
+    { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"HPU": "(?P<v>[0-9.]+)"', of = "package" },
+    { file = "scripts/k3d-gpu", regex = '\[ -z "\$\{AGENT_HPU:-\}" \] \|\| vver=(?P<v>[0-9.]+)', of = "package" },
+]
+
+[[engine]]
+id = "llama-sycl"
+kind = "surface"
+family = "llama.cpp"
+locator = { file = "scripts/k3d-gpu", regex = 'LLAMA_SYCL_IMAGE="\$\{K3D_GPU_LLAMA_SYCL_IMAGE:-(?P<ref>ghcr\.io/ggml-org/llama\.cpp(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+version_probe = { args = ["--version"], regex = 'build (?P<v>\d+)', tag = 'b(?P<v>\d+)$' }
+surface = { driver = "llama-server" }
+flags_source = ["scripts/k3d-gpu:llamacpp_manifest", "console/fit.py:_flags", "console/fit.py:fit_groups", "console/model_opt.py:spec_decide"]
+
+[[engine]]
+id = "llama-vulkan"
+kind = "surface"
+family = "llama.cpp"
+locator = { file = "scripts/k3d-gpu", regex = 'LLAMA_VULKAN_IMAGE="\$\{K3D_GPU_LLAMA_VULKAN_IMAGE:-(?P<ref>ghcr\.io/ggml-org/llama\.cpp(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+version_probe = { args = ["--version"], regex = 'build (?P<v>\d+)', tag = 'b(?P<v>\d+)$' }
+surface = { driver = "llama-server" }
+flags_source = ["scripts/k3d-gpu:llamacpp_manifest", "console/fit.py:_flags", "console/fit.py:fit_groups", "console/model_opt.py:spec_decide"]
+
+[[engine]]
+id = "llama-full"
+kind = "surface"
+family = "llama-convert"
+locator = { file = "scripts/k3d-gpu", regex = 'LLAMA_FULL_IMAGE="\$\{K3D_GPU_LLAMA_FULL_IMAGE:-(?P<ref>ghcr\.io/ggml-org/llama\.cpp(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+version_probe = { entrypoint = "/app/llama-cli", args = ["--version"], regex = 'build (?P<v>\d+)', tag = 'b(?P<v>\d+)$' }
+surface = { driver = "llama-convert" }
+flags_source = ["scripts/k3d-gpu:gguf_convert", "scripts/k3d-gpu:llamacpp_manifest", "console/fit.py:convert_plan"]
+
+[[engine]]
+id = "dlstreamer"
+kind = "surface"
+family = "dlstreamer"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_VIDEO_IMAGE="\$\{K3D_GPU_AGENT_VIDEO_IMAGE:-(?P<ref>intel/dlstreamer(?::[^@"}]+)?@sha256:[0-9a-f]{64})\}"' }
+version_probe = { entrypoint = "gst-inspect-1.0", args = ["--version"], regex = 'GStreamer (?P<v>[0-9.]+)' }
+# va* elements register only on a VA device (GStreamer's va plugin enumerates
+# /dev/dri), which a hosted runner has none of: they are listed, not checked.
+surface = { driver = "gst", device_only = ["va"] }
+flags_source = ["scripts/k3d-gpu:agent_video_script"]
+
+[[engine]]
+id = "sglang-xeon"
+kind = "surface"
+family = "sglang"
+locator = { file = "console/moe_predict.py", regex = '"images": \("(?P<ref>lmsysorg/sglang(?::[^@"]+)?@sha256:[0-9a-f]{64})",\)' }
+version_probe = { package = "sglang", tag = '^v(?P<v>\d+\.\d+\.\d+)' }
+surface = { driver = "sglang" }
+flags_source = ["bench/h54/h54.py:sglang_args"]
+
+[[engine]]
+id = "npu-umd"
+kind = "surface"
+family = "ovms"
+locator = { file = "scripts/k3d-gpu", regex = 'NPU_UMD_IMAGE="(?P<ref>openvino/model_server(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+version_probe = { args = ["--version"], regex = 'OpenVINO Model Server (?P<v>\d+\.\d+\.\d+)', tag = '^(?P<v>\d+\.\d+\.\d+)' }
+# The NPU user space k3d-gpu checks host firmware against (npu_doctor): the driver
+# package's version and the build date inside its firmware.
+surface = { driver = "ovms", deb = "intel-level-zero-npu", firmware = "/lib/firmware/updates/intel/vpu/vpu_37xx_v1.bin" }
+flags_source = ["scripts/k3d-gpu:agent_manifest", "scripts/k3d-gpu:agent_ovms_addon_manifest", "console/fit.py:_flags", "console/model_opt.py:spec_decide"]
+derived = [
+    { file = "scripts/k3d-gpu", regex = 'NPU_UMD_DRIVER="v(?P<v>[0-9.]+)"', of = "deb" },
+    { file = "scripts/k3d-gpu", regex = 'NPU_UMD_FW_DATE="(?P<v>[0-9]{8})"', of = "firmware" },
+]
+
+[[engine]]
+id = "ovms"
+kind = "surface"
+family = "ovms"
+locator = { file = "scripts/k3d-gpu", regex = 'AGENT_OVMS_IMAGE="(?P<ref>openvino/model_server(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
+version_probe = { args = ["--version"], regex = 'OpenVINO Model Server (?P<v>\d+\.\d+\.\d+)', tag = '^(?P<v>\d+\.\d+\.\d+)' }
+surface = { driver = "ovms" }
+flags_source = ["scripts/k3d-gpu:agent_manifest", "scripts/k3d-gpu:agent_ovms_addon_manifest", "console/fit.py:_flags", "console/model_opt.py:spec_decide"]

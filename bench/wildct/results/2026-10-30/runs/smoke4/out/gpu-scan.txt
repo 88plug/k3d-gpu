@@ -1,0 +1,34 @@
+kube-system/coredns-577d995dff-76hth hostPath 
+kube-system/coredns-577d995dff-76hth hostPath 
+kube-system/coredns-577d995dff-76hth hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/helm-install-gateway-api-crd-v8zd7 hostPath 
+kube-system/local-path-provisioner-6858d854cf-27b87 hostPath 
+kube-system/local-path-provisioner-6858d854cf-27b87 hostPath 
+kube-system/metrics-server-778c4649b4-v42kk hostPath 
+kube-system/metrics-server-778c4649b4-v42kk hostPath 
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /var/lib/nri-resource-policy
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /sys
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /proc
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /var/run/nri-resource-policy
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /var/run/nri
+kube-system/nri-resource-policy-balloons-cx8wm hostPath /var/lib/kubelet/pod-resources
+kube-system/nri-resource-policy-balloons-cx8wm hostPath 
+node-feature-discovery/nfd-gc-8d4595cbc-gwzl9 hostPath 
+node-feature-discovery/nfd-master-74b44b767d-xr4mp hostPath 
+node-feature-discovery/nfd-master-74b44b767d-xr4mp hostPath 
+node-feature-discovery/nfd-worker-t8wcd hostPath /k3d-gpu/host/boot
+node-feature-discovery/nfd-worker-t8wcd hostPath /proc/swaps
+node-feature-discovery/nfd-worker-t8wcd hostPath /k3d-gpu/host/etc
+node-feature-discovery/nfd-worker-t8wcd hostPath /sys
+node-feature-discovery/nfd-worker-t8wcd hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-t8wcd hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-t8wcd hostPath /etc/kubernetes/node-feature-discovery/features.d/
+node-feature-discovery/nfd-worker-t8wcd hostPath 
+node-feature-discovery/nfd-worker-t8wcd hostPath 
+GPU-SCAN clean

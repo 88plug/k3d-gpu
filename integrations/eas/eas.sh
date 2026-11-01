@@ -7,7 +7,8 @@
 #       1. clone EAS and check out EAS_SHA (a clean tree: earlier overlay hunks are dropped)
 #       2. the patch overlay: overlay.py --apply, decisions in overlay.txt
 #       3. the layer manifest's revs as commit SHAs (repos.<layer>.yaml from eas-config.py)
-#       4. es_auto_installer.sh init <layer> --env k3d-gpu
+#       4. es_auto_installer.sh init <layer> --env k3d-gpu; EI's model deploy must take the
+#          LiteLLM master key from the Secret read the overrides empty (key_argv_guard)
 #       5. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/:
 #          keys merge; a model's env merges and its args_append follows its catalog args
 #       6. es_auto_installer.sh install <layer> --env k3d-gpu -- -e @k3d-gpu-images.yaml
@@ -140,6 +141,21 @@ env_edits() {
 
 installer() { (cd "${CHECKOUT}" && ./es_auto_installer.sh "$@"); }
 
+# key_argv_guard: EI's model deploy hands model-manager the LiteLLM master key as
+# MM_LITELLM_MASTER_KEY in its ansible environment:, which ansible writes into the deploy's
+# /bin/sh -c command line. k3d-gpu-overrides.yaml empties the Secret read that value comes
+# from (_deploy_litellm_secret, eas-config.py argv_master_key); an EI that takes the key
+# from anything else would put it back on that command line, so it stops the install.
+key_argv_guard() {
+    local f="${CHECKOUT}/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml"
+    [ -d "${CHECKOUT}/ext/enterprise.ai-inference" ] || return 0
+    [ -f "${f}" ] || err "EI has no roles/llm_services/tasks/deploy_models.yaml: check how it now hands model-manager the LiteLLM master key (eas-config.py argv_master_key)"
+    awk '/^[[:space:]]*MM_LITELLM_MASTER_KEY:/ { any = 1; if ($0 !~ /_deploy_litellm_secret/) bad = 1 }
+         /^[[:space:]]*register:[[:space:]]*_deploy_litellm_secret[[:space:]]*$/ { reg = 1 }
+         END { exit (bad || (any && !reg)) ? 1 : 0 }' "${f}" \
+        || err "EI's deploy_models.yaml no longer takes MM_LITELLM_MASTER_KEY from _deploy_litellm_secret alone: k3d-gpu-overrides.yaml would not keep the master key off the deploy's command line (eas-config.py argv_master_key)"
+}
+
 cmd_up() {
     local layer=${1:-}
     [ -n "${layer}" ] || err "usage: eas.sh up <layer> [-- <ansible-playbook args>]"
@@ -156,6 +172,7 @@ cmd_up() {
     else
         installer init "${layer}" --env "${ENV_NAME}"
     fi
+    key_argv_guard
     env_edits
     installer install "${layer}" --env "${ENV_NAME}" -- \
         -e "@${EAS_STATE}/k3d-gpu-images.yaml" -e "@${EAS_STATE}/k3d-gpu-overrides.yaml" "$@"

@@ -49,7 +49,11 @@ stamp "start ${MODE} (${left} s of the hold left)"
 M=${OUT}/deploy.yaml
 case ${DEPLOY} in
     k3d-gpu)
-        K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=$(field model) K3D_GPU_AGENT_MODEL_NAME=${MODEL} K3D_GPU_AGENT_DRAFT=off \
+        # K3D_GPU_CLUSTER: `agent manifest` reads the node's hybrid label and allocatable CPU
+        # through context k3d-${K3D_GPU_CLUSTER}; unset, that is k3d-gpu, which the hold's
+        # kubeconfig does not hold, and Od renders with no P-core label and 1 CPU (H57d
+        # amendment R2).
+        K3D_GPU_CLUSTER=${CLUSTER} K3D_GPU_AGENT_DEVICE=CPU K3D_GPU_AGENT_MODEL=$(field model) K3D_GPU_AGENT_MODEL_NAME=${MODEL} K3D_GPU_AGENT_DRAFT=off \
             K3D_GPU_AUTOQUANT=off "${REPO}/scripts/k3d-gpu" agent manifest > "${OUT}/agent.yaml" 2> "${OUT}/agent.err" \
             && ${PY} "${REPO}/bench/apb/stage.py" ovms "${OUT}/agent.yaml" "${OUT}/staged.yaml" \
             && ${PY} "${D}/h57d.py" od-ro "${OUT}/staged.yaml" "${M}" ;;

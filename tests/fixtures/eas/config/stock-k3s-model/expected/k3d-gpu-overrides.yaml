@@ -7,5 +7,6 @@ nfd_enabled: true
 kubernetes_cluster_cidr: "10.42.0.0/16"
 kubernetes_service_cidr: "10.43.0.0/16"
 kata_containers_enabled: false
+_deploy_litellm_secret: ""
 kubernetes_accelerator: "cpu"
 llm_services_autodeploy_models: ["qwen3-coder-30b"]
