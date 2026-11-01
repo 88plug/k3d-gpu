@@ -539,8 +539,10 @@ hardware, a recorded run.
   the CPU ISA labels their first recorded live node; both detection rows are REFUTED
   (H52, H52b), and so is the zero-touch row (H58). Two of its rows are SUPPORTED: the
   CPU engine choice [ledger:H59] and DRAM-resident serving of Qwen3.8-Flash-Next
-  [ledger:H60]. Next: the engine-choice replications on the i9-13900T (H59d) and the
-  i7-13700 (H59w), both PENDING, and the B70 rows that `/dev/dri/by-path` blocked (H53).
+  [ledger:H60]. The engine-choice replication on the i9-13900T (H59d) is INCONCLUSIVE:
+  llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds.
+  Next: the replication on the i7-13700 (H59w), PENDING, and the B70 rows that
+  `/dev/dri/by-path` blocked (H53).
 - **EAT 1.1.0 run.** `eat-up.sh` deploys `release-1.1.0` since 2026-10-29, with the
   guardrail off and the vLLM CPU image re-pinned to `v0.28.0`
   ([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). The recorded
