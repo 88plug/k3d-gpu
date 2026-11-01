@@ -1,0 +1,1 @@
+{"phase": "n1", "try": 1, "t0": 1793541875.684457448, "t1": 1793541920.167516396, "w0": 1793541798.948961172, "w1": 1793541858.995622271, "check": {"void": false, "reason": "non-campaign CPU idle window 2.49 CPU-s/s; phase 4.61"}}
