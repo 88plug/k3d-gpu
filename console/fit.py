@@ -102,6 +102,28 @@ LLAMA_UBATCH = 512
 # those, so four keep the latest request's set. The host prompt cache (--cache-ram, default
 # 8192 MiB) is turned off with --cache-ram 0: a slot's KV stays in its own cache.
 LLAMA_CTX_CHECKPOINTS = 4
+# Draft tokens per step (llama.cpp v0.8.0 common/common.h:331 n_max = 3): a drafting slot's
+# verify batch asks logits for 1 + 3 tokens (tools/server/server-context.cpp:48-67).
+LLAMA_DRAFT_MAX = 3
+# ggml type ids (ggml/include/ggml.h:390-432, v0.8.0) of a GGUF tensor header.
+GGML_TYPES = {0: "F32", 1: "F16", 2: "Q4_0", 3: "Q4_1", 6: "Q5_0", 7: "Q5_1", 8: "Q8_0", 9: "Q8_1", 10: "Q2_K",
+              11: "Q3_K", 12: "Q4_K", 13: "Q5_K", 14: "Q6_K", 15: "Q8_K", 16: "IQ2_XXS", 17: "IQ2_XS",
+              18: "IQ3_XXS", 19: "IQ1_S", 20: "IQ4_NL", 21: "IQ3_S", 22: "IQ2_S", 23: "IQ4_XS", 24: "I8", 25: "I16",
+              26: "I32", 27: "I64", 28: "F64", 29: "IQ1_M", 30: "BF16", 34: "TQ1_0", 35: "TQ2_0", 39: "MXFP4",
+              40: "NVFP4", 41: "Q1_0", 42: "Q2_0"}
+# Weights the llama.cpp v0.8.0 CPU backend copies out of the mapped GGUF into its extra buffer
+# types (anonymous memory), x86 only. The extra types come first in the CPU's buffer list
+# (src/llama-model.cpp:1184-1196), AMX before CPU_REPACK (ggml/src/ggml-cpu/ggml-cpu.cpp:42-66).
+# AMX: 2-D MUL_MAT weights with ne[1] % 32 and ne[0] a multiple of the type's block
+# (ggml/src/ggml-cpu/amx/amx.cpp:145-187). CPU_REPACK: 2-D and 3-D (MUL_MAT_ID: the experts)
+# weights with ne[1] % 8 (ggml/src/ggml-cpu/repack.cpp:4979-5110, :5196-5222).
+LLAMA_AMX_TYPES = {"Q4_0": 32, "Q4_1": 32, "Q8_0": 32, "Q4_K": 256, "Q5_K": 256, "Q6_K": 256, "IQ4_XS": 256, "F16": 16}
+# An AMX buffer holds the packed size (ggml/src/ggml-cpu/amx/mmq.cpp get_row_size): per block a
+# 4 B compensation term for Q8_0 (34 -> 38 B), 4 B more for Q4_K and Q5_K (144 -> 148, 176 -> 180)
+# and 2 B for IQ4_XS (136 -> 138); every other type at its file size. CPU_REPACK allocates
+# ggml_nbytes (repack.cpp get_alloc_size).
+LLAMA_AMX_PACKED = {"Q8_0": 38 / 34, "Q4_K": 148 / 144, "Q5_K": 180 / 176, "IQ4_XS": 138 / 136}
+LLAMA_REPACK_TYPES = {"Q4_0": "avx2", "Q4_K": "avx2", "IQ4_NL": "avx2", "MXFP4": "avx2", "Q2_K": "avx512"}
 # Fixed runtime per GPU process (device context, allocator pools, collective
 # buffers) and per pod on the host (Python, torch or the server binary). Estimates.
 GPU_RUNTIME = 1 * GIB
@@ -555,16 +577,32 @@ def gguf_header(read, size):
     for _ in range(n_t):
         name = string()
         (nd,) = struct.unpack("<I", b.take(4))
-        b.take(8 * nd)
-        _t, off = struct.unpack("<IQ", b.take(12))
-        infos.append((name, off))
+        if nd > 8:
+            raise ValueError("corrupt GGUF header: a %d-dimension tensor" % nd)
+        dims = struct.unpack("<%dQ" % nd, b.take(8 * nd))
+        t, off = struct.unpack("<IQ", b.take(12))
+        infos.append((name, off, t, dims))
     data = (b.pos + align - 1) // align * align
     infos.sort(key=lambda x: x[1])
-    out = []
-    for i, (name, off) in enumerate(infos):
+    out, mm = [], {}
+    for i, (name, off, t, dims) in enumerate(infos):
         end = infos[i + 1][1] if i + 1 < len(infos) else size - data
         out.append((name, end - off))
-    return {"tensors": out, "data_start": data, "kv": kv}
+        if len(dims) in (2, 3):
+            key = (tensor_class(name), GGML_TYPES.get(t, "type%d" % t), len(dims), _align(dims[1], (32, 8)),
+                   _align(dims[0], (256, 32, 16)))
+            mm[key] = mm.get(key, 0) + end - off
+    return {"tensors": out, "data_start": data, "kv": kv, "mm": _mm_list(mm)}
+
+
+def _align(n, sizes):
+    """The largest of sizes that divides n, else 1."""
+    return next((s for s in sizes if n % s == 0), 1)
+
+
+def _mm_list(mm):
+    """[[class, ggml type, dimensions, ne[1] alignment, ne[0] alignment, bytes]], sorted."""
+    return sorted([list(k) + [v] for k, v in mm.items()])
 
 
 def _file_reader(path):
@@ -640,11 +678,13 @@ def gguf_group_weights(files, opener, source):
     """weights/v1 of one GGUF model: every shard's header read and its tensors summed.
     opener(name) -> (read, size). A gguf-split model must list split.count shards and
     split.tensors.count tensors in total, or this raises."""
-    tensors, flist, want, want_t = [], [], None, None
+    tensors, flist, want, want_t, mm = [], [], None, None, {}
     for n in files:
         read, size = opener(n)
         h = gguf_header(read, size)
         tensors += h["tensors"]
+        for *k, v in h["mm"]:
+            mm[tuple(k)] = mm.get(tuple(k), 0) + v
         flist.append({"name": n, "bytes": size})
         if "split.count" in h["kv"]:
             want = h["kv"]["split.count"]
@@ -655,6 +695,7 @@ def gguf_group_weights(files, opener, source):
         raise ValueError("%s: split.tensors.count %d but the shards hold %d tensors" % (source, want_t, len(tensors)))
     doc = weights_doc("gguf", flist, tensors, source)
     doc["tensor_count"] = len(tensors)
+    doc["gguf_mm"] = _mm_list(mm)
     return doc
 
 
@@ -900,8 +941,14 @@ def model_profile(cfg, weights, tokenizer_cfg=None):
         "layers": tc.get("num_hidden_layers"),
         "hidden": tc.get("hidden_size"),
         "heads": tc.get("num_attention_heads"),
+        "head_dim": max(tc.get("head_dim") or (tc.get("hidden_size") or 0) // max(tc.get("num_attention_heads") or 1, 1),
+                        tc.get("global_head_dim") or 0),
         "vocab": tc.get("vocab_size"),
         "intermediate": max(tc.get("intermediate_size") or 0, (tc.get("moe_intermediate_size") or 0) * max(k, 1)),
+        "ff": tc.get("intermediate_size") or 0, "ff_exp": tc.get("moe_intermediate_size") or 0,
+        # [[class, ggml type, dims, ne[1] alignment, ne[0] alignment, bytes]] of a GGUF's 2-D and
+        # 3-D tensors (gguf_header); None when the weights document predates it or is not a GGUF.
+        "gguf_mm": weights.get("gguf_mm"),
         "max_ctx": cap, "ctx_why": capwhy,
         "experts": ne, "experts_per_tok": k, "moe": bool(ne and b["experts"]),
         # MTP (nextn) blocks a GGUF holds after its trunk (llama.cpp's converter keeps them all
@@ -1202,6 +1249,96 @@ def _llama_card_lines(use, ts, wl, kl, ov, m):
     return lines
 
 
+# ---- llama.cpp in host RAM ------------------------------------------------------------------
+def llama_cpu_copies(m, cpu):
+    """(bytes, why): weights llama.cpp v0.8.0 copies out of the mapped GGUF into the CPU's
+    extra buffer types (LLAMA_AMX_TYPES, LLAMA_REPACK_TYPES) on this CPU: anonymous memory on
+    top of the mapping, whose pages --load-mode mmap+mlock keeps locked as well (_llama_cpu). The
+    lookup tables stay mapped (GET_ROWS); a tied output tensor is the token embedding loaded
+    again for MUL_MAT (TENSOR_DUPLICATED) and is copied when its type is."""
+    amx, has = cpu.get("amx"), {"avx2": cpu.get("avx2"), "avx512": cpu.get("avx512")}
+
+    def copied(t, nd, a1, a0):
+        """The factor of the file bytes a weight takes in an extra buffer, 0 when it stays mapped."""
+        if amx and nd == 2 and t in LLAMA_AMX_TYPES and a1 >= 32 and a0 >= LLAMA_AMX_TYPES[t]:
+            return LLAMA_AMX_PACKED.get(t, 1)
+        return 1 if t in LLAMA_REPACK_TYPES and has[LLAMA_REPACK_TYPES[t]] and a1 >= 8 else 0
+
+    mm = m.get("gguf_mm")
+    conv = m.get("gguf_conv")
+    if mm is None and conv:
+        # The agent's conversion writes the matmul weights as conv: of those types only F16 and
+        # Q8_0 are copied, by AMX and only in 2-D (an upper bound: their alignment is not read).
+        if not (amx and conv in LLAMA_AMX_TYPES):
+            return 0, "none: the conversion's %s weights stay mapped on this CPU" % conv
+        n = m["serve_bytes"] - m["lookup_bytes"] - m["bytes"]["experts"] + llama_output_copy(m)
+        return int(n * LLAMA_AMX_PACKED.get(conv, 1)), "the conversion's 2-D %s weights into AMX buffers, an upper bound" % conv
+    if mm is None:
+        if not (amx or has["avx2"]):
+            return 0, "none: neither AVX2 nor AMX"
+        n = m["serve_bytes"] - m["lookup_bytes"] + (llama_output_copy(m) if amx else 0)
+        n = int(n * max(LLAMA_AMX_PACKED.values())) if amx else n
+        return n, "every matmul weight, an upper bound: the weights document has no tensor types (fit.py fetch records them)"
+    n = int(sum(b * copied(t, nd, a1, a0) for c, t, nd, a1, a0, b in mm if c not in LOOKUP_CLASSES))
+    emb = [(t, nd, a1, a0) for c, t, nd, a1, a0, b in mm if c == "embed"]
+    if llama_output_copy(m) and emb and copied(*emb[0]):
+        n += int(llama_output_copy(m) * copied(*emb[0]))
+    kinds = sorted({t for c, t, nd, a1, a0, b in mm if c not in LOOKUP_CLASSES and copied(t, nd, a1, a0)})
+    return n, ("%s weights into %s" % ("/".join(kinds) or "no", "AMX and CPU_REPACK buffers" if amx else "CPU_REPACK buffers")
+               if n else "none on this CPU")
+
+
+def llama_act_bytes(m):
+    """Activation estimate of one llama.cpp context's reserved graph: one ubatch of float32
+    values, per token the residual, norm, attention input and output (4 x hidden), the query
+    and attention output (2 x heads x head_dim), the dense FFN (3 x ff) and the routed experts'
+    gate-up, activation, down and weighted outputs (k x (3 x ff_exp + 2 x hidden))."""
+    k = m["experts_per_tok"] if m["moe"] else 0
+    per_tok = 4 * m["hidden"] + 2 * m["heads"] * m["head_dim"] + 3 * m["ff"] + k * (3 * m["ff_exp"] + 2 * m["hidden"])
+    return LLAMA_UBATCH * 4 * per_tok
+
+
+def llama_mask_bytes(kv, ctx):
+    """The reserved graph's f16 KQ masks (flash attention, on for the CPU), one per cache:
+    n_kv x n_ubatch x 2 B (src/llama-graph.cpp:30-46), n_kv the cache's cells per stream,
+    GGML_PAD(n_ctx_seq, 256) for full attention (src/llama-context.cpp:390-405) and the SWA
+    cache's (swa_tokens) for sliding-window layers (src/llama-kv-cache.cpp:2795)."""
+    full = _pad(ctx, 256) * LLAMA_UBATCH * 2 if kv["full_layers"] else 0
+    return full + (swa_tokens(kv, ctx) * LLAMA_UBATCH * 2 if kv["swa_layers"] else 0)
+
+
+def llama_ctx_bytes(m, kv, ctx):
+    """One llama.cpp context's compute buffer at ctx tokens per slot: its masks and activations.
+    sched_reserve sizes it for the worst-case ubatch, min(n_ctx, n_ubatch) tokens over every
+    slot, against the full cache (src/llama-context.cpp:732-859)."""
+    return llama_mask_bytes(kv, ctx) + llama_act_bytes(m)
+
+
+def llama_out_bytes(m, drafting):
+    """Per slot: the logits llama-server's target context keeps, in its output buffer
+    (src/llama-context.cpp:2253-2276) and in the reserved graph, for 1 token, or 1 +
+    LLAMA_DRAFT_MAX with a drafter (the verify batch: tools/server/server-context.cpp:48-67)."""
+    return 2 * (1 + (LLAMA_DRAFT_MAX if drafting else 0)) * m["vocab"] * 4
+
+
+def draft_profile(cfg, weights, gguf_bytes, kv_bytes):
+    """The drafter llama-server loads with --spec-draft-model: its own GGUF (gguf_bytes, the
+    file the agent's conversion builds) loaded as the target is (common_base_params_to_speculative
+    copies the target's load mode, common/speculative.cpp:2631-2648), and a second context with the
+    target's n_ctx and slots (:2716-2727), its masks over the caches it attends and one logits
+    row per slot (n_outputs_max = n_parallel, :2665). A Gemma4Assistant drafter shares every KV
+    layer of the target's (src/llama-model.cpp:3276-3304) and writes no checkpoint state of its
+    own (src/llama-kv-cache.cpp:2051-2053). A drafter with a KV cache of its own is not sized."""
+    tc = text_config(cfg)
+    n = tc.get("num_hidden_layers") or 0
+    if (tc.get("num_kv_shared_layers") or 0) < n:
+        raise ValueError("drafter %s keeps a KV cache of its own (num_kv_shared_layers %s of %d layers): "
+                         "the fit sizes only drafters that share the target's"
+                         % (weights.get("source") or "?", tc.get("num_kv_shared_layers"), n))
+    return {"m": model_profile(cfg, weights), "kv": kv_profile(cfg, kv_bytes, "llama.cpp"), "bytes": int(gguf_bytes),
+            "source": weights.get("source") or "?", "layers": n}
+
+
 def ckpt_seq(kv, ctx):
     """Host bytes of one llama-server slot's context checkpoints at context ctx: kv["ckpts"]
     of them, each the slot's SWA cache (GGML_PAD(min(n_ctx_seq, n_swa + n_ubatch), 256)
@@ -1219,16 +1356,18 @@ def ctx_ladder(max_ctx, want=None):
     return out or [max_ctx]
 
 
-def size_kv(kv, budget, ladder, want_seqs, scale=1.0, relaxed=False, host_ckpt=False):
+def size_kv(kv, budget, ladder, want_seqs, scale=1.0, relaxed=False, host_ckpt=False, fixed=None, extra=0):
     """(ctx, seqs): the most context at which TARGET_SEQS (or want_seqs) whole sequences fit
     in budget, then as many sequences as fit at that context (capped at MAX_SEQS).
     relaxed: at the ladder's last rung one sequence is enough. host_ckpt: the budget also
-    holds each sequence's context checkpoints (KV in host RAM)."""
+    holds each sequence's context checkpoints (KV in host RAM). fixed(ctx): bytes the budget
+    holds first at that context; extra: more bytes per sequence."""
     need = want_seqs or TARGET_SEQS
     for ctx in ladder:
-        s = per_seq(kv, ctx, scale) + (ckpt_seq(kv, ctx) if host_ckpt else 0)
-        n = int(budget // s) if s else MAX_SEQS
-        if n >= need or (relaxed and ctx == ladder[-1] and n >= 1 and not want_seqs):
+        room = budget - (fixed(ctx) if fixed else 0)
+        s = per_seq(kv, ctx, scale) + (ckpt_seq(kv, ctx) if host_ckpt else 0) + extra
+        n = int(room // s) if s else MAX_SEQS
+        if room > 0 and (n >= need or (relaxed and ctx == ladder[-1] and n >= 1 and not want_seqs)):
             return ctx, min(want_seqs or n, MAX_SEQS)
     return None, 0
 
@@ -1239,9 +1378,10 @@ def _tp_sizes(m, n):
 
 def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtype="auto", overhead=None,
         host_reserve_pct=HOST_RESERVE_PCT, host_reserve_floor=HOST_RESERVE_FLOOR, name=None, tokenizer_cfg=None,
-        device=None):
+        device=None, draft=None):
     """The fit/v1 document. Pure: reads its arguments only. device "cpu" or "gpu" limits
-    the placements to that side (the device the cluster already chose)."""
+    the placements to that side (the device the cluster already chose). draft: (config,
+    weights/v1, GGUF bytes) of the drafter llama-server loads with --spec-draft-model."""
     m = model_profile(cfg, weights, tokenizer_cfg)
     bad = None
     if m["serve_bytes"] <= 0:
@@ -1299,10 +1439,16 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
         if not eng:
             continue
         ms[eng] = llama_profile(m) if eng == "llama.cpp" else m
-        if ms[eng] is not m:
+        converted = eng == "llama.cpp" and m["format"] != "gguf"
+        if converted and m["mtp_blocks"]:
             ex.append("  the GGUF conversion keeps the MTP head (convert_hf_to_gguf.py without --no-mtp): "
                       "%d block(s) after the trunk, %s more to serve, %s"
                       % (ms[eng]["nextn"], g1(m["bytes"]["mtp"]), g1(ms[eng]["serve_bytes"])))
+        if converted:
+            args = convert_plan(cfg, m["format"])["args"] or []
+            # The GGUF type of the converted weights (--fp8-as-q8: Q8_0), for llama_cpu_copies.
+            ms[eng] = dict(ms[eng], gguf_conv="Q8_0" if "--fp8-as-q8" in args else
+                           "F16" if args[1:2] == ["f16"] else "BF16")
         if kv_dtype != "auto" and kv_dtype not in KV_DTYPES_OF.get(eng, ()):
             raise ValueError("--kv-dtype %s is not a KV cache type of %s (%s)"
                              % (kv_dtype, eng, ", ".join(KV_DTYPES_OF.get(eng, ())) or "auto only"))
@@ -1314,9 +1460,16 @@ def fit(host, cfg, weights, engine=None, ctx=None, seqs=None, gpus=None, kv_dtyp
                                                        if kvb == 1 and kv_dtype == "auto" else ""))
         ex += ["    " + s for s in kvs[eng]["lines"]]
         if eng == "llama.cpp":
-            ex.append("    host prompt cache off (--cache-ram 0); context checkpoints (-ctxcp %d) in host RAM: "
+            ex.append("    host prompt cache off (--cache-ram 0: tools/server/server-context.cpp:1594-1605); context "
+                      "checkpoints (-ctxcp %d, at most that many per slot: :2746-2753) in host RAM: "
                       "%d x the slot's SWA cache and recurrent state = %s per slot at %d tokens"
                       % (LLAMA_CTX_CHECKPOINTS, LLAMA_CTX_CHECKPOINTS, _mb(ckpt_seq(kvs[eng], full[0])), full[0]))
+            if draft:
+                dcfg, dw, dbytes = draft
+                kvs[eng]["draft"] = draft_profile(dcfg, dw, dbytes, kvb)
+                ex.append("  drafter %s: a %s GGUF, %d layers sharing the target's KV cache (no KV or checkpoint state "
+                          "of its own), its own context of the target's n_ctx and slots"
+                          % (kvs[eng]["draft"]["source"], g1(dbytes), kvs[eng]["draft"]["layers"]))
     tried, picked, degraded = [], None, False
     for i, (label, ladder, relaxed) in enumerate(passes):
         ex.append("placements, %s:" % label)
@@ -1442,6 +1595,12 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
     bw = host["bandwidth"].get("gbs")
     nseq0 = want_seqs or TARGET_SEQS
     ov, ovl = _overhead(eng, m, nseq0, overhead)
+    d = kv.get("draft")
+    if d and cards:
+        # On a GPU placement the drafter goes to the GPU (-ngld auto, common/common.h:346): its
+        # GGUF and its context's masks (at the ladder's top context) and activations, per card.
+        dc = d["bytes"] + llama_ctx_bytes(d["m"], d["kv"], ladder[0]) + nseq0 * llama_out_bytes(d["m"], False)
+        ov, ovl = ov + dc, "%s + drafter %s (GGUF, masks at %d tokens, activations, logits)" % (ovl, g1(dc), ladder[0])
     # The pod limit is the host bytes plus LIMIT_SLACK, rounded up to a whole GiB.
     hfree = max(int(hfree / (1 + LIMIT_SLACK)) - GIB, 0)
     # llama.cpp keeps the input layer (token_embd, per_layer_token_embd: the n-gram
@@ -1549,7 +1708,9 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
                 yield best
     # CPU only: weights, KV and activations all in DRAM (vLLM: its CPU build, the KV
     # pool sized by VLLM_CPU_KVCACHE_SPACE, as EAT's vLLM chart sets it).
-    if cpu_ok:
+    if cpu_ok and eng == "llama.cpp":
+        yield _llama_cpu(m, kv, ladder, relaxed, want_seqs, hfree, cpu, bw)
+    elif cpu_ok:
         act = act_bytes(m, LLAMA_UBATCH, nseq0)
         left = hfree - m["serve_bytes"] - act - HOST_RUNTIME[eng]
         active = m["serve_bytes"] - m["lookup_bytes"]
@@ -1582,6 +1743,83 @@ def _placements(eng, m, kv, ladder, relaxed, want_seqs, want_gpus, cards, hfree,
         yield _res(eng, "cpu", True, "", lines, ctx=c, seqs=n, host_bytes=hb, kv_bytes=int(kvused), ckpt_bytes=ck,
                    dram_tok_s=round(toks, 1) if toks else None,
                    flags=_flags(eng, "cpu", c, n, 1, 0, [], kvused, m, 0, kv))
+
+
+def _llama_cpu(m, kv, ladder, relaxed, want_seqs, hfree, cpu, bw):
+    """llama.cpp on the CPU, everything in host RAM, served with --load-mode mmap+mlock:
+      - the GGUF mapped and locked. Each mapped tensor grows the lock from the mapping's start
+        to its own end (src/llama-model-loader.cpp:1735-1737) and only the ranges outside the
+        mapped tensors are unmapped (:1853-1860), so the pages of the copied tensors between
+        them stay mapped and locked (mlock faults them in): the whole GGUF, counted here as
+        charged to the pod, as it is when the pod faults the pages in itself;
+      - the weights the CPU backend copies into its extra buffers (llama_cpu_copies);
+      - per context (the target's and a drafter's), its compute buffer (llama_ctx_bytes);
+      - the drafter's GGUF, mapped and locked as the target's, and its copies (at most the file);
+      - per slot, its KV cache (cleared, so every page is touched: src/llama-kv-cache.cpp:376-386),
+        its context checkpoints and its logits (llama_out_bytes)."""
+    d = kv.get("draft")
+    rt = HOST_RUNTIME["llama.cpp"]
+    copies, cwhy = llama_cpu_copies(m, cpu)
+    simd = bool(cpu.get("avx2") or cpu.get("amx"))
+    dw = d["bytes"] * (2 if simd else 1) if d else 0
+    base = m["serve_bytes"] + copies + rt + dw
+
+    def compute(c):
+        return llama_ctx_bytes(m, kv, c) + (llama_ctx_bytes(d["m"], d["kv"], c) if d else 0)
+
+    def fixed(c):
+        return base + compute(c)
+
+    slot = llama_out_bytes(m, bool(d)) + (2 * d["m"]["vocab"] * 4 if d else 0)
+    active = m["serve_bytes"] - m["lookup_bytes"]
+    if m["moe"]:
+        active -= m["bytes"]["experts"] * (1 - m["experts_per_tok"] / m["experts"])
+    toks = _dram_rate(bw, active)
+    top = ladder[0]
+    lines = ["host budget / %.2f slack = %s" % (1 + LIMIT_SLACK, g1(hfree)),
+             "weights: the GGUF mapped and locked (--load-mode mmap+mlock; the lock reaches the last mapped tensor, "
+             "src/llama-model-loader.cpp:1735-1737) %s + the CPU backend's copies (%s) %s"
+             % (g1(m["serve_bytes"]), cwhy, g1(copies)),
+             "compute buffer at %d tokens per slot (the ladder's top; the masks shrink with the context): "
+             "f16 KQ masks %s (n_kv x %d ubatch x 2 B, src/llama-graph.cpp:30-46) "
+             "+ activations %s (estimate: %d tokens x 4 B x (4 x hidden + 2 x heads x head_dim + 3 x ff + k x "
+             "(3 x ff_exp + 2 x hidden)))" % (top, g1(llama_mask_bytes(kv, top)), LLAMA_UBATCH,
+                                              g1(llama_act_bytes(m)), LLAMA_UBATCH)]
+    if d:
+        lines.append("drafter: its GGUF mapped and locked %s + its copies (at most the file) %s + its compute buffer "
+                     "at %d tokens %s (masks over the target's caches, activations)"
+                     % (g1(d["bytes"]), g1(dw - d["bytes"]), top, g1(llama_ctx_bytes(d["m"], d["kv"], top))))
+    lines.append("runtime %s; per slot beside its KV and checkpoints: logits %s (%d target row(s)%s of %d x 4 B, "
+                 "each in the output buffer and the graph, src/llama-context.cpp:2253-2276)"
+                 % (g1(rt), _mb(slot), 1 + (LLAMA_DRAFT_MAX if d else 0), " and 1 drafter row" if d else "", m["vocab"]))
+    if toks:
+        lines.append("DRAM decode bound: %g GB/s / %s read per token = %.1f tok/s" % (bw, g1(active), toks))
+    if fixed(ladder[-1]) >= hfree:
+        return _res("llama.cpp", "cpu", False, "weights %s + copies %s + compute and runtime exceed the host budget %s"
+                    % (g1(m["serve_bytes"]), g1(copies), g1(hfree)), lines)
+    if toks is not None and toks < MIN_DRAM_TOK_S:
+        return _res("llama.cpp", "cpu", False, "DRAM bandwidth gives %.1f tok/s, under the %g floor"
+                    % (toks, MIN_DRAM_TOK_S), lines)
+    c, n = size_kv(kv, hfree, ladder, want_seqs, 1.0, relaxed, host_ckpt=True, fixed=fixed, extra=slot)
+    if not c:
+        c = ladder[-1]
+        room = max(hfree - fixed(c), 0)
+        each = per_seq(kv, c) + ckpt_seq(kv, c) + slot
+        return _res("llama.cpp", "cpu", False, "KV room %s holds %d sequence(s) of %d tokens (%s each with its "
+                    "checkpoints), not the %d needed" % (g1(room), room // each, c, _mb(each),
+                                                         want_seqs or (1 if relaxed else TARGET_SEQS)), lines)
+    kvused = per_seq(kv, c) * n
+    ck = ckpt_seq(kv, c) * n
+    hb = int(fixed(c) + kvused + ck + n * slot)
+    lines.append("KV: %d seqs x %s at %d tokens = %s" % (n, _mb(per_seq(kv, c)), c, g1(kvused)))
+    if ck:
+        lines.append("context checkpoints: %d seqs x %s = %s" % (n, _mb(ckpt_seq(kv, c)), g1(ck)))
+    lines.append("host: weights %s + copies %s + compute %s%s + runtime %s + KV %s + checkpoints %s + logits %s = %s"
+                 % (g1(m["serve_bytes"]), g1(copies), g1(compute(c)), " + drafter %s" % g1(dw) if d else "", g1(rt),
+                    g1(kvused), g1(ck), g1(n * slot), g1(hb)))
+    return _res("llama.cpp", "cpu", True, "", lines, ctx=c, seqs=n, host_bytes=hb, kv_bytes=int(kvused), ckpt_bytes=ck,
+                dram_tok_s=round(toks, 1) if toks else None,
+                flags=_flags("llama.cpp", "cpu", c, n, 1, 0, [], kvused, m, 0, kv))
 
 
 def _llama_multi(m, kv, ladder, relaxed, want_seqs, use, ov, ovl, n_cpus, on_host, hfree, bw):
@@ -1806,6 +2044,18 @@ def load_model_dir(d):
     return cfg, w, tok
 
 
+def load_draft(d, gguf_bytes):
+    """fit()'s draft argument from a drafter's model directory and its GGUF's bytes, or None."""
+    if not d:
+        if gguf_bytes:
+            raise ValueError("--draft-bytes needs --draft-model, the drafter's model directory")
+        return None
+    if not gguf_bytes:
+        raise ValueError("--draft-model %s needs --draft-bytes, the size of the drafter's GGUF" % d)
+    cfg, w, _ = load_model_dir(d)
+    return cfg, w, int(gguf_bytes)
+
+
 def fit_groups(host, cfg, w, name, tok, file=None, **kw):
     """fit() of a GGUF repo's models: the one --file names, else each in group_order until
     one fits the target (4 seqs at the good context), else the first that fits at all."""
@@ -1840,13 +2090,15 @@ def fit_groups(host, cfg, w, name, tok, file=None, **kw):
     return best
 
 
-def plan_with_variants(host, model_dir, variants, file=None, **kw):
+def plan_with_variants(host, model_dir, variants, file=None, draft=None, draft_bytes=None, **kw):
     """fit() for one model directory (a GGUF repo: its best-fitting model, or the one
     file names); when it does not fit, also for each variant directory, naming the
-    smallest variant (by bytes to serve) that does."""
+    smallest variant (by bytes to serve) that does. draft: the model directory of the
+    drafter llama-server loads beside this model, draft_bytes its GGUF's size; the
+    variants are fitted without it (a drafter is its target's)."""
     cfg, w, tok = load_model_dir(model_dir)
     name = kw.pop("name", None) or (w.get("source") or os.path.basename(model_dir.rstrip("/"))).split(":")[0]
-    doc = fit_groups(host, cfg, w, name, tok, file=file, **kw)
+    doc = fit_groups(host, cfg, w, name, tok, file=file, draft=load_draft(draft, draft_bytes), **kw)
     if (doc["fits"] and not doc["degraded"]) or not variants:
         return doc
     ok = []
@@ -1895,6 +2147,8 @@ def main(argv):
     pl.add_argument("--kv-dtype", default="auto", choices=sorted(KV_DTYPE_BYTES))
     pl.add_argument("--device", choices=("cpu", "gpu"))
     pl.add_argument("--file", help="the GGUF model (a file, shard or quant label) of a repo with several")
+    pl.add_argument("--draft-model", help="model directory of the drafter llama-server loads (--spec-draft-model)")
+    pl.add_argument("--draft-bytes", type=int, help="bytes of that drafter's GGUF")
     kn = sub.add_parser("knobs")
     kn.add_argument("--fit", required=True)
     kn.add_argument("--rung", type=int, default=0)
@@ -1919,7 +2173,8 @@ def main(argv):
             ov = os.environ.get("K3D_GPU_FIT_OVERHEAD_GIB")
             doc = plan_with_variants(host, a.model, a.variants, name=a.name, engine=a.engine, ctx=a.ctx,
                                      seqs=a.seqs, gpus=a.gpus, kv_dtype=a.kv_dtype, device=a.device, file=a.file,
-                                     overhead=float(ov) * GIB if ov else None)
+                                     overhead=float(ov) * GIB if ov else None, draft=a.draft_model,
+                                     draft_bytes=a.draft_bytes)
             if a.mode != "json":
                 lines = doc["explain"] + [doc["summary"]] if a.mode == "explain" else [doc["summary"]]
                 sys.stdout.write("\n".join(lines) + "\n")
