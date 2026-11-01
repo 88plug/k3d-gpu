@@ -45,6 +45,7 @@ jobs:
   deb-rpm:
     name: Build and attach .deb + .rpm
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Determine version
         id: ver
@@ -85,6 +86,7 @@ jobs:
   homebrew:
     name: Update Homebrew formula
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Determine version
         id: ver
@@ -147,6 +149,7 @@ jobs:
     needs: deb-rpm
     if: ${{ !inputs.dry_run }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Determine version
         id: ver

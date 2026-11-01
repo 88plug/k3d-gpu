@@ -10,6 +10,7 @@ jobs:
   automerge:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Enable auto-merge (squash)
         run: gh pr merge --auto --squash "$PR_URL"
