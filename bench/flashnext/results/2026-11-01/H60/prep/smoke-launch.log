@@ -1,0 +1,4 @@
+== H60-smoke waiting for the lock 2026-11-01T13:30:13Z
+== H60-smoke lock taken 2026-11-01T13:30:13Z
+== H60-smoke start: env PATH=/home/devcloud/k3dgpu-xhost/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin K3D_GPU_VENDORS=none K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% H60_SMOKE=1 H60_HFPY=/home/devcloud/k3dgpu-xhost/hfvenv/bin/python H60_LG_DIR=/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf SERVING=/home/devcloud/k3dgpu-xhost/runs/H60-smoke/serving.jsonl bench/flashnext/h60.sh /home/devcloud/k3dgpu-xhost/runs/H60-smoke/out 2026-11-01T13:30:13Z
+== H60-smoke rc=0; clusters deleted: none; now:  2026-11-01T13:47:05Z

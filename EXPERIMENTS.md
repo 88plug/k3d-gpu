@@ -78,7 +78,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H54c | Hybrid placement ("use the fast DRAM"): llama.cpp with Gemma 4 26B-A4B QAT Q4_0, routed experts on the Xeon and everything else on one B70 (Hg, `-ngl 99 -ot exps=CPU`), decodes at N=1 within 25% of a pre-stated byte-split model built from the same image's full-CPU (Cg) and full-GPU (Gg) runs. Qwen3.8-Flash-Next falls back to Gemma 4 QAT (reasons in the pre-registration). | Written 2026-10-20, before any measurement. Model: t_Hg = t_Cg x (B_exp / B_tot) + t_Gg x (B_rest / B_tot) + 60 x 30 us, bytes from the GGUF tensor table. Within 25% (0.45). Hg < Gg (0.8). Hg / Cg in [0.8, 1.6] (0.5). Gg in [30, 90] tok/s (0.4). SUPPORTED (0.45), INCONCLUSIVE (0.3), REFUTED (0.25). | One hold of at most 40 min on one free card: Cg, Gg, Hg in that order, then Gg again (drift check), all in `ghcr.io/ggml-org/llama.cpp:server-intel-b11749`, H54a's N=1 phase only. SUPPORTED: abs(Hg measured / predicted - 1) <= 0.25. REFUTED: > 0.40. Otherwise INCONCLUSIVE (also: any of the three arms not delivered, or the two Gg runs differ by > 10%). Run 2026-10-21, 1 hold ([H54b and H54c run](#h54b-and-h54c-run-arc-pro-b70-2026-10-21)): INCONCLUSIVE, not delivered as pre-registered: the pinned "one card" pods saw all 4 cards. Gg, Hg and Gg2 split their GPU layers over four B70s (two serving the live `qwen38-a-hr`), and Cg (`-ngl 0`) also allocated about 0.5 GB on one of those cards, so t_Cg and the prediction are confounded. The verdict does not come from `predict.py`'s band test, whose inputs are these 4-card and confounded runs. Descriptive only, not one-card or hybrid results: Cg 36.8, Gg 58.0, Hg 56.3, Gg2 57.4 tok/s N=1 median. | INCONCLUSIVE |
 | H54d | Inside EAT's banking flow with Gemma 4 26B-A4B (QAT), the best H54a CPU arm A* delivers far more B24 tasks within budget than EAT stock B1g, under H50's design, statistic, gates and thresholds (rule L2, amendment C1). Runs only when A* is not H50's A1 config. | Written 2026-10-20, before any measurement. A* within-budget success >= 0.60 (0.55). B1g >= 0.50 (0.6). Paired A* - B1g in [-0.10, +0.30] (0.6). A* serves B24's tool calls without a parser change (0.6). Fewer than 16 matched pairs in 3 holds (0.5). REFUTED (0.4), INCONCLUSIVE (0.5), SUPPORTED (0.1). | H50's procedure with arm A = A*, arm B = B1g; at most 3 holds of at most 40 min, until 24 pairs. SUPPORTED: paired difference CI lower bound >= +30 points and A* >= 0.6, L2, void and idle-arm checks passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. Not run (and so recorded) when A* is H50's A1 config: H50 answers it. Not run 2026-10-21, no hold used ([H54d: not run](#h54d-not-run-2026-10-21)): A* is undefined (H54a chose no arm), B1g stalled in both H54a holds, and H54q has not run; the caps rule makes a row with its stock or chosen arm missing INCONCLUSIVE. Re-checked 2026-10-29 ([H54d: re-checked, still not run](#h54d-re-checked-still-not-run-2026-10-29)): still not run, no hold used. H54q has since run. A* is still undefined, and B1g stays at v0.24.0 ([amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29)), whose stall is vllm-project/vllm#45844 ([note N2](#h54-note-n2-why-b1g-stalled-unscored-diagnostic-2026-10-29)). An amendment that defines A* and moves B would now follow H50's measured B1 outcome, so none is written. 1 of H54d's 3 holds remains after [amendment Q1](#h54-amendment-q1-h54qs-reference-arm-hold-cap-and-order-2026-10-29). | INCONCLUSIVE |
 | H58 | The zero-touch thesis on the Xeon 6741P with four Arc Pro B70s. From a clean state, k3d-gpu brings up EAT's banking flow on Gemma 4 26B-A4B-it with no flag, no manual step and no edit. It detects and advertises every engine H52 and H52b found. It places each model by its own memory fit. Its result is within tolerance of the best hand-tuned arm on the same host. Under a controlled host memory squeeze, its guard backs off and nothing outside its own pods is OOM-killed. | Written 2026-10-20, before any H58 run and before the model optimizer (PR #163) and the fit-and-guard layer (branch `claude/fit-and-guard`) are on main. (a) Flags beyond the documented commands: 0 (0.8). (b) Manual steps or edits: 0 (0.6). (c) Decode tok/s >= 0.90x the best hand-tuned arm on this host (0.6), and within-budget B24 success within 5 points of it (0.7). (d) Every engine H52/H52b found is detected and advertised (0.75). (e) Qwen3.8-Flash-Next W4A16 (Intel AutoRound) lands on an experts-in-DRAM placement, and Gemma 4 and Qwen3.8-27B land on the GPU or the CPU, each as its fit decides, with no flag (0.5). (f) Under the squeeze: 0 OOM kills outside our pods (0.85), and the guard lowers admission (0.6). All six together: SUPPORTED (0.25), REFUTED (0.6), INCONCLUSIVE (0.15). | See [H58 pre-registration](#h58-pre-registration-the-zero-touch-thesis-on-crescent-2026-10-20), [amendment P1](#h58-amendment-p1-the-model-pins-2026-10-29) (the model pins) and [amendment R1](#h58-amendment-r1-the-runner-the-gpu-interlock-and-the-clause-readings-2026-11-01) (the runner, the GPU interlock and the clause readings) and [amendment R2](#h58-amendment-r2-run-1-is-not-valid-and-the-interlock-leaves-k3d-gpus-own-pods-alone-2026-11-01) (run 1 not valid; the interlock fixed). Runs last on crescent, after #163 and the fit-and-guard layer merge, with their commits recorded. SUPPORTED: (a) through (f) all hold. REFUTED: any clause fails on a valid run. A manual step found is a REFUTED run. It is fixed test-first, and the re-run is a new run with its own section. INCONCLUSIVE: no valid baseline for (c), or the run is not deliverable for reasons outside k3d-gpu. Result ([H58 run](#h58-run-xeon-6741p-2026-11-01)): run 2 at k3d-gpu 0.1.83; run 1 is not valid (amendment R2). The commands ran plainly, with no flag, so (a) holds. `up` advertised 3 of the 4 B70s, since the serving pairs hold just over half of card1, and no DSA work queue, so (d) fails. `agent up` refused all three models, so (e) fails. Gemma 4 and Qwen3.8-27B went to OVMS on the GPU, and their int4 IRs came out 0.1 and 0.5 GiB over the best card's 15.2 GiB budget. Flash-Next was refused because no DRAM bandwidth was cached. So the banking flow never came up: (b) counts one stop, and (c) fails. The squeeze did not run, so (f) is INCONCLUSIVE. Four clauses fail, so REFUTED. | REFUTED |
-| H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). Both arms run llama.cpp v0.8.0 (`server-b11960`), per [amendment V1](#h60-amendment-v1-llamacpp-v080-for-both-arms-2026-10-29). | PENDING |
+| H60 | On the Xeon 6741P, Qwen3.8-Flash-Next (125B MoE, 6B active, a 51B-parameter n-gram table) runs entirely from host DRAM through llama.cpp, and reads the same share of its DRAM bandwidth ceiling as the Gemma 4 QAT GGUF on the same llama.cpp build: with e = N=1 median decode / (STREAM triad 305 GB/s / bytes read per token from the GGUF's tensor table), Flash-Next's e over a same-hold Gemma control's e (H54's Lg) lies within [0.7, 1.3] (without a valid control, e within 0.38 x [0.7, 1.3], H54a Lg's). A microbench of DRAM-resident serving, not an agent claim. | Written 2026-10-21, before any H60 measurement. Bytes per token 5.94 GB (all tensors but the lookup tables, 10/512 of the routed experts), ceiling 51.3 tok/s at 305 GB/s (53.9 at 320). e_fn 0.30 (0.18-0.45), N=1 decode 15 tok/s (9-23), control e_lg 0.38, ratio 0.79 (0.5-1.15): the Gated DeltaNet and hyper-connection compute per token is heavier than Gemma's. GSM8K 0-49 >= 40/50 (0.7). SUPPORTED 0.45, REFUTED 0.35, INCONCLUSIVE 0.2. | [H60 pre-registration](#h60-pre-registration-qwen38-flash-next-from-host-dram-on-the-xeon-6741p-2026-10-21): `bench/flashnext/h60.sh` inside `bench/xhost/hold.sh`, H54's one-arm protocol (idle, 3 warm-ups, N=1 8 x 256, N=4 16 x 256, TTFT 4 x 16 on H54's 1,000-token prompt, GSM8K 0-49, RAPL per phase, H54's void rule and one re-run), after a same-hold control (Gemma 4 QAT Q4_0 GGUF, idle, warm-ups, N=1 8 x 256), scored by `bench/flashnext/h60.py score`: 95% bootstrap CI of the ratio inside the band SUPPORTED, wholly outside REFUTED, else INCONCLUSIVE (also when N=1 is void, the PSI guard stops the hold, or GSM8K is below 25/50). Both arms run llama.cpp v0.8.0 (`server-b11960`), per [amendment V1](#h60-amendment-v1-llamacpp-v080-for-both-arms-2026-10-29). Result ([H60 run](#h60-run-xeon-6741p-2026-11-01)): one hold, 2026-11-01, k3d-gpu 0.1.84 at `8a4f8c8a`, after the one wiring smoke. Every phase was clean on its first try, and the PSI guard never fired. Flash-Next decoded 16.00 tok/s at N=1 (8/8 ok), so e_fn = 0.312 against a ceiling of 51.33 tok/s (5.94 GB per token). The same-hold Gemma control decoded 48.52 tok/s, so e_lg = 0.379 (2.380 GB per token). The ratio is 0.823, 95% CI 0.819-0.831, inside [0.7, 1.3]. GSM8K 0-49 scored 50/50. Every prediction holds: e_lg in 0.33-0.42, e_fn in 0.18-0.45, decode in 9-23, r in 0.5-1.15, GSM8K at least 40. | SUPPORTED |
 | H57da | On an AMX-less client CPU (i9-13900T, the 16 P-core CPUs, AVX2 and VNNI, no AVX-512), with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other arm passing the quality gate (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A microbench, not an agent claim. | Written 2026-10-20, before any H57d measurement. N=1 median decode tok/s: Od in [8, 20] (0.5); Ld (llama.cpp Q4_0, 8 threads) in [12, 30] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token gross and net of idle. | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20): H54's measurement protocol per arm (`bench/llm_load.py`, 256 tokens, greedy, `ignore_eos`; RAPL per phase; GSM8K items 0-49 graded as H54), one arm serving at a time, arm order rotated over 3 performance holds, quality in a 4th, at most 5 holds of at most 45 min. Statistic: R = median N=1 decode of the fastest other gate-passing arm X / Od's, over the pooled requests of the 3 holds, 95% bootstrap CI (H54's). REFUTED: Od fails the quality gate, or CI lower bound >= 1.05 and X faster than Od in each of the 3 holds. SUPPORTED: Od passes the gate and CI upper bound < 1.05. INCONCLUSIVE otherwise, or when Od or every other arm is not delivered, or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Od 0.785 (95% CI 0.692-1.561), per hold 0.72, 0.79, 1.44; Od 6.90, Ld 3.50, Ld-mtp 5.41 tok/s pooled N=1; all 50/50 on GSM8K; load matched (1.80 <= 2.0). The strict-pinned llama.cpp arms tracked host load 2.3-2.7x, Od 1.3x. | INCONCLUSIVE |
 | H57dm | On the same client and model, the CPU Fast Draft rule extends to Gemma 4's MTP drafter: llama.cpp Ld-mtp (Ld plus Google's QAT MTP assistant, converted to Q4_0 GGUF here, `--spec-type draft-mtp`, default draft length) decodes at N=1 at least 1.20x Ld (H34's bar) with the quality gate passed. | Written 2026-10-20, before any H57d measurement. Ld-mtp/Ld in [0.8, 1.3] (0.6): Google's MTP note says the 26B A4B drafter may not pay at batch 1, and llama.cpp's MTP PR saw no MoE gain. REFUTED (0.65), INCONCLUSIVE (0.15), SUPPORTED (0.2). Not gated: the N=4 ratio and the J/token ratio. | As H57da (same holds and records). Statistic: Rm = median N=1 decode Ld-mtp / Ld, pooled, H54's bootstrap CI. SUPPORTED: Rm >= 1.20, CI lower bound > 1.0, Ld-mtp faster in each of the 3 holds, and Ld-mtp passes the gate. REFUTED: CI upper bound < 1.20, or Ld-mtp fails the gate. INCONCLUSIVE otherwise, or when either arm is not delivered or the load gate fails. Run 2026-10-21 ([H57d run](#h57d-run-i9-13900t-2026-10-21)): Ld-mtp/Ld 1.548 (95% CI 1.057-3.017), faster in each hold (1.47, 1.58, 1.52), 50/50 quality. Scope: llama.cpp b11749, default draft length 3, i9-13900T P-cores, single stream, busy shared host. | SUPPORTED |
 | H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. Not run ([H57d run](#h57d-run-i9-13900t-2026-10-21)): memory gate failed, MemAvailable 42.9 GB at the campaign's start (< 100 GiB). | INCONCLUSIVE |
@@ -6823,6 +6823,135 @@ written.
 builds' sources and the pinned GGUF's headers; no H60 server was started. Checked on crescent
 at 19:40Z on 2026-10-29, read only: no `~/k3dgpu-xhost/runs/H60` (the hold wrapper creates it
 before it waits for the lock), no `/dev/shm/k3dgpu-h60`, and no H60 line in the campaign log.
+
+### H60 run (Xeon 6741P, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T13:47:32Z (lock taken with no wait: load1 3.45, no aiperf process) to
+                 14:20:59Z (cluster deleted, lock released). The one wiring smoke ran first,
+                 13:30:13Z to 13:47:05Z
+hypothesis:      H60 (pre-registration and amendment V1)
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids, family 6 model 173), 48 cores / 96 threads,
+                 1 socket, 1 NUMA node, microcode 0xa000133, 503 GiB RAM, no swap
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+k3d-gpu commit:  8a4f8c8a (main, k3d-gpu 0.1.84), clean and detached at ~/k3dgpu-xhost/k3d-gpu-h60;
+                 moved there from 8beba206, #199's earlier head (amendment V1 item 7)
+node image:      cryptoandcoffee/k3d-gpu:0.1.84@sha256:2e788347d9bc566ba10f58eda1f95c191ddf9277c32439f03df43431b913e6a3
+                 (the launcher's default at the commit; no K3D_GPU_IMAGE), k3s v1.37.1-k3s1, cluster
+                 k3dgpu-x-h60, K3D_GPU_VENDORS=none, crescent C1 kubelet thresholds
+tools:           k3d v5.9.0 (06d8f25b...), kubectl v1.37.2 (c0448752...) in ~/k3dgpu-xhost/bin;
+                 bench/xhost/tools.sh (cross-host amendment K1) installed them at 13:29Z under the
+                 bench lock, before the smoke; the workspace had kubectl v1.35.2 until then
+engine:          ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+                 (v0.8.0, amendment V1), both arms; system_fingerprint b11960-8642541b2 in every reply.
+                 Args -t 48 -Cr 0-47 --cpu-strict 1 --jinja, plus -rea off for Flash-Next; context
+                 and slots at the defaults (Flash-Next: n_slots 4, n_ctx_slot 262144)
+models:          Flash-Next ggml-org/Qwen3.8-Flash-Next-GGUF @ 91fb0035, IQ4_NL, 2 shards (10,945,504 and
+                 102,037,973,504 bytes, equal to the Hub's sizes), downloaded into /dev/shm/k3dgpu-h60
+                 at the hold's start (hfvenv: huggingface_hub 1.21.0 with hf_xet, Python 3.14.4, no
+                 token) and removed on exit. Control: google/gemma-4-26B-A4B-it-qat-q4_0-gguf @
+                 d1c082be, gemma-4-26B_q4_0-it.gguf (14,439,363,584 bytes), read-only from
+                 ~/k3dgpu-gemma/models
+serving load:    both SGLang pairs up and never touched; serving.py's non-campaign CPU 1.96-4.64
+                 CPU-s/s (median 2.22), aiperf idle throughout; no GPU used
+command:         X=~/k3dgpu-xhost; bench/xhost/hold.sh H60 5400 env PATH=$X/bin:$PATH K3D_GPU_VENDORS=none \
+                   K3D_GPU_K3S_ARGS="$C1" H60_HFPY=$X/hfvenv/bin/python \
+                   H60_LG_DIR=~/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf \
+                   SERVING=$X/runs/H60/serving.jsonl bench/flashnext/h60.sh $X/runs/H60/out
+                 (the smoke: H60-smoke instead of H60, H60_SMOKE=1, and its own SERVING and OUT)
+scoring:         python3 bench/flashnext/h60.py score bench/flashnext/results/2026-11-01/H60/hold/out
+                 (at 8a4f8c8a; equal to the hold's own verdict.json)
+raw results:     bench/flashnext/results/2026-11-01/H60/: hold/ (out/: lg/ and fn/ with deploy.yaml,
+                 image.txt, isa.txt, hello.json, load-*.json, energy-*.json, phases.jsonl, server.log,
+                 describe.txt; fn/quality.json; active-bytes*.json, psi.log, shm-window.json,
+                 probes.txt, mem-before.txt, verdict.json, h60.log; hold.log, pre.txt, post.txt, rc,
+                 wait_s, serving.jsonl), smoke/ (the same, smoke mode), prep/ (deploy.txt, tools.txt,
+                 frontdoor-H60-pre.txt and -post.txt, the launch logs)
+```
+
+The kubeconfigs of the two deleted clusters are left out of the records.
+
+**Timeline.** The download and the byte count took 886 s, to `up` at 14:02:18Z (about 115 MB/s,
+below the 300-900 MB/s the pre-registration assumed). `up` and the control's deploy took 31 s. The
+control was ready 29 s after its deploy, and Flash-Next 47 s after its own. The whole hold took 2,007 s of its 5,400 s cap.
+`shm-window.json` reads 13:47:32Z to 14:20:57Z, `removed_ok` true. The host's Qwen3.8 server
+answered the 4-token chat with HTTP 200 before the download and after the removal.
+
+**Guards.** `MemAvailable` read 410 GiB before the download (the guard is 300), 314 GiB after it,
+and 229 GiB at its lowest, while Flash-Next served. "full avg10" and "some avg10" stayed at 0.00
+in all 201 samples, so the hold had no `psi-abort`.
+
+**Phases.** Every phase passed H54's void check on its first try. The idle windows read 2.49
+CPU-s/s of non-campaign CPU (control) and 2.37 (Flash-Next), against the 4.0 bar. During the
+phases themselves the same reading was 4.48-4.61 (reported, not gating, amendment R4).
+
+| Arm | Phase | ok | Decode tok/s per request, median (range) | TTFT median | Package W (idle) | J/token gross / net of idle |
+|---|---|---|---|---|---|---|
+| Gemma control (Lg) | N=1 8 x 256 | 8/8 | 48.52 (47.79-48.84) | 0.280 s | 267.5 (130.8) | 5.81 / 2.97 |
+| Flash-Next | N=1 8 x 256 | 8/8 | 16.00 (15.96-16.03) | 0.629 s | 264.6 (130.5) | 17.14 / 8.68 |
+| Flash-Next | N=4 16 x 256 | 16/16 | 9.76 (9.66-9.91); aggregate 36.96 tok/s | 1.676 s | 274.0 | 7.42 / 3.89 |
+| Flash-Next | TTFT 4 x 16, 987-token prompt | 4/4 | | 5.002 s | 287.3 | |
+
+**Bytes per token** (`h60.py active-bytes`, recomputed from the downloaded shards). Flash-Next:
+5,941,706,240 bytes, equal to the pre-registration's 5.94 GB. That is 4.61 GB read in full plus
+67.95 GB of routed experts x 10/512; the 29.48 GB of lookup tables count 0. The control: 2,380,056,448
+bytes (tied output, so `token_embd` counts in full; 12.85 GB of routed experts x 8/128). Ceilings at
+305 GB/s: 51.33 tok/s and 128.15 tok/s.
+
+**Score** (`h60.py score`, primary statistic, same-hold control valid):
+
+| | Read | Predicted |
+|---|---|---|
+| e_lg | 0.379 (48.52 / 128.15) | 0.38 (0.33-0.42) |
+| e_fn | 0.312 (16.00 / 51.33) | 0.30 (0.18-0.45) |
+| N=1 decode | 16.00 tok/s | 15 (9-23) |
+| r = e_fn / e_lg | 0.823, 95% CI 0.819-0.831 (`verdict.json`: 0.8192-0.8315) | 0.79 (0.5-1.15) |
+| GSM8K 0-49 | 50/50, 0 errors, 497 s | >= 40/50 |
+
+**Verdict: SUPPORTED.** The CI, 0.819-0.831, lies inside [0.7, 1.3]. No INCONCLUSIVE condition
+applies: no phase was void, the PSI guard never fired, 8 of 8 N=1 requests were ok in each arm, and
+GSM8K scored 50/50. Every prediction holds. Flash-Next reads 0.82 of the Gemma control's share of
+the DRAM ceiling. That is lower than Gemma's share but inside the band, as the 0.79 point prediction
+expected. The control read 0.379, equal to H54a's Lg on b11749 (0.38, 48.74 tok/s).
+
+Reported, not scored:
+- At 320 GB/s, e_fn reads 0.297 and e_lg 0.361. The ratio is the same.
+- N=4 gave 36.96 tok/s in aggregate, 2.39x N=1's 15.45.
+- The 987-token prompt's TTFT was 5.0 s, about 197 tok/s of prefill.
+- GSM8K's replies had a median of 310 completion tokens.
+- Package watts include the other tenants' load, about 130 W at idle.
+
+**Disclosed.**
+- One wiring smoke ran first, under the lock, through the same wrapper (`H60_SMOKE=1`,
+  13:30-13:47Z, rc 0). Its records are in `smoke/` and decide nothing. It downloaded the GGUF too
+  (882 s to `up`), brought up both servers and sent each one 16-token request. Flash-Next answered
+  "Hello! How can I help you today?" with and without `enable_thinking: false`.
+- kubectl v1.37.2 came from cross-host amendment K1. H60 is the first cross-host-workspace row whose
+  hold started after `tools.sh` ran (K1 item 4, crescent amendment E4 item 4). `tools.txt` keeps the
+  checksums from before and after.
+- The pre-registration names no node image. The commit's launcher default, 0.1.84, was used,
+  pulled onto crescent by the smoke.
+- The Gemma control ran without `-rea off`, as `h60.sh` renders it and as H54a's Lg ran. Its
+  chat template opened a thinking block: `hello.json` carries `reasoning_content`, as H54a's
+  Lg's did on b11749. `bench/llm_load.py` counts reasoning and content chunks alike, and
+  `ignore_eos` fixed 256 tokens a request, so both arms' decode tok/s divide the same 255 tokens.
+  The control's timing window is short, though. Its thinking-channel markers stream no text, so
+  its `ttft_s` (the first chunk with text) lands 0.060 s after its `first_chunk_s` (median of its 8
+  N=1 requests), about 3 tokens at its rate. Flash-Next's gap is 0.0001 s. So
+  (256 - 1) / (latency - ttft) reads the control about 1% high. Timed from `first_chunk_s`
+  instead, the control decodes 47.97 tok/s (median; its `server.log` eval timings for the same 8
+  requests also give a median of 47.97), e_lg is 0.374, and r is 0.833, 95% CI 0.829-0.841 (the
+  same bootstrap). The scored figures stay as the pre-registered tool produced them, and the
+  verdict and every prediction hold either way. H54a's Lg, the comparison in the verdict, also
+  opened a thinking block, and its hold-2 N=1 requests show the same 0.061 s gap, so its
+  48.74 tok/s was timed the same way. Flash-Next ran with
+  `-rea off`, and its `hello.json` carries content only.
+- After the hold, both serving pairs answered through Dynamo `:8100` (`prep/frontdoor-H60-post.txt`,
+  14:21:55-14:22:00Z: `:30000` 50 to 51, `:30001` 42 to 43), as they did before the smoke
+  (13:30:01-06Z). H60 used no card and stopped no container.
 
 ### H54 note N2: why B1g stalled (unscored diagnostic, 2026-10-29)
 

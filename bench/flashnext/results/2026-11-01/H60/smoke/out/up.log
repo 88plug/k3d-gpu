@@ -1,0 +1,82 @@
+[32m==>[0m Accelerators: none (K3D_GPU_VENDORS=none)
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Pulling node image cryptoandcoffee/k3d-gpu:0.1.84...
+0.1.84: Pulling from cryptoandcoffee/k3d-gpu
+879006e822ea: Pulling fs layer
+9caf89df4b42: Pulling fs layer
+951c4ec85de1: Pulling fs layer
+de0de448cb9d: Pulling fs layer
+c687e9eafb75: Pulling fs layer
+715eece9c9be: Pulling fs layer
+25068f49e046: Pulling fs layer
+88071e19f5e2: Pulling fs layer
+3b03c86d43ec: Pulling fs layer
+c6ceffcc1e6e: Pulling fs layer
+8f683cbe550d: Pulling fs layer
+4cf96161e667: Pulling fs layer
+6f72c5e71fed: Pulling fs layer
+a58a5bdbf14e: Pulling fs layer
+7fac277d0eea: Pulling fs layer
+d06794e9b52a: Pulling fs layer
+c6ceffcc1e6e: Already exists
+44136fa355b3: Already exists
+951c4ec85de1: Already exists
+6aa99a53fbcd: Download complete
+879006e822ea: Download complete
+de0de448cb9d: Download complete
+715eece9c9be: Download complete
+25068f49e046: Download complete
+c687e9eafb75: Download complete
+9caf89df4b42: Download complete
+88071e19f5e2: Download complete
+6f72c5e71fed: Download complete
+8f683cbe550d: Download complete
+4cf96161e667: Download complete
+9caf89df4b42: Pull complete
+3b03c86d43ec: Download complete
+d06794e9b52a: Download complete
+a58a5bdbf14e: Download complete
+7fac277d0eea: Download complete
+c6ceffcc1e6e: Pull complete
+951c4ec85de1: Pull complete
+715eece9c9be: Pull complete
+6f72c5e71fed: Pull complete
+8f683cbe550d: Pull complete
+d06794e9b52a: Pull complete
+a58a5bdbf14e: Pull complete
+7fac277d0eea: Pull complete
+879006e822ea: Pull complete
+de0de448cb9d: Pull complete
+25068f49e046: Pull complete
+c687e9eafb75: Pull complete
+88071e19f5e2: Pull complete
+4cf96161e667: Pull complete
+3b03c86d43ec: Pull complete
+Digest: sha256:2e788347d9bc566ba10f58eda1f95c191ddf9277c32439f03df43431b913e6a3
+Status: Downloaded newer image for cryptoandcoffee/k3d-gpu:0.1.84
+docker.io/cryptoandcoffee/k3d-gpu:0.1.84
+[32m==>[0m Creating k3d cluster 'k3dgpu-x-h60' with image cryptoandcoffee/k3d-gpu:0.1.84...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-x-h60'           
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-x-h60-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-x-h60-tools'       
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-x-h60-server-0'    
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-x-h60'              
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-x-h60-server-0'    
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-x-h60' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-x-h60)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/devcloud/k3dgpu-xhost/runs/H60-smoke/out/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-x-h60-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m No accelerators requested; cluster ready.

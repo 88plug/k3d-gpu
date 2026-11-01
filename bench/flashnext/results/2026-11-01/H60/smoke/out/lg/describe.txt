@@ -1,0 +1,75 @@
+Name:             h60-lg-6699f6ff6f-mgzzd
+Namespace:        h60
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-x-h60-server-0/172.19.0.2
+Start Time:       Sun, 01 Nov 2026 13:45:28 +0000
+Labels:           app=h60-lg
+                  pod-template-hash=6699f6ff6f
+Annotations:      <none>
+Status:           Running
+IP:               10.42.0.9
+IPs:
+  IP:           10.42.0.9
+Controlled By:  ReplicaSet/h60-lg-6699f6ff6f
+Containers:
+  llamacpp:
+    Container ID:  containerd://61152a69935337a037470cbb4d76a88fd725262f861019494f72b4e86143f67e
+    Image:         ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Image ID:      ghcr.io/ggml-org/llama.cpp@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Port:          8080/TCP
+    Host Port:     0/TCP
+    Args:
+      -m
+      /var/lg/gemma-4-26B_q4_0-it.gguf
+      --host
+      0.0.0.0
+      --port
+      8080
+      --alias
+      gemma
+      -t
+      48
+      -Cr
+      0-47
+      --cpu-strict
+      1
+      --jinja
+    State:          Running
+      Started:      Sun, 01 Nov 2026 13:45:44 +0000
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/lg from lg (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-4x2w9 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  lg:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/lg
+    HostPathType:  Directory
+  kube-api-access-4x2w9:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  30s   default-scheduler  Successfully assigned h60/h60-lg-6699f6ff6f-mgzzd to k3d-k3dgpu-x-h60-server-0
+  Normal  Pulling    30s   kubelet            spec.containers{llamacpp}: Pulling image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220"
+  Normal  Pulled     15s   kubelet            spec.containers{llamacpp}: Successfully pulled image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220" in 14.861s (14.861s including waiting). Image size: 309250915 bytes.
+  Normal  Created    15s   kubelet            spec.containers{llamacpp}: Container created
+  Normal  Started    15s   kubelet            spec.containers{llamacpp}: Container started

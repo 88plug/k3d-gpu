@@ -1,0 +1,13 @@
+{
+ "arch": "gemma4",
+ "expert_used_count": 8,
+ "expert_count": 128,
+ "tied_output": true,
+ "bytes": {
+  "routed_experts": 12846382080,
+  "lookup_tables": 0,
+  "rest": 1577157568
+ },
+ "file_bytes": 14423539648,
+ "active_bytes": 2380056448
+}
