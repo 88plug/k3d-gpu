@@ -1,0 +1,40 @@
+== sysctl 2026-11-01T07:16:30Z
+== clone 2026-11-01T07:16:30Z
+Note: switching to '5c27fb39a95eecec41aa4e29a1188984e9c726f3'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+== d1 2026-11-01T07:16:31Z
+== configure 2026-11-01T07:16:31Z
+== init 2026-11-01T07:17:31Z
+== edit 2026-11-01T07:17:33Z
+Traceback (most recent call last):
+  File "/home/ubuntu/h62/h62.py", line 570, in <module>
+    sys.exit(main(sys.argv[1:]))
+             ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/h62/h62.py", line 539, in main
+    sys.stdout.write(eas_edit(args[0]))
+                     ^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/h62/h62.py", line 329, in eas_edit
+    new = fn(old)
+          ^^^^^^^
+  File "/home/ubuntu/h62/h62.py", line 324, in <lambda>
+    ("models.yaml", lambda t: set_model_id(t, PINS["catalog_name"], PINS["stock_model_id"],
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/h62/h62.py", line 303, in set_model_id
+    if re.match(r"\s*- name:\s*(\S+)\s*$", lines[i]).group(1) != name:
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'group'

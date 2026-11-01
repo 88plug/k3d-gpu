@@ -1,0 +1,30 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from qemu.Dockerfile
+#1 transferring dockerfile: 827B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+#2 DONE 0.5s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+#4 resolve docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c 0.0s done
+#4 DONE 0.0s
+
+#5 [2/2] RUN apt-get update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends         qemu-system-x86=1:10.2.1+ds-1ubuntu3.3         qemu-utils=1:10.2.1+ds-1ubuntu3.3         genisoimage=9:1.1.11-5     && dpkg-query -W > /h62-packages.txt     && rm -rf /var/lib/apt/lists/*
+#5 CACHED
+
+#6 exporting to image
+#6 exporting layers done
+#6 exporting manifest sha256:6b2b26028d6cac9bb4d34507171448621d5f1ba74c4dcf9aa7833d3be59bb9d4 done
+#6 exporting config sha256:79fea5d05089bf39d912b6d6062fe695b23d6458d3018c40c0de7f34424b7751 done
+#6 exporting attestation manifest sha256:e8720d7d7cf56f8d90fc1f90a9a68df8d51832f32afa239b7e7e817547096f85 done
+#6 exporting manifest list sha256:834d4f27d76b54aba4be9d8f3986c215a9eee17c38fc9fffe09546859fcea964 done
+#6 naming to docker.io/library/h62-qemu:1-10.2.1-ds-1ubuntu3.3 done
+#6 unpacking to docker.io/library/h62-qemu:1-10.2.1-ds-1ubuntu3.3
+#6 unpacking to docker.io/library/h62-qemu:1-10.2.1-ds-1ubuntu3.3 1.2s done
+#6 DONE 1.2s

@@ -1,0 +1,1 @@
+{"amx_tile": {"a": 96, "b": 96}, "nproc": {"a": 96, "b": 96}, "a": {"nproc": 96, "amx_tile": 96, "mem_total_kib": 98840596, "kernel": "6.8.0-147-generic"}, "b": {"nproc": 96, "amx_tile": 96, "mem_total_kib": 197832656, "kernel": "6.8.0-147-generic"}}
