@@ -50,6 +50,9 @@ on:
       - 'oracle/validate.py'
       - 'oracle/share.py'
       - 'oracle/schema/bundle-v1.json'
+      - 'integrations/eas/**'
+      - 'integrations/eat/eat-check.sh'
+      - 'integrations/eat/upstream/patches/**'
   workflow_dispatch:
     inputs:
       mode:

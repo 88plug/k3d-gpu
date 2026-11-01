@@ -67,6 +67,10 @@ k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes i
 - Arguments after `--` go to `ansible-playbook`, for example
   `k3d-gpu eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'` to
   install without EAT's chat model.
+- `eas down` gives the teardown the same image pins and overrides as `eas up` gave the
+  install. EAS picks teardown components by the same `enabled` flags as install
+  ([resolve_components.py](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/filter_plugins/resolve_components.py#L245)),
+  so components `eas up` left to k3d-gpu, such as its NFD, stay.
 
 What `eas up` does, in order:
 
@@ -214,6 +218,7 @@ Bastion tools (each binary checked against its upstream checksum file at build t
 | kubectl | v1.37.2 | the minor of the node's k3s (`K3S_TAG` v1.37.1-k3s1); EAS's own v1.34.3 ([#L52](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L52)) is three minors off, outside the [kubectl skew policy](https://kubernetes.io/releases/version-skew-policy/#kubectl) |
 | helm | v3.22.1 | latest v3; EAS's floor is v3.20.2 ([#L53](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L53)). Helm v4 is untested with `kubernetes.core` 6.3.0 |
 | yq | v4.54.1 | EAS's floor is v4.53.2 ([#L51](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L51)) |
+| jq | jq-1.8.2 | latest; enterprise-inference pipes yq into jq on the installer host to pick the models to deploy ([deploy_models.yaml#L108-L114](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L108-L114)), and EAS's `configure` installs no jq |
 | ansible, kubernetes (Python) | 12.3.0, 35.0.0, hashed | newest inside EAS's ranges `ansible>=10.0,<13.0`, `kubernetes>=29.0,<36.0` ([requirements.txt](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/requirements.txt)) |
 | kubernetes.core | 6.3.0 | EAS's [collections/requirements.yml](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/collections/requirements.yml) |
 

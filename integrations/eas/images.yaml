@@ -1,0 +1,10 @@
+# Extra vars for es_auto_installer.sh install: the agent toolkit's floating images by
+# registry digest. `k3d-gpu eas up` passes this file before k3d-gpu-overrides.yaml, so a
+# value in the overrides still wins. EAT release-2.0.0 (036b662) roles/agent_sandbox/
+# defaults/main.yaml#L27-L28 names the router by the moving tag latest-main and the
+# runtime by tag only; its install.yaml substitutes these values whole into the router
+# manifest (${ROUTER_IMAGE}) and the default SandboxTemplate, so a name:tag@sha256
+# reference reaches the pods as written. Digests read from the registries 2026-10-29
+# (scripts/images-lock digest); scripts/images-lock repin moves them.
+agent_sandbox_router_image: "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main@sha256:9cebf7d97f98c0ce008aec8524f23637e60b61485db18ad426897eefac156968"
+agent_sandbox_python_runtime_image: "registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.0@sha256:bbacb1409a2ec436ee8cecdfb50f626fe66eae35adbf2886df255cbf5a2b10df"
