@@ -1,0 +1,33 @@
+{
+ "arm": "A_slo",
+ "round": 4,
+ "position": 2,
+ "ref_s": 6.2142,
+ "window_start": 1793324642.4597049,
+ "window_end": 1793325542.4597049,
+ "cpumax_set": null,
+ "cpumax_reads": [
+  "375000 100000",
+  "375000 100000"
+ ],
+ "pkg_temp_start_c": 93.0,
+ "load1_start": 7.38,
+ "package_throttle_delta": 20100,
+ "rapl_energy_j": 102669.919,
+ "measure_s": 903.737,
+ "package_w": 113.61,
+ "neighbour_running_at_window_end": true,
+ "ctl_alive_at_window_end": true,
+ "neighbour": {
+  "bogo_ops": 5739665,
+  "real_s": 960.03,
+  "bogo_ops_per_s_real": 5978.63
+ },
+ "tool_proxy_s": 1.026,
+ "exit_codes_load_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_matches_snapshot": true
+}

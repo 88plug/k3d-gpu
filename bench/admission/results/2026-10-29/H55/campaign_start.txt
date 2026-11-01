@@ -1,0 +1,3 @@
+campaign start 2026-10-29T20:55:05Z
+source: git archive of 890d1d16790ed656ae5aa86a8319e578310b0f80 at /home/andrew/k3dgpu-h55/src
+lock: /home/andrew/k3dgpu-bench.lock; no extra lock

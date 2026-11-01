@@ -1,0 +1,8 @@
+{
+ "arms": {},
+ "failed_conditions": [],
+ "reasons": [
+  "A_slo round 3: 3 windows (< 4)"
+ ],
+ "verdict": "INCONCLUSIVE"
+}

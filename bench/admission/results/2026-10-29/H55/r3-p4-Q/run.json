@@ -1,0 +1,26 @@
+{
+ "arm": "Q",
+ "round": 3,
+ "position": 4,
+ "ref_s": 7.9526,
+ "window_start": 1793321181.527076,
+ "window_end": 1793322081.527076,
+ "cpumax_set": null,
+ "cpumax_reads": [],
+ "pkg_temp_start_c": 83.0,
+ "load1_start": 13.63,
+ "package_throttle_delta": 6217,
+ "rapl_energy_j": 99217.322,
+ "measure_s": 903.755,
+ "package_w": 109.78,
+ "neighbour_running_at_window_end": false,
+ "ctl_alive_at_window_end": false,
+ "neighbour": null,
+ "tool_proxy_s": 0.951,
+ "exit_codes_load_decode_tool": [
+  0,
+  0,
+  0
+ ],
+ "cpufreq_matches_snapshot": true
+}

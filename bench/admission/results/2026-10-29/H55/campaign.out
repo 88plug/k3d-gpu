@@ -1,0 +1,125 @@
+2026-10-29T20:55:06Z round 1 launch
+2026-10-29T20:55:06Z waiting for /home/andrew/k3dgpu-bench.lock
+2026-10-29T20:55:06Z lock(s) acquired; hold cap 7200s
+2026-10-29T20:55:06Z round 1 order Q N0 K50 K25 A_slo
+concurrency=1 ok=2/2 ttft_median=7.915s ttft_p90=9.121s latency_median=9.206s tok/s_median=1.8 aggregate_tok/s=1.7
+concurrency=1 ok=20/20 ttft_median=6.182s ttft_p90=6.678s latency_median=7.405s tok/s_median=2.2 aggregate_tok/s=2.1
+2026-10-29T20:58:01Z server ready; quiet reference 6.182s (SLO = 1.10 x)
+2026-10-29T20:58:01Z run Q (position 1): idle 60s
+concurrency=1 ok=1/1 ttft_median=6.699s ttft_p90=6.699s latency_median=19.410s tok/s_median=6.6 aggregate_tok/s=6.6
+2026-10-29T21:14:37Z run Q done
+2026-10-29T21:14:37Z run N0 (position 2): idle 60s
+concurrency=1 ok=1/1 ttft_median=16.396s ttft_p90=16.396s latency_median=38.030s tok/s_median=3.4 aggregate_tok/s=3.4
+2026-10-29T21:31:39Z run N0 done
+2026-10-29T21:31:39Z run K50 (position 3): idle 60s
+concurrency=1 ok=1/1 ttft_median=13.018s ttft_p90=13.018s latency_median=28.947s tok/s_median=4.4 aggregate_tok/s=4.4
+2026-10-29T21:48:40Z run K50 done
+2026-10-29T21:48:40Z run K25 (position 4): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.515s ttft_p90=8.515s latency_median=20.045s tok/s_median=6.4 aggregate_tok/s=6.4
+2026-10-29T22:05:41Z run K25 done
+2026-10-29T22:05:41Z run A_slo (position 5): idle 60s
+concurrency=1 ok=1/1 ttft_median=7.653s ttft_p90=7.653s latency_median=19.010s tok/s_median=6.7 aggregate_tok/s=6.7
+2026-10-29T22:22:43Z run A_slo done
+2026-10-29T22:22:43Z round 1 done
+2026-10-29T22:22:43Z exit: children signalled, containers removed
+2026-10-29T22:22:43Z round 1 exit 0
+2026-10-29T22:22:43Z round 2 launch
+2026-10-29T22:22:43Z waiting for /home/andrew/k3dgpu-bench.lock
+2026-10-29T22:22:43Z lock(s) acquired; hold cap 7200s
+2026-10-29T22:22:43Z round 2 order N0 K50 K25 A_slo Q
+concurrency=1 ok=2/2 ttft_median=9.521s ttft_p90=11.278s latency_median=10.763s tok/s_median=1.5 aggregate_tok/s=1.5
+concurrency=1 ok=20/20 ttft_median=6.052s ttft_p90=8.233s latency_median=7.205s tok/s_median=2.2 aggregate_tok/s=2.0
+2026-10-29T22:25:48Z server ready; quiet reference 6.0525s (SLO = 1.10 x)
+2026-10-29T22:25:48Z run N0 (position 1): idle 60s
+concurrency=1 ok=1/1 ttft_median=9.055s ttft_p90=9.055s latency_median=20.892s tok/s_median=6.1 aggregate_tok/s=6.1
+2026-10-29T22:42:48Z run N0 done
+2026-10-29T22:42:48Z run K50 (position 2): idle 60s
+concurrency=1 ok=1/1 ttft_median=7.354s ttft_p90=7.354s latency_median=18.614s tok/s_median=6.9 aggregate_tok/s=6.9
+2026-10-29T22:59:49Z run K50 done
+2026-10-29T22:59:49Z run K25 (position 3): idle 60s
+concurrency=1 ok=1/1 ttft_median=9.004s ttft_p90=9.004s latency_median=20.525s tok/s_median=6.2 aggregate_tok/s=6.2
+2026-10-29T23:16:50Z run K25 done
+2026-10-29T23:16:50Z run A_slo (position 4): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.942s ttft_p90=8.942s latency_median=20.525s tok/s_median=6.2 aggregate_tok/s=6.2
+2026-10-29T23:33:52Z run A_slo done
+2026-10-29T23:33:52Z run Q (position 5): idle 60s
+concurrency=1 ok=1/1 ttft_median=6.176s ttft_p90=6.176s latency_median=17.029s tok/s_median=7.5 aggregate_tok/s=7.5
+2026-10-29T23:50:32Z run Q done
+2026-10-29T23:50:32Z round 2 done
+2026-10-29T23:50:33Z exit: children signalled, containers removed
+2026-10-29T23:50:33Z round 2 exit 0
+2026-10-29T23:50:33Z round 3 launch
+2026-10-29T23:50:33Z waiting for /home/andrew/k3dgpu-bench.lock
+2026-10-29T23:50:33Z lock(s) acquired; hold cap 7200s
+2026-10-29T23:50:33Z round 3 order K50 K25 A_slo Q N0
+concurrency=1 ok=2/2 ttft_median=10.313s ttft_p90=12.049s latency_median=11.565s tok/s_median=1.4 aggregate_tok/s=1.4
+concurrency=1 ok=20/20 ttft_median=7.953s ttft_p90=8.845s latency_median=9.180s tok/s_median=1.7 aggregate_tok/s=1.8
+2026-10-29T23:53:56Z server ready; quiet reference 7.9526s (SLO = 1.10 x)
+2026-10-29T23:53:56Z run K50 (position 1): idle 60s
+concurrency=1 ok=1/1 ttft_median=18.059s ttft_p90=18.059s latency_median=43.659s tok/s_median=2.9 aggregate_tok/s=2.9
+2026-10-30T00:11:04Z run K50 done
+2026-10-30T00:11:04Z run K25 (position 2): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.304s ttft_p90=8.304s latency_median=20.874s tok/s_median=6.1 aggregate_tok/s=6.1
+2026-10-30T00:28:05Z run K25 done
+2026-10-30T00:28:05Z run A_slo (position 3): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.189s ttft_p90=8.189s latency_median=20.211s tok/s_median=6.3 aggregate_tok/s=6.3
+2026-10-30T00:45:06Z run A_slo done
+2026-10-30T00:45:06Z run Q (position 4): idle 60s
+concurrency=1 ok=1/1 ttft_median=6.497s ttft_p90=6.497s latency_median=18.494s tok/s_median=6.9 aggregate_tok/s=6.9
+2026-10-30T01:01:45Z run Q done
+2026-10-30T01:01:45Z run N0 (position 5): idle 60s
+concurrency=1 ok=1/1 ttft_median=17.505s ttft_p90=17.505s latency_median=38.533s tok/s_median=3.3 aggregate_tok/s=3.3
+2026-10-30T01:18:54Z run N0 done
+2026-10-30T01:18:54Z round 3 done
+2026-10-30T01:18:54Z exit: children signalled, containers removed
+2026-10-30T01:18:54Z round 3 exit 0
+2026-10-30T01:18:55Z round 4 launch
+2026-10-30T01:18:55Z waiting for /home/andrew/k3dgpu-bench.lock
+2026-10-30T01:22:50Z lock(s) acquired; hold cap 7200s
+2026-10-30T01:22:50Z round 4 order K25 A_slo Q N0 K50
+concurrency=1 ok=2/2 ttft_median=8.642s ttft_p90=10.663s latency_median=9.986s tok/s_median=1.7 aggregate_tok/s=1.6
+concurrency=1 ok=20/20 ttft_median=6.214s ttft_p90=6.487s latency_median=7.472s tok/s_median=2.1 aggregate_tok/s=2.1
+2026-10-30T01:25:46Z server ready; quiet reference 6.2142s (SLO = 1.10 x)
+2026-10-30T01:25:46Z run K25 (position 1): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.998s ttft_p90=8.998s latency_median=20.772s tok/s_median=6.2 aggregate_tok/s=6.2
+2026-10-30T01:42:47Z run K25 done
+2026-10-30T01:42:47Z run A_slo (position 2): idle 60s
+concurrency=1 ok=1/1 ttft_median=9.162s ttft_p90=9.162s latency_median=21.429s tok/s_median=6.0 aggregate_tok/s=6.0
+2026-10-30T01:59:49Z run A_slo done
+2026-10-30T01:59:49Z run Q (position 3): idle 60s
+concurrency=1 ok=1/1 ttft_median=5.719s ttft_p90=5.719s latency_median=16.426s tok/s_median=7.8 aggregate_tok/s=7.8
+2026-10-30T02:16:22Z run Q done
+2026-10-30T02:16:22Z run N0 (position 4): idle 60s
+concurrency=1 ok=1/1 ttft_median=9.905s ttft_p90=9.905s latency_median=21.929s tok/s_median=5.8 aggregate_tok/s=5.8
+2026-10-30T02:33:23Z run N0 done
+2026-10-30T02:33:23Z run K50 (position 5): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.866s ttft_p90=8.866s latency_median=20.433s tok/s_median=6.3 aggregate_tok/s=6.3
+2026-10-30T02:50:23Z run K50 done
+2026-10-30T02:50:23Z round 4 done
+2026-10-30T02:50:24Z exit: children signalled, containers removed
+2026-10-30T02:50:24Z round 4 exit 0
+2026-10-30T02:50:24Z round 5 launch
+2026-10-30T02:50:24Z waiting for /home/andrew/k3dgpu-bench.lock
+2026-10-30T02:50:24Z lock(s) acquired; hold cap 7200s
+2026-10-30T02:50:24Z round 5 order A_slo Q N0 K50 K25
+concurrency=1 ok=2/2 ttft_median=8.348s ttft_p90=9.082s latency_median=9.525s tok/s_median=1.7 aggregate_tok/s=1.7
+concurrency=1 ok=20/20 ttft_median=8.171s ttft_p90=8.896s latency_median=9.384s tok/s_median=1.7 aggregate_tok/s=1.7
+2026-10-30T02:53:53Z server ready; quiet reference 8.1711s (SLO = 1.10 x)
+2026-10-30T02:53:53Z run A_slo (position 1): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.296s ttft_p90=8.296s latency_median=19.984s tok/s_median=6.4 aggregate_tok/s=6.4
+2026-10-30T03:10:54Z run A_slo done
+2026-10-30T03:10:54Z run Q (position 2): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.168s ttft_p90=8.168s latency_median=19.601s tok/s_median=6.5 aggregate_tok/s=6.5
+2026-10-30T03:27:33Z run Q done
+2026-10-30T03:27:33Z run N0 (position 3): idle 60s
+concurrency=1 ok=1/1 ttft_median=9.504s ttft_p90=9.504s latency_median=21.496s tok/s_median=6.0 aggregate_tok/s=6.0
+2026-10-30T03:44:34Z run N0 done
+2026-10-30T03:44:34Z run K50 (position 4): idle 60s
+concurrency=1 ok=1/1 ttft_median=8.014s ttft_p90=8.014s latency_median=19.493s tok/s_median=6.6 aggregate_tok/s=6.6
+2026-10-30T04:01:35Z run K50 done
+2026-10-30T04:01:35Z run K25 (position 5): idle 60s
+concurrency=1 ok=1/1 ttft_median=6.662s ttft_p90=6.662s latency_median=17.774s tok/s_median=7.2 aggregate_tok/s=7.2
+2026-10-30T04:18:36Z run K25 done
+2026-10-30T04:18:36Z round 5 done
+2026-10-30T04:18:36Z exit: children signalled, containers removed
+2026-10-30T04:18:36Z round 5 exit 0
