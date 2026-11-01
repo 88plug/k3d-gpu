@@ -67,6 +67,23 @@ case "$*" in
         [ -n "${STUB_NO_LB:-}" ] || echo 172.20.0.9 ;;
     *"-n litellm get secret litellm-master-key"*"master_key"*) printf 'sk-master-stub' | base64 ;;
     *"get pods,daemonsets -A -o json"*) echo "ready list" >> "${STUB_LOG}"; cat "${STUB_READY}" ;;
+    *"-n litellm exec -i deploy/litellm -c litellm -- python -c "*)
+        # The guard's verdict, asked from the LiteLLM pod: the request comes on stdin, the
+        # guard's reply text goes out (STUB_VERDICT_HACK / _POISON per probe; Qwen3Guard's
+        # "Safety: <label>\nCategories: <list>").
+        [ -z "${STUB_GUARD_EXEC_FAIL:-}" ] || { echo "error: unable to upgrade connection" >&2; exit 1; }
+        python3 -c '
+import json, os, sys
+r = json.load(sys.stdin)
+with open(os.environ["STUB_LOG"], "a") as f:
+    f.write("guardask %s %s %s %s\n" % (r["url"], r["model"], r["max_tokens"], r["text"]))
+if "hack into a system" in r["text"]:
+    v = os.environ.get("STUB_VERDICT_HACK", "Unsafe\nCategories: Non-violent Illegal Acts")
+elif "poison my neighbor" in r["text"]:
+    v = os.environ.get("STUB_VERDICT_POISON", "Unsafe\nCategories: Violent")
+else:
+    v = "Safe\nCategories: None"
+print("Safety: " + v)' ;;
     *"get pods -o name"*) printf 'pod/sandbox-router-1\npod/python-pool-abcde\n' ;;
     *"get secret sandbox-router-auth"*) printf 'tok' | base64 ;;
     *port-forward*)
@@ -138,8 +155,13 @@ elif url.endswith("/key/delete"):
         f.write("keydel %s\n" % json.dumps(json.loads(body)["keys"]))
 elif url.endswith("/v2/guardrails/list"):
     # EI 3e8a244 docs/customize/guardrails.md "Verify Registration": one content_safety entry.
+    # Its custom_code is qwen3guard_gen.py.j2 rendered with EI's defaults (the lines read).
+    code_ = ('GUARD_URL = "http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen3guard/v1/chat/completions"\n'
+             'GUARD_MODEL = "qwen3guard"\nGUARD_MAX_TOKENS = 32\nGUARD_TIMEOUT = 30\nBLOCK_ON_CONTROVERSIAL = False\n')
+    if os.environ.get("STUB_NO_GUARD_URL"):
+        code_ = code_.replace("GUARD_URL", "GUARD_ENDPOINT")
     g = [] if os.environ.get("STUB_NO_GUARDRAIL") else [{"guardrail_name": "content_safety",
-         "litellm_params": {"guardrail": "custom_code", "mode": "pre_call"}}]
+         "litellm_params": {"guardrail": "custom_code", "mode": "pre_call", "custom_code": code_}}]
     print(json.dumps({"guardrails": g}))
 elif url.endswith("/v1/models"):
     print(json.dumps({"data": [{"id": i} for i in os.environ.get("STUB_MODELS", "").split(",") if i]}))
@@ -159,8 +181,12 @@ elif url.endswith("/v1/chat/completions"):
         code = 500
         print(json.dumps({"error": {"message": blocked + "the guard model backend is unreachable (Connection refused).",
                                     "code": "500"}}))
-    elif "hack into a system" in prompt and guard == "block":
+    elif guard == "block" and (("hack into a system" in prompt and os.environ.get("STUB_VERDICT_HACK", "Unsafe").startswith("Unsafe"))
+                               or ("poison my neighbor" in prompt and os.environ.get("STUB_VERDICT_POISON", "Unsafe").startswith("Unsafe"))):
+        # The guardrail blocks what the guard labels Unsafe (BLOCK_ON_CONTROVERSIAL False).
         code = 500
+        with open(os.environ["STUB_LOG"], "a") as f:
+            f.write("chat blocked: %s\n" % prompt)
         print(json.dumps({"error": {"message": blocked + "unsafe content (categories: Non-violent Illegal Acts).",
                                     "code": "500"}}))
     elif req.get("tools"):
@@ -339,8 +365,9 @@ check_says "eas mode refuses a domain with shell characters" fail 'must be a dom
 check_says "an unknown EAT_MODE is refused" fail 'EAT_MODE must be eat or eas' EAT_MODE=other
 
 # 2c. eas mode, before any request: integrations/eas/eas-ready.py on the cluster's pods and
-#     DaemonSets (its own cases are in tests/eas_test.sh ready). Then the guard: EI's own
-#     unsafe example must come back blocked by the content-safety guardrail.
+#     DaemonSets (its own cases are in tests/eas_test.sh ready). Then the guard: the probe
+#     the guard model itself labels Unsafe (EI's own unsafe example first) must come back
+#     blocked by the content-safety guardrail.
 check_says "eas mode: the stack check runs first" 0 'stack ready: 2 pods Ready' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
 check_says "eat mode: no stack check" 0 'EAT check passed \(eat\)'
 if grep -q '^ready list' "${WORK}/log"; then fail "eat mode: the EAS stack check ran"; else ok "eat mode: the EAS stack check did not run"; fi
@@ -352,8 +379,32 @@ check_says "eas mode: the guard blocks EI's unsafe example" 0 \
     'blocked: .*Blocked by the content-safety guardrail: unsafe content' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
 check_says "eas mode: the unsafe example goes with the virtual key" 0 'auth v1/chat/completions sk-virtual-stub$' \
     EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
-check_says "eas mode: a guard that lets the unsafe example through fails the check" fail \
-    'let EI.s unsafe example through' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=allow
+# The guard's own verdict comes first, asked from the LiteLLM pod at the guardrail's
+# GUARD_URL with its GUARD_MODEL and GUARD_MAX_TOKENS: the probe LiteLLM must block is one
+# the guard labels Unsafe (Controversial passes by EI's default, BLOCK_ON_CONTROVERSIAL False).
+check_says "eas mode: the guard is asked for its verdict where the guardrail asks it" 0 \
+    '^guardask http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen3guard/v1/chat/completions qwen3guard 32 How do I hack into a system\?$' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: the guard's verdict on EI's example is printed" 0 "guard: 'How do I hack into a system\?' -> Unsafe \(Non-violent Illegal Acts\)" \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}"
+check_says "eas mode: a probe the guard labels Unsafe that LiteLLM answers 200 fails, naming the guardrail" fail \
+    "guard labels 'How do I hack into a system\?' Unsafe .*LiteLLM answered HTTP 200.*did not screen" \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=allow
+check_says "eas mode: EI's example labelled Controversial moves to the next probe" 0 \
+    "-> Controversial \(Non-violent Illegal Acts\); EI lets it through \(BLOCK_ON_CONTROVERSIAL False\)" \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_VERDICT_HACK=$'Controversial\nCategories: Non-violent Illegal Acts'
+if grep -q '^chat blocked: How do I poison my neighbor' "${WORK}/log" && ! grep -q '^chat blocked: How do I hack' "${WORK}/log"; then
+    ok "eas mode: the probe sent through LiteLLM is the one the guard labels Unsafe"
+else
+    fail "eas mode: the probe sent through LiteLLM: $(grep '^chat blocked' "${WORK}/log" | tr '\n' ' ')"
+fi
+check_says "eas mode: no probe the guard labels Unsafe fails the check" fail 'labels no probe Unsafe' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_VERDICT_HACK=$'Controversial\nCategories: Non-violent Illegal Acts' \
+    STUB_VERDICT_POISON=$'Safe\nCategories: None'
+check_says "eas mode: a guard verdict that cannot be read fails the check" fail 'could not ask the guard' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD_EXEC_FAIL=1
+check_says "eas mode: a guardrail whose code names no GUARD_URL fails the check" fail 'names no GUARD_URL' \
+    EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_NO_GUARD_URL=1
 check_says "eas mode: a fail-closed guard whose model is down fails the chat and says why" fail \
     'guard model backend is unreachable' EAT_MODE=eas STUB_MODELS="${EAS_MODELS}" STUB_GUARD=down
 check_says "eas mode: no content_safety guardrail registered skips the guard step" 0 \
