@@ -6,7 +6,9 @@ hold's own context, so a render that misses the hold's cluster is caught; arm.sh
 local OpenAI-compatible server with kubectl and docker stubbed, and the records it writes are
 scored by h59.py, so the runner's N=4 holds feed the registered bootstrap-ratio scorer end to
 end. No cluster, no network."""
+import http.client
 import http.server
+import inspect
 import json
 import os
 import shutil
@@ -21,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
 import h59  # noqa: E402
+import h54  # noqa: E402  (on the path h59 adds: the quality phase's GSM8K client)
 import run  # noqa: E402
 
 FIX = os.path.join(ROOT, "tests", "fixtures", "fit")
@@ -95,8 +98,10 @@ def put(path, text, mode=None):
 
 class Fake(http.server.ThreadingHTTPServer):
     """OpenAI-compatible stand-in: /v1 (L) and /v3 (O) stream at their own inter-token gap; a
-    non-streamed chat answers one fixed sentence. Every request body is kept."""
+    non-streamed chat answers one fixed sentence. Every request body is kept. Its listen queue
+    holds every request a phase keeps in flight (socketserver's default holds 5)."""
     daemon_threads = True
+    request_queue_size = 64
 
     def __init__(self, itl):
         self.itl, self.bodies = itl, []
@@ -624,6 +629,39 @@ def synth_load(hold_dir, arms, foreign=1.0):
         while ts < max(t) + 1:
             f.write(json.dumps({"ts": ts, "seconds": 0.2, "pcore_busy": 6.0 + foreign, "node_cpu": 6.0}) + "\n")
             ts += 0.2
+
+
+class Stub(unittest.TestCase):
+    def test_listen_queue_holds_the_quality_phases_requests(self):
+        """The quality hold's h54.py gsm8k keeps its workers' requests in flight at once. The stub
+        queues every one of those connections before its accept loop reaches any, so a busy host
+        that delays the accept loop delays the requests rather than failing one. Past a full
+        listen queue the kernel drops the handshake, or answers it with a SYN cookie that can end
+        in a reset; the GSM8K item is then an error whose body never reaches the stub (49 of 50
+        on L, or O's quality.json with an error, on CI)."""
+        n = inspect.signature(h54.gsm8k).parameters["workers"].default
+        srv = Fake({"v1": 0.0})   # its accept loop has not started
+        conns, loop = [], threading.Thread(target=srv.serve_forever, daemon=True)
+        try:
+            for i in range(n):
+                c = http.client.HTTPConnection(*srv.server_address, timeout=5)
+                try:
+                    c.connect()
+                except OSError as e:
+                    self.fail(f"connection {i + 1} of {n} was not queued: {e!r}")
+                conns.append(c)
+            loop.start()
+            body = json.dumps({"model": "gemma", "max_tokens": 1024, "messages": []})
+            for c in conns:
+                c.request("POST", "/v1/chat/completions", body, {"Content-Type": "application/json"})
+            self.assertEqual([c.getresponse().status for c in conns], [200] * n)
+            self.assertEqual(len(srv.bodies), n)
+        finally:
+            for c in conns:
+                c.close()
+            if loop.is_alive():
+                srv.shutdown()
+            srv.server_close()
 
 
 class EndToEnd(unittest.TestCase):
