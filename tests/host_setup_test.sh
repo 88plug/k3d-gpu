@@ -79,63 +79,81 @@ not_says() { ! grep -F -- "$2" <<< "${OUT}" >/dev/null; check "$1" $? "unexpecte
 logged()   { grep -F -- "$2" "${STUB_LOG}" >/dev/null; check "$1" $? "not run: $2"; }
 rc_is()    { local rc=0; [ "${RC}" -eq "$2" ] || rc=1; check "$1" "${rc}" "rc=${RC}, want $2"; }
 
-# host-setup's toolkit pin follows the node image's (Dockerfile ARG), and the
-# nightly bump in build-and-push.yml moves both.
+# host-setup's toolkit pin follows the node image's (Dockerfile ARG): the registry's
+# nvctk pin (pins/registry.toml) derives HS_NVCTK from NVIDIA_CTK_VERSION, so the
+# Freshness bump moves both and `hack/pins check` fails when they part.
 ROOT="$(dirname "${K3D_GPU}")/.."
 CTK=$(sed -n 's/^ARG NVIDIA_CTK_VERSION="\(.*\)"$/\1/p' "${ROOT}/Dockerfile")
 HS=$(sed -n 's/^HS_NVCTK=//p' "${K3D_GPU}")
 OUT="HS_NVCTK=${HS} NVIDIA_CTK_VERSION=${CTK}"
 ok=1; [ -n "${CTK}" ] && [ "${HS}" = "${CTK}" ] && ok=0
 check "HS_NVCTK equals the Dockerfile NVIDIA_CTK_VERSION" "${ok}" "${OUT}"
-OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
-says "nightly bump moves HS_NVCTK" 'sed -i "s|^HS_NVCTK=.*|HS_NVCTK=${{ steps.nvctk.outputs.ctk }}|" scripts/k3d-gpu'
+# registry <id>: "site <file> <var|arg|regex>", "derived <file> <regex> <from>" and
+# "source <run...> <key>" lines of that pin.
+registry() {
+    python3 - "${ROOT}/pins/registry.toml" "$1" <<'PY'
+import sys, tomllib
+pin = next(p for p in tomllib.load(open(sys.argv[1], "rb"))["pin"] if p["id"] == sys.argv[2])
+for s in pin["sites"]:
+    print("site", s["file"], s.get("var") or s.get("arg") or s.get("regex") or s.get("ref"))
+for d in pin.get("derived", []):
+    print("derived", d["file"], d["regex"], d["from"])
+src = pin["source"]
+print("source", " ".join(src.get("run", [src["kind"]])), src.get("key", ""))
+PY
+}
+OUT=$(registry nvctk)
+says "the nvctk pin's site is the Dockerfile NVIDIA_CTK_VERSION" "site Dockerfile NVIDIA_CTK_VERSION"
+says "the nvctk pin derives HS_NVCTK from it" 'derived scripts/k3d-gpu ^HS_NVCTK=(?P<v>\S+)$ {v}'
 
 # host-setup's ppa:kobuk-team/intel-graphics pins. The PPA serves only its
-# current builds, so the nightly check (hack/ppa-pins) moves them: the cases below
-# read each pin from the launcher. ppa <var> <release>: the PPA's name for that
-# release's build (26.3.5-1~ppa1 -> 26.3.5-1~24.04~ppa1).
+# current builds, so the Freshness workflow (group ppa, hack/ppa-pins) moves them:
+# the cases below read each pin from the launcher. ppa <var> <release>: the PPA's
+# name for that release's build (26.3.5-1~ppa1 -> 26.3.5-1~24.04~ppa1).
 pin() { sed -n "s/^$1=//p" "${K3D_GPU}"; }
 ppa() { local v; v=$(pin "$1"); echo "${v%%~*}~$2~${v#*~}"; }
-for v in HS_PPA_MEDIA HS_PPA_GMM HS_PPA_LIBVA; do
+for id_v in ppa-media:HS_PPA_MEDIA ppa-gmm:HS_PPA_GMM ppa-libva:HS_PPA_LIBVA; do
+    v=${id_v#*:}
     OUT="${v}=$(pin "${v}")"
     ok=1; [[ "$(pin "${v}")" =~ ^[0-9][0-9.]*-[0-9]+~ppa[0-9]+$ ]] && ok=0
     check "${v} is a PPA build with the release taken out" "${ok}" "${OUT}"
-    OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
-    says "nightly check compares ${v} with the PPA's build" "[ \"\${{ steps.ppa.outputs.${v} }}\" != \"\${{ steps.current.outputs.${v} }}\" ]"
+    OUT=$(registry "${id_v%%:*}")
+    says "the registry reads ${v} from the launcher" "site scripts/k3d-gpu ${v}"
+    says "the registry compares ${v} with hack/ppa-pins' build" "source hack/ppa-pins ${v}"
 done
-# The ppa step as the runner runs a step with no shell: key (bash -e, no pipefail),
-# from a checkout whose hack/ppa-pins is a stub. A hack/ppa-pins failure has to fail
-# the step: its empty outputs would otherwise read as moved pins and cut a release.
-ppastep=$(python3 -c 'import sys, yaml
-for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["check"]["steps"]:
-    if s.get("id") == "ppa": print(s["run"])' "${ROOT}/.github/workflows/build-and-push.yml")
-OUT=${ppastep}
-ok=1; [ -n "${ppastep}" ] && ok=0
-check "build-and-push has the ppa step" "${ok}" "no step with id ppa"
-ppastep_run() {  # ppastep_run <stub exit code>: the step's GITHUB_OUTPUT into OUT, its exit code into RC
+# The registry's PPA source runs hack/ppa-pins (here a stub) and reads its output. A
+# hack/ppa-pins failure has to fail the source: empty values would otherwise read
+# as moved pins.
+ppa_resolve() {  # ppa_resolve <stub exit code>: the ppa-gmm pin's resolved value into OUT, the exit code into RC
     local d="${WORK}/ppastep"
     rm -rf "${d}"; mkdir -p "${d}/hack"
-    printf '%s\n' "${ppastep}" > "${d}/step.sh"
     if [ "$1" -eq 0 ]; then
         printf '#!/bin/sh\nprintf "HS_PPA_MEDIA=1.0.0-1~ppa1\\nHS_PPA_GMM=2.0.0-1~ppa1\\nHS_PPA_LIBVA=3.0.0-1~ppa1\\n"\n' > "${d}/hack/ppa-pins"
     else
         printf '#!/bin/sh\necho "ppa-pins: cannot fetch the PPA'"'"'s noble index" >&2\nexit %s\n' "$1" > "${d}/hack/ppa-pins"
     fi
     chmod +x "${d}/hack/ppa-pins"
-    : > "${d}/out"
-    (cd "${d}" && GITHUB_OUTPUT="${d}/out" bash -e step.sh) >/dev/null 2>&1
+    OUT=$(python3 - "${ROOT}" "${d}" 2>&1 <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/hack")
+from pinlib import registry, sources
+sources.ROOT = sys.argv[2]
+pin = next(p for p in registry.load(sys.argv[1] + "/pins/registry.toml")["pin"] if p["id"] == "ppa-gmm")
+print("HS_PPA_GMM=" + sources.resolve(pin, None).v)
+PY
+)
     RC=$?
-    OUT=$(cat "${d}/out")
 }
-ppastep_run 0
-rc_is "nightly ppa step: hack/ppa-pins succeeding exits 0" 0
-says "nightly ppa step: the pins land in its outputs" "HS_PPA_GMM=2.0.0-1~ppa1"
-ppastep_run 1
+ppa_resolve 0
+rc_is "PPA source: hack/ppa-pins succeeding resolves" 0
+says "PPA source: the pin's value comes from hack/ppa-pins' output" "HS_PPA_GMM=2.0.0-1~ppa1"
+ppa_resolve 1
 ok=1; [ "${RC}" -ne 0 ] && ok=0
-check "nightly ppa step: hack/ppa-pins failing fails the step" "${ok}" "rc=${RC}, want non-zero"
-OUT=$(cat "${ROOT}/.github/workflows/build-and-push.yml")
-says "nightly check reads the launcher's PPA pins" "grep '^HS_PPA_' scripts/k3d-gpu"
-says "nightly bump writes the PPA pins into the launcher and README" "hack/ppa-pins --write scripts/k3d-gpu README.md"
+check "PPA source: hack/ppa-pins failing fails the resolve" "${ok}" "rc=${RC}, want non-zero"
+says "PPA source: the failure names hack/ppa-pins" "hack/ppa-pins failed"
+OUT=$(cat "${ROOT}/hack/bump")
+says "the ppa group's hook writes the PPA pins into the launcher and README" \
+    '"ppa-pins"), "--write", "scripts/k3d-gpu", "README.md"'
 OUT=$(grep -F 'kobuk-team/intel-graphics' "${ROOT}/README.md")
 says "README names the pinned media driver" "media driver $(pin HS_PPA_MEDIA | cut -d- -f1)"
 says "README names the pinned libva" "libva $(pin HS_PPA_LIBVA | cut -d- -f1)"

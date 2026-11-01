@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # rhysd/actionlint, pinned by digest in hack/ci-images.env (the nightly repin moves it).
+      # rhysd/actionlint, pinned by digest in hack/ci-images.env (the Freshness workflow moves it).
       - name: actionlint
         run: |
           image=$(sed -n 's/^ACTIONLINT_IMAGE=//p' hack/ci-images.env)
@@ -600,6 +600,38 @@ jobs:
           args=(--base "${base}" --head "${head}" --branch "${BRANCH}")
           if [[ "${BRANCH}" == autobump/* ]]; then args+=(--autobump); fi
           hack/pin-guard "${args[@]}"
+
+  # --- Freshness: pin registry, bumper and policy -------------------------------
+  # pins/registry.toml owns every ours and eat-stock pin. Offline: every site
+  # resolves to its span, derived values equal their parents, holds are not past
+  # review_by, one owner per pin (Dependabot keeps github-actions only), known-issue
+  # sites lie inside registry sites, and every pinned image, == requirements pin and
+  # Hugging Face revision in an ours or eat-stock file has an owner. The tests run
+  # the sources on recorded responses, the bumper in a scratch repo, and the policy
+  # matrix cell by cell.
+  pins:
+    name: Pin registry, bumper and policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Tool versions (hack/ci-tools.env)
+        run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
+      - run: hack/pins check
+      - run: python3 tests/pinlib_test.py
+      - run: python3 tests/pins_test.py
+      - run: python3 tests/policy_test.py
+      - run: python3 tests/pin_only_diff_test.py
+      - run: tests/bump_test.sh
+      - name: hack/bump-convert-pins on recorded PyPI answers
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}"
+          "$RUNNER_TEMP/venv/bin/python" tests/bump_convert_pins_test.py
 
   # ─── Bot PR CI and alarm surfacing ───────────────────────────────────────
   # The watchdog files a ci-alarm issue for a red or missing scheduled run or a

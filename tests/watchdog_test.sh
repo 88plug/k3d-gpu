@@ -74,6 +74,10 @@ setup() {
     export FAKE_GH=$C
     mkdir -p "$C/root/.github"
     cp -r "${ROOT}/.github/workflows" "$C/root/.github/"
+    # The October replays below are of build-and-push.yml's nightly, which ran at
+    # 06:17 until the Freshness workflow replaced it: the case's copy keeps it.
+    grep -q "cron: '17 6 \* \* \*'" "$C/root/.github/workflows/build-and-push.yml" \
+        || sed -i "s|^on:$|on:\n  schedule:\n    - cron: '17 6 * * *'|" "$C/root/.github/workflows/build-and-push.yml"
     at "${2:-2026-10-29T13:00:00Z}"
     # The workflow list: the real one, plus every workflow file the repo has now
     # (watchdog.yml registered an hour ago).
@@ -95,9 +99,11 @@ PY
     jq -n --arg t "$(iso '-13 minutes')" '[{databaseId: 4200, conclusion: "success", status: "completed",
         createdAt: $t, url: "https://github.com/88plug/k3d-gpu/actions/runs/4200", headSha: "x",
         workflowName: "Watchdog", event: "schedule"}]' > "$C/wd_sched.json"
-    # The scheduled workflows the watchdog finds besides those two (Canary, Bot sweep)
+    # The scheduled workflows the watchdog finds besides those two (Canary, Bot sweep; Freshness below)
     # ran green 13 minutes ago.
     jq '.[0].workflowName = "Scheduled"' "$C/wd_sched.json" > "$C/other_sched.json"
+    jq --arg t "$(iso '-2 hours')" '.[0].workflowName = "Freshness" | .[0].databaseId = 4202 | .[0].createdAt = $t' \
+        "$C/wd_sched.json" > "$C/fr_sched.json"
     jq -n --arg s "$HEAD_SHA" --arg t "$(iso '-1 hour')" \
         '{sha: $s, commit: {committer: {name: "88plug", date: $t}, message: "bench(wildct): smoke3"}}' > "$C/head.json"
     runs ci_head.json "push:completed:success:$HEAD_SHA:$(iso '-58 minutes')"
@@ -120,6 +126,7 @@ PY
     route '^run list .*--workflow build-and-push\.yml .*--event schedule' bp_sched.json
     route '^run list .*--workflow watchdog\.yml .*--event schedule' wd_sched.json
     route '^run list .*--workflow (canary|bot-sweep)\.yml .*--event schedule' other_sched.json
+    route '^run list .*--workflow freshness\.yml .*--event schedule' fr_sched.json
     route '^api repos/88plug/k3d-gpu/commits/main' head.json
     route '^run list .*--workflow ci\.yml .*--commit ' ci_head.json
     route '^run list .*--workflow ci\.yml .*--branch main' ci_main.json
@@ -509,8 +516,9 @@ fi
 # 14. --list-scheduled: every workflow with on.schedule, with its cron period in hours.
 setup listsched
 watch --list-scheduled; rc=$?
-if [ "$rc" -eq 0 ] && grep -qx 'build-and-push.yml 24' "$C/out" && grep -qx 'watchdog.yml 1' "$C/out"; then
-    ok "--list-scheduled: build-and-push.yml 24, watchdog.yml 1"
+if [ "$rc" -eq 0 ] && grep -qx 'build-and-push.yml 24' "$C/out" && grep -qx 'watchdog.yml 1' "$C/out" \
+   && grep -qx 'freshness.yml 6' "$C/out" && grep -qx 'bot-sweep.yml 1' "$C/out"; then
+    ok "--list-scheduled: build-and-push.yml 24 (the October copy), watchdog.yml 1, freshness.yml 6, bot-sweep.yml 1"
 else
     fail "--list-scheduled: rc=$rc out=$(tr '\n' ' ' < "$C/out")"
 fi

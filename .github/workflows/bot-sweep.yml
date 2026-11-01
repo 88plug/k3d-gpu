@@ -7,6 +7,11 @@ name: Bot sweep
 #            branch with no run at its head, and re-runs a first-attempt failure
 #            once, one bot run in flight at a time and none while a human PR's CI
 #            is queued. It fills in what the nightly deferred.
+#   known-issues: hack/known-issues poll finds the release that fixes each entry of
+#            pins/known-issues.toml; for an entry newly fixed (released, nothing
+#            recorded on main yet) it dispatches Freshness for each group whose ours
+#            pins its sites read (hack/pins issue-groups), with reason
+#            known-issue:<id>, unless an open autobump/<group> PR already carries it.
 
 on:
   schedule:
@@ -39,3 +44,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: hack/bot-ci-dispatch
+
+  known-issues:
+    name: Dispatch Freshness for newly fixed known issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Poll the known issues, dispatch Freshness per newly fixed one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          t="$RUNNER_TEMP"
+          hack/known-issues poll --json > "$t/poll.json" \
+            || echo "::warning::hack/known-issues poll could not read every entry (the rest still count)"
+          jq -e 'type == "array"' "$t/poll.json" > /dev/null || { echo "::error::poll printed no JSON list"; exit 1; }
+          hack/pins issue-groups "$t/poll.json" > "$t/todo"
+          [ -s "$t/todo" ] || { echo "no newly fixed known issue"; exit 0; }
+          while read -r id group; do
+            open=$(gh pr list --state open --head "autobump/$group" --json body \
+                     --jq "[.[] | select(.body | contains(\"known-issue:$id\"))] | length")
+            if [ "$open" != 0 ]; then
+              echo "$id: the open autobump/$group PR already records it"
+              continue
+            fi
+            gh workflow run freshness.yml --ref main -f group="$group" -f reason="known-issue:$id"
+            echo "$id: dispatched Freshness for group $group"
+          done < "$t/todo"

@@ -7478,8 +7478,8 @@ cmd_model_share() {
 #     publishes no media-driver .debs, and this is Intel's Ubuntu package source).
 #     The compute .debs need gmmlib 22.10 or later, newer than either release
 #     archive's (24.04: 22.3.17, 26.04: 22.9.0), so compute takes the PPA's too.
-#     The PPA serves only its current build of each package: the nightly check in
-#     build-and-push.yml moves HS_PPA_* to it (hack/ppa-pins).
+#     The PPA serves only its current build of each package: the Freshness
+#     workflow (group ppa) moves HS_PPA_* to it (hack/ppa-pins).
 #   nvidia-container-toolkit 1.20.1-1 (NVIDIA's apt and dnf repos)
 # Ubuntu archive tools (vainfo, clinfo, libtbb12) come from the release itself.
 # Arch, Manjaro and Fedora install their own repo builds: those repos serve only

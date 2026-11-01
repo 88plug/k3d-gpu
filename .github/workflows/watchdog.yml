@@ -26,6 +26,7 @@ on:
       - 'Docs'
       - 'Canary'
       - 'Bot sweep'
+      - 'Freshness'
     types: [completed]
     branches: [main]
   workflow_dispatch:

@@ -1,6 +1,6 @@
 {
   "schema": "k3d-gpu.convert-pins/v1",
-  "comment": "Toolchain of the QAT-matched OpenVINO conversion (console/model_opt.py conversion_job). Each pin is the newest release optimum-intel's own requirements allow; hack/bump-convert-pins moves them nightly (build-and-push.yml bump-convert-pins).",
+  "comment": "Toolchain of the QAT-matched OpenVINO conversion (console/model_opt.py conversion_job). Each pin is the newest release optimum-intel's own requirements allow; hack/bump-convert-pins moves them (the Freshness workflow, group convert-pins).",
   "checked": "2026-10-29",
   "pins": {
     "huggingface-hub": "1.21.0",
