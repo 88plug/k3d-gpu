@@ -633,6 +633,20 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}"
           "$RUNNER_TEMP/venv/bin/python" tests/bump_convert_pins_test.py
 
+  # ─── Bot merge ───────────────────────────────────────────────────────────
+  # hack/bot-merge (bot-sweep.yml, job merge) against a fake gh and fixture repos.
+  bot-merge-tests:
+    name: Bot merge (fake gh, fixture repos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: tests/bot_merge_test.sh
+
   # ─── Bot PR CI and alarm surfacing ───────────────────────────────────────
   # The watchdog files a ci-alarm issue for a red or missing scheduled run or a
   # broken release (email went unread for 9 nights). Every open alarm, and a
