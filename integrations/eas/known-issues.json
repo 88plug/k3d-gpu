@@ -48,6 +48,14 @@
       "workaround": "none needed on the inference layer: EI's seeded config.yaml already sets llm_services_deploy_models: false. On the agent toolkit, EAT's chat model deploys whatever that key says; 'k3d-gpu eas up --agent-toolkit -- -e '{\"llm_services_autodeploy_models\": []}'' skips it (the guard model stays while the guardrail is on)",
       "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/config.yaml#L94-L98; https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/install.yaml#L143-L161; https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1312",
       "checked": "2026-10-29"
+    },
+    {
+      "id": "ei-keycloak-kcadm-argv",
+      "upstream": "https://github.com/intel/enterprise-inference",
+      "symptom": "keycloak_config runs kcadm.sh config credentials --password <admin password> and kcadm.sh update clients/<id> -s secret=<client secret> in the Keycloak pod through k8s_exec, so each value is in a process argv that ps lists on the node (on k3d, on the host) while the kcadm JVM runs; no_log hides it from Ansible's output only",
+      "workaround": "eas up applies patches/ei/0001-keycloak-config-kcadm-argv.patch after init (ei-kcadm.sh): kcadm reads the password from KC_CLI_PASSWORD, copied in the pod from the operator's KC_BOOTSTRAP_ADMIN_PASSWORD, and Keycloak generates the client secret, which kcadm prints; the install stops when the task changed shape. EI issue drafted, unsent (docs/intel/upstream-eat.md)",
+      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L205; https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110",
+      "checked": "2026-11-01"
     }
   ]
 }

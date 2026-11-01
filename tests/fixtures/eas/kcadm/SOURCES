@@ -1,0 +1,18 @@
+# Verbatim copies of intel/enterprise-inference (EI) files at 3e8a244, Apache-2.0,
+# Copyright (C) Intel Corporation; LICENSE here is EI's own. The keycloak_config role,
+# whose install task runs kcadm in the Keycloak pod
+# (integrations/eas/patches/ei/0001-keycloak-config-kcadm-argv.patch is cut against it).
+# tests/eas_test.sh checks every blob sha below, so the role is byte-identical to upstream
+# or the suite fails.
+#
+#   3e8a244  main  3e8a24486b6ee812adf2bf452f8ba5751c16c8bd  (#44)
+#
+# The rest of this directory is the test's own: play/play.yml runs the role (a
+# playbook beside roles/ would take this roles/ before ANSIBLE_ROLES_PATH), kcadm.py stands in
+# for the pod's /opt/keycloak/bin/kcadm.sh, and collections/ replaces kubernetes.core.
+#
+# <blob sha> <path>
+6e1424c3717dcf8c3883bf980662cc142cdd7864 LICENSE
+7a62c02fefd896ecbe1399cd78fdd0b7ef58e0f1 roles/keycloak_config/defaults/main.yaml
+813b34360b748c11832693cba60558fd293d3f8b roles/keycloak_config/tasks/main.yaml
+3732753302cd10d70c2a0e70746f51059baa3a39 roles/keycloak_config/tasks/install.yaml

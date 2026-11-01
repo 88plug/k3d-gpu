@@ -1,0 +1,8 @@
+# EI's keycloak_config role (ANSIBLE_ROLES_PATH: roles/ as shipped, or a copy
+# ei-kcadm.sh patched) with kubernetes.core replaced by collections/, for
+# tests/eas_test.sh section kcadm.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - keycloak_config
