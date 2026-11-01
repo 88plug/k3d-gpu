@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# smoke4-live.sh: read-only live view of the smoke4 cluster while it runs (GPU isolation and node
+# restarts). Every 10 s, at most 1200 s: the node container's state and docker restart count;
+# once the node reads Ready, one full read of DaemonSets, pods, node capacity/allocatable and pod
+# /dev mounts. Ends when the node container is gone after having existed. Writes nothing on the
+# cluster. Not part of the hold (no WILDCT_HOLD in its environment).
+W=~/k3dgpu-bench-wildct; export PATH=$W/bin:$PATH
+export KUBECONFIG=$W/runs/smoke4/out/kubeconfig
+N=k3d-k3dgpu-w-smoke-server-0
+seen=0 full=0 t0=$SECONDS
+while [ $(( SECONDS - t0 )) -lt 1200 ]; do
+    st=$(timeout -k 5 30 docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} started={{.State.StartedAt}}' "$N" 2>/dev/null)
+    if [ -n "$st" ]; then
+        seen=1
+        echo "$(date -u +%FT%TZ) node-container $st"
+        if [ "$full" = 0 ] && [ -s "$KUBECONFIG" ] \
+            && timeout -k 5 30 kubectl get nodes --no-headers 2>/dev/null | awk '$2 == "Ready" {ok=1} END {exit !ok}' \
+            && bash $W/repo/bench/wildct/ready.sh; then
+            full=1
+            echo "== live read $(date -u +%FT%TZ) (node Ready, every pod ready)"
+            echo "-- kubectl get ds -A"; timeout -k 5 30 kubectl get ds -A
+            echo "-- kubectl get pods -A -o wide"; timeout -k 5 30 kubectl get pods -A -o wide
+            echo "-- node capacity / allocatable"
+            timeout -k 5 30 kubectl get node -o jsonpath='{range .items[*]}{.metadata.name} capacity={.status.capacity} allocatable={.status.allocatable} taints={.spec.taints}{"\n"}{end}'
+            echo "-- pods with a hostPath under /dev, or a GPU resource"
+            timeout -k 5 30 kubectl get pods -A -o json | python3 -c '
+import json, sys
+d = json.load(sys.stdin); n = 0
+for p in d["items"]:
+    name = p["metadata"]["namespace"] + "/" + p["metadata"]["name"]
+    for v in p["spec"].get("volumes", []):
+        hp = (v.get("hostPath") or {}).get("path", "")
+        if hp == "/dev" or hp.startswith("/dev/"):
+            print(name, "hostPath", hp); n += 1
+    for c in p["spec"].get("containers", []) + p["spec"].get("initContainers", []):
+        r = {**(c.get("resources", {}).get("limits") or {}), **(c.get("resources", {}).get("requests") or {})}
+        for k in r:
+            if "nvidia" in k or "gpu" in k or "intel" in k:
+                print(name, "asks", k); n += 1
+print("pods", len(d["items"]), "dev-or-gpu findings", n)'
+            echo "-- node container devices"
+            timeout -k 5 30 docker inspect -f 'privileged={{.HostConfig.Privileged}} devices={{.HostConfig.Devices}} runtime={{.HostConfig.Runtime}} gpus={{.HostConfig.DeviceRequests}} binds={{.HostConfig.Binds}}' "$N"
+            echo "== end live read"
+        fi
+    elif [ "$seen" = 1 ]; then
+        echo "$(date -u +%FT%TZ) node container gone"; break
+    fi
+    sleep 10
+done
+echo "$(date -u +%FT%TZ) live view done (seen=$seen full=$full)"
