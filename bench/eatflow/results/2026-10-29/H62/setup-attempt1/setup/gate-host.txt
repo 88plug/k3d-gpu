@@ -1,0 +1,5 @@
+PASS MemAvailable 430095940 KiB >= 352321536 KiB (both guests + 48 GiB)
+PASS / used 31% <= 90%
+PASS huggingface.co reachable
+PASS registry-1.docker.io reachable
+PASS registry.k8s.io reachable

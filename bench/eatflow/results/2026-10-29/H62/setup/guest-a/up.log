@@ -1,0 +1,87 @@
+[32m==>[0m Accelerators: amx
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Pulling node image cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c...
+docker.io/cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c: Pulling from cryptoandcoffee/k3d-gpu
+e67feb2c8650: Pulling fs layer
+b6534f7a9bc8: Pulling fs layer
+da654ccf864f: Pulling fs layer
+530a667cc81b: Pulling fs layer
+e6bfb6d1a7b1: Pulling fs layer
+426a288f2cea: Pulling fs layer
+d9d511d19a19: Pulling fs layer
+ffec8b5406ea: Pulling fs layer
+78f442d81dea: Pulling fs layer
+ea6e437e3b64: Pulling fs layer
+435bf5c20694: Pulling fs layer
+1eaf7d66a591: Pulling fs layer
+76706ee414e3: Pulling fs layer
+bc5aa7ba8dd6: Pulling fs layer
+26d6a4f45c14: Pulling fs layer
+72b59c652e52: Pulling fs layer
+c6004f7c2743: Pulling fs layer
+b6534f7a9bc8: Download complete
+e6bfb6d1a7b1: Download complete
+bc5aa7ba8dd6: Download complete
+ea6e437e3b64: Download complete
+78f442d81dea: Download complete
+72b59c652e52: Download complete
+26d6a4f45c14: Download complete
+426a288f2cea: Download complete
+435bf5c20694: Download complete
+e67feb2c8650: Download complete
+ffec8b5406ea: Download complete
+76706ee414e3: Download complete
+c6004f7c2743: Download complete
+1eaf7d66a591: Download complete
+d9d511d19a19: Download complete
+44136fa355b3: Download complete
+530a667cc81b: Download complete
+99c20d7d29fe: Download complete
+435bf5c20694: Pull complete
+d9d511d19a19: Pull complete
+da654ccf864f: Download complete
+ffec8b5406ea: Pull complete
+ea6e437e3b64: Pull complete
+426a288f2cea: Pull complete
+530a667cc81b: Pull complete
+da654ccf864f: Pull complete
+b6534f7a9bc8: Pull complete
+e6bfb6d1a7b1: Pull complete
+78f442d81dea: Pull complete
+72b59c652e52: Pull complete
+76706ee414e3: Pull complete
+c6004f7c2743: Pull complete
+bc5aa7ba8dd6: Pull complete
+26d6a4f45c14: Pull complete
+e67feb2c8650: Pull complete
+1eaf7d66a591: Pull complete
+Digest: sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c
+Status: Downloaded newer image for cryptoandcoffee/k3d-gpu@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c
+docker.io/cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c
+[32m==>[0m Creating k3d cluster 'k3dgpu-e-h62' with image cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-e-h62'           
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-e-h62-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Pulling image 'ghcr.io/k3d-io/k3d-tools:5.9.0' 
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-e-h62-server-0'    
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-e-h62-tools'       
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0002] HostIP: using network gateway 172.18.0.1 address 
+[36mINFO[0m[0002] Starting cluster 'k3dgpu-e-h62'              
+[36mINFO[0m[0002] Starting servers...                          
+[36mINFO[0m[0002] Starting node 'k3d-k3dgpu-e-h62-server-0'    
+[36mINFO[0m[0005] All agents already running.                  
+[36mINFO[0m[0005] All helpers already running.                 
+[36mINFO[0m[0005] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0007] Cluster 'k3dgpu-e-h62' created successfully! 
+[36mINFO[0m[0007] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0007] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-e-h62)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/ubuntu/h62/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-e-h62-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m Verifying accelerators are schedulable...
+[32m==>[0m Accelerators schedulable: amx=1. Try: k3d-gpu test

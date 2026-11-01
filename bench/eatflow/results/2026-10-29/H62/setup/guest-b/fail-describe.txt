@@ -1,0 +1,154 @@
+=== agent-sandbox-system/sandbox-router-deployment-745bd47d69-2ltjd
+Name:             sandbox-router-deployment-745bd47d69-2ltjd
+Namespace:        agent-sandbox-system
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app=sandbox-router
+                  pod-template-hash=745bd47d69
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/sandbox-router-deployment-745bd47d69
+Containers:
+  router:
+    Image:      us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     1
+      memory:  1Gi
+    Requests:
+      cpu:      250m
+      memory:   512Mi
+    Liveness:   http-get http://:8080/healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+    Readiness:  http-get http://:8080/healthz delay=5s timeout=1s period=5s #success=1 #failure=3
+    Environment:
+      ROUTER_AUTH_TOKEN:             <set to the key 'ROUTER_AUTH_TOKEN' in secret 'sandbox-router-auth'>  Optional: false
+      PROXY_TIMEOUT_SECONDS:         180
+      ALLOW_UNAUTHENTICATED_ROUTER:  false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-z6gnf (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-z6gnf:
+    Type:                     Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:   3607
+    ConfigMapName:            kube-root-ca.crt
+    Optional:                 false
+    DownwardAPI:              true
+QoS Class:                    Burstable
+Node-Selectors:               <none>
+Tolerations:                  node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                              node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Topology Spread Constraints:  topology.kubernetes.io/zone:ScheduleAnyway when max skew 1 is exceeded for selector app=sandbox-router
+Events:
+  Type     Reason            Age                From               Message
+  ----     ------            ----               ----               -------
+  Warning  FailedScheduling  10m                default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+  Warning  FailedScheduling  5s (x2 over 5m5s)  default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+=== agent-sandbox-system/sandbox-router-deployment-7f9db56b-m5f9b
+Name:             sandbox-router-deployment-7f9db56b-m5f9b
+Namespace:        agent-sandbox-system
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app=sandbox-router
+                  pod-template-hash=7f9db56b
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/sandbox-router-deployment-7f9db56b
+Containers:
+  router:
+    Image:      us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     1
+      memory:  1Gi
+    Requests:
+      cpu:      250m
+      memory:   512Mi
+    Liveness:   http-get http://:8080/healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+    Readiness:  http-get http://:8080/healthz delay=5s timeout=1s period=5s #success=1 #failure=3
+    Environment:
+      PROXY_TIMEOUT_SECONDS:         180
+      ALLOW_UNAUTHENTICATED_ROUTER:  false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-gw7rz (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-gw7rz:
+    Type:                     Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:   3607
+    ConfigMapName:            kube-root-ca.crt
+    Optional:                 false
+    DownwardAPI:              true
+QoS Class:                    Burstable
+Node-Selectors:               <none>
+Tolerations:                  node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                              node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Topology Spread Constraints:  topology.kubernetes.io/zone:ScheduleAnyway when max skew 1 is exceeded for selector app=sandbox-router
+Events:
+  Type     Reason            Age                From               Message
+  ----     ------            ----               ----               -------
+  Warning  FailedScheduling  10m                default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+  Warning  FailedScheduling  6s (x2 over 5m6s)  default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+=== agent-sandbox-system/sandbox-router-deployment-7f9db56b-vznbv
+Name:             sandbox-router-deployment-7f9db56b-vznbv
+Namespace:        agent-sandbox-system
+Priority:         0
+Service Account:  default
+Node:             <none>
+Labels:           app=sandbox-router
+                  pod-template-hash=7f9db56b
+Annotations:      <none>
+Status:           Pending
+IP:               
+IPs:              <none>
+Controlled By:    ReplicaSet/sandbox-router-deployment-7f9db56b
+Containers:
+  router:
+    Image:      us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main
+    Port:       8080/TCP
+    Host Port:  0/TCP
+    Limits:
+      cpu:     1
+      memory:  1Gi
+    Requests:
+      cpu:      250m
+      memory:   512Mi
+    Liveness:   http-get http://:8080/healthz delay=10s timeout=1s period=10s #success=1 #failure=3
+    Readiness:  http-get http://:8080/healthz delay=5s timeout=1s period=5s #success=1 #failure=3
+    Environment:
+      PROXY_TIMEOUT_SECONDS:         180
+      ALLOW_UNAUTHENTICATED_ROUTER:  false
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-v9sz7 (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  kube-api-access-v9sz7:
+    Type:                     Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:   3607
+    ConfigMapName:            kube-root-ca.crt
+    Optional:                 false
+    DownwardAPI:              true
+QoS Class:                    Burstable
+Node-Selectors:               <none>
+Tolerations:                  node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                              node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Topology Spread Constraints:  topology.kubernetes.io/zone:ScheduleAnyway when max skew 1 is exceeded for selector app=sandbox-router
+Events:
+  Type     Reason            Age                From               Message
+  ----     ------            ----               ----               -------
+  Warning  FailedScheduling  10m                default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.
+  Warning  FailedScheduling  6s (x2 over 5m6s)  default-scheduler  0/1 nodes are available: 1 Insufficient cpu. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.

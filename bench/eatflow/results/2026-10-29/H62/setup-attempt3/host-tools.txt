@@ -1,0 +1,6 @@
+ba08b7396e3d0e125e4ed57c02046dd6ed41d6db
+k3d version v5.9.0
+Client Version: v1.37.2
+version.BuildInfo{Version:"v4.3.1", GitCommit:"c0d08d0d6d9424d4a14febb5e8a3e51b0dd00dff", GitTreeState:"clean", GoVersion:"go1.27.2", KubeClientVersion:"v1.37"}
+29.8.0
+7.0.0-31-generic
