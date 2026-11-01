@@ -1,0 +1,82 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 8.62kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/rancher/k3s:v1.37.1-k3s1@sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d
+#3 DONE 0.0s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 249B done
+#4 DONE 0.0s
+
+#5 [isst 1/2] FROM docker.io/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+#5 DONE 0.0s
+
+#6 [k3s 1/1] FROM docker.io/rancher/k3s:v1.37.1-k3s1@sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 194.74kB done
+#7 DONE 0.0s
+
+#8 [stage-2 15/17] COPY share/node-feature-discovery.yml /var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml
+#8 CACHED
+
+#9 [stage-2 16/17] COPY share/intel-gpu-wsl-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-wsl-plugin.yaml
+#9 CACHED
+
+#10 [stage-2 13/17] COPY share/intel-qat-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-qat-plugin.yaml
+#10 CACHED
+
+#11 [stage-2  2/17] RUN apt-get update && apt-get install -y curl gnupg ca-certificates     && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg     && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |       sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' |       tee /etc/apt/sources.list.d/nvidia-container-toolkit.list     && apt-get update && apt-get install -y       nvidia-container-toolkit-base=1.20.1-1 nvidia-container-toolkit=1.20.1-1       libnvidia-container-tools=1.20.1-1 libnvidia-container1=1.20.1-1       nvidia-container-runtime=3.14.0-1 util-linux     && nvidia-ctk runtime configure --runtime=containerd     && rm -rf /var/lib/apt/lists/*
+#11 CACHED
+
+#12 [stage-2  3/17] COPY --from=k3s /bin/ /usr/bin/
+#12 CACHED
+
+#13 [stage-2  5/17] COPY --from=isst /usr/local/bin/intel-speed-select /usr/local/bin/intel-speed-select
+#13 CACHED
+
+#14 [stage-2 11/17] COPY share/intel-dsa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-dsa-plugin.yaml
+#14 CACHED
+
+#15 [stage-2 14/17] COPY share/nri-balloons.yml /var/lib/rancher/k3s/server/manifests/nri-balloons.yaml
+#15 CACHED
+
+#16 [stage-2 10/17] COPY share/intel-npu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml
+#16 CACHED
+
+#17 [stage-2  4/17] COPY --from=k3s /usr/share/ /usr/share/
+#17 CACHED
+
+#18 [stage-2  6/17] COPY share/nvidia-device-plugin.yml /var/lib/rancher/k3s/server/manifests/nvidia-device-plugin.yaml
+#18 CACHED
+
+#19 [stage-2  9/17] COPY share/intel-gpu-dra.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-dra.yaml
+#19 CACHED
+
+#20 [stage-2 12/17] COPY share/intel-iaa-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-iaa-plugin.yaml
+#20 CACHED
+
+#21 [isst 2/2] RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils make gcc libc6-dev       pkg-config libnl-3-dev libnl-genl-3-dev     && curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v$(echo "7.3" | cut -d. -f1).x/linux-7.3.tar.xz"     && echo "87363c24f10e06321eb362765521094e94471f6bff8bce2d6b3e40f39f004953  /tmp/linux.tar.xz" | sha256sum -c -     && tar -xJf /tmp/linux.tar.xz -C /tmp "linux-7.3/tools" "linux-7.3/include/uapi"     && make -C "/tmp/linux-7.3/tools/power/x86/intel-speed-select" LDFLAGS=-static     && install -m 0755 "/tmp/linux-7.3/tools/power/x86/intel-speed-select/intel-speed-select" /usr/local/bin/     && /usr/local/bin/intel-speed-select --version     && ! ldd /usr/local/bin/intel-speed-select     && rm -rf /tmp/linux* /var/lib/apt/lists/*
+#21 CACHED
+
+#22 [stage-2  7/17] COPY share/intel-gpu-plugin.yml /var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml
+#22 CACHED
+
+#23 [stage-2  8/17] COPY share/gaudi-device-plugin.yml /var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml
+#23 CACHED
+
+#24 [stage-2 17/17] RUN mkdir -p /etc/cdi
+#24 CACHED
+
+#25 exporting to image
+#25 exporting layers done
+#25 writing image sha256:9ab13228938bfb527ea02fdb7346e14dace6106fc8c2440ca9e1f3b9819b57ad done
+#25 naming to docker.io/library/k3d-gpu-f3node:48e1da90 done
+#25 DONE 0.0s

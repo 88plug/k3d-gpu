@@ -167,8 +167,10 @@ machine. There are two paths, one per EAT generation:
   moved the toolkit into Intel's EAS installer (`es_auto_installer.sh install
   agent-toolkit`). `k3d-gpu eas up --agent-toolkit` runs that installer against the
   cluster, with every k3d choice made from what it reads there:
-  [intel/eas.md](intel/eas.md). It has not run end to end yet; F3 in
-  [EXPERIMENTS.md](../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29) is PENDING.
+  [intel/eas.md](intel/eas.md). F3 ran it once end to end on the i9-13900T and is
+  REFUTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install,
+  `eas check` and the teardown passed, but enterprise-inference's Keycloak step put the
+  Keycloak admin password on a process command line, where the run's secret scan found it.
 
 Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
@@ -217,7 +219,7 @@ and installs through EAS.
 | Hosts | Xeon. Minimum 48 cores and 32 GB RAM, recommended 96+ cores and 64 GB; Docker mode asks for 96+ cores and 128 GB | Any Intel host it detects: client Core and Core Ultra, Xeon, Arc, Gaudi (detection and config fixture-tested per family, [platforms.md](platforms.md)). EAT ran end to end on one i9-13900T with no AMX and no AVX-512, n=1 [ledger:H1b] |
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
-| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). Not run yet; F3 is PENDING |
+| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F3 is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
 | Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores; vLLM XPU (`v0.31.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |

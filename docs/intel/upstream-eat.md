@@ -239,7 +239,7 @@ shellcheck --severity=error es_auto_installer.sh
 
 **Gate 2. Live probes on one throwaway k3d cluster.** **Status: all six ran on 2026-10-20 (UTC) on one i9-13900T host. Probes 1 and 2 found a defect in 0005, now fixed; probe 5 needed one deviation.** EAS `main` `e8f3ebc` with all five patches applied, from an Ubuntu 24.04 bastion container on the host network (`configure` supports Ubuntu and RHEL only; this host runs Manjaro). Each run took the shared live lock, used one cluster named `k3dgpu-gate2`, and deleted it afterwards.
 
-Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. EAT 2.0 on k3d stays unverified until F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-pre-registration-i9-13900t-2026-10-29)) has run: `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered.
+Gate 2 covered EAS's platform and inference layers only, on EAS `e8f3ebc` and enterprise-inference `aaca1e5`. It did not install the agent-toolkit layer, which did not exist in EAS then. F3 ([EXPERIMENTS.md](../../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)) then ran `k3d-gpu eas up --agent-toolkit` on one fresh cluster, graded as pre-registered, and is REFUTED: the agent-toolkit layer installed, `eas check` passed through the EAS gateway and `eas down` tore it down, but enterprise-inference's `keycloak_config` role passes the Keycloak admin password on `kcadm.sh`'s command line, and the run's `ps` samples caught it once.
 
 | # | Probe | Cluster | Result |
 |---|---|---|---|

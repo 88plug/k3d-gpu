@@ -1,0 +1,5 @@
+k3d-gpu commit: 48e1da900f8402fd76aeded71cabd0662dbcc7e5
+node image: k3d-gpu-f3node:48e1da90 sha256:9ab13228938bfb527ea02fdb7346e14dace6106fc8c2440ca9e1f3b9819b57ad
+HF_TOKEN: unset
+inotify: 1024 524288
+lock taken: 2026-11-01T03:59:53-08:00  cap: 180 min

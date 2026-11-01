@@ -1,0 +1,6 @@
+# overlay at eas@97f6157 (HEAD), kubernetes_cpu_policy=best-effort, nodes=1
+0002 variant a applies -> apply 0002-eas-istio-global-platform.patch [eas@97f6157 configs/defaults/global_config.yaml:69]
+0003 kubernetes_cpu_policy=best-effort, needed only for nri-balloons -> skip [overlay.json 0003 needed_when=eas_owns_nri]
+0004 nodes=1, needed only on more than one node -> skip [overlay.json 0004 needed_when=multi_node]
+0005 documentation only -> skip [overlay.json 0005 needed_when=never]
+0006 variant a applies -> apply 0006-eas-envoy-control-plane-affinity.patch [eas@97f6157 roles/envoy_gateway/tasks/controller.yaml:154]
