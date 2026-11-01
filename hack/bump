@@ -530,6 +530,15 @@ def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True,
         notes.append("golden substitution: %s" % ", ".join(golden))
     if vcs(root, "status", "--porcelain", "--", ".github").strip():
         raise BumpError("the bump changed .github/: a bumper never writes a workflow")
+    # the sites and the goldens are written only where path_writable allows; a hook's
+    # output is checked here, so a ledger arm, a finished run or the ledger never moves
+    from pinlib import classes
+    touched = set(vcs(root, "diff", "--name-only", "HEAD").splitlines())
+    touched |= set(vcs(root, "ls-files", "--others", "--exclude-standard").splitlines())
+    bad = sorted(p for p in touched if p and not path_writable(root, p))
+    if bad:
+        raise BumpError("the bump changed %s: a bumper writes only ours and eat-stock files"
+                        % ", ".join("%s (%s)" % (p, classes.effective(root, p)) for p in bad))
     tests = []
     if run_tests and not dry_run:
         for t in conf.get("tests", []):
