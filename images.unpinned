@@ -9,6 +9,7 @@
 Makefile                              k3d-gpu-dev:local                     built from .devcontainer/ by `make dev-image`, run by `make check-container`
 examples/dataplane/pgvector-backup.yaml k3d-gpu/pg-zlib-accel:18-zla1.1.0  built from images/pg-zlib-accel.Dockerfile and loaded with `k3d image import`
 examples/dataplane/redis-dto.yaml     k3d-gpu/redis-dto:8.10.2-dto-fbf41a6  built on the target host from images/redis-dto.Dockerfile (-march=native) and loaded with `k3d image import`
+bench/f3/launch.sh                    k3d-gpu-f3node:48e1da90               F3's node image, built from this repo's Dockerfile at 48e1da90 by bench/f3/step0.sh (amendment R1)
 
 # A rolling distro: pacman needs a current keyring, so the tag stays `latest` and
 # `scripts/images-lock repin` moves the digest beside it.

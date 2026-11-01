@@ -32,6 +32,7 @@ integrations/eas/**                     eat-stock   EAS, the stack EAT 2.0 deplo
 console/matrix.v1.json                  historical  the measured cells of H6 and H8 the planner reads
 oracle/seed/**                          historical  the maintainer bundles of the H6 and H8 runs
 oracle/raw/**                           historical  the raw H6 and H8 records the seed bundles were built from
+bench/f3/**                             historical  F3's runner and records (a functional row; ledger lines take H ids only)
 
 # --- Runners of finished rows. Ledger lines, so the class follows the ledger: every row
 # listed has a verdict, so each resolves to historical (hack/pin-classes effective).
