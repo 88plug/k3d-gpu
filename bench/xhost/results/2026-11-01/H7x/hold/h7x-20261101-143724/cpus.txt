@@ -1,0 +1,7 @@
+A Cpus_allowed_list:	0-7,48-55
+B Cpus_allowed_list:	0-7,48-55
+A Cpus_allowed_list:	0-7,48-55
+B Cpus_allowed_list:	0-7,48-55
+A Cpus_allowed_list:	0-7,48-55
+B Cpus_allowed_list:	0-7,48-55
+C Cpus_allowed_list:	0-7,48-55

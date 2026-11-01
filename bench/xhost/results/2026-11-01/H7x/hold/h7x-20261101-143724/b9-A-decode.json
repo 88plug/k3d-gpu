@@ -1,0 +1,165 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-11-01T15:09:44Z",
+  "config": {
+    "base_url": "http://127.0.0.1:18000/v3",
+    "model": "Qwen3-4B-fp16-ov",
+    "prompt": "Explain in three short paragraphs how a CPU cache hierarchy reduces memory latency, and what a cache miss costs.",
+    "max_tokens": 256,
+    "temperature": 0.0,
+    "ignore_eos": true,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 5,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 600.0,
+    "label": "h7x-A-b9-decode",
+    "out": "/home/devcloud/k3dgpu-xhost/runs/H7x/h7x-20261101-143724/b9-A-decode.json",
+    "run_id": "83eff854"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 5,
+      "ok": 5,
+      "errors": 0,
+      "wall_s": 99.49859140021726,
+      "output_tokens_total": 1280,
+      "aggregate_tokens_per_s": 12.864503728011622,
+      "requests_per_s": 0.0502519676875454,
+      "stats": {
+        "first_chunk_s": {
+          "n": 5,
+          "median": 0.1523694391362369,
+          "p90": 0.16276573203504086,
+          "min": 0.149687506724149,
+          "max": 0.16276573203504086
+        },
+        "ttft_s": {
+          "n": 5,
+          "median": 0.23652675095945597,
+          "p90": 0.2480271477252245,
+          "min": 0.233644207008183,
+          "max": 0.2480271477252245
+        },
+        "latency_s": {
+          "n": 5,
+          "median": 19.90465731685981,
+          "p90": 19.931505571119487,
+          "min": 19.868794593960047,
+          "max": 19.931505571119487
+        },
+        "output_tokens": {
+          "n": 5,
+          "median": 256,
+          "p90": 256,
+          "min": 256,
+          "max": 256
+        },
+        "tokens_per_s": {
+          "n": 5,
+          "median": 12.861311597821919,
+          "p90": 12.884525973096624,
+          "min": 12.843987077972722,
+          "max": 12.884525973096624
+        },
+        "decode_tokens_per_s": {
+          "n": 5,
+          "median": 12.965136627784368,
+          "p90": 12.986913518597495,
+          "min": 12.955027283029747,
+          "max": 12.986913518597495
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 251,
+          "text_chars": 1082,
+          "finish_reason": "length",
+          "first_chunk_s": 0.16276573203504086,
+          "ttft_s": 0.2480271477252245,
+          "latency_s": 19.931505571119487,
+          "output_tokens": 256,
+          "tokens_per_s": 12.843987077972722,
+          "decode_tokens_per_s": 12.955027283029747,
+          "prompt_tokens": 41,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 251,
+          "text_chars": 1078,
+          "finish_reason": "length",
+          "first_chunk_s": 0.149687506724149,
+          "ttft_s": 0.233644207008183,
+          "latency_s": 19.868794593960047,
+          "output_tokens": 256,
+          "tokens_per_s": 12.884525973096624,
+          "decode_tokens_per_s": 12.986913518597495,
+          "prompt_tokens": 41,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 251,
+          "text_chars": 1076,
+          "finish_reason": "length",
+          "first_chunk_s": 0.1523694391362369,
+          "ttft_s": 0.23652675095945597,
+          "latency_s": 19.90465731685981,
+          "output_tokens": 256,
+          "tokens_per_s": 12.861311597821919,
+          "decode_tokens_per_s": 12.965136627784368,
+          "prompt_tokens": 41,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 251,
+          "text_chars": 1076,
+          "finish_reason": "length",
+          "first_chunk_s": 0.15038609597831964,
+          "ttft_s": 0.23532850528135896,
+          "latency_s": 19.9051646431908,
+          "output_tokens": 256,
+          "tokens_per_s": 12.86098379937656,
+          "decode_tokens_per_s": 12.964012420446224,
+          "prompt_tokens": 41,
+          "finished": true
+        },
+        {
+          "index": 4,
+          "ok": true,
+          "error": null,
+          "chunks": 254,
+          "content_chunks": 251,
+          "text_chars": 1076,
+          "finish_reason": "length",
+          "first_chunk_s": 0.15490802424028516,
+          "ttft_s": 0.23724062135443091,
+          "latency_s": 19.885921139270067,
+          "output_tokens": 256,
+          "tokens_per_s": 12.873429307454085,
+          "decode_tokens_per_s": 12.97797069719218,
+          "prompt_tokens": 41,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

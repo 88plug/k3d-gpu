@@ -1,0 +1,3 @@
+xeon-values.yaml: OK
+values.yaml: OK
+templates/deployment.yaml: OK
