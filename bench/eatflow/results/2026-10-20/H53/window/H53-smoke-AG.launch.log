@@ -1,0 +1,11 @@
+2026-10-30T00:15:13Z cards free: 0000:12:00.0 0.0;0000:48:00.0 0.0;0000:7c:00.0 0.0;0000:96:00.0 0.0;
+2026-10-30T00:15:13Z smoke H53-smoke-AG start
+== H53-smoke-AG waiting for the lock 2026-10-30T00:15:13Z
+== H53-smoke-AG lock taken 2026-10-30T00:15:13Z
+== H53-smoke-AG start: env K3D_GPU_IMAGE=cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa68c77681d7fa474693944de0db8d55de5881253e4029bf72a67e175c K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1% LIVE_MODE=solo LIVE_SOLO=AG LIVE_CAP=2370 LIVE_HOLD=1 LIVE_PAIRS_GUARD=99999 LIVE_PAIRS_DIR=/home/devcloud/k3dgpu-bench/smoke/H53/H53-smoke-AG/pairs LIVE_MODEL_SET=qwen38 LIVE_MOUNT_B=1 LIVE_GPU_FREE=0000:12:00.0 0000:48:00.0 0000:7c:00.0 0000:96:00.0 LIVE_B2_TP=4 LIVE_B2_LADDER= LIVE_EAT_XPU_CHART=/home/devcloud/k3dgpu-bench/eat-pr21/core/helm-charts/vllm LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python PATH=/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-bench/k3d-gpu-h53/bench/eatflow/live.sh H53 /home/devcloud/k3dgpu-bench/smoke/H53/H53-smoke-AG/hold 2026-10-30T00:15:14Z
+/home/devcloud/k3dgpu-bench/k3d-gpu-h53/bench/eatflow/crescent/hold.sh: line 151: 1549367 Killed                     ( while kill -0 "${cp}" 2> /dev/null; do
+    sleep 30; if [ "$(disk)" -gt 97 ]; then
+        echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "$$"; break;
+    fi;
+done ) 7>&- 8>&- 9>&-
+== H53-smoke-AG rc=0; clusters deleted: none; containers removed: none; now:   2026-10-30T00:20:05Z

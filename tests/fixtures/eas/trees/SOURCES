@@ -1,0 +1,35 @@
+# Verbatim copies of intel/enterprise-ai-solutions (EAS) files, Apache-2.0,
+# Copyright (C) Intel Corporation; LICENSE here is EAS's own, the same file on
+# both branches. Only the files the overlay patches touch
+# (integrations/eas/overlay.json). tests/eas_test.sh checks every blob sha below,
+# so a fixture is byte-identical to upstream or the suite fails.
+#
+#   97f6157  main         97f6157d6a72f7173c698c474d4e51d2c79f1fd6  2026-10-29 (#69)
+#   5c27fb3  release-1.2  5c27fb39a95eecec41aa4e29a1188984e9c726f3  2026-10-27 (tag v1.2.0-rc.1)
+#
+# <tree> <blob sha> <path>   (tree "-" is this directory)
+- 6e1424c3717dcf8c3883bf980662cc142cdd7864 LICENSE
+97f6157 44a10e4dd37fcb343c2212bf0c00901c37fe4747 configs/defaults/global_config.yaml
+97f6157 d86e20f0a4bbd4d2352219cd8abb7cb93bec2b87 docs/README.md
+97f6157 c2b89bf396954d5be4ab863c12f34b601097838d docs/customize/node_topology.md
+97f6157 054f7c435931ed9f834a61bd2d4281cd3ed75f83 docs/deploy/topologies.md
+97f6157 cf1824b2b106986c4425ae52d3c9c65aa7cc9862 roles/envoy_gateway/tasks/controller.yaml
+97f6157 f91161e77611183f3752a82d011f369af6ec7938 roles/istio/defaults/main.yaml
+97f6157 e81c08ef92529c62c80d64cbd826bb59d496717d roles/istio/tasks/install.yaml
+97f6157 bb6dc68ff85bcf8d7f7bc25861b9d41406bc9bdc roles/istio/tasks/upgrade.yaml
+97f6157 c1a093133e09133f813426583438d706acc1ce44 roles/kubernetes/tasks/apply_node_topology.yaml
+97f6157 3c2db0521e5298cadb18910c344a73230b726b7a roles/kubernetes/tasks/install.yaml
+97f6157 d8641f977da59f7cf990ea048fa2150ace9aa274 roles/nri_cpu_balloons/defaults/main.yaml
+97f6157 9f80228ecc15571687cc7b6833301dd107828302 roles/nri_cpu_balloons/tasks/install_advanced.yaml
+5c27fb3 d8d2537d36da0e965e21b966ca90880db66e4adc configs/defaults/global_config.yaml
+5c27fb3 726d97c34611849c9d84a452a86ddc916f858667 docs/README.md
+5c27fb3 7f4bd3ab169fb0dbdf8e79978a91d9267be61211 docs/customize/node_topology.md
+5c27fb3 bd9d5f7ff4565710f623187b73f1fe6a0168c21d docs/deploy/topologies.md
+5c27fb3 9f3d4234a159191d75dda1769fd9c6a46dc50d8d roles/envoy_gateway/tasks/install.yaml
+5c27fb3 b2e0882fce12d08831950ea89d1baca45bac92a8 roles/istio/defaults/main.yaml
+5c27fb3 6aafac3dd0977e44f5ff8d28ea49e95be1e4d3df roles/istio/tasks/install.yaml
+5c27fb3 3e0fc4abbcaf2daab1293c35930124972c6fd23b roles/istio/tasks/upgrade.yaml
+5c27fb3 c1a093133e09133f813426583438d706acc1ce44 roles/kubernetes/tasks/apply_node_topology.yaml
+5c27fb3 edc15669db543ec0ea92833d6d9678ba1f643c49 roles/kubernetes/tasks/install.yaml
+5c27fb3 d8641f977da59f7cf990ea048fa2150ace9aa274 roles/nri_cpu_balloons/defaults/main.yaml
+5c27fb3 9f80228ecc15571687cc7b6833301dd107828302 roles/nri_cpu_balloons/tasks/install_advanced.yaml

@@ -15,6 +15,8 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "${HERE}/../.." && pwd)
 export REPO G
 case ${ROW} in smoke*) R=${G}/smoke/${ROW}/hold${HOLD} ;; *) R=${G}/results/H54${ROW}/hold${HOLD} ;; esac
+# H54q's arms and its wiring smoke run arm.sh's item mode (amendment Q2).
+case ${ROW} in q | smokeq) export H54Q=1 ;; esac
 mkdir -p "${R}"
 export PATH=${G}/h54a/bin:${G}/bin:${PATH} EAT=${G}/h54a/eat-src
 export CLUSTER=k3dgpu-g-h54${ROW}-${HOLD} KUBECONFIG=${R}/kubeconfig

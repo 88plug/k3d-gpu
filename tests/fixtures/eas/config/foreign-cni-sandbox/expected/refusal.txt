@@ -1,0 +1,2 @@
+REFUSE: containerd CNI bin_dirs ["/usr/lib/cni"] -> matches no Istio platform profile EAS can pass (k3d: /bin, k3s: /var/lib/rancher/k3s/data/cni, default: /opt/cni/bin), so ambient mode could not chain into the CNI [88plug/k3d-gpu@d997ea8 integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch:6-11]
+REFUSE: agent-sandbox v0.4.0 installed -> remove it first: EAT installs agent-sandbox v0.5.0 over the same CRDs [intel/enterprise-agent-toolkit@036b662 config.yaml:56]

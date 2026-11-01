@@ -1,0 +1,2 @@
+REFUSE: --layer erag -> not wired yet: ERAG's Intel GPU flavour chatqna_intel_gpu is EXPERIMENTAL and needs kubernetes_accelerator=intel-gpu [intel/enterprise-rag@319eb46 deployment/pipelines/chatqna_intel_gpu/config.yaml:8-15]
+REFUSE: --layer erag -> enterprise-inference ships no vllm-xpu runtime for it (model_manager/runtimes holds openvino and vllm) [intel/enterprise-inference@3e8a244 model_manager/runtimes]

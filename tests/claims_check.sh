@@ -21,10 +21,16 @@
 # docs/provenance.md is the source of truth for cited numbers and is not scanned
 # either. A file the guard cannot read is an error.
 #
-# Usage: tests/claims_check.sh [repo-root]
+# --cited prints, instead of checking, the ids of the ledger rows that claims cite
+# (a [ledger:Hn] reference on a claim line, or on either line of a claim split over
+# two lines), sorted, one per line, and exits 0. hack/ledger-freshness reads it.
+#
+# Usage: tests/claims_check.sh [--cited] [repo-root]
 
 set -uo pipefail
 
+CITED=0
+if [ "${1:-}" = "--cited" ]; then CITED=1; shift; fi
 ROOT=${1:-"$(cd "$(dirname "$0")/.." && pwd)"}
 LEDGER="${ROOT}/EXPERIMENTS.md"
 PROVENANCE="${ROOT}/docs/provenance.md"
@@ -87,7 +93,7 @@ report=""
 for f in "${files[@]}"; do
     rel=${f#"${ROOT}/"}
     [ -r "${f}" ] || read_error "${f}"
-    out=$(awk -v rel="${rel}" -v ledger="${ledger}" -v prov="${provenance}" '
+    out=$(awk -v rel="${rel}" -v ledger="${ledger}" -v prov="${provenance}" -v cited="${CITED}" '
         function load(s, m,    n, i, kv, p) {
             n = split(s, kv, ";")
             for (i = 1; i <= n; i++) if ((p = index(kv[i], "=")) > 0) m[substr(kv[i], 1, p - 1)] = substr(kv[i], p + 1)
@@ -154,13 +160,14 @@ for f in "${files[@]}"; do
 
             claim = is_claim(low)
 
-            backed = linked; notes = ""; rest = s
+            backed = linked; notes = ""; rest = s; rows = ""
             while (match(rest, /\[(ledger|provenance):[A-Za-z0-9]+\]/)) {
                 ref = substr(rest, RSTART, RLENGTH)
                 rest = substr(rest, RSTART + RLENGTH)
                 kind = substr(ref, 2, index(ref, ":") - 2)
                 id = substr(ref, index(ref, ":") + 1); sub(/\]$/, "", id)
                 if (kind == "ledger") {
+                    rows = rows " " id
                     if (!(id in L)) printf "%s:%d: %s not in EXPERIMENTS.md hypothesis table\n", rel, NR, ref
                     else if (L[id] == "SUPPORTED") backed = 1
                     else notes = notes sprintf("; %s is %s", ref, L[id])
@@ -179,14 +186,22 @@ for f in "${files[@]}"; do
             }
             if ((claim || split_claim) && !backed)
                 printf "%s:%d: unbacked claim (no ledger or provenance reference that backs it%s): %s\n", rel, NR, notes, $0
+            if (cited && (claim || split_claim)) {
+                n = split(rows (split_claim ? prevrows : ""), ids, " ")
+                for (i = 1; i <= n; i++) if (ids[i] != "") printf "cite %s\n", ids[i]
+            }
 
             if (low ~ /^[ \t]*$/) prev = ""
-            else { prev = low; prevclaim = claim || split_claim; prevbacked = backed }
+            else { prev = low; prevclaim = claim || split_claim; prevbacked = backed; prevrows = rows }
         }' "${f}") || read_error "${f}"
     report+=${out}$'\n'
 done
 
 report=$(sed '/^$/d' <<< "${report}")
+if [ "${CITED}" = 1 ]; then
+    sed -n 's/^cite //p' <<< "${report}" | sort -u
+    exit 0
+fi
 if [ -z "${report}" ]; then
     echo "claims_check: ${#files[@]} file(s) clean"
     exit 0

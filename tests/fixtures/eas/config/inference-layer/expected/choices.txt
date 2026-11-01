@@ -1,0 +1,18 @@
+# k3d-gpu eas-config: profile main, layer inference, cluster k3d-gpu
+# eas intel/enterprise-ai-solutions 97f6157d6a72f7173c698c474d4e51d2c79f1fd6
+# ei intel/enterprise-inference 3e8a24486b6ee812adf2bf452f8ba5751c16c8bd
+# each line: <fact> -> <choice> [<source>]; --explain prints each source as a permalink
+cluster k3d-gpu, kubeconfig mounted read-only at /kube/config -> existing_kubernetes: /kube/config [intel/enterprise-ai-solutions@97f6157 es_auto_installer.sh:1342-1358]
+containerd CNI bin_dirs ["/usr/bin"] -> istio_platform: k3d (needs overlay 0002) [88plug/k3d-gpu@d997ea8 docs/intel/upstream-eat.md:222]
+ServiceLB on (no --disable servicelb in k3s.io/node-args) -> metallb_enabled: false [intel/enterprise-ai-solutions@97f6157 roles/metallb/tasks/install.yaml:23-31]
+DaemonSet kube-system/nri-resource-policy-balloons from k3s addon nri-balloons -> kubernetes_cpu_policy: best-effort (one NRI policy per node) [88plug/k3d-gpu@d997ea8 docs/intel/upstream-eat.md:231]
+DaemonSet node-feature-discovery/nfd-worker from k3s addon node-feature-discovery -> nfd_enabled: false (EI would install a second NFD) [intel/enterprise-inference@3e8a244 roles/nfd/tasks/install.yaml:15-25]
+no node labelled feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -> defaults.require_amx: false (true leaves model pods Pending) [intel/enterprise-inference@3e8a244 model_manager/core/renderer.py:90-95]
+no node with AMXBF16 -> VLLM_CPU_SGL_KERNEL: as shipped (vLLM v0.28.0 checks for AMX before it uses the SGL kernel) [vllm-project/vllm@2cf0a69 vllm/model_executor/layers/utils.py:238-244]
+no --cluster-cidr in k3s.io/node-args -> kubernetes_cluster_cidr: 10.42.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:137-141]
+no --service-cidr in k3s.io/node-args -> kubernetes_service_cidr: 10.43.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:142-146]
+bring-your-own cluster -> kata_containers_enabled: false [intel/enterprise-ai-solutions@97f6157 roles/kata_containers/tasks/install.yaml:9-22]
+gpu.intel.com/xe allocatable 1 -> kubernetes_accelerator: cpu (serve the device with k3d-gpu agent up) [intel/enterprise-agent-toolkit@036b662 README.md:36]
+pin ei main (profile main) -> repos.inference.yaml inference rev: 3e8a24486b6ee812adf2bf452f8ba5751c16c8bd [intel/enterprise-ai-solutions@97f6157 configs/repos/repos.agent-toolkit.yaml:12]
+WARN: node has 32 CPUs, under EAT's 48-core minimum -> continuing [intel/enterprise-agent-toolkit@036b662 docs/prerequisites.md:7]
+WARN: fs.inotify.max_user_instances 128 < 8192, fs.inotify.max_user_watches 524288 < 1048576 -> raise on the host: sudo sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576 [intel/enterprise-agent-toolkit@036b662 docs/prerequisites.md:22-32]

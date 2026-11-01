@@ -29,6 +29,14 @@ done
 echo "weights sha256:"
 cat "${G}"/weights*.sha256 2>/dev/null | sed 's/^/  /'
 echo "data: gsm8k-test-0-199.jsonl $(sha256sum "${HERE}/gsm8k-test-0-199.jsonl" | cut -c1-16) (openai/gsm8k main test @ 740312ad); ttft-prompt.txt $(sha256sum "${HERE}/ttft-prompt.txt" | cut -c1-16)"
+if [ -n "${H54Q:-}" ]; then
+    echo "H54q manifests (h54.py q-render, amendment Q2), sha256:"
+    t=$(mktemp)
+    for a in R OVQ OVB Lg Vi; do
+        python3 "${HERE}/h54.py" q-render "${a}" "${t}" && echo "  ${a}: $(sha256sum "${t}" | cut -c1-16)"
+    done
+    rm -f "${t}"
+fi
 echo "engine flags (Lg, Lg-mtp, Sg as rendered; B1g/Vq/Vi/A1o/A1g/B3g in each arm's deploy.yaml):"
 python3 - "${HERE}" <<'EOF'
 import sys

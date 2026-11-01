@@ -276,12 +276,12 @@
       "tag": "3.10.2"
     },
     {
-      "digest": "sha256:b0e6f8604413a8bfcca8836bb4b57b47f1aa653957e07f8903ece531309981a1",
+      "digest": "sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647",
       "name": "docker.io/vllm/vllm-openai-cpu",
       "sources": [
         "integrations/eat/vllm-values.yaml"
       ],
-      "tag": "v0.24.0"
+      "tag": "v0.28.0"
     },
     {
       "digest": "sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",

@@ -1,0 +1,1 @@
+REFUSE: agent-sandbox v1.0.8 from k3d-gpu sandbox up (namespace agent-sandbox) -> run 'k3d-gpu sandbox down' first: EAT installs agent-sandbox v0.5.0 over the same CRDs [intel/enterprise-agent-toolkit@036b662 config.yaml:56]

@@ -1,0 +1,9 @@
+# k3d-gpu eas-config: configs/repos/repos.agent-toolkit.yaml revs as commit SHAs
+# (profile main); each row sets rev on the manifest entry with its layer and url
+repos:
+  - layer: "inference"
+    url: "https://github.com/intel/enterprise-inference"
+    rev: "3e8a24486b6ee812adf2bf452f8ba5751c16c8bd"
+  - layer: "agent-toolkit"
+    url: "https://github.com/intel/enterprise-agent-toolkit"
+    rev: "036b66234801e9bd950afd90830821859780d668"

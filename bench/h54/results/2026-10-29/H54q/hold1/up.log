@@ -1,0 +1,28 @@
+[32m==>[0m Accelerators: amx
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-g-h54q-1' with image cryptoandcoffee/k3d-gpu:0.1.63@sha256:b6fc46f60a47948eb1c4e6c5e80059c7f581427429c35a2627c58fc2307e4b76...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-g-h54q-1'        
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-g-h54q-1-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-g-h54q-1-tools'    
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-g-h54q-1-server-0' 
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-g-h54q-1'           
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-g-h54q-1-server-0' 
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-g-h54q-1' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(/home/devcloud/k3dgpu-gemma/bin/k3d.real kubeconfig write k3dgpu-g-h54q-1)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/devcloud/k3dgpu-gemma/results/H54q/hold1/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-g-h54q-1-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m Verifying accelerators are schedulable...
+[32m==>[0m Accelerators schedulable: amx=1. Try: k3d-gpu test

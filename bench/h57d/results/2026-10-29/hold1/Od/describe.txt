@@ -1,0 +1,79 @@
+Name:             ovms-7d48dbb75d-c7h49
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h57d-1-server-0/172.20.0.2
+Start Time:       Thu, 29 Oct 2026 12:43:57 -0700
+Labels:           app=ovms
+                  pod-template-hash=7d48dbb75d
+Annotations:      k3d-gpu.io/agent-device: CPU
+                  k3d-gpu.io/agent-fit: cpu 6x131072
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/ovms-7d48dbb75d
+Containers:
+  ovms:
+    Container ID:  containerd://41da4e54de6f16e7f6f33e3e8d1e5745c9991433ee57d3f9043d2bff45028147
+    Image:         openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Image ID:      docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      --rest_port=8000
+      --model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+      --model_name=gemma
+      --cache_dir=/ov-cache
+      --log_level=INFO
+    State:          Running
+      Started:      Thu, 29 Oct 2026 12:44:09 -0700
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      memory:  36Gi
+    Requests:
+      cpu:        1
+      memory:     36Gi
+    Readiness:    http-get http://:http/v2/health/ready delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (ro)
+      /ov-cache from ov-cache (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-6ggwh (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  ov-cache:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     
+    SizeLimit:  <unset>
+  kube-api-access-6ggwh:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  12m                default-scheduler  Successfully assigned k3d-gpu-agent/ovms-7d48dbb75d-c7h49 to k3d-k3dgpu-d-h57d-1-server-0
+  Normal   Pulling    12m                kubelet            spec.containers{ovms}: Pulling image "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+  Normal   Pulled     12m                kubelet            spec.containers{ovms}: Successfully pulled image "openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58" in 10.6s (10.6s including waiting). Image size: 404902607 bytes.
+  Normal   Created    12m                kubelet            spec.containers{ovms}: Container created
+  Normal   Started    12m                kubelet            spec.containers{ovms}: Container started
+  Warning  Unhealthy  12m                kubelet            spec.containers{ovms}: Readiness probe failed: Get "http://10.42.0.11:8000/v2/health/ready": dial tcp 10.42.0.11:8000: connect: connection refused
+  Warning  Unhealthy  11m (x9 over 12m)  kubelet            spec.containers{ovms}: Readiness probe failed: HTTP probe failed with statuscode: 503

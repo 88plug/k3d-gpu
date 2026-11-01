@@ -1,0 +1,106 @@
+{
+ "arms": {
+  "Ld-mtp": {
+   "per_hold": {
+    "1": 12.251274719789958,
+    "2": 12.025672046488353
+   },
+   "holds_measured": 2,
+   "median": 12.09104859646159,
+   "foreign_mean": 3.415059941520468
+  },
+  "Ld-mtp-u": {
+   "per_hold": {
+    "1": 13.574894135019056,
+    "2": 13.23264758033588
+   },
+   "holds_measured": 2,
+   "median": 13.393209521109803,
+   "foreign_mean": 3.1143079044117643
+  },
+  "Od": {
+   "per_hold": {
+    "1": 9.693779926443675,
+    "2": 9.94115057666897
+   },
+   "holds_measured": 2,
+   "median": 9.784030271232458,
+   "foreign_mean": 0.4480937198067634
+  }
+ },
+ "delivered": {
+  "Ld-mtp": true,
+  "Ld-mtp-u": true,
+  "Od": true
+ },
+ "quality": "inherited, not re-measured (H57dp pre-registration): H57d's Ld-mtp record (50/50) stands for Ld-mtp-u and Od's (50/50) for Od; neither row has a quality gate here",
+ "quality_records": {
+  "Ld-mtp-u": {
+   "from": "H57d hold 4, Ld-mtp",
+   "correct": 50,
+   "n": 50,
+   "score": 1.0
+  },
+  "Ld-mtp": {
+   "from": "H57d hold 4, Ld-mtp",
+   "correct": 50,
+   "n": 50,
+   "score": 1.0
+  },
+  "Od": {
+   "from": "H57d hold 4, Od",
+   "correct": 50,
+   "n": 50,
+   "score": 1.0
+  }
+ },
+ "affinity": {
+  "Ld-mtp": {
+   "single_cpu_threads": {
+    "1": {
+     "0": 2,
+     "10": 1,
+     "12": 1,
+     "14": 1,
+     "2": 1,
+     "4": 1,
+     "6": 1,
+     "8": 1
+    },
+    "2": {
+     "0": 2,
+     "10": 1,
+     "12": 1,
+     "14": 1,
+     "2": 1,
+     "4": 1,
+     "6": 1,
+     "8": 1
+    }
+   },
+   "as_registered": true
+  },
+  "Ld-mtp-u": {
+   "single_cpu_threads": {
+    "1": {},
+    "2": {}
+   },
+   "as_registered": true
+  }
+ },
+ "load_gate": {
+  "matched": false,
+  "spread": 2.9669662217137045,
+  "tolerance": 2.0,
+  "reason": "foreign P-core load spread 2.97 > 2.00 CPU-s/s"
+ },
+ "H57dp": {
+  "verdict": "INCONCLUSIVE",
+  "reason": "load unmatched: foreign P-core load spread 2.97 > 2.00 CPU-s/s"
+ },
+ "H57de": {
+  "x": "Ld-mtp-u",
+  "verdict": "INCONCLUSIVE",
+  "reason": "load unmatched: foreign P-core load spread 2.97 > 2.00 CPU-s/s"
+ }
+}
