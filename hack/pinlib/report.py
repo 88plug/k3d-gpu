@@ -181,7 +181,9 @@ def render(root, rows, prs, alarms, now=None, actions=True):
     md += [ki.strip() if ki and ki.strip() else "`hack/known-issues` is not installed or reported nothing.", ""]
     md += ["## Ledger re-measure queue", ""]
     lf = _run(root, ["hack/ledger-freshness", "--md"])
-    md += [lf.strip() if lf and lf.strip() else "`hack/ledger-freshness` is not installed or reported nothing.", ""]
+    # hack/ledger-freshness --md opens with its own "## Ledger re-measure queue" heading
+    lf = re.sub(r"\A\s*## Ledger re-measure queue[^\n]*\n", "", lf or "")
+    md += [lf.strip() if lf.strip() else "`hack/ledger-freshness` is not installed or reported nothing.", ""]
     md += ["## Actions behind", "",
            "GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves them: a bot token cannot "
            "push `.github/workflows/`. Apply with `git apply`, then open a PR.", ""]

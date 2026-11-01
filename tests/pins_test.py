@@ -188,12 +188,12 @@ class Check(unittest.TestCase):
         self.assertIn("ecosystem docker overlaps the registry", out)
 
     def test_coverage_unowned_requirement_and_revision(self):
-        rc, out = self.run_check(files={"examples/agents/demo/requirements.txt": "openai==3.41.0\n",
+        rc, out = self.run_check(files={"examples/agents/demo/requirements.txt": "openai==0.0.1\n",
                                         "share/models.yml": 'model: Org/Other\nrevision: "%s"\n' % ("f" * 40),
                                         # a git commit beside no model id is not a Hub revision
                                         "share/commits.json": '{"profile": "main",\n "rev": "%s"}\n' % ("e" * 40)})
         self.assertEqual(rc, 1, out)
-        self.assertIn("openai==3.41.0 has no owner", out)
+        self.assertIn("openai==0.0.1 has no owner", out)
         self.assertIn("Hugging Face revision ffffffffffff has no owner", out)
         self.assertNotIn("eeeeeeeeeeee", out)
 

@@ -173,6 +173,7 @@ outputs = ["images.lock"]
 family = "base-image"
 groups = [
   { glob = "integrations/eat/*", group = "eat-stock" },
+  { glob = "integrations/eas/*", group = "eat-stock" },
   { glob = "examples/kuberay/*", group = "eat-stock" },
   { glob = "examples/agents/litellm-gateway/*", group = "eat-stock" },
   { glob = "contrib/eat/*", group = "eat-stock" },
