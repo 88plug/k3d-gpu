@@ -80,6 +80,26 @@ if grep -qF 'git status --porcelain -- .github)' "${FR}"; then
 else
     fail "freshness.yml has no 'git status --porcelain -- .github' check before the PR"
 fi
+# A freshness.yml job that applies a patch then runs hack/autobump-branch-reset and
+# hack/bot-ci-dispatch (and through it hack/pins) from that tree, with a write token:
+# every step that applies a patch refuses one that changes those scripts.
+if python3 - "${FR}" <<'PY'
+import sys, yaml
+guard = "git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)"
+bad = []
+for jid, job in (yaml.safe_load(open(sys.argv[1])).get("jobs") or {}).items():
+    for s in job.get("steps") or []:
+        run = s.get("run", "")
+        if "git apply" in run and guard not in run:
+            bad.append("%s: %s" % (jid, s.get("name")))
+if bad:
+    sys.exit("steps applying a patch without the script guard: %s" % "; ".join(bad))
+PY
+then
+    ok "freshness.yml refuses a patch that changes a script its write jobs run"
+else
+    fail "freshness.yml applies a patch without refusing changes to the scripts it then runs"
+fi
 # Every create-pull-request step (a GITHUB_TOKEN PR) sits between two steps under
 # its if:. Before it, hack/autobump-branch-reset deletes the branch when its
 # workflow files differ from main's: create-pull-request resets the branch onto
