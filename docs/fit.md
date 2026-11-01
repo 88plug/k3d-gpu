@@ -125,6 +125,35 @@ prompt's end, which is what the next turn restores from), and counts slots x 4 x
 checkpoint in the host bytes and the pod limit. A model with no sliding-window and no
 linear-attention layers makes none.
 
+On a CPU placement llama-server v0.8.0 (b11960) holds more host memory than the weights and
+the KV cache, and the fit counts each part (H59d's llama.cpp arm was OOMKilled at a 45Gi limit
+the fit set without them):
+
+- The CPU backend copies weights out of the mapped GGUF into its extra buffers, anonymous
+  memory: on an AVX2 CPU every Q4_0, Q4_K, IQ4_NL and MXFP4 weight of 2 or 3 dimensions with
+  `ne[1] % 8 == 0` goes to `CPU_REPACK` (`ggml/src/ggml-cpu/repack.cpp:4979-5110`), and on an
+  AMX CPU the 2-D weights of the AMX types go to the AMX buffer first
+  (`ggml/src/ggml-cpu/amx/amx.cpp:145-187`). For Gemma 4's QAT Q4_0 GGUF that is 12.8 GiB.
+  `fit.py fetch` records each GGUF tensor's type and shape (`gguf_mm` in weights.json); a
+  weights.json without them counts every matmul weight (an upper bound).
+- `--load-mode mmap+mlock` grows the lock from the mapping's start to the end of each mapped
+  tensor (`src/llama-model-loader.cpp:1735-1737`), so the pages of the copied tensors between
+  them stay mapped and locked: the whole GGUF, charged to the pod when the pod faults the pages
+  in itself (in H59d, when OVMS had run first and pushed them out of the page cache).
+- Each llama context's compute buffer: the f16 KQ masks of the worst-case ubatch,
+  `n_kv x n_ubatch x 2 B` per cache (`src/llama-graph.cpp:30-46`, 256 MiB for a 262,144-token
+  slot), and an activation estimate; the logits rows each slot can return.
+- The MTP drafter (`K3D_GPU_AGENT_DRAFT=mtp`, or the optimizer's pick): its GGUF, loaded as the
+  target is, its copies, and a second context of the target's `n_ctx` and slots. Gemma's QAT
+  assistant shares every KV layer of the target's, so it adds no KV and no checkpoint state
+  (`src/llama-kv-cache.cpp:2051-2053`); a drafter with a cache of its own is refused. The
+  agent passes the drafter's metadata and its built GGUF's bytes (`LLAMA_MTP_DRAFTERS`) as
+  `fit.py plan --draft-model DIR --draft-bytes N`; on a GPU placement the drafter counts
+  in each card's overhead.
+
+`--cache-ram 0` creates no prompt cache (`tools/server/server-context.cpp:1594-1605`) and
+`-ctxcp 4` keeps at most 4 checkpoints per slot (`:2746-2753`), as counted above.
+
 On several GPUs llama.cpp places whole layers, so the fit sizes each card from the
 layers it gets, the way llama.cpp v0.8.0 assigns them with `-ngl 999`
 (`src/llama-model.cpp`, `load_tensors`). Layer `il` goes to the device

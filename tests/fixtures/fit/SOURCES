@@ -28,6 +28,16 @@ hosts/*.json (host/v1, as `console/fit.py probe` prints it; written by hand):
   laptop-16g         Core Ultra 7 258V (Lunar Lake: AVX2, no AVX-512), 15.3 GiB,
                      9 GiB available, 1.5 GiB of swap in use, integrated GPU only
                      (no device-local memory), LPDDR5X-8533 on a 128-bit bus.
+  desktop-i9-13900t-h59d  H59d's host (EXPERIMENTS.md "H59d run"): i9-13900T, MemTotal
+                     131521428 kB, MemAvailable 59.9 GiB (the lowest hold-start reading), no
+                     GPU; AVX2 without AVX-512 or AMX. Bandwidth is desktop-i9-nogpu's
+                     theoretical figure (it only gates the DRAM decode floor). The fit before
+                     the llama.cpp host buffers sized H59d's L from it as recorded: 4 x 262144,
+                     40.3 GiB, limit 45Gi.
+  xeon6741p-h59      H59's host (crescent, bench/h59/results/2026-11-01/H59/hold1/reproduce.txt):
+                     xeon6741p-4xb70 with MemTotal 527767144 kB, MemAvailable 430260972 kB and
+                     no GPU (H59's arms run on the CPU). The fit before the llama.cpp host
+                     buffers sized H59's L from it as recorded: 48 x 262144, limit 358Gi.
 
 models/ggml-org__Qwen3.8-Flash-Next-GGUF/
   `console/fit.py fetch ggml-org/Qwen3.8-Flash-Next-GGUF --revision 91fb003...` output,
@@ -41,6 +51,14 @@ models/google__gemma-4-26B-A4B-it-qat-q4_0-gguf/
   writes for every GGUF repo: "group" Q4_0 and "groups" (its one model) beside the
   top-level weights/v1, and "tensor_count" 658. The byte totals and classes are those of
   the 2026-10-20 fetch; config.json and tokenizer_config.json are byte-identical to it.
+  "gguf_mm" added 2026-11-01 by the same fetch at the same revision: the 2-D and 3-D tensors'
+  bytes by class, ggml type, dimensions and ne[1] / ne[0] alignment, read from the header;
+  every other field is unchanged.
+
+models/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/
+  `console/fit.py fetch google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant --revision
+  9537141...` output, 2026-11-01: the QAT MTP drafter's config.json, tokenizer_config.json and
+  safetensors header bytes (bf16). The agent converts it to a 321145312-byte Q4_0 GGUF.
 
 gguf-heads/
   The header bytes (up to the tensor data, gzip) of the IQ4_NL shards of

@@ -152,14 +152,34 @@ if render ggopt "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" && has ggopt '^  nam
 else fail "GGUF repo goes to llama.cpp first" "$(show ggopt)"; fi
 
 # --- the desktop with no GPU: the CPU image on the P-core balloon ------------------------
+# 4 x 65,536 at 43Gi: the fit counts the locked GGUF, its CPU_REPACK copies and the compute
+# buffers (it gave 4 x 262,144 at 45Gi before, the render H59d's L was OOMKilled at).
 if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA_GGUF}" \
     && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11960@${CPUSRV}" && arg cpu '-ngl' && arg cpu '0' \
+    && pair cpu -c 262144 && pair cpu -np 4 \
     && pair cpu --load-mode 'mmap+mlock' && has cpu 'add: \[IPC_LOCK\]' && ! has cpu 'gpu.intel.com' \
-    && ! has cpu 'ZES_ENABLE_SYSMAN' && grep -A1 '^            limits:$' "${WORK}/cpu.yaml" | grep -qE '^              memory: 45Gi$' \
+    && ! has cpu 'ZES_ENABLE_SYSMAN' && grep -A1 '^            limits:$' "${WORK}/cpu.yaml" | grep -qE '^              memory: 43Gi$' \
     && pair cpu --threads-batch 16 && pair cpu --threads 8 \
     && yaml_ok cpu; then
     ok "QAT GGUF on the desktop with no GPU: CPU image, -ngl 0, mlock, pod limit and threads from the pod's CPUs"
 else fail "QAT GGUF on the CPU-only desktop" "$(show cpu)"; fi
+# With its MTP drafter the fit sizes the drafter too (its GGUF, copies and context): the pod's
+# limit and slots are fit.py's with --draft-model and the drafter's GGUF bytes; k3d-gpu fit agrees.
+dlim=$(python3 "${ROOT}/console/fit.py" plan --host "${DESK}" --model "${FIX}/models/google__gemma-4-26B-A4B-it-qat-q4_0-gguf" \
+    --device cpu --draft-model "${FIX}/models/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant" \
+    --draft-bytes 321145312 --mode json | python3 -c 'import json, sys; d = json.load(sys.stdin); print(d["k8s"]["memory_limit"], d["ctx"] * d["seqs"], d["host_bytes"])')
+read -r dmem dctx dhost <<< "${dlim}"
+nohost=$(python3 "${ROOT}/console/fit.py" plan --host "${DESK}" --model "${FIX}/models/google__gemma-4-26B-A4B-it-qat-q4_0-gguf" \
+    --device cpu --mode json | python3 -c 'import json, sys; print(json.load(sys.stdin)["host_bytes"])')
+if render cpumtp STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" K3D_GPU_AGENT_DRAFT=mtp -- --model "${GEMMA_GGUF}" \
+    && pair cpumtp --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" && pair cpumtp -c "${dctx}" \
+    && grep -A1 '^            limits:$' "${WORK}/cpumtp.yaml" | grep -qE "^              memory: ${dmem}$" \
+    && [ "${dhost}" -gt "${nohost}" ] \
+    && K3D_GPU_AGENT_DRAFT=mtp bash "${K3D_GPU}" fit --model "${GEMMA_GGUF}" --host "${DESK}" --device cpu --explain 2>&1 \
+        | grep -q "drafter google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166" \
+    && ! bash "${K3D_GPU}" fit --model "${GEMMA_GGUF}" --host "${DESK}" --device cpu --explain 2>&1 | grep -q drafter; then
+    ok "K3D_GPU_AGENT_DRAFT=mtp on the CPU: the fit sizes the QAT drafter too (limit ${dmem}, -c ${dctx}), as k3d-gpu fit does"
+else fail "the fit sizes the MTP drafter" "$(show cpumtp)"; fi
 
 # --- a GGUF repo with several split models (IQ4_NL, Q2_K, Q8_0): the one the fit picked ----
 # llama-server downloads the first shard of the GGUF the fit sized, pinned to the commit the
@@ -514,7 +534,7 @@ rm -f "${WORK}/root/proc/cpuinfo"
 
 # Every llama-server render above: its args parse as llama-server's own parser reads them.
 bad=""
-for n in gguf ggopt cpu fngq2 fng fngoff fn fn8 img optl setl mtp fnmtp rung l59 l59j l59doff l57 l57off l57g; do
+for n in gguf ggopt cpu cpumtp fngq2 fng fngoff fn fn8 img optl setl mtp fnmtp rung l59 l59j l59doff l57 l57off l57g; do
     [ -s "${WORK}/${n}.yaml" ] || { bad+=" ${n}(not rendered)"; continue; }
     why=$(llama_argv_ok "${n}" 2>&1) || bad+=" ${n}: ${why}"
 done

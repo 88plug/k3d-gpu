@@ -9047,9 +9047,33 @@ EOF
 #                  GGUF card asks for a drafter of the same precision). Default draft length.
 LLAMA_SERVE_PORT=8000
 # Gemma 4's QAT GGUF has no MTP head: its drafter, a repo converted to GGUF and quantized.
+# "<target repo> <drafter repo@commit> <quantize type> <the built GGUF's bytes>": the bytes the
+# fit sizes the drafter by (fit_draft_args) before the conversion Job has built it; 321145312 is
+# the Q4_0 file H59d's and crescent's prep built from that commit (sha256 f6f80c36...).
 LLAMA_MTP_DRAFTERS=(
-    "google/gemma-4-26B-A4B-it-qat-q4_0-gguf google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 Q4_0"
+    "google/gemma-4-26B-A4B-it-qat-q4_0-gguf google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 Q4_0 321145312"
 )
+
+# fit_draft_args <model>: the fit's --draft-model <dir> and --draft-bytes <n>, one word per line,
+# for the drafter llamacpp_manifest loads beside <model> (K3D_GPU_AGENT_DRAFT=mtp, or the model
+# optimizer's MTP pick with K3D_GPU_AGENT_DRAFT unset): llama-server holds its GGUF and a second
+# context in the pod's memory. Nothing for any other setting or a model without a listed drafter.
+# Fails when the drafter's metadata (config and weight headers) cannot be read.
+fit_draft_args() {
+    local d target f quant bytes dir
+    case "${K3D_GPU_AGENT_DRAFT:-default}" in
+        [Mm][Tt][Pp]) ;;
+        [Dd][Ee][Ff][Aa][Uu][Ll][Tt]) [ "${AGENT_OPT_SPEC:-}" = mtp ] || return 0 ;;
+        *) return 0 ;;
+    esac
+    for d in "${LLAMA_MTP_DRAFTERS[@]}"; do
+        read -r target f quant bytes <<< "${d}"
+        [ "${target}" = "$1" ] || continue
+        dir=$(fit_model_dir "${f%@*}" "${f##*@}") || return 1
+        printf '%s\n' --draft-model "${dir}" --draft-bytes "${bytes}"
+        return 0
+    done
+}
 # pip pins the conversion adds on PYTHONPATH (bench/h57d/convert.sh's approach): the image's
 # transformers 4.57.6 cannot read transformers-5 tokenizer configs (extra_special_tokens as
 # a list); huggingface-hub fetches the pinned revision.
@@ -9231,7 +9255,7 @@ llamacpp_manifest() {
     esac
     if [ -n "${draft}" ]; then
         for d in "${LLAMA_MTP_DRAFTERS[@]}"; do
-            read -r target f quant <<< "${d}"
+            read -r target f quant _ <<< "${d}"
             [ "${target}" = "${repo}" ] && dsrc=${f} && break
         done
         if [ -z "${dsrc}" ] && [ "${mtp}" -eq 0 ]; then
@@ -11702,6 +11726,11 @@ cmd_fit() {
     require python3
     dir=$(fit_model_dir "${model}" "${rev}") \
         || err "fit: no metadata for ${model}@${rev}: not a local directory and the Hugging Face fetch failed (offline, private or gated: set HF_TOKEN)"
+    # The MTP drafter agent up would load beside it (K3D_GPU_AGENT_DRAFT=mtp): sized with it, as agent_fit does.
+    local draft
+    draft=$(fit_draft_args "${model}") \
+        || err "fit: no metadata for ${model}'s MTP drafter (offline, private or gated: set HF_TOKEN)"
+    [ -z "${draft}" ] || readarray -t -O "${#args[@]}" args <<< "${draft}"
     tmp=$(mktemp)
     if [ -n "${host}" ]; then
         [ -f "${host}" ] || { rm -f "${tmp}"; err "fit: host file ${host} does not exist"; }
@@ -11871,6 +11900,11 @@ agent_fit() {
     command -v python3 >/dev/null 2>&1 || { fit_soft "${mode}" "fit: python3 not found"; return 0; }
     dir=$(fit_model_dir "${AGENT_MODEL}" "${AGENT_REVISION:-main}") \
         || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
+    # The MTP drafter llama-server would load beside the model: sized with it.
+    local draft
+    draft=$(fit_draft_args "${AGENT_MODEL}") \
+        || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL}'s MTP drafter (offline, private or gated: set HF_TOKEN)"; return 0; }
+    [ -z "${draft}" ] || readarray -t -O "${#args[@]}" args <<< "${draft}"
     [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
     [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
     # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
