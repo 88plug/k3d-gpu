@@ -1,0 +1,102 @@
+Name:             llamacpp-76f5c4b8c9-47xd5
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h59-smoke-server-0/172.20.0.2
+Start Time:       Sun, 01 Nov 2026 09:17:14 -0800
+Labels:           app=llamacpp
+                  k3d-gpu.io/cores=performance
+                  pod-template-hash=76f5c4b8c9
+Annotations:      k3d-gpu.io/agent-backend: llama.cpp
+                  k3d-gpu.io/agent-device: CPU
+                  k3d-gpu.io/agent-fit: cpu 6x131072
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/llamacpp-76f5c4b8c9
+Containers:
+  llamacpp:
+    Container ID:  containerd://e27e00c1e852e86ed373ea3f118bb109bc228b6dd666055c7c385f28529db1ae
+    Image:         ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Image ID:      ghcr.io/ggml-org/llama.cpp@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      --model
+      /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf
+      --alias
+      gemma
+      --host
+      0.0.0.0
+      --port
+      8000
+      --jinja
+      --reasoning
+      off
+      -c
+      786432
+      -np
+      6
+      -ngl
+      0
+      --cache-ram
+      0
+      -ctxcp
+      4
+      --threads
+      8
+      --threads-batch
+      16
+      --load-mode
+      mmap+mlock
+      --spec-draft-model
+      /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf
+      --spec-type
+      draft-mtp
+    State:          Running
+      Started:      Sun, 01 Nov 2026 09:17:28 -0800
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      memory:  43Gi
+    Requests:
+      cpu:        16
+      memory:     43Gi
+    Readiness:    http-get http://:http/health delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-f6r59 (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  kube-api-access-f6r59:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  58s                default-scheduler  Successfully assigned k3d-gpu-agent/llamacpp-76f5c4b8c9-47xd5 to k3d-k3dgpu-d-h59-smoke-server-0
+  Normal   Pulling    57s                kubelet            spec.containers{llamacpp}: Pulling image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220"
+  Normal   Pulled     44s                kubelet            spec.containers{llamacpp}: Successfully pulled image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220" in 12.757s (12.757s including waiting). Image size: 309250915 bytes.
+  Normal   Created    44s                kubelet            spec.containers{llamacpp}: Container created
+  Normal   Started    44s                kubelet            spec.containers{llamacpp}: Container started
+  Warning  Unhealthy  44s                kubelet            spec.containers{llamacpp}: Readiness probe failed: Get "http://10.42.0.11:8000/health": dial tcp 10.42.0.11:8000: connect: connection refused
+  Warning  Unhealthy  14s (x7 over 44s)  kubelet            spec.containers{llamacpp}: Readiness probe failed: HTTP probe failed with statuscode: 503

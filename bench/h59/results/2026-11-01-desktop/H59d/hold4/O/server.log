@@ -1,0 +1,156 @@
+[INFO] LFS resume: attempts=5 interval=10 s
+[2026-11-01 18:53:19.507][1][serving][info][libgit2.cpp:1342] Path "/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov" exists but is not a git repository. Skipping download and using existing files.
+Model: OpenVINO/gemma-4-26b-a4b-it-int4-ov downloaded to: /models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+Graph: graph.pbtxt created in: /models/OpenVINO/gemma-4-26b-a4b-it-int4-ov
+[2026-11-01 18:53:21.173][1][serving][info][server.cpp:115] OpenVINO Model Server 2026.4.1.cfc9ac721
+[2026-11-01 18:53:21.173][1][serving][info][server.cpp:116] OpenVINO backend 2026.4.1-22982-e213a147257-releases/2026/4
+[2026-11-01 18:53:21.173][1][serving][info][server.cpp:119] OpenVINO GenAI backend 2026.4.1.0-3408-ab01d1771e4
+[2026-11-01 18:53:21.173][1][serving][info][pythoninterpretermodule.cpp:37] PythonInterpreterModule starting
+[2026-11-01 18:53:21.173][1][serving][info][pythoninterpretermodule.cpp:40] Initializing python interpreter
+[2026-11-01 18:53:21.224][1][serving][info][pythoninterpretermodule.cpp:59] PythonInterpreterModule started
+[2026-11-01 18:53:21.225][1][modelmanager][info][modelmanager.cpp:206] Model cache is enabled: /models/.ov_cache
+[2026-11-01 18:53:21.225][8][modelmanager][info][servable_loading_queue.cpp:89] Started servable loading queue thread
+[2026-11-01 18:53:21.259][1][modelmanager][info][modelmanager.cpp:252] Available devices for Open VINO: CPU
+[2026-11-01 18:53:21.259][1][serving][info][capimodule.cpp:40] C-APIModule starting
+[2026-11-01 18:53:21.259][1][serving][info][capimodule.cpp:42] C-APIModule started
+[2026-11-01 18:53:21.259][1][serving][info][grpcservermodule.cpp:106] GRPCServerModule starting
+[2026-11-01 18:53:21.259][1][serving][info][grpcservermodule.cpp:110] GRPCServerModule started
+[2026-11-01 18:53:21.259][1][serving][info][grpcservermodule.cpp:111] Port was not set. GRPC server will not be started.
+[2026-11-01 18:53:21.259][1][serving][info][httpservermodule.cpp:35] HTTPServerModule starting
+[2026-11-01 18:53:21.259][1][serving][info][httpservermodule.cpp:39] Will start 32 REST workers
+[2026-11-01 18:53:21.261][13][serving][info][drogon_http_server.cpp:157] Binding REST server to address: 0.0.0.0:8000
+[2026-11-01 18:53:21.361][1][serving][info][drogon_http_server.cpp:184] REST server listening on port 8000 with 32 unary threads and 32 streaming threads
+[2026-11-01 18:53:21.361][1][serving][info][http_server.cpp:242] API key not provided via --api_key_file or API_KEY environment variable. Authentication will be disabled.
+[2026-11-01 18:53:21.361][1][serving][info][httpservermodule.cpp:52] HTTPServerModule started
+[2026-11-01 18:53:21.361][1][serving][info][httpservermodule.cpp:53] Started REST server at 0.0.0.0:8000
+[2026-11-01 18:53:21.361][1][serving][info][servablemanagermodule.cpp:51] ServableManagerModule starting
+[2026-11-01 18:53:21.364][8][serving][info][mediapipegraphdefinition.cpp:643] MediapipeGraphDefinition initializing graph nodes
+[2026-11-01 18:53:21.364][8][modelmanager][info][servable_initializer.cpp:688] Initializing Visual Language Model Continuous Batching servable
+[2026-11-01 18:53:54.090][8][llm_calculator][info][servable_initializer.cpp:228] Using manually configured tool_parser: gemma4
+[2026-11-01 18:53:54.090][8][llm_calculator][info][servable_initializer.cpp:238] Using manually configured reasoning_parser: gemma4
+[2026-11-01 18:53:54.093][174][llm_executor][info][llm_executor.hpp:128] All requests: 0; Scheduled requests: 0;
+[2026-11-01 18:53:54.096][8][modelmanager][info][mediapipegraphdefinition.cpp:300] Mediapipe: gemma inputs: 
+name: input; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+[2026-11-01 18:53:54.096][8][modelmanager][info][mediapipegraphdefinition.cpp:301] Mediapipe: gemma outputs: 
+name: output; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+[2026-11-01 18:53:54.096][8][modelmanager][info][mediapipegraphdefinition.cpp:302] Mediapipe: gemma kfs pass through: false
+[2026-11-01 18:53:54.096][8][modelmanager][info][pipelinedefinitionstatus.hpp:60] Mediapipe: gemma state changed to: AVAILABLE after handling: ValidationPassedEvent: 
+[2026-11-01 18:53:54.097][207][modelmanager][info][modelmanager.cpp:1184] Started model manager thread
+[2026-11-01 18:53:54.097][1][serving][info][servablemanagermodule.cpp:55] ServableManagerModule started
+[2026-11-01 18:53:54.097][208][modelmanager][info][modelmanager.cpp:1213] Started cleaner thread
+[2026-11-01 18:54:01.170][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.0% of 25.0 GB;
+[2026-11-01 18:54:01.170][174][llm_executor][info][llm_executor.hpp:128] All requests: 0; Scheduled requests: 0;
+[2026-11-01 18:54:38.847][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 0.9% of 25.0 GB;
+[2026-11-01 18:54:43.581][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.0% of 25.0 GB;
+[2026-11-01 18:54:48.427][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.0% of 25.0 GB;
+[2026-11-01 18:54:53.259][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 18:54:58.087][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.2% of 25.0 GB;
+[2026-11-01 18:55:02.940][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.3% of 25.0 GB;
+[2026-11-01 18:55:07.791][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.3% of 25.0 GB;
+[2026-11-01 18:55:12.683][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 18:55:17.523][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 18:55:22.418][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 18:55:27.414][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 18:55:32.319][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 18:55:37.291][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 18:55:42.265][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:55:49.297][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:55:54.362][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:55:59.437][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 18:56:06.598][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:56:11.693][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:56:16.838][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 18:56:21.990][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:56:27.253][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:56:33.928][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:56:39.147][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:56:44.309][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:56:51.650][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:56:56.863][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.5% of 25.0 GB;
+[2026-11-01 18:57:02.048][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.6% of 25.0 GB;
+[2026-11-01 18:57:09.583][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:57:18.470][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:57:26.968][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:57:34.439][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 18:57:39.608][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:57:44.899][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:57:52.542][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 18:57:57.781][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:58:03.040][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 18:58:08.271][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:58:15.566][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 18:58:20.924][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:58:26.227][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:58:31.565][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.5% of 25.0 GB;
+[2026-11-01 18:58:38.884][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 18:58:46.316][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 18:58:53.263][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:58:58.493][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 18:59:09.321][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:59:16.211][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 18:59:23.277][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 18:59:28.399][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 18:59:33.552][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:59:38.718][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 18:59:43.880][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 18:59:49.058][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 18:59:54.171][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 18:59:59.325][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.2% of 25.0 GB;
+[2026-11-01 19:00:04.485][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 19:00:09.669][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 19:00:16.565][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 19:00:21.694][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.4% of 25.0 GB;
+[2026-11-01 19:00:30.816][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.3% of 25.0 GB;
+[2026-11-01 19:00:43.815][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 19:00:51.651][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:00:56.838][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 19:01:04.112][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 19:01:11.630][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 19:01:16.815][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:01:21.877][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:01:29.878][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:01:35.085][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 19:01:40.265][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 19:01:48.456][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.0% of 25.0 GB;
+[2026-11-01 19:01:53.704][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 2.1% of 25.0 GB;
+[2026-11-01 19:02:02.349][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:02:09.187][174][llm_executor][info][llm_executor.hpp:104] All requests: 16; Scheduled requests: 16; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 19:02:14.290][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 1.6% of 25.0 GB;
+[2026-11-01 19:02:19.248][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 19:02:24.137][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 1.7% of 25.0 GB;
+[2026-11-01 19:02:29.016][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 19:02:33.948][174][llm_executor][info][llm_executor.hpp:104] All requests: 15; Scheduled requests: 15; Cache type: static, cache usage: 1.9% of 25.0 GB;
+[2026-11-01 19:02:38.732][174][llm_executor][info][llm_executor.hpp:104] All requests: 14; Scheduled requests: 14; Cache type: static, cache usage: 1.8% of 25.0 GB;
+[2026-11-01 19:02:43.266][174][llm_executor][info][llm_executor.hpp:104] All requests: 12; Scheduled requests: 12; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 19:02:47.459][174][llm_executor][info][llm_executor.hpp:104] All requests: 11; Scheduled requests: 11; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 19:02:51.430][174][llm_executor][info][llm_executor.hpp:104] All requests: 10; Scheduled requests: 10; Cache type: static, cache usage: 1.3% of 25.0 GB;
+[2026-11-01 19:02:55.137][174][llm_executor][info][llm_executor.hpp:104] All requests: 10; Scheduled requests: 10; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 19:02:58.771][174][llm_executor][info][llm_executor.hpp:104] All requests: 10; Scheduled requests: 10; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 19:03:02.408][174][llm_executor][info][llm_executor.hpp:104] All requests: 10; Scheduled requests: 10; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 19:03:06.133][174][llm_executor][info][llm_executor.hpp:104] All requests: 10; Scheduled requests: 10; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 19:03:09.801][174][llm_executor][info][llm_executor.hpp:104] All requests: 9; Scheduled requests: 9; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 19:03:13.253][174][llm_executor][info][llm_executor.hpp:104] All requests: 9; Scheduled requests: 9; Cache type: static, cache usage: 1.5% of 25.0 GB;
+[2026-11-01 19:03:16.510][174][llm_executor][info][llm_executor.hpp:104] All requests: 8; Scheduled requests: 8; Cache type: static, cache usage: 1.4% of 25.0 GB;
+[2026-11-01 19:03:19.497][174][llm_executor][info][llm_executor.hpp:104] All requests: 7; Scheduled requests: 7; Cache type: static, cache usage: 1.2% of 25.0 GB;
+[2026-11-01 19:03:22.265][174][llm_executor][info][llm_executor.hpp:104] All requests: 7; Scheduled requests: 7; Cache type: static, cache usage: 1.2% of 25.0 GB;
+[2026-11-01 19:03:25.035][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:27.496][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:30.042][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:32.548][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:35.136][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.2% of 25.0 GB;
+[2026-11-01 19:03:37.797][174][llm_executor][info][llm_executor.hpp:104] All requests: 6; Scheduled requests: 6; Cache type: static, cache usage: 1.2% of 25.0 GB;
+[2026-11-01 19:03:40.251][174][llm_executor][info][llm_executor.hpp:104] All requests: 5; Scheduled requests: 5; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:42.531][174][llm_executor][info][llm_executor.hpp:104] All requests: 5; Scheduled requests: 5; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:44.860][174][llm_executor][info][llm_executor.hpp:104] All requests: 5; Scheduled requests: 5; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:47.220][174][llm_executor][info][llm_executor.hpp:104] All requests: 5; Scheduled requests: 5; Cache type: static, cache usage: 1.1% of 25.0 GB;
+[2026-11-01 19:03:49.295][174][llm_executor][info][llm_executor.hpp:104] All requests: 3; Scheduled requests: 3; Cache type: static, cache usage: 0.7% of 25.0 GB;
+[2026-11-01 19:03:51.004][174][llm_executor][info][llm_executor.hpp:104] All requests: 3; Scheduled requests: 3; Cache type: static, cache usage: 0.7% of 25.0 GB;
+[2026-11-01 19:03:52.374][174][llm_executor][info][llm_executor.hpp:104] All requests: 2; Scheduled requests: 2; Cache type: static, cache usage: 0.5% of 25.0 GB;
+[2026-11-01 19:03:53.694][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:54.708][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:55.732][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:56.745][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:57.827][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:58.877][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:03:59.950][174][llm_executor][info][llm_executor.hpp:104] All requests: 1; Scheduled requests: 1; Cache type: static, cache usage: 0.3% of 25.0 GB;
+[2026-11-01 19:04:00.449][174][llm_executor][info][llm_executor.hpp:128] All requests: 0; Scheduled requests: 0;

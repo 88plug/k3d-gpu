@@ -1,0 +1,6 @@
+cmdline /app/llama-server --model /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf --alias gemma --host 0.0.0.0 --port 8000 --jinja --reasoning off -c 1048576 -np 4 -ngl 0 --cache-ram 0 -ctxcp 4 --threads 8 --threads-batch 16 --load-mode mmap+mlock --spec-draft-model /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf --spec-type draft-mtp 
+cpuset 0-15
+Cpus_allowed_list:	0-15
+avx512f 0 amx 0 avx_vnni 32 nproc 16
+server threads by affinity:
+     51 0-15

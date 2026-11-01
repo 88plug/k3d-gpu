@@ -1,0 +1,4 @@
+[32m==>[0m model optimizer: reading the Hugging Face metadata of google/gemma-4-26B-A4B-it and its variants (cached for a day in /home/andrew/.cache/k3d-gpu/hf)
+[32m==>[0m Detected 13th Gen Intel(R) Core(TM) i9-13900T; picked OpenVINO/gemma-4-26b-a4b-it-int4-ov on OVMS (CPU), no drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain
+[32m==>[0m fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AVX2) via ovms, context 16384 x 7 seqs (below the 32768 x 4 target), host 41.3 GiB (pod limit 46Gi), host reserve 12.5 GiB
+[32m==>[0m agent: OpenVINO/gemma-4-26b-a4b-it-int4-ov as 'gemma' on CPU, P-cores, 16 CPU(s)

@@ -1,0 +1,110 @@
+Name:             llamacpp-5b58d8c885-5662q
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-d-h59-3-server-0/172.20.0.2
+Start Time:       Sun, 01 Nov 2026 10:25:56 -0800
+Labels:           app=llamacpp
+                  k3d-gpu.io/cores=performance
+                  pod-template-hash=5b58d8c885
+Annotations:      k3d-gpu.io/agent-backend: llama.cpp
+                  k3d-gpu.io/agent-device: CPU
+                  k3d-gpu.io/agent-fit: cpu 4x262144
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/llamacpp-5b58d8c885
+Containers:
+  llamacpp:
+    Container ID:  containerd://56e32eb9855553af8e976b56a8f0cdc3b20491612cc5235de3ff75c734372dd9
+    Image:         ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Image ID:      ghcr.io/ggml-org/llama.cpp@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      --model
+      /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e/gemma-4-26B_q4_0-it.gguf
+      --alias
+      gemma
+      --host
+      0.0.0.0
+      --port
+      8000
+      --jinja
+      --reasoning
+      off
+      -c
+      1048576
+      -np
+      4
+      -ngl
+      0
+      --cache-ram
+      0
+      -ctxcp
+      4
+      --threads
+      8
+      --threads-batch
+      16
+      --load-mode
+      mmap+mlock
+      --spec-draft-model
+      /models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166/model.gguf
+      --spec-type
+      draft-mtp
+    State:          Waiting
+      Reason:       CrashLoopBackOff
+    Last State:     Terminated
+      Reason:       OOMKilled
+      Exit Code:    137
+      Started:      Sun, 01 Nov 2026 10:39:05 -0800
+      Finished:     Sun, 01 Nov 2026 10:39:20 -0800
+    Ready:          False
+    Restart Count:  7
+    Limits:
+      memory:  45Gi
+    Requests:
+      cpu:        16
+      memory:     45Gi
+    Readiness:    http-get http://:http/health delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (ro)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-clxfb (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/apb-models
+    HostPathType:  Directory
+  kube-api-access-clxfb:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                   From               Message
+  ----     ------     ----                  ----               -------
+  Normal   Scheduled  15m                   default-scheduler  Successfully assigned k3d-gpu-agent/llamacpp-5b58d8c885-5662q to k3d-k3dgpu-d-h59-3-server-0
+  Normal   Pulling    15m                   kubelet            spec.containers{llamacpp}: Pulling image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220"
+  Normal   Pulled     14m                   kubelet            spec.containers{llamacpp}: Successfully pulled image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220" in 15.844s (15.844s including waiting). Image size: 309250915 bytes.
+  Warning  Unhealthy  14m                   kubelet            spec.containers{llamacpp}: Readiness probe failed: Get "http://10.42.0.11:8000/health": read tcp 10.42.0.1:52818->10.42.0.11:8000: read: connection reset by peer
+  Warning  Unhealthy  13m (x14 over 14m)    kubelet            spec.containers{llamacpp}: Readiness probe failed: HTTP probe failed with statuscode: 503
+  Warning  Unhealthy  13m (x7 over 14m)     kubelet            spec.containers{llamacpp}: Readiness probe failed: Get "http://10.42.0.11:8000/health": dial tcp 10.42.0.11:8000: connect: connection refused
+  Warning  BackOff    4m32s (x11 over 14m)  kubelet            spec.containers{llamacpp}: Back-off restarting failed container llamacpp in pod llamacpp-5b58d8c885-5662q_k3d-gpu-agent(368d0d71-874c-4c9e-9191-4b5263e70080)
+  Normal   Created    117s (x8 over 14m)    kubelet            spec.containers{llamacpp}: Container created
+  Normal   Started    117s (x8 over 14m)    kubelet            spec.containers{llamacpp}: Container started
+  Normal   Pulled     117s (x7 over 14m)    kubelet            spec.containers{llamacpp}: Container image "ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220" already present on machine and can be accessed by the pod

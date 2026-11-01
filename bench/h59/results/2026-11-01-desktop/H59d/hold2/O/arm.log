@@ -1,0 +1,13 @@
+2026-11-01T17:59:12Z O start perf (3788 s of the hold left)
+2026-11-01T18:00:11Z O ready after 56 s
+energy: zone=intel-rapl:0 (package-0) joules=5202.609 seconds=60.008 avg_watts=86.698 command_seconds=60.001 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=1.411s ttft_p90=1.453s latency_median=25.718s tok/s_median=10.0 aggregate_tok/s=9.9
+energy: zone=intel-rapl:0 (package-0) joules=6869.421 seconds=77.287 avg_watts=88.881 command_seconds=77.278 samples=17 exit=0
+concurrency=1 ok=8/8 ttft_median=1.363s ttft_p90=1.388s latency_median=25.667s tok/s_median=10.0 aggregate_tok/s=10.0
+energy: zone=intel-rapl:0 (package-0) joules=18384.679 seconds=205.530 avg_watts=89.450 command_seconds=205.526 samples=42 exit=0
+concurrency=4 ok=16/16 ttft_median=4.977s ttft_p90=5.207s latency_median=50.848s tok/s_median=5.0 aggregate_tok/s=20.1
+energy: zone=intel-rapl:0 (package-0) joules=19758.153 seconds=203.676 avg_watts=97.008 command_seconds=203.665 samples=42 exit=0
+concurrency=1 ok=4/4 ttft_median=24.529s ttft_p90=24.603s latency_median=25.844s tok/s_median=0.6 aggregate_tok/s=0.6
+energy: zone=intel-rapl:0 (package-0) joules=10892.532 seconds=103.293 avg_watts=105.453 command_seconds=103.283 samples=22 exit=0
+{"added_ttft_median_s": 3.2592347357422113, "first_ttft_s": 32.515014262869954}
+2026-11-01T18:12:02Z O status measured: perf phases recorded

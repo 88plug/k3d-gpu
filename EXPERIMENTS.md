@@ -104,7 +104,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H55 | On the i9-13900T, an SLO gate on the E-core neighbour's `cpu.max`, set from the P-core inference server's own median TTFT, keeps CPU-served prefill within +10% of quiet while the neighbour keeps more throughput than H5's frequency-cap frontier (CMIN: +23.3% at 72.4% neighbour loss) and than the best static quota at the same penalty. | Written 2026-10-20, before any H55 measurement; control rule revised the same day, still before any measurement (see the section). Pre-registered prior, not a result: N0 about +40% (H5 replicate), K50 +20 to +30% at about 50% loss, K25 +8 to +15% at about 75% loss. A_slo climbs only while the penalty at its level is at most +5%, so it is expected to stay at the 25-37.5% levels, close to K25: +8 to +15% at 70-78% loss, failing (b) or (c). Expected verdict REFUTED: package power is the coupling, duty-cycling the neighbour is less power-efficient per op than H5's frequency cap, and a closed-loop c = 1 prefill load leaves no idle gap to admit it into. If H55 holds, A_slo settles at 50% or above at +10% or less. | H5 amendment A1's host-level harness (OVMS 2026.4.1, `OpenVINO/Qwen3-4B-int4-ov`, `bench/prefill-guard/prompt.txt` with a unique tag per request, CPUs 0-14; `stress-ng --cpu 15 --cpu-method matrixprod` on CPUs 17-31; tool proxy on CPU 16), with a 900 s closed-loop prefill window per run (16 tokens, concurrency 1). Arms Q, N0 (`cpu.max max`), K50 (`750000 100000`), K25 (`375000 100000`) and A_slo (`bench/admission/ctl.py` steps 25-100% of 15 CPUs on windows of 20 requests: down if the window median > 1.10 x the round's quiet reference, the median of 20 pre-roll requests; up if it is at most 1.05 x that), 5x5 Latin square, one round per lock hold. Supported only if A_slo's median penalty is at most +10%, its neighbour loss is below 72.4%, and no static arm reaches +10% at a loss no higher than A_slo's plus the neighbour's own N0 run-to-run spread; inconclusive gates and the hold cap in [H55 pre-registration](#h55-pre-registration-slo-gated-admission-of-an-e-core-neighbour-2026-10-20). A SUPPORTED H55 does not ship a controller by itself: kubelet owns the sandbox pod's `cpu.max` (`limits cpu "1"`). Run 2026-10-29 ([H55 run](#h55-run-i9-13900t-2026-10-29)), all 5 holds: the 25 runs completed with no failed request, but A_slo's round-3 run closed 3 full windows (78 requests in its window), under the gate's 4, so the scorer stops at INCONCLUSIVE. Not gated (the scoring branch's formulas past that gate): A_slo +23.2% at 67.9% neighbour loss, at the 25% floor through rounds 1-4 and up to 62.5% in round 5; K25 +17.0% at 70.4%; K50 +24.1% at 43.0%; N0 +54.6%; Q spread 28.0% of the Q median, drift inside it. No arm reached +10%, so read past the gate the row fails (a) only. | INCONCLUSIVE |
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. Stage 0 under amendment S0 (`lockwait.json`, 62fdf617): pooled share 0.9987 (16081 s of lock wait over 16102 s held, 21 holds, 4 logs), so stage 1 ran; smoke-W passed `h56.py gate` (slice-0 setup 225 s, 15 tasks in 120 s). Stage 1 run 2026-10-21, holds 1-8 in order, every rc 0, none gate-flagged ([H56 run](#h56-run-stage-1-xeon-6741p-2026-10-21)): `h56.py score` reads "4 VOID condition-holds > 2; position 2 missing; position 3 missing; position 6 missing; position 7 missing". Every W hold is VOID on one rule, slice 0's block window not inside the sibling's: a B24 block ends at its 24th task, not at its run budget, and took 178-190 s, so the sibling's block (1800 s budget) ended 27-32 s after slice 0's began and covered 0.15-0.17 of it. No time, success, completion, MHz or power statistic is scored. The 4 A holds are valid (22/24 passed in each). A VOID replacement cannot lift the verdict (4 VOID > 2) and would VOID by the same timing, so no further H56 hold is owed; crescent rows stay K=1 (adoption rule 1). | INCONCLUSIVE |
 | H59 | Engine choice by evidence on the Xeon 6741P (crescent; AMX, CPU only, no card): with Gemma 4 26B-A4B QAT at agent concurrency N=4, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter (L, `agent up` with the llama.cpp backend of PR #182) decodes at least 1.2x faster than OVMS int4 (O, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`, the model optimizer's current pick), with GSM8K quality within 2 of 50. SUPPORTED makes llama.cpp the optimizer's CPU engine default for this CPU class (`console/ledger-rules.json`, H59 family); otherwise OVMS stays. | Written 2026-10-21, before any H59 measurement. Informed by H54a's descriptive N=1 numbers on this host (Lg-mtp 54.52, A1g 23.25 tok/s, not a verdict): N=1 L/O 2.2 (1.6-2.8) (0.6); N=4 per-request decode L/O 1.6 (1.1-2.3) (0.55), with MTP's gain smaller at N=4 than at N=1 (0.65); N=16 L/O < N=4 L/O (0.6); prefix-reuse added-agent TTFT O < L (0.55); GSM8K both >= 46/50 (0.7). SUPPORTED (0.55), REFUTED (0.3), INCONCLUSIVE (0.15). | [H59 pre-registration](#h59-pre-registration-engine-choice-per-cpu-class-2026-10-21): arms O and L at their best documented settings, one serving at a time on the CPU, 3 performance holds in rotated order (N=1: 8, N=4: 16, N=16: 32 requests, 256 tokens, greedy), a TTFT and a prefix-reuse phase per arm, 1 quality hold (GSM8K 0-49), RAPL J/token. Statistic: ratio of L's to O's median per-request decode tok/s at N=4 over the pooled holds, 95% bootstrap CI (H54's `boot_ratio`). SUPPORTED: CI lower bound >= 1.2 and L's GSM8K >= O's - 2. REFUTED: CI upper bound < 1.2, or the quality gate fails. Otherwise INCONCLUSIVE (also: an arm not deliverable, load unmatched). Scorer: `bench/h59/h59.py`, [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28) (2026-10-28, before any H59 measurement). O serves base-model int4 (OVB), not QAT weights, so a verdict compares the two stacks as shipped (S1's description fixes); SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59 measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59 measurement). Its model check names OVB's language-model files: [H59 amendment R3](#h59-amendment-r3-the-model-check-names-ovbs-language-model-files-2026-11-01) (2026-11-01, before any H59 hold). L's render also carries `--cache-ram 0` and `-ctxcp 4`, both read at the pin: [H59 amendment R4](#h59-amendment-r4-ls-render-also-carries---cache-ram-0-and--ctxcp-4-2026-11-01) (2026-11-01, before any H59 hold). Result ([H59 run](#h59-run-xeon-6741p-2026-11-01)): 4 holds, every arm measured, no spare, no void phase, load matched. N=4 L/O 3.499 (95% CI 3.422-3.612), L faster in each performance hold (3.29, 3.68, 3.48); GSM8K L 49/50, O 50/50, gate passed; so SUPPORTED. Not gated: N=1 L/O 2.10, N=16 2.09; 1,000-token TTFT L 2.87 s, O 4.76 s; added-agent prefix TTFT L 0.82 s, O 0.63 s; N=4 J/output token gross L 2.98, O 9.81. | SUPPORTED |
-| H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59d measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59d measurement). | PENDING |
+| H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59d measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59d measurement). Result ([H59d run](#h59d-run-i9-13900t-2026-11-01)): 4 holds, no spare. L was not deliverable in holds 1 and 3: each time it followed O in the hold, its server was OOMKilled 7 times at the fit's 45Gi pod limit (4 x 262,144 tokens) and never answered within 900 s. The same render served in holds 2 and 4, where L ran first. So INCONCLUSIVE (L not deliverable in two holds). Not gated, from hold 2 only: N=4 L/O 1.05, N=1 1.19; GSM8K L 50/50, O 49/50; the idle-window load read matched (L 2.14, O 2.01 CPU-s/s). | INCONCLUSIVE |
 | H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59w measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59w measurement). | PENDING |
 
 ## Falsification log
@@ -15446,6 +15446,177 @@ a chat completion through dynamo-frontend :8100 returned "OK" for each pair:
 The bench lock and both slot locks were free, and no k3d cluster or process of this run was
 left. Crescent keeps `~/k3dgpu-h59` (29 GB: the model files, the checkout and its bin) for a
 re-run, and the llama.cpp `full-b11960` image the drafter conversion pulled.
+
+### H59d run (i9-13900T, 2026-11-01)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-01T17:18:48Z (hold 1 start) to 2026-11-01T19:04:18Z (hold 4 end), 4 lock holds, no spare
+hypothesis:      H59d
+host:            p360ultra: 13th Gen Intel(R) Core(TM) i9-13900T (P = CPUs 0-15, E = 16-31), avx_vnni on every CPU,
+                 no amx_*, no avx512*; microcode 0x133; MemTotal 131521428 kB; governor powersave, EPP performance;
+                 kernel 6.6.128-1-MANJARO
+k3d-gpu commit:  dd1ad986 (origin/main), run from this worktree with 0 uncommitted files at every hold start;
+                 k3d-gpu 0.1.85, node image
+                 cryptoandcoffee/k3d-gpu:0.1.85@sha256:980402d79c9b42d5b0b2873c18f9663f5fa8f4116b0ee4591e5d33974b6b5242
+                 (release commit 99789454; scripts/ and console/ are unchanged from it to dd1ad986)
+tools:           docker 29.3.0; k3d v5.9.0 (/usr/bin/k3d, behind the k3d shim); kubectl v1.35.2
+runtimes:        O openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58;
+                 L ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220;
+                 drafter conversion ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+models:          google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be (gemma-4-26B_q4_0-it.gguf sha256 3eca3b8f...);
+                 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3 (openvino_language_model.bin sha256 0f887130...);
+                 QAT drafter @ 95371415 -> Q4_0 GGUF built here by prep.sh with Job gguf-convert-b459c9c78d78
+                 (sha256 f6f80c36..., 321145312 bytes, the same file crescent's prep built); every LFS file equals
+                 the Hub's sha256 (weights.sha256)
+lock:            ~/k3dgpu-bench.lock (LOCK; F3 amendment R1), for the drafter conversion, the smoke and each hold
+energy source:   RAPL package-0 through energy.sh and sudo (SUDO_ASKPASS)
+co-tenants:      qwen35-9b (vLLM v0.19.1, 13530 MiB of GPU 1): running, 0 restarts, no request served
+                 (request_success_total stop = 1 and generation_tokens_total = 11 before and after every hold);
+                 gpustack-worker: running, crash-looping, RestartCount 5306 -> 5316 over holds 1-4; GPU 0 5206 MiB
+                 throughout; neither touched (cotenants/)
+records:         bench/h59/results/2026-11-01-desktop/: H59d/holdK/ (reproduce.txt, load.jsonl, node.json, pre.txt,
+                 post.txt, hold.log; per arm deploy.yaml, agent.yaml, check.json, fit.json, cpus.txt, boot.json,
+                 describe.txt, pods.txt, server.log, load-*.json, energy-*.json, phases.jsonl, prefix.json,
+                 quality.json, graph.pbtxt for O), gate.json, verdict.json, report.json, campaign.log,
+                 campaign-steps.log, campaign.sh.txt, prep.log, prep/, smoke/, cotenants/, weights.sha256,
+                 cpufreq-snapshot.txt, cpufreq-after.txt; the hold kubeconfigs are left out
+```
+
+Commands, on the desktop from this worktree at `dd1ad986` (`G` is the profile's `~/k3dgpu-h59`, a
+link to a directory on the second disk; `campaign.sh.txt` ran the smoke and holds 1-4 and read the
+co-tenants before and after each):
+
+```bash
+mkdir -p "/home/andrew/docker&models/k3dgpu-h59" && ln -sfnT "/home/andrew/docker&models/k3dgpu-h59" ~/k3dgpu-h59
+install -D -m 0755 bench/h59/k3d-shim.sh ~/k3dgpu-h59/bin/k3d
+export PATH=~/k3dgpu-h59/bin:$PATH K3D_REAL=/usr/bin/k3d G=~/k3dgpu-h59 LOCK=~/k3dgpu-bench.lock \
+    SUDO_ASKPASS=<askpass helper> \
+    H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.85@sha256:980402d79c9b42d5b0b2873c18f9663f5fa8f4116b0ee4591e5d33974b6b5242
+PY_HF=python3 bench/h59/prep.sh desktop
+bench/h59/hold.sh desktop smoke
+for h in 1 2 3 4; do bench/h59/hold.sh desktop $h; done
+R=~/k3dgpu-h59/results/H59d    # committed as bench/h59/results/2026-11-01-desktop/H59d
+python3 bench/h59/run.py idle-gate $R > gate.json
+python3 bench/h59/h59.py score $R --load gate.json > verdict.json
+python3 bench/h59/report.py $R > report.json
+```
+
+Re-scoring the committed records with the same three commands reproduces `gate.json`,
+`verdict.json` and `report.json` byte for byte.
+
+**Preparation and smoke.** `prep.sh desktop` ran from 17:05:05Z to 17:12:02Z. It downloaded both
+repos, matched every LFS file against the Hub's sha256 and passed the model check (amendment
+R3). It took the bench lock at 17:10:22Z and built the drafter with Job
+`gguf-convert-b459c9c78d78`, the Job amendment R1's offline render names. The wiring smoke ran
+from 17:12:33Z to 17:18:30Z and is discarded. Both arms answered: O was ready after 57 s, L after
+55 s. Each served one streamed 16-token request and one `chat_template_kwargs` chat. The smoke's L
+rendered `-c 786432 -np 6` (6 x 131,072) with a 43Gi limit.
+
+**Holds.** Every hold returned rc 0 and no hold waited for the start rule (`load1` 7.1, 3.4, 8.8
+and 4.6, against 24). The holds took 23-29 minutes of the 75-minute cap. `/` had 185 GiB free and
+MemAvailable read 59.9-61.5 GiB at every start. Over the holds the P-core sampler read `load1`
+2.2-17.4 (hold means 6.9, 11.5, 6.9 and 12.8) and package temperature 72-100 C.
+
+- Every render passed `run.py check`: the images, CPU, no GPU resource, the P-core label and a
+  16-CPU request. Each served pod's cpuset was 0-15 (O 189 threads, L 51, all on 0-15).
+- L rendered `-c 1048576 -np 4` (4 x 262,144 tokens) with a 45Gi limit in all four holds, with
+  `--threads 8 --threads-batch 16 --load-mode mmap+mlock --cache-ram 0 -ctxcp 4` (amendment R4).
+- O rendered 6 sequences and `--cache_size=21` (41Gi) in hold 1, and 7 and 25 (46Gi) in holds 2-4,
+  as the host's free memory at render time gave the fit.
+- O was measured in every hold; it was ready after 46-77 s.
+- L served in holds 2 and 4, where it ran first in a fresh cluster (ready after 44 and 35 s).
+- **L was not deliverable in holds 1 and 3**, where it followed O. Its container was OOMKilled
+  (exit 137) at the 45Gi limit and restarted 7 times in the 900 s each time (`describe.txt`).
+  The last run lasted 16 s in hold 1 and 15 s in hold 3, and its log stops after the model's
+  token load (`server.log`).
+
+| Hold | Order | O | L |
+|---|---|---|---|
+| 1 | O, L | measured | not deliverable: OOMKilled x 7 at 45Gi |
+| 2 | L, O | measured | measured |
+| 3 | O, L | measured | not deliverable: OOMKilled x 7 at 45Gi |
+| 4 (quality) | L, O | GSM8K 49/50 | GSM8K 50/50 |
+
+**H59d: INCONCLUSIVE** (`h59.py score --load gate.json`): "L not deliverable in two holds", the
+decision order's first step. No statistic is scored.
+
+**Spares.** None was run. Holds 1 and 3 each left an arm not measured, so either could be repeated.
+But `h59.py` counts the not-deliverable records over every hold directory, spares included, and two
+already stand. A spare could not change the verdict.
+
+**Load (H57d's gate over each arm's idle window, amendment R2).** Foreign P-core load over the
+60 s idle windows read L 2.14 (hold 2) and O 2.08, 2.03 and 1.91 CPU-s/s: means 2.14 and 2.01,
+spread 0.13 <= 2.00, matched. The decision stops before this step. Over the N=4 phases (amendment
+S1's reading, recorded and not gated) L read 1.59 and O 0.08, spread 1.51: the same pattern
+amendment R1 reported, with O's foreign load falling to near zero while it serves.
+
+Reported, not gated (`report.json`). L's figures come from hold 2 alone; O's are medians over
+holds 1-3.
+
+| | O (OVMS 2026.4.1, OVB int4) | L (llama.cpp b11960, QAT Q4_0 and the QAT MTP drafter) | L/O |
+|---|---|---|---|
+| N=1 decode tok/s per request | 10.48 (10.55, 10.49, 10.37) | 12.49 | 1.19 |
+| N=4 decode tok/s per request | 5.56 (5.60, 5.56, 5.54) | 5.83 | 1.05 (against hold 2's O alone, also 1.05) |
+| N=4 aggregate tok/s | 20.1-20.3 | 22.0 | |
+| TTFT, H54's 1,000-token prompt | 24.26 s | 13.47 s | 0.56 |
+| Prefix reuse, first agent / added agent | 32.2-32.5 s / 3.26 s | 19.25 s / 2.20 s | added 0.67 |
+| RAPL J per output token, N=4, gross / net of idle | 4.81 / 0.50 | 4.51 / 0.56 | |
+| GSM8K 0-49 (hold 4) | 49/50 | 50/50 | |
+
+The idle windows drew 86.7-86.9 W, so the net J/token figures are small differences of large
+numbers. The prefix phase's shared prompt is 1,377 tokens as Gemma's tokenizer counts it.
+
+Predictions against the record (not gated):
+
+| Prediction | Result |
+|---|---|
+| Row (2026-10-21): N=1 L/O 1.4 (0.9-2.0) (0.5) | 1.19, one L hold: inside |
+| Row: N=4 L/O 1.2 (0.8-1.7) (0.45) | 1.05, one L hold: inside |
+| Row: SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2) | INCONCLUSIVE |
+| Amendment S1 (2026-10-28): N=1 0.9 (0.6-1.5), N=4 0.85 (0.6-1.2) | 1.19 and 1.05: both inside |
+| Amendment S1: SUPPORTED (0.1), REFUTED (0.5), INCONCLUSIVE (0.4) | INCONCLUSIVE, though not for the reason S1 gave (the load gate) |
+
+What the records show about L's failure, beside the verdict:
+
+- The fit (`k3d-gpu fit --engine llama.cpp --ctx 262144 --seqs 4 --explain` on this host) sizes
+  L as 13.4 GiB of weights, 1.0 GiB of runtime, 21.2 GiB of KV and 4.7 GiB of context
+  checkpoints: 40.3 GiB, limit ceil(40.3 x 1.10) = 45Gi. It counts 0.0 GiB of activations and
+  nothing for the drafter.
+- The same render, image and files OOMed in both holds where L followed O and served in both
+  where it ran first. The smoke's L, which followed O, had the 6 x 131,072 rung at 43Gi and
+  served.
+- Why the order matters is not measured. One candidate: with `--load-mode mmap+mlock`, the
+  GGUF's 13.4 GiB is charged to L's cgroup only when L faults it in itself. O's run before it may
+  push those pages out of the page cache. That would put L's need above 45Gi with the weights
+  charged and below it without them.
+- On the Xeon (H59) L served 262,144 tokens per slot in every hold, at 48 slots and with far
+  more memory.
+
+Confounds and scope:
+
+- **Stacks as shipped** (amendment S1), as for H59: engine and weights both differ.
+- **Shared host.** About 50 other containers and other sessions ran throughout. Arms were rotated
+  over holds, not interleaved per request.
+- **The fit follows the host.** Each arm's context and sequences came from the host's free memory
+  at render time (amendment R1). O's fit differed between hold 1 and holds 2-4; L's did not.
+- **Vendor.** The node ran `K3D_GPU_VENDORS=hybrid`: no GPU in the node and no GPU resource asked,
+  so the co-tenants' GPUs were not touched.
+
+**What the verdict changes.** Nothing. An INCONCLUSIVE row picks no engine, so the i9-13900T
+class keeps OVMS when `K3D_GPU_AGENT_BACKEND` is unset. `console/ledger-rules.json` now reads
+H59d INCONCLUSIVE. The 6-hold cap allows no further H59d hold that could change it; another
+attempt would be a new row.
+
+**cpufreq and cleanup.** The runner writes no cpufreq value. The `bench/prefill-guard/cpufreq.sh
+snapshot` taken before prep and after hold 4 are byte-identical (128 lines, sha256 `7403983b...`,
+H5's campaign snapshot), so nothing needed restoring. Every hold and the smoke deleted their
+clusters; no `k3dgpu-d-h59-*` cluster, container or process remains, and the bench lock is free.
+After the records were copied, the campaign directory on the second disk (models, drafter and
+records, 29 GB) and the node image the smoke pulled were removed. The `full-b11960` image was on
+the host before prep (its run pulled nothing) and stays.
 
 ## Scope corrections
 

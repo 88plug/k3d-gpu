@@ -1,0 +1,34 @@
+{
+ "arm": "O",
+ "fit": "cpu 6x16384",
+ "requests": {
+  "cpu": "16",
+  "memory": "41Gi"
+ },
+ "limits": {
+  "memory": "41Gi"
+ },
+ "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+ "args": [
+  "--rest_port=8000",
+  "--model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+  "--model_name=gemma",
+  "--cache_dir=/models/.ov_cache",
+  "--log_level=INFO"
+ ],
+ "pull_args": [
+  "--pull",
+  "--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+  "--model_repository_path=/models",
+  "--model_name=gemma",
+  "--task=text_generation",
+  "--target_device=CPU",
+  "--tool_parser=gemma4",
+  "--reasoning_parser=gemma4",
+  "--max_num_seqs=6",
+  "--cache_size=21"
+ ],
+ "max_num_seqs": "6",
+ "cache_size": "21",
+ "enable_prefix_caching": null
+}
