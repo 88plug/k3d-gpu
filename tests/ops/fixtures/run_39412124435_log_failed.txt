@@ -1,0 +1,69 @@
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.3921272Z [command]/usr/bin/git checkout --progress -B autobump/image-digests 3dafeaa7-ed44-406a-adab-6b3079798909 --
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4155261Z Switched to a new branch 'autobump/image-digests'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4170852Z [command]/usr/bin/git rev-list --right-only --count main...autobump/image-digests
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4213474Z 1
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4218208Z Created branch 'autobump/image-digests'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4223267Z [command]/usr/bin/git rev-parse main
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4257673Z a32a9701bf9bc139c1b38a5c46673462b26f66b2
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4279469Z [command]/usr/bin/git -c core.quotePath=false show --raw --cc --no-renames --no-abbrev --format=%H%n%T%n%P%n%G?%n%s%n%b%n###EOB### a32a9701bf9bc139c1b38a5c46673462b26f66b2
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4736792Z [command]/usr/bin/git rev-parse autobump/image-digests
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4824065Z 44df43843575c34e4445f74c19275b0a8c368127
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4828650Z [command]/usr/bin/git log --format=%H main..autobump/image-digests
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4890744Z 44df43843575c34e4445f74c19275b0a8c368127
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4900873Z [command]/usr/bin/git -c core.quotePath=false show --raw --cc --no-renames --no-abbrev --format=%H%n%T%n%P%n%G?%n%s%n%b%n###EOB### 44df43843575c34e4445f74c19275b0a8c368127
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4945493Z [command]/usr/bin/git branch --delete --force 3dafeaa7-ed44-406a-adab-6b3079798909
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4985736Z Deleted branch 3dafeaa7-ed44-406a-adab-6b3079798909 (was 44df438).
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.4993338Z [command]/usr/bin/git checkout --progress main --
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.5185041Z Switched to branch 'main'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.5186587Z Your branch is up to date with 'origin/main'.
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.5195480Z ##[endgroup]
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.5196354Z ##[group]Pushing pull request branch to 'origin/autobump/image-digests'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:40.5201405Z [command]/usr/bin/git push --force-with-lease origin autobump/image-digests:refs/heads/autobump/image-digests
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5322777Z To https://github.com/88plug/k3d-gpu
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5323814Z  ! [remote rejected] autobump/image-digests -> autobump/image-digests (refusing to allow a GitHub App to create or update workflow `.github/workflows/ci.yml` without `workflows` permission)
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5324928Z error: failed to push some refs to 'https://github.com/88plug/k3d-gpu'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5362780Z ##[error]The process '/usr/bin/git' failed with exit code 1
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5371492Z ##[group]Restore git configuration
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5372069Z [command]/usr/bin/git config --local --name-only --get-regexp http.https://github.com/.extraheader ^AUTHORIZATION:
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5391040Z http.https://github.com/.extraheader
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5401977Z [command]/usr/bin/git config --local --get-regexp http.https://github.com/.extraheader ^AUTHORIZATION:
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5444012Z http.https://github.com/.extraheader AUTHORIZATION: basic ***
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5449266Z [command]/usr/bin/git config --local --unset http.https://github.com/.extraheader ^AUTHORIZATION:
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5489680Z Unset config key 'http.https://github.com/.extraheader'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5493641Z Restored checkout credential file: git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5497799Z [command]/usr/bin/git config --global --unset safe.directory /home/runner/work/k3d-gpu/k3d-gpu
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5542247Z ##[endgroup]
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.5777709Z Post job cleanup.
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6720620Z [command]/usr/bin/git version
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6770976Z git version 2.55.0
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6810419Z Copying '/home/runner/.gitconfig' to '/home/runner/work/_temp/61145c41-06b6-42b8-b3ad-72172d8eeb20/.gitconfig'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6821283Z Temporarily overriding HOME='/home/runner/work/_temp/61145c41-06b6-42b8-b3ad-72172d8eeb20' before making global git config changes
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6822668Z Adding repository directory to the temporary git global config as a safe directory
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6827043Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/k3d-gpu/k3d-gpu
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6868727Z Removing SSH command configuration
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6876124Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.6918380Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7214198Z Removing HTTP extra header
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7221090Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7263494Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7561114Z Removing includeIf entries pointing to credentials config files
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7573853Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7609505Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7610347Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7611064Z includeif.gitdir:/github/workspace/.git.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7611707Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7620469Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7652746Z /home/runner/work/_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7665336Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path /home/runner/work/_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7719090Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7754639Z /home/runner/work/_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7767248Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7817451Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7854260Z /github/runner_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7864827Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7914916Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7949826Z /github/runner_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.7962282Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.8011711Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.8271962Z Removing credentials config '/home/runner/work/_temp/git-credentials-0855f328-330d-4402-b0df-e8084e6fb813.config'
+repin-images	UNKNOWN STEP	2026-10-20T11:11:41.8452430Z Cleaning up orphan processes

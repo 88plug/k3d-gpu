@@ -1,0 +1,8 @@
+# Known failure signatures for hack/watchdog: <Python regex> TAB <hint>.
+# The watchdog scans a failed run's log and puts the hint of the first matching
+# line (top to bottom in this file) in the alarm body. Lines starting with # are comments.
+registry serves sha256	An upstream tag was re-pushed (the registry serves a new digest for a pinned tag): repin with scripts/images-lock repin, then update and check.
+without .workflows. permission	A bot push touched .github/workflows/: GITHUB_TOKEN cannot create or update workflow files. Delete the stale autobump branch (its workflows differ from main) or move the pin out of the workflow file.
+refusing to allow a GitHub App	A bot push touched .github/workflows/: GITHUB_TOKEN cannot create or update workflow files. Delete the stale autobump branch (its workflows differ from main) or move the pin out of the workflow file.
+429 Too Many Requests	Docker Hub rate limit: retry later; the release build retries 3 times with backoff.
+non-fast-forward	Release race: another writer moved main between fetch and push; the next run releases from the new tip.

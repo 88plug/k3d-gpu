@@ -1,0 +1,75 @@
+== resume step 1 2026-10-29T21:21:50Z repo=e5748cd112f2fdc2cf2e02962461f69f7938c17d
+-- H1
+active
+
+active
+H1 rc=0
+-- H2
+running
+H2 rc=0
+-- H3
+29.7.2 live-restore=false cgroup=systemd/2
+H3 rc=0
+-- H4
+probe rc=0
+-- H5
+H5 done
+-- H6
+/dev/nvme0n1p2             3667G 3273G      208G      95% /
+MemAvailable:   123766348 kB
+1.16 0.68 0.55 2/3113 23701
+-- H7
+
+H7 rc=0/0
+-- H8
+lock-free
+H8 done
+-- H9
+br_netfilter vxlan
+modprobe=[]
+-- H10
+ok ipset hash:ip
+ok ipset hash:net
+ok ipset hash:ip,port
+ok ipset hash:ip,port,ip
+ok ipset hash:ip,port,net
+ok iptables-nft filter comment
+ok iptables-nft filter statistic
+ok iptables-nft filter recent
+ok iptables-nft filter conntrack
+ok iptables-nft filter addrtype
+ok iptables-nft filter mark
+ok iptables-nft filter MARK
+ok iptables-nft filter REJECT
+ok iptables-nft filter tcp
+ok iptables-nft filter udp
+ok iptables-nft filter multiport
+FAIL iptables-nft filter limit :: iptables v1.8.11 (nf_tables):  RULE_APPEND failed (No such file or directory): rule in chain K3DGPU_PROBE
+FAIL iptables-nft filter NFLOG :: iptables v1.8.11 (nf_tables):  RULE_APPEND failed (No such file or directory): rule in chain K3DGPU_PROBE
+ok iptables-nft filter physdev
+ok iptables-nft filter pkttype
+ok iptables-nft nat MASQUERADE
+ok iptables-nft nat comment
+ok ip6tables-nft filter comment
+ok ip6tables-nft filter statistic
+ok ip6tables-nft filter recent
+ok ip6tables-nft filter conntrack
+ok ip6tables-nft filter addrtype
+ok ip6tables-nft filter mark
+ok ip6tables-nft filter MARK
+ok ip6tables-nft filter REJECT
+ok ip6tables-nft filter tcp
+ok ip6tables-nft filter udp
+ok ip6tables-nft filter multiport
+FAIL ip6tables-nft filter limit :: ip6tables v1.8.11 (nf_tables):  RULE_APPEND failed (No such file or directory): rule in chain K3DGPU_PROBE
+FAIL ip6tables-nft filter NFLOG :: ip6tables v1.8.11 (nf_tables):  RULE_APPEND failed (No such file or directory): rule in chain K3DGPU_PROBE
+ok ip6tables-nft filter physdev
+ok ip6tables-nft filter pkttype
+ok ip6tables-nft nat MASQUERADE
+ok ip6tables-nft nat comment
+ok iptables-nft nat DNAT
+ok iptables-nft nat SNAT
+ok ip6tables-nft nat DNAT
+iptables: iptables v1.8.11 (nf_tables)
+NFPROBE missing: NFLOG limit
+nfprobe rc=1

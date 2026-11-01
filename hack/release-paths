@@ -1,0 +1,29 @@
+# The paths whose change ships to users: a commit on main that touches one of them
+# (and carries no [skip release]) cuts a launcher release. One entry per line: a
+# file, or dir/** for everything under dir. # starts a comment.
+#
+# Read by hack/release_cas.sh (its git log path filter for push runs and
+# mode=changed dispatches). .github/workflows/auto-release.yml repeats the list as
+# its literal push paths: (GitHub reads no file there); tests/ci_wiring_test.sh
+# checks the two are equal, and that this list covers every file
+# packaging/nfpm/nfpm.yaml and Formula/k3d-gpu.rb install (README.md and
+# LICENSE.md excepted: documentation rides the next release).
+packaging/**
+scripts/**
+share/**
+Dockerfile
+console/**
+images.lock
+bench/vs.py
+bench/llm_load.py
+bench/energy.sh
+bench/agent_trace.py
+bench/agent_trace_gen.py
+bench/apb/apb.py
+bench/apb/capacity.py
+bench/competitors.lock
+oracle/bundle.py
+oracle/project.py
+oracle/validate.py
+oracle/share.py
+oracle/schema/bundle-v1.json

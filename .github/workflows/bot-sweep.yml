@@ -1,0 +1,41 @@
+name: Bot sweep
+
+# Hourly upkeep of the bot's PRs (branches autobump/*, opened by github-actions[bot]
+# with GITHUB_TOKEN, so their own pull_request runs wait for approval).
+#
+#   ci-fill: hack/bot-ci-dispatch runs ci.yml by workflow_dispatch on each bot PR
+#            branch with no run at its head, and re-runs a first-attempt failure
+#            once, one bot run in flight at a time and none while a human PR's CI
+#            is queued. It fills in what the nightly deferred.
+
+on:
+  schedule:
+    - cron: '13 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: bot-sweep
+  cancel-in-progress: false
+
+jobs:
+  ci-fill:
+    name: CI on bot PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Dispatch CI on bot PRs that have none at their head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: hack/bot-ci-dispatch
