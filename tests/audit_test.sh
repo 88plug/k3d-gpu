@@ -82,8 +82,9 @@ lock_drift "a bumped image under share/telemetry" \
 lock_drift "a bumped plain image pin in the launcher" \
     "not in images.lock: docker.io/openvino/model_server:2099.1.0-gpu (from scripts/k3d-gpu NPU_UMD_IMAGE)" \
     "sed -i 's|^NPU_UMD_IMAGE=.*|NPU_UMD_IMAGE=\"openvino/model_server:2099.1.0-gpu\"|' scripts/k3d-gpu"
-lock_drift "a moved backend digest in the launcher" "vllm/vllm-openai-xpu: the repo pins sha256:$(printf 'e%.0s' {1..64})" \
-    "sed -i 's|vllm/vllm-openai-xpu@sha256:[0-9a-f]*|vllm/vllm-openai-xpu@sha256:$(printf 'e%.0s' {1..64})|' scripts/k3d-gpu"
+XPU_TAG=$(sed -n 's|.*AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu:\([^@]*\)@.*|\1|p' "${REPO}/scripts/k3d-gpu")
+lock_drift "a moved backend digest in the launcher" "vllm/vllm-openai-xpu:${XPU_TAG}: the repo pins sha256:$(printf 'e%.0s' {1..64})" \
+    "sed -i 's|\(vllm/vllm-openai-xpu:[^@]*\)@sha256:[0-9a-f]*|\1@sha256:$(printf 'e%.0s' {1..64})|' scripts/k3d-gpu"
 lock_drift "a changed pinned digest" "the repo pins sha256:$(printf 'f%.0s' {1..64})" \
     "sed -i 's/node-feature-discovery:v0.20.1@sha256:[0-9a-f]*/node-feature-discovery:v0.20.1@sha256:$(printf 'f%.0s' {1..64})/' share/node-feature-discovery.yml"
 lock_drift "a k3s bump" "images.lock is for k3s v1.37.1-k3s1, the Dockerfile pins v1.38.0-k3s1" \
@@ -162,7 +163,7 @@ f = "crictl-k3d-gpu-server-0.json"; d = json.load(open(f))
 d["images"].append({"id": "sha256:" + "9" * 64, "repoTags": TAGS, "repoDigests": DIGESTS, "pinned": False})
 json.dump(d, open(f, "w"))'
 img_edit() { local s=${PY_IMG/TAGS/$1}; echo "${s/DIGESTS/$2}"; }
-OWUI_DIGEST=$(sed -nE 's/^ +image: ghcr\.io\/open-webui\/open-webui@(sha256:[0-9a-f]{64})$/\1/p' "${REPO}/share/agent-chat-ui.yml")
+OWUI_DIGEST=$(sed -nE 's/^ +image: ghcr\.io\/open-webui\/open-webui(:[^@]+)?@(sha256:[0-9a-f]{64})$/\2/p' "${REPO}/share/agent-chat-ui.yml")
 chat_ui_edit() {  # chat_ui_edit <WEBUI_AUTH value as a Python literal>
     printf '%s\n' "$(img_edit '[]' "[\"ghcr.io/open-webui/open-webui@${OWUI_DIGEST}\"]")" \
         'w = json.load(open("workloads.json"))' \

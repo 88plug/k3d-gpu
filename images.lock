@@ -62,7 +62,7 @@
       "sources": [
         "scripts/k3d-gpu K3D_GPU_AGENT_VIDEO_IMAGE"
       ],
-      "tag": null
+      "tag": "2026.2.0-ubuntu24"
     },
     {
       "digest": "sha256:386e6bec28b3f25a0e4e1c0fb726f026e8ed199bd74e4aa0fb226631359f7daf",
@@ -127,7 +127,7 @@
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
       ],
-      "tag": null
+      "tag": "1.5"
     },
     {
       "digest": "sha256:dd9874fb6a29aa6b3070754760876b42d0e440bb34537d7196d51bc15abb0068",
@@ -190,14 +190,7 @@
       "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
       "name": "docker.io/openvino/model_server",
       "sources": [
-        "scripts/k3d-gpu AGENT_OVMS_IMAGE"
-      ],
-      "tag": null
-    },
-    {
-      "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
-      "name": "docker.io/openvino/model_server",
-      "sources": [
+        "scripts/k3d-gpu AGENT_OVMS_IMAGE",
         "scripts/k3d-gpu NPU_UMD_IMAGE",
         "share/npu-embeddings.yml"
       ],
@@ -297,7 +290,7 @@
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
       ],
-      "tag": null
+      "tag": "v0.32.0"
     },
     {
       "digest": "sha256:73cbb215d3d43ae5b42816217b200386eb08d567767fcb36cba163152c5f3c79",
@@ -315,14 +308,6 @@
         "share/nri-balloons.yml"
       ],
       "tag": "v0.15.0"
-    },
-    {
-      "digest": "sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
-      "name": "ghcr.io/ggml-org/llama.cpp",
-      "sources": [
-        "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"
-      ],
-      "tag": null
     },
     {
       "digest": "sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf",
@@ -349,12 +334,20 @@
       "tag": "server-intel-b11960"
     },
     {
+      "digest": "sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
+      "name": "ghcr.io/ggml-org/llama.cpp",
+      "sources": [
+        "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"
+      ],
+      "tag": "server-vulkan-b11960"
+    },
+    {
       "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",
       "name": "ghcr.io/home-operations/drm-exporter",
       "sources": [
         "share/telemetry/intel-gpu-exporter.yml"
       ],
-      "tag": null
+      "tag": "0.3.4"
     },
     {
       "digest": "sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776",
@@ -378,7 +371,7 @@
       "sources": [
         "share/agent-chat-ui.yml"
       ],
-      "tag": null
+      "tag": "v0.12.2"
     },
     {
       "digest": "sha256:27c1b2553a690ca3d29889dcd61df97525d46f58272c0be8dc63c2b18f120075",
@@ -442,7 +435,7 @@
       "sources": [
         "scripts/k3d-gpu AGENT_DEFAULT_IMAGE"
       ],
-      "tag": null
+      "tag": "1.24.2-481"
     }
   ],
   "k3s_tag": "v1.37.1-k3s1",

@@ -3,13 +3,22 @@
 
   scripts/images-lock check    offline: images.lock lists exactly the images the
                                repo references, with the digests the repo pins
-  scripts/images-lock update   network: resolve each digest from its registry,
-                               read k3s's own image list, rewrite images.lock
+  scripts/images-lock update [--only FILE...]
+                               network: resolve each digest from its registry,
+                               read k3s's own image list, rewrite images.lock; a
+                               pinned digest its tag no longer resolves to fails.
+                               --only resolves and checks only the references FILEs
+                               source (k3s-images.txt too when the Dockerfile is one)
+                               and keeps every other entry as images.lock has it; a
+                               reference another file adds, or pins to a digest the
+                               lock does not hold, fails (name that file too)
   scripts/images-lock pins     offline: every image reference in the repo is pinned
-                               by digest (name:tag@sha256:...), except those that
-                               images.unpinned lists, each with its reason; and every
-                               NVIDIA apt package (nvidia-*, libnvidia-*) a Dockerfile
-                               installs is pinned pkg=version
+                               by digest under its tag (name:tag@sha256:...), except
+                               those that images.unpinned lists, each with its reason
+                               (a digest with no tag passes only in a ledger or
+                               historical path of pins/classes: records keep what
+                               ran); and every NVIDIA apt package (nvidia-*,
+                               libnvidia-*) a Dockerfile installs is pinned pkg=version
   scripts/images-lock digest REF...
                                network: print the registry's digest of each name:tag
   scripts/images-lock repin [--exclude GLOB]... [FILE...]
@@ -18,7 +27,13 @@
                                repo, or in FILEs, and write the registry's digest;
                                files whose repo-relative path matches a GLOB are left
                                alone (the nightly passes '.github/workflows/*': its
-                               token cannot push workflow files)
+                               token cannot push workflow files), and so are the ledger
+                               and historical paths of pins/classes and the files its
+                               historical-ref lines name (a pending row's pins move
+                               only by a ledger amendment, a finished run's never)
+  scripts/images-lock drift    network: list the name:tag@sha256 pins (outside those
+                               same paths) whose tag the registry now resolves to
+                               another digest; writes nothing, exits 0
 
 Sources of image references (the lock holds all of them and nothing else):
   - share/**/*.yml             every `image:` line (the baked manifests and the
@@ -36,8 +51,9 @@ Sources of image references (the lock holds all of them and nothing else):
                                (coredns, local-path-provisioner, metrics-server,
                                pause, ...): k3s itself starts them in the cluster
 
-`pins` and `repin` read every tracked text file except prose (*.md, docs/) and
-recorded data (research/, data/, oracle/raw/, */results/). An image reference is
+`pins` and `repin` read every tracked text file except prose (*.md, docs/),
+recorded data (research/, data/, oracle/raw/, */results/) and pins/classes (its
+historical-ref strings quote finished runs' refs). An image reference is
 the value of an `image:` / "image": key, a `container:` key, a FROM line, a
 *IMAGE= / *IMG= assignment, a ${*IMAGE:-default}, a docker:// URL, or a Helm values
 mapping's sibling `repository:` (with `registry:`) and `tag:` keys in a *.yaml/*.yml
@@ -57,7 +73,10 @@ Python standard library only. Options: --root DIR (default: this repo).
 """
 
 import argparse
+import email.utils
 import fnmatch
+import importlib.machinery
+import importlib.util
 import json
 import os
 import re
@@ -83,6 +102,9 @@ ACCEPT = ", ".join([
 ])
 REGISTRY_HOSTS = {"docker.io": "registry-1.docker.io"}
 ALLOW_FILE = "images.unpinned"
+# pins/classes names paths and quotes finished runs' refs exactly (historical-ref): its
+# strings are not image uses, and repin must never move them.
+CLASSES_FILE = "pins/classes"
 # One image reference: [registry[:port]/]path[:tag][@sha256:digest].
 NAME_TAG = (r"(?:[a-z0-9][a-z0-9.-]*(?::[0-9]+)?/)?[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)*"
             r"(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?")
@@ -117,6 +139,39 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from audit import parse_ref  # noqa: E402  (one image-reference parser for the lock and the audit)
 import facts  # noqa: E402
 import schema_check  # noqa: E402
+
+CLASSES_TOOL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hack", "pin-classes")
+RETRY_STATUS = (429, 500, 502, 503, 504)
+_classes = {}
+
+
+def classes(root):
+    """(glob lines, historical-ref paths) of ROOT's pins/classes; none without the file."""
+    if root not in _classes:
+        path = os.path.join(root, CLASSES_FILE)
+        if not os.path.isfile(path):
+            _classes[root] = ([], set())
+        else:
+            if not os.path.isfile(CLASSES_TOOL):
+                raise ValueError("%s exists but %s does not" % (path, CLASSES_TOOL))
+            loader = importlib.machinery.SourceFileLoader("pin_classes", CLASSES_TOOL)
+            pc = importlib.util.module_from_spec(importlib.util.spec_from_loader("pin_classes", loader))
+            loader.exec_module(pc)
+            lines, refs = pc.load(path)
+            _classes[root] = (lines, {r.glob for r in refs})
+    return _classes[root]
+
+
+def pin_class(root, path):
+    """The kind of the first pins/classes line matching path (ours when none does)."""
+    lines, _ = classes(root)
+    return next((ln.kind for ln in lines if ln.matches(path)), "ours")
+
+
+def frozen(root, path):
+    """True for a path `repin` and `drift` leave alone: a ledger or historical line's,
+    or a file a historical-ref line names."""
+    return pin_class(root, path) in ("ledger", "historical") or path in classes(root)[1]
 
 
 def dockerfile_froms(text):
@@ -290,7 +345,7 @@ def scanned_files(root):
             paths += [os.path.relpath(os.path.join(dirpath, f), root).replace(os.sep, "/") for f in sorted(filenames)]
     return [p for p in sorted(paths)
             if not p.endswith(".md") and not p.startswith(SKIP_PREFIXES) and "/results/" not in "/" + p
-            and p not in ("images.lock", ALLOW_FILE)]
+            and p not in ("images.lock", ALLOW_FILE, CLASSES_FILE)]
 
 
 def read_text(root, path):
@@ -393,6 +448,13 @@ def pins(root):
         if text is None:
             continue
         for line, ref, _ in image_refs(text, path):
+            if is_pinned(ref) and parse_ref(ref)[1] is None and pin_class(root, path) not in ("ledger", "historical"):
+                hits = allowed(allow, path, ref)
+                used.update(hits)
+                if not hits:
+                    problems.append("%s:%d: %s has no tag (write name:tag@sha256:... with the tag the digest is, "
+                                    "or allow it in %s with a reason)" % (path, line, ref, ALLOW_FILE))
+                continue
             if is_pinned(ref):
                 continue
             hits = allowed(allow, path, ref)
@@ -410,9 +472,11 @@ def pins(root):
     return problems
 
 
-def repin(root, paths, exclude=()):
+def repin(root, paths, exclude=(), write=True):
     """Rewrite each name:tag reference to name:tag@<the registry's digest>, except in
-    files whose repo-relative path matches an exclude glob; returns the changes."""
+    files whose repo-relative path matches an exclude glob and in frozen() files.
+    Returns [(path, line, written text, new text, name:tag, old digest or None)];
+    write=False changes nothing (drift)."""
     allow, digests, changes = read_allow(root), {}, []
 
     def resolved(ref):
@@ -422,17 +486,17 @@ def repin(root, paths, exclude=()):
         return digests[(name, tag)]
 
     for path in paths or scanned_files(root):
-        if any(fnmatch.fnmatchcase(path, g) for g in exclude):
+        if any(fnmatch.fnmatchcase(path, g) for g in exclude) or frozen(root, path):
             continue
         text = read_text(root, path)
         if text is None:
             continue
-        edits = {}  # (start, end) -> new text
+        edits = {}  # (start, end) -> (new text, name:tag, old digest)
         for m in PINNED_RE.finditer(text):
             if parse_ref(m.group("ref"))[1] is not None:
                 d = resolved(m.group("ref"))
                 if d != m.group("digest"):
-                    edits[m.span("digest")] = d
+                    edits[m.span("digest")] = (d, m.group("ref"), m.group("digest"))
         for _, ref, end in image_refs(text, path):
             name, tag, digest = parse_ref(ref)
             if end is None or tag is None:
@@ -440,14 +504,16 @@ def repin(root, paths, exclude=()):
             if digest:  # PINNED_RE moved name:tag@sha256 written as one; this is a values tag@sha256
                 d = resolved(ref)
                 if d != digest:
-                    edits[(end - len(digest), end)] = d
+                    edits[(end - len(digest), end)] = (d, ref.rsplit("@", 1)[0], digest)
             elif not allowed(allow, path, ref):
-                edits[(end, end)] = "@" + resolved(ref)
+                edits[(end, end)] = ("@" + resolved(ref), ref, None)
         if not edits:
             continue
-        for (start, end), new in sorted(edits.items(), reverse=True):
-            changes.append("%s:%d: %s -> %s" % (path, text.count("\n", 0, start) + 1, text[start:end] or "(tag only)", new))
+        for (start, end), (new, ref, old) in sorted(edits.items(), reverse=True):
+            changes.append((path, text.count("\n", 0, start) + 1, text[start:end] or "(tag only)", new, ref, old))
             text = text[:start] + new + text[end:]
+        if not write:
+            continue
         full = os.path.join(root, path)
         with open(full + ".tmp", "w", encoding="utf-8") as f:
             f.write(text)
@@ -456,17 +522,36 @@ def repin(root, paths, exclude=()):
     return changes
 
 
+def retry_after(value):
+    """Seconds a Retry-After header asks for (delta-seconds or an HTTP date), or None."""
+    if not value:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        pass
+    try:
+        return max(0, int(email.utils.parsedate_to_datetime(value).timestamp() - time.time()))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def http(req):
-    """urlopen with three tries on network errors (an HTTP status is not retried)."""
-    for attempt in range(3):
+    """urlopen with up to five attempts. A network error, an HTTP 429 or a 5xx is
+    retried after the Retry-After the reply names (capped at 120 s), else after 2, 4,
+    8 and 16 s; any other HTTP status is raised at once."""
+    for attempt in range(5):
         try:
             return urllib.request.urlopen(req, timeout=60)
-        except urllib.error.HTTPError:
-            raise
-        except (urllib.error.URLError, TimeoutError):
-            if attempt == 2:
+        except urllib.error.HTTPError as e:
+            if e.code not in RETRY_STATUS or attempt == 4:
                 raise
-            time.sleep(3 * (attempt + 1))
+            wait = retry_after(e.headers.get("Retry-After"))
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 4:
+                raise
+            wait = None
+        time.sleep(min(120, 2 ** (attempt + 1) if wait is None else wait))
 
 
 def registry_digest(name, tag):
@@ -495,18 +580,49 @@ def registry_digest(name, tag):
     raise ValueError("%s:%s: registry refused the pull token" % (name, tag))
 
 
-def update(root, lock_path):
-    found, k3s_tag = collect(root)
+def k3s_images(k3s_tag):
+    """The image references of k3s release k3s_tag's k3s-images.txt."""
     with http(K3S_IMAGES_URL % urllib.parse.quote(k3s_tag.replace("-k3s", "+k3s"))) as r:
-        k3s_refs = [line.strip() for line in r.read().decode().splitlines() if line.strip()]
-    for ref in k3s_refs:
+        return [line.strip() for line in r.read().decode().splitlines() if line.strip()]
+
+
+def update(root, lock_path, only=None):
+    """Rewrite images.lock from the registries. only: repo-relative files; then only
+    the references they source are resolved and checked (k3s-images.txt's when the
+    Dockerfile is one), and every other entry is kept as images.lock has it."""
+    found, k3s_tag = collect(root)
+    k3s = k3s_source(k3s_tag)
+    named = {os.path.normpath(p).replace(os.sep, "/") for p in only or ()}
+    lock = read_lock(lock_path) if only is not None else None
+    old = {(e["name"], e["tag"]): e for e in lock["images"]} if lock else {}
+    if only is None or "Dockerfile" in named:
+        refs = [(ref, None) for ref in k3s_images(k3s_tag)]
+    else:
+        if lock["k3s_tag"] != k3s_tag:
+            raise ValueError("the Dockerfile's K3S_TAG is %s, images.lock is for %s: name the Dockerfile in --only"
+                             % (k3s_tag, lock["k3s_tag"]))
+        refs = [(label(e["name"], e["tag"]), e["digest"]) for e in lock["images"] if k3s in e["sources"]]
+    for ref, locked in refs:
         name, tag, digest = parse_ref(ref)
-        e = found.setdefault((name, tag), {"digest": digest, "sources": set()})
-        e["sources"].add(k3s_source(k3s_tag))
+        e = found.setdefault((name, tag), {"digest": digest or locked, "sources": set()})
+        e["sources"].add(k3s)
     images = []
     for (name, tag), e in sorted(found.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
         digest = e["digest"]
-        if digest is None:
+        files = {s.split(" ", 1)[0] for s in e["sources"]} | ({"Dockerfile"} if k3s in e["sources"] else set())
+        if only is not None and not files & named:
+            # Not a file --only names: kept as images.lock has it, unresolved. A
+            # reference the lock lacks, or pins another digest, is a change to that
+            # file, so its file must be named.
+            if (name, tag) not in old:
+                raise ValueError("%s (from %s): not in images.lock; name its file in --only"
+                                 % (label(name, tag), ", ".join(sorted(e["sources"]))))
+            if digest is not None and digest != old[(name, tag)]["digest"]:
+                raise ValueError("%s (from %s): pins %s, images.lock has %s; name its file in --only"
+                                 % (label(name, tag), ", ".join(sorted(e["sources"])), digest,
+                                    old[(name, tag)]["digest"]))
+            digest = old[(name, tag)]["digest"]
+        elif digest is None:
             digest = registry_digest(name, tag)
         elif tag is not None and registry_digest(name, tag) != digest:
             raise ValueError("%s:%s: the repo pins %s but the registry serves %s"
@@ -522,20 +638,29 @@ def update(root, lock_path):
 def main(argv):
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser(prog="images-lock", description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=("check", "update", "pins", "repin", "digest"))
+    ap.add_argument("command", choices=("check", "update", "pins", "repin", "drift", "digest"))
     ap.add_argument("files", nargs="*", help="repin: only these repo-relative files; digest: the references")
     ap.add_argument("--root", default=here)
     ap.add_argument("--exclude", action="append", default=[], metavar="GLOB",
                     help="repin: leave files whose repo-relative path matches GLOB alone")
+    ap.add_argument("--only", nargs="+", metavar="FILE",
+                    help="update: resolve and check only the references these repo-relative files source")
     args = ap.parse_args(argv[1:])
     if args.files and args.command not in ("repin", "digest"):
         ap.error("only repin and digest take arguments")
     if args.exclude and args.command != "repin":
         ap.error("only repin takes --exclude")
+    if args.only and args.command != "update":
+        ap.error("only update takes --only")
     lock_path = os.path.join(args.root, "images.lock")
     try:
         if args.command == "update":
-            update(args.root, lock_path)
+            update(args.root, lock_path, args.only)
+            return 0
+        if args.command == "drift":
+            moved = [c for c in repin(args.root, [], write=False) if c[5]]
+            for path, line, _, new, ref, old in sorted(moved):
+                print("%s:%d: %s %s -> %s" % (path, line, ref, old, new))
             return 0
         if args.command == "digest":
             for ref in args.files:
@@ -545,8 +670,8 @@ def main(argv):
                 print(registry_digest(name, tag))
             return 0
         if args.command == "repin":
-            for c in repin(args.root, args.files, args.exclude):
-                print(c)
+            for path, line, was, new, _, _ in repin(args.root, args.files, args.exclude):
+                print("%s:%d: %s -> %s" % (path, line, was, new))
             return 0
         problems = pins(args.root) if args.command == "pins" else check(args.root, lock_path)
     except (ValueError, OSError, KeyError) as e:

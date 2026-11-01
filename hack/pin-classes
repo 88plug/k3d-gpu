@@ -1,0 +1,297 @@
+#!/usr/bin/env python3
+"""pins/classes: the pin class of every path in the repo.
+
+  hack/pin-classes class PATH       the kind of the first pins/classes line that
+                                    matches PATH: ours, eat-stock, ledger or historical;
+                                    an unmatched path is ours, except a file under bench/
+                                    or oracle/ that holds a pin token: unclassified
+  hack/pin-classes effective PATH   as class, with a ledger line resolved against the
+                                    Hypotheses table of EXPERIMENTS.md: arm while any of
+                                    its rows is PENDING, historical once a listed row has
+                                    a verdict and none is PENDING, ours while no listed
+                                    row is in the table yet (a row being pre-registered)
+  hack/pin-classes excludes         the glob of every ledger and historical line
+  hack/pin-classes coverage         fails (exit 1) on a pin-bearing file under bench/ or
+                                    oracle/ that no line classifies, a historical-ref
+                                    string missing from its file, a ledger line naming a
+                                    row the Hypotheses table does not have, and a line
+                                    that matches no file
+
+pins/classes, one line each (# starts a comment line; first match wins; globs are
+fnmatch patterns on repo-relative paths, where * also matches /):
+
+  <glob> ours|eat-stock|historical [reason]
+  <glob> ledger <rows csv> amend=<aliases csv> [reason]
+  historical-ref <path> <exact string>
+
+ours        k3d-gpu's own pins: always the latest stable release
+eat-stock   tracks Intel EAT's latest release; every change is reviewed
+ledger      a ledger row's runner or records. The rows are the Hypotheses table ids
+            that use the path; the aliases are the heading prefixes its amendments
+            use ("### <alias> amendment <ID>: ...")
+historical  a finished run's record: never edited
+historical-ref  an exact string in a mixed file (a finished run's pin inside a live
+            runner) that must keep occurring as often as it does
+
+A pin token (pin_tokens) is an image reference (name:tag with a registry path,
+name@sha256:..., name:tag@sha256:..., or name:tag after image:, FROM or *IMAGE=),
+a bare sha256:<64 hex> digest, pkg==version, a 40-hex string, or an assignment
+NAME=value whose NAME ends in TAG, VERSION, REV, REVISION, COMMIT, IMAGE or DIGEST.
+Comment lines and *.md files hold none.
+
+Python standard library only. Options: --root DIR (default: this repo),
+--classes FILE (default: ROOT/pins/classes).
+"""
+
+import argparse
+import fnmatch
+import importlib.util
+import os
+import pathlib
+import re
+import subprocess
+import sys
+
+KINDS = ("ours", "eat-stock", "ledger", "historical")
+GUARDED_PREFIXES = ("bench/", "oracle/")
+CLASSES_FILE = "pins/classes"
+
+_REPO = r"[a-z0-9][a-z0-9.-]*(?::[0-9]+)?(?:/[a-z0-9][a-z0-9._-]*)+"
+_TAG = r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}"
+TOKEN_RES = [re.compile(p) for p in (
+    # name[:tag]@sha256:<digest>, or a bare tag@sha256:<digest> (B1_TAG=v0.28.0@sha256:...)
+    r"(?<![\w./:@])(?:[a-z0-9][a-z0-9._/-]*(?::" + _TAG + r")?)?@sha256:[0-9a-f]{64}(?![0-9a-f])",
+    # a bare digest (manifest sha256:..., SHA256=...)
+    r"(?<![@0-9a-f])sha256:[0-9a-f]{64}(?![0-9a-f])",
+    # registry/path:tag, the tag not all digits (a sysfs intel-rapl:0 is no image)
+    r"(?<![\w./:@$-])" + _REPO + r":(?![0-9]+(?![\w.-]))" + _TAG + r"(?![\w.@/:-])",
+    # name:tag where an image is named (image:, FROM, *IMAGE=, ${*IMAGE:-)
+    r"""(?:\bimage["']?[ \t]*[:=][ \t]*["']?|^[ \t]*FROM[ \t]+|IMAGE[A-Z0-9_]*=["']?|\$\{[A-Z0-9_]*IMAGE[A-Z0-9_]*:-)"""
+    r"(?P<v>[a-z0-9][a-z0-9._/-]*:" + _TAG + r")(?![\w.@/:-])",
+    # pkg==version, the name with a lower-case letter (awk's NR==2 is no pin)
+    r"(?<![\w.-])(?=[A-Za-z0-9._\[\],-]*[a-z])[A-Za-z][A-Za-z0-9._\[\],-]*==[ \t]*v?[0-9][\w.+!-]*",
+    # a 40-hex commit
+    r"(?<![0-9A-Za-z])[0-9a-f]{40}(?![0-9A-Za-z])",
+)]
+ASSIGN_RE = re.compile(r"^[ \t]*(?:export[ \t]+)?([A-Z0-9_]*(?:TAG|VERSION|REV|REVISION|COMMIT|IMAGE|DIGEST))=(.*)$")
+
+
+def assigned(raw):
+    """An assignment's value: no trailing comment or continuation, unquoted, and the
+    default of a ${VAR:-default} (making a pin overridable does not move it)."""
+    v = re.sub(r"[ \t]+#.*$", "", raw).strip().rstrip("\\").strip().strip("\"'")
+    m = re.match(r"^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.*)\}$", v)
+    return m.group(1).strip("\"'") if m else v
+
+
+def literal_value(value):
+    """True when an assignment's value holds a literal pin: not a command substitution,
+    not a variable (${X}, ${1:?...}), and some digit in it."""
+    if "$(" in value or "`" in value or not re.search(r"[0-9]", value):
+        return False
+    return not value.startswith("$")
+
+
+def pin_tokens(line):
+    """The pin tokens on one line of a file, in order (a list: the same token twice
+    counts twice). A comment line holds none."""
+    if line.lstrip().startswith("#"):
+        return []
+    spans = {}
+    for r in TOKEN_RES:
+        for m in r.finditer(line):
+            start, end = m.span("v" if "v" in r.groupindex else 0)
+            if not any(s <= start and end <= e for s, e in spans):
+                spans = {k: v for k, v in spans.items() if not (start <= k[0] and k[1] <= end)}
+                spans[(start, end)] = line[start:end]
+    out = [spans[k] for k in sorted(spans)]
+    m = ASSIGN_RE.match(line)
+    if m:
+        value = assigned(m.group(2))
+        if literal_value(value):
+            out.insert(0, "%s=%s" % (m.group(1), value))
+    return out
+
+
+def text_tokens(path, text):
+    """Every pin token in a file's text; none in prose (*.md)."""
+    if path.endswith(".md"):
+        return []
+    return [t for line in text.splitlines() for t in pin_tokens(line)]
+
+
+class Line:
+    def __init__(self, n, glob, kind, rows=(), aliases=(), reason="", ref=None):
+        self.n, self.glob, self.kind, self.rows, self.aliases = n, glob, kind, tuple(rows), tuple(aliases)
+        self.reason, self.ref = reason, ref
+
+    def matches(self, path):
+        return fnmatch.fnmatchcase(path, self.glob)
+
+
+def parse(text, name=CLASSES_FILE):
+    """([Line] for glob lines in order, [Line] for historical-ref lines)."""
+    lines, refs = [], []
+    for n, raw in enumerate(text.splitlines(), 1):
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            continue
+        parts = s.split(None, 2)
+        if parts[0] == "historical-ref":
+            if len(parts) < 3 or not parts[2].strip():
+                raise ValueError("%s:%d: want 'historical-ref <path> <exact string>'" % (name, n))
+            refs.append(Line(n, parts[1], "historical-ref", ref=parts[2].strip()))
+            continue
+        if len(parts) < 2 or parts[1] not in KINDS:
+            raise ValueError("%s:%d: want '<glob> %s [...]'" % (name, n, "|".join(KINDS)))
+        glob, kind, rest = parts[0], parts[1], parts[2] if len(parts) > 2 else ""
+        if kind != "ledger":
+            lines.append(Line(n, glob, kind, reason=rest))
+            continue
+        lp = rest.split(None, 2)
+        if len(lp) < 2 or not lp[1].startswith("amend="):
+            raise ValueError("%s:%d: want '<glob> ledger <rows csv> amend=<aliases csv> [reason]'" % (name, n))
+        rows = [r for r in lp[0].split(",") if r]
+        aliases = [a for a in lp[1][len("amend="):].split(",") if a]
+        bad = [r for r in rows if not re.fullmatch(r"H\d+[a-z]{0,2}", r)]
+        if not rows or bad:
+            raise ValueError("%s:%d: ledger rows must be Hypotheses table ids like H54q, got %r" % (name, n, lp[0]))
+        lines.append(Line(n, glob, kind, rows, aliases, lp[2] if len(lp) > 2 else ""))
+    return lines, refs
+
+
+def load(path):
+    with open(path, encoding="utf-8") as f:
+        return parse(f.read(), os.path.relpath(path))
+
+
+def match(lines, path):
+    """The first line whose glob matches path, or None."""
+    return next((ln for ln in lines if ln.matches(path)), None)
+
+
+def guarded(path):
+    return path.startswith(GUARDED_PREFIXES)
+
+
+def class_of(lines, path, text=None):
+    """(kind, line): the matching line's kind; unmatched is ours, or unclassified for
+    a pin-bearing file under bench/ or oracle/ (text: the file's content)."""
+    ln = match(lines, path)
+    if ln:
+        return ln.kind, ln
+    if guarded(path) and text is not None and text_tokens(path, text):
+        return "unclassified", None
+    return "ours", None
+
+
+def resolve(line, ledger):
+    """arm, historical or ours for a ledger line under one Hypotheses table."""
+    states = [ledger.get(r) for r in line.rows]
+    if "PENDING" in states:
+        return "arm"
+    if any(s for s in states):
+        return "historical"
+    return "ours"
+
+
+def effective(lines, ledger, path, text=None):
+    kind, ln = class_of(lines, path, text)
+    return (resolve(ln, ledger) if kind == "ledger" else kind), ln
+
+
+def read_ledger(root):
+    """{"H1": "INCONCLUSIVE", ...}: tests/ledger_drift_check.py's ledger() over ROOT."""
+    here = pathlib.Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location("ledger_drift_check", here / "tests" / "ledger_drift_check.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.ledger(pathlib.Path(root))
+
+
+def tracked(root):
+    try:
+        out = subprocess.run(["git", "-C", root, "ls-files", "-z"], capture_output=True, check=True).stdout
+        return sorted(p for p in out.decode().split("\0") if p)
+    except (OSError, subprocess.CalledProcessError):
+        paths = []
+        for d, dirs, files in os.walk(root):
+            dirs[:] = sorted(x for x in dirs if x != ".git")
+            paths += [os.path.relpath(os.path.join(d, f), root).replace(os.sep, "/") for f in files]
+        return sorted(paths)
+
+
+def read_text(root, path):
+    try:
+        with open(os.path.join(root, path), encoding="utf-8") as f:
+            return f.read()
+    except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+        return None
+
+
+def coverage(root, lines, refs, ledger):
+    """Problems, one string each."""
+    problems, paths = [], tracked(root)
+    for path in paths:
+        if not guarded(path) or match(lines, path):
+            continue
+        text = read_text(root, path)
+        if text is not None and text_tokens(path, text):
+            problems.append("%s: holds pin tokens (%s) and no %s line classifies it"
+                            % (path, text_tokens(path, text)[0], CLASSES_FILE))
+    for r in refs:
+        text = read_text(root, r.glob)
+        if text is None:
+            problems.append("%s:%d: historical-ref file %s does not exist" % (CLASSES_FILE, r.n, r.glob))
+        elif r.ref not in text:
+            problems.append("%s:%d: historical-ref %r is missing from %s" % (CLASSES_FILE, r.n, r.ref, r.glob))
+    for ln in lines:
+        missing = [r for r in ln.rows if r not in ledger]
+        if missing:
+            problems.append("%s:%d: %s names %s, not in the EXPERIMENTS.md Hypotheses table"
+                            % (CLASSES_FILE, ln.n, ln.glob, ", ".join(missing)))
+        if not any(ln.matches(p) for p in paths):
+            problems.append("%s:%d: %s matches no file; drop it" % (CLASSES_FILE, ln.n, ln.glob))
+    return problems
+
+
+def main(argv):
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ap = argparse.ArgumentParser(prog="pin-classes", description=__doc__.split("\n")[0])
+    ap.add_argument("command", choices=("class", "effective", "excludes", "coverage"))
+    ap.add_argument("path", nargs="?")
+    ap.add_argument("--root", default=here)
+    ap.add_argument("--classes")
+    a = ap.parse_args(argv[1:])
+    if (a.command in ("class", "effective")) != bool(a.path):
+        ap.error("class and effective take one PATH; excludes and coverage take none")
+    try:
+        lines, refs = load(a.classes or os.path.join(a.root, CLASSES_FILE))
+        if a.command == "excludes":
+            for ln in lines:
+                if ln.kind in ("ledger", "historical"):
+                    print(ln.glob)
+            return 0
+        if a.command == "coverage":
+            problems = coverage(a.root, lines, refs, read_ledger(a.root))
+            for p in problems:
+                print("FAIL " + p)
+            if problems:
+                return 1
+            print("ok   every pin-bearing file under bench/ and oracle/ is classified in %s; "
+                  "%d historical-ref strings present" % (CLASSES_FILE, len(refs)))
+            return 0
+        path = os.path.normpath(a.path).replace(os.sep, "/")
+        text = read_text(a.root, path)
+        if a.command == "class":
+            print(class_of(lines, path, text)[0])
+        else:
+            print(effective(lines, read_ledger(a.root), path, text)[0])
+        return 0
+    except (ValueError, OSError) as e:
+        sys.stderr.write("pin-classes: %s\n" % e)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

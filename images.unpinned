@@ -1,6 +1,7 @@
-# Image references allowed without a digest pin. `scripts/images-lock pins` (CI and
-# tests/image_pins_test.sh) fails on any other name:tag, bare name or :latest
-# reference, and on a line here that matches nothing.
+# Image references allowed without a digest pin, or with a digest but no tag.
+# `scripts/images-lock pins` (CI and tests/image_pins_test.sh) fails on any other
+# name:tag, bare name or :latest reference, on a name@sha256 with no tag outside the
+# ledger and historical paths of pins/classes, and on a line here that matches nothing.
 #
 # <path glob> <reference, or * for every reference in the file> <reason>
 
@@ -30,3 +31,9 @@ tests/model_share_test.sh             localhost:5000/agent                  chec
 tests/image_pins_test.sh              *                                     the pin gate's own unpinned inputs
 tests/eat_test.sh                     *                                     stubs of EAT's gateway chart files, the input gateway-charts.py pins
 tests/ledger_freshness_test.py        cryptoandcoffee/k3d-gpu:0.1.70        a fixture ledger row's node image the re-measure queue parses, never pulled
+tests/pin_classes_test.py             *                                     the pin-token parser's own inputs
+
+# Digest-only test inputs: the form a user may pass, or an old release pinned.
+tests/detect_test.sh                  intel/intel-gpu-plugin@*              a fake digest-only plugin image: up must still add its args
+tests/llamacpp_test.sh                openvino/model_server@*               a digest-only K3D_GPU_AGENT_IMAGE the fit must not hand to llama.cpp
+oracle/test_oracle.py                 openvino/model_server@*               release 0.1.19's OVMS pin (digest only then), the server image the seed bundles record
