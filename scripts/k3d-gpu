@@ -8242,8 +8242,8 @@ agent_config() {
                 # vllm-0.30.0-ptupstream-2.13.0, pulled anonymously.
                 AGENT_DEFAULT_IMAGE="vault.habana.ai/gaudi-docker/1.24.2/ubuntu24.04/habanalabs/vllm-0.30.0-ptupstream-2.13.0:1.24.2-481@sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967"
             elif [ "${AGENT_BACKEND}" = vllm ]; then
-                # vllm/vllm-openai-xpu:v0.32.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
-                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c"
+                # vllm/vllm-openai-xpu:v0.33.0 (Level Zero 1.32 and compute-runtime 26.27 inside).
+                AGENT_DEFAULT_IMAGE="vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086"
             else
                 # intel/llm-scaler-vllm:1.5 = 0.26.0-b2 (vLLM 0.26 baseline, compute-runtime 26.14).
                 AGENT_DEFAULT_IMAGE="intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b"
