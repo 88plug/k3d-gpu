@@ -43,7 +43,7 @@ lacks "no tag-only image"      '^ +image: [^@]+:[^@]+$'
 # The exact index digest of ghcr.io/open-webui/open-webui:v0.12.2, and the
 # version the header comment names. A bump changes all three together.
 OWUI_VERSION=v0.12.2
-OWUI_DIGEST=sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+OWUI_DIGEST=sha256:2272b0fb7c8783a016bcc179abb467cfa34590c99c5e6560fe0e9155b4820a09
 has "image is ${OWUI_VERSION} digest" "^ +image: ghcr\.io/open-webui/open-webui:${OWUI_VERSION//./\\.}@${OWUI_DIGEST}$"
 has "header names ${OWUI_VERSION}"    "^# Source: https://github\.com/open-webui/open-webui ${OWUI_VERSION//./\\.}\."
 
