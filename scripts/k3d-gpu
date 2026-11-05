@@ -8213,17 +8213,17 @@ AGENT_BACKEND="${AGENT_BACKEND,,}"
 AGENT_HPU=""    # set by agent_select when the device is a Gaudi
 AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # llama.cpp server on Vulkan, the engine plan() may pick for a GPU cell other
-# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960, the multi-arch
-# index built from release v0.8.0 (tag b11960, commit 8642541b255bfb5dc39cd351a178be09013a55d6).
-LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e}"
-# The llama.cpp agent backend: release v0.8.0 (tag b11960, commit
-# 8642541b255bfb5dc39cd351a178be09013a55d6), the latest release on 2026-10-28; its image
+# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b12110, the multi-arch
+# index built from release v0.9.0 (tag b12110, commit cd959bae99ff4bed22bef2604f45241c09bbb8c8).
+LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan-b12110@sha256:dd0ca57c2543cbd99ec09890b2601a86930f086d6f6543faf49698421df907a4}"
+# The llama.cpp agent backend: release v0.9.0 (tag b12110, commit
+# cd959bae99ff4bed22bef2604f45241c09bbb8c8), the latest release on 2026-10-28; its image
 # tags are server-intel-b11960 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
 # Intel GPU, server-b11960 (CPU) otherwise, and full-b11960 (convert_hf_to_gguf.py and
 # llama-quantize) for a one-time GGUF conversion. Multi-arch indexes, pinned by digest.
-LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700}"
-LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220}"
-LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf}"
+LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b12110@sha256:738f507eef7069c31fcd643852a8e1a58d2425fa745424248c55bdc523165e8f}"
+LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b12110@sha256:1145e8de3111dc9358c6d8daffb755c4cf8a862d93391c26ba521b9a810bbe3e}"
+LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b12110@sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).

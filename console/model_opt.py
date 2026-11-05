@@ -98,8 +98,8 @@ VLLM_SPEC_DOC = "https://github.com/vllm-project/vllm/blob/v0.32.0/vllm/config/s
 VLLM_MTP_DOC = "https://github.com/vllm-project/vllm/blob/v0.32.0/docs/features/speculative_decoding/mtp.md"
 VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.32.0/docs/features/README.md (hardware table, L67)"
 VLLM_GAUDI_SD = "https://github.com/vllm-project/vllm-gaudi/blob/v0.30.0/docs/features/supported_features.md (L25, L27)"
-LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 -md)"
-LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
+LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4322 -md)"
+LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
 
 # Tool and reasoning parsers by model family (config model_type), per engine.
 # OVMS detects both from the chat template when unset (docs/parameters.md
@@ -1065,7 +1065,7 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         if chosen.get("mtp"):
             doc["speculative"] = {"kind": "mtp", "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"]}
             choose("%s carries an MTP head (%s)" % (chosen["id"], chosen.get("mtp_source")),
-                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4196, L4330); llama.cpp PR 22673")
+                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4196, L4330); llama.cpp PR 22673")
         elif gg:
             doc["speculative"] = {"kind": "draft", "model": gg[0]["id"], "args": ["-md", gg[0]["id"]]}
             choose("GGUF drafter %s" % gg[0]["id"], "-md (draft model)", LLAMACPP_ARGS)

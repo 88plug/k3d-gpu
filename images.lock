@@ -311,36 +311,36 @@
       "tag": "v0.15.0"
     },
     {
-      "digest": "sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf",
+      "digest": "sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_FULL_IMAGE"
       ],
-      "tag": "full-b11960"
+      "tag": "full-b12110"
     },
     {
-      "digest": "sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220",
+      "digest": "sha256:1145e8de3111dc9358c6d8daffb755c4cf8a862d93391c26ba521b9a810bbe3e",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_CPU_IMAGE"
       ],
-      "tag": "server-b11960"
+      "tag": "server-b12110"
     },
     {
-      "digest": "sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700",
+      "digest": "sha256:738f507eef7069c31fcd643852a8e1a58d2425fa745424248c55bdc523165e8f",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_SYCL_IMAGE"
       ],
-      "tag": "server-intel-b11960"
+      "tag": "server-intel-b12110"
     },
     {
-      "digest": "sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e",
+      "digest": "sha256:dd0ca57c2543cbd99ec09890b2601a86930f086d6f6543faf49698421df907a4",
       "name": "ghcr.io/ggml-org/llama.cpp",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_LLAMA_VULKAN_IMAGE"
       ],
-      "tag": "server-vulkan-b11960"
+      "tag": "server-vulkan-b12110"
     },
     {
       "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",

@@ -320,7 +320,7 @@ class Engines(unittest.TestCase):
 
 
 class Convert(unittest.TestCase):
-    """convert_plan: the GGUF conversion llama.cpp v0.8.0's convert_hf_to_gguf.py makes of
+    """convert_plan: the GGUF conversion llama.cpp v0.9.0's convert_hf_to_gguf.py makes of
     each checkpoint, sized as the fit sized it, or why it cannot."""
 
     def test_bf16_keeps_its_type(self):

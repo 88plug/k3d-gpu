@@ -296,7 +296,7 @@ class Eat(Fixtures):
 
 class Llama(Fixtures):
     def test_release_maps_to_its_build_tag(self):
-        commit = "8642541b255bfb5dc39cd351a178be09013a55d6"
+        commit = "cd959bae99ff4bed22bef2604f45241c09bbb8c8"
         self.serve({
             GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.8.0", commit=commit)),
             GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([

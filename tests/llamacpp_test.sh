@@ -67,7 +67,7 @@ XEON="${FIX}/hosts/xeon6741p-4xb70.json"
 DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 # The Xeon's cluster after `up` pinned the free cards: two B70s advertised, XMX labelled.
 XEON_ENV=(STUB_XMX=1 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 2' K3D_GPU_FIT_HOST="${XEON}")
-SYCL=sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700
+SYCL=sha256:738f507eef7069c31fcd643852a8e1a58d2425fa745424248c55bdc523165e8f
 CPUSRV=sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
 FULL=sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
 
