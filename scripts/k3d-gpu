@@ -9077,7 +9077,7 @@ fit_draft_args() {
 # pip pins the conversion adds on PYTHONPATH (bench/h57d/convert.sh's approach): the image's
 # transformers 4.57.6 cannot read transformers-5 tokenizer configs (extra_special_tokens as
 # a list); huggingface-hub fetches the pinned revision.
-GGUF_CONVERT_PIP="transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
+GGUF_CONVERT_PIP="transformers==5.22.2 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0"
 AGENT_CONVERT_TIMEOUT="${K3D_GPU_AGENT_CONVERT_TIMEOUT:-43200}" # seconds: a 360 GB checkpoint downloads, then converts
 AGENT_CONVERT_MEMORY="${K3D_GPU_AGENT_CONVERT_MEMORY:-64Gi}"
 

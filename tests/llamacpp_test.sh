@@ -252,7 +252,7 @@ EOF
 chmod +x "${CV}/bin/pip" "${CV}/bin/python3"
 sed -n '/^    gguf_convert () $/,$p' "${WORK}/fn.yaml" | sed -n '1,/^    gguf_convert "\$@"$/p' | sed 's/^    //' > "${CV}/convert.sh"
 cv() {
-    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="transformers==5.21.0" PATH="${CV}/bin:${PATH}" \
+    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="transformers==5.22.2" PATH="${CV}/bin:${PATH}" \
         bash "${CV}/convert.sh" Qwen/Qwen3.8-Flash-Next "${FNREV}" "${CV}/models/gguf/fn" 1000 - --outtype bf16
 }
 if cv > "${CV}/out1" 2>&1 && [ -s "${CV}/models/gguf/fn/model.gguf" ] && [ -f "${CV}/models/gguf/fn/manifest.json" ] \
