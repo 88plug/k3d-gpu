@@ -1167,7 +1167,7 @@ else fail "eat-opt.py: unknown catalog id (rc=${rc}): ${out}"; fi
 # 7. EAT release-1.1.0 (https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0).
 tag=$(sed -n 's/^EAT_TAG="\(.*\)"$/\1/p' "${EAT}/eat-up.sh")
 commit=$(sed -n 's/^EAT_COMMIT="\(.*\)"$/\1/p' "${EAT}/eat-up.sh")
-if [ "${tag}" = release-1.1.0 ] && [ "${commit}" = 0c726f576595971c53cc45b94e08ba969beb4a4a ]; then
+if [ "${tag}" = release-1.1.0 ] && [ "${commit}" = 7b827e2d95cec826a20c7e3f5a30eb4818ed2992 ]; then
     ok "eat-up.sh clones EAT release-1.1.0 at 0c726f5"
 else fail "eat-up.sh pins EAT ${tag} ${commit}"; fi
 # release-1.1.0 adds these toggles; its own agentic-config.cfg turns deploy_guardrails on.

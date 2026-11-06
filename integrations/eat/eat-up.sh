@@ -27,8 +27,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EAT_REPO="https://github.com/intel/enterprise-agent-toolkit"
-EAT_TAG="release-1.1.0"
-EAT_COMMIT="0c726f576595971c53cc45b94e08ba969beb4a4a"
+EAT_TAG="release-2.0.0"
+EAT_COMMIT="7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
 EAT_WORK="${EAT_WORK:-${PWD}/eat-work}"
 EAT_KUBECONFIG="${EAT_KUBECONFIG:-${KUBECONFIG:-${HOME}/.kube/config}}"
 EAT_CONFIG="${EAT_CONFIG:-${HERE}/agentic-config.cfg}"
