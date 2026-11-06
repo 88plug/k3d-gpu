@@ -1697,8 +1697,8 @@ These are Docker **build args** (not runtime env):
 
 | Build arg    | Default               | Description                                  |
 |--------------|-----------------------|----------------------------------------------|
-| `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
-| `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
+| `K3S_TAG`    | `v1.37.2-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `K3S_DIGEST` | `sha256:21ea6e0f…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
 | `UBUNTU_2404_IMAGE` | `ubuntu:24.04@sha256:…` | the pinned 24.04 base; the release passes it as `UBUNTU_IMAGE` for the `ubuntu24.04` image |
 
@@ -1860,6 +1860,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | K3s Tag             | NVIDIA Plugin | Intel GPU Plugin | Gaudi Plugin |
 |------------|---------------------|---------------|------------------|--------------|
+| 2026-11-06 | v1.37.2-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-17 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-16 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-09-30 | v1.34.1-k3s1-amd64 | v0.20.1 | — | — |
