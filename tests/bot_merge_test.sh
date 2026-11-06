@@ -63,6 +63,7 @@ fx() {
   rgit remote add origin "$FIX/origin.git"; rgit push -q origin main aur-v0.1.79; rgit fetch -q origin
   # the code under test, plus the fixture policy (untracked in the clone)
   cp "$BOT_MERGE" "$R/hack/bot-merge"; cp "$GATE_LIB" "$R/hack/gate_lib.sh"
+  cp "$ROOT/hack/ci_alarm" "$ROOT/hack/gh_retry.sh" "$ROOT/hack/status-branch" "$R/hack/"
   cat > "$R/hack/pins" <<'PINS'
 #!/usr/bin/env bash
 # fixture: `pins policy BASE HEAD` prints $FIX/policy/HEAD.json once both refs resolve.
@@ -159,7 +160,7 @@ main_commit() {
 
 # run_bm: one pass. CAP=N run_bm sets MAX_BOT_MERGES_PER_DAY (unset: the script's default).
 run_bm() {
-  OUT=$(cd "$FIX/repo" && PATH="$T/bin:$PATH" GITHUB_REPOSITORY=o/r BOT_MERGE_NOW=$NOW \
+  OUT=$(cd "$FIX/repo" && PATH="$T/bin:$PATH" GITHUB_REPOSITORY=o/r BOT_MERGE_NOW=$NOW GH_RETRY_DELAY=0 \
         GITHUB_SERVER_URL=https://github.com GITHUB_RUN_ID=777 env ${CAP:+MAX_BOT_MERGES_PER_DAY=$CAP} \
         timeout 120 bash hack/bot-merge 2>&1); RC=$?
 }
@@ -446,6 +447,43 @@ else fail "breaker_unreadable: $(show) comment=$(comment 1)"; fi
 # 16. an alarm whose key is not a breaker key: merges.
 fx alarm_other; mkpr 1; alarm 'blind-spot:k3s'; run_bm
 if [ "$(merged 1)" -eq 1 ]; then ok "alarm_other: merged"; else fail "alarm_other: $(show)"; fi
+
+# 16b. Issues disabled (has_issues=false): the breaker reads the alarms hack/ci_alarm keeps
+# on branch ci-status. None there (no branch yet): merges, exit 0.
+fx store_none; mkpr 1; echo false > "$(G has_issues)"; run_bm
+if [ "$(merged 1)" -eq 1 ] && [ "$RC" -eq 0 ] && ! grep -q 'circuit breaker' <<<"$OUT"; then
+  ok "store_none: Issues disabled, no alarm on ci-status: merged, exit 0"
+else fail "store_none: $(show)"; fi
+# ...a ci-main alarm there: nothing merges, and the comment names it...
+fx store_ci_main; mkpr 1; echo false > "$(G has_issues)"; mkdir -p "$FIX/gh/store"
+jq -n '{"ci-main": {title: "ci.yml on main failure", body: "red", opened_at: "2026-10-29T13:00:00Z",
+        updated_at: "2026-10-29T13:00:00Z", notified_at: "2026-10-29T13:00:00Z", acked: false}}' > "$FIX/gh/store/alarms.json"
+run_bm
+if [ "$(merges)" -eq 0 ] && comment 1 | grep -q 'circuit breaker: open alarm ci-main (https://github.com/o/r/blob/ci-status/ALARMS.md)'; then
+  ok "store_ci_main: the ci-status alarm opens the breaker"
+else fail "store_ci_main: $(show) comment=$(comment 1)"; fi
+# ...a blind-spot alarm there: merges...
+fx store_other; mkpr 1; echo false > "$(G has_issues)"; mkdir -p "$FIX/gh/store"
+jq -n '{"blind-spot:k3s": {title: "k3s behind", body: "x", opened_at: "2026-10-29T13:00:00Z",
+        updated_at: "2026-10-29T13:00:00Z", notified_at: "2026-10-29T13:00:00Z", acked: false}}' > "$FIX/gh/store/alarms.json"
+run_bm
+if [ "$(merged 1)" -eq 1 ]; then ok "store_other: a non-breaker alarm on ci-status merges"; else fail "store_other: $(show)"; fi
+# ...and the branch unreadable (502 on every attempt): nothing merges, exit 1.
+fx store_unreadable; mkpr 1; echo false > "$(G has_issues)"; echo 1 > "$(G store_rc)"; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$RC" -eq 1 ] && comment 1 | grep -q 'cannot read ci-alarm issues'; then
+  ok "store_unreadable: no merge, exit 1"
+else fail "store_unreadable: $(show) comment=$(comment 1)"; fi
+
+# 16c. gh run list answers HTTP 502 once (the breaker's read), then again once (CI at the
+# head): both are retried and the PR merges. A run list that keeps failing is no CI
+# evidence: nothing merges, the comment says why, exit 1.
+fx runs_502_once; mkpr 1; echo '1 0 1 0' > "$(G run_list_rc)"; run_bm
+if [ "$(merged 1)" -eq 1 ] && [ "$RC" -eq 0 ]; then ok "runs_502_once: retried, merged"
+else fail "runs_502_once: $(show)"; fi
+fx runs_502_always; mkpr 1; echo '0 1' > "$(G run_list_rc)"; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$RC" -eq 1 ] && comment 1 | grep -q 'cannot read the ci.yml runs at this head'; then
+  ok "runs_502_always: no merge, exit 1"
+else fail "runs_502_always: $(show) comment=$(comment 1)"; fi
 
 # 17. daily cap reached: the non-urgent PR waits, the urgent one merges. Yesterday's merge
 #     does not count.

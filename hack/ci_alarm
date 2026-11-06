@@ -1,43 +1,70 @@
 #!/usr/bin/env bash
-# ci_alarm: one GitHub issue per alarm key, labelled ci-alarm.
+# ci_alarm: one alarm per key. With Issues on, an issue labelled ci-alarm; with
+# has_issues=false, an entry on branch ci-status (hack/status-branch).
 #
 #   hack/ci_alarm open <key> <title> <body-file>
-#       Keeps one open issue titled "[ci-alarm] <key>: <title>", labelled ci-alarm
-#       (created with `gh label create --force` when the issue is filed), assigned
-#       to $ALARM_OWNER with an @mention in its body. When the key's issue is
-#       already open: a new body replaces the issue body and is posted as a
-#       comment; the same body comments again only once 24 h have passed since
-#       the last comment (or since the issue was opened).
+#       Issues: keeps one open issue titled "[ci-alarm] <key>: <title>", labelled
+#       ci-alarm (created with `gh label create --force` when the issue is filed),
+#       assigned to $ALARM_OWNER with an @mention in its body. When the key's issue
+#       is already open: a new body replaces the issue body and is posted as a
+#       comment; the same body comments again only once 24 h have passed since the
+#       last comment (or since the issue was opened).
+#       ci-status: the key's entry in alarms.json (title, body, times) and in
+#       ALARMS.md, the page that renders them. A new alarm or a new body is a commit
+#       comment on main's HEAD that @mentions $ALARM_OWNER (GitHub notifies the
+#       owner) with the body and the page's URL; the same body again only after
+#       24 h, as a reminder. Each open also prints a ::error annotation (when it
+#       notifies) and appends the body to $GITHUB_STEP_SUMMARY.
 #   hack/ci_alarm close <key> <comment>
-#       Comments and closes the key's open issue; no open issue is a no-op.
-#   hack/ci_alarm list
-#       Prints the key of every open ci-alarm issue, one per line.
+#       Issues: comments and closes the key's open issue. ci-status: drops the key.
+#       No open alarm is a no-op.
+#   hack/ci_alarm list [--json]
+#       The key of every open alarm, one per line; --json: the open alarms as
+#       `gh issue list --json number,title,body,url,labels` prints them (on
+#       ci-status: number null, url the page, labels ci-alarm plus alarm-ack once acked).
+#   hack/ci_alarm ack <key>
+#       ci-status: marks the key read (gate_merge.sh no longer refuses for it).
+#       Issues: says which label to add.
+#   hack/ci_alarm status
+#       ci-status: the commit status `ci-alarm` on main's HEAD: failure naming the
+#       open keys, success when none is open (the Watchdog sets it every run, so
+#       main's newest commit carries it). Issues: nothing to do.
 #
 # A key is [A-Za-z0-9._:/@+-]+ (no spaces), e.g. red:build-and-push.yml,
-# release:0.1.76, watchdog-error. gh picks the repository from GH_REPO, else the
-# checkout's remote.
+# release:0.1.76, watchdog-error. The repository is GH_REPO, else
+# GITHUB_REPOSITORY, else gh's own. A gh call that fails with a 5xx is retried
+# (hack/gh_retry.sh); a write to ci-status that races another writer re-reads and
+# re-applies (5 attempts).
 #
-# When the repository has issues disabled, `open` prints a ::error workflow
-# annotation with the title and appends the body to $GITHUB_STEP_SUMMARY, and
-# every command exits 3. Exit 2 is a usage error, 1 any other gh failure.
+# Exit 0 done; 1 a gh failure (on ci-status `open` also prints a ::error that the
+# alarm was not filed, and the body to the summary); 2 a usage error; 3 the issue
+# calls said Issues are disabled although the repository said they were on (the
+# same ::error and summary).
 #
 # Env: ALARM_OWNER (default 88plug), CI_ALARM_NOW (epoch seconds, for tests),
-#      GITHUB_STEP_SUMMARY.
+#      GITHUB_STEP_SUMMARY, STATUS_BRANCH (default ci-status).
 set -euo pipefail
 
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=hack/gh_retry.sh
+. "$HERE/gh_retry.sh"
 OWNER=${ALARM_OWNER:-88plug}
 LABEL=ci-alarm
 NOW=${CI_ALARM_NOW:-$(date -u +%s)}
+NOW_ISO=$(date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%SZ)
 DAY=86400
+STORE="$HERE/status-branch"
+BRANCH=${STATUS_BRANCH:-ci-status}
+REPO=${GH_REPO:-${GITHUB_REPOSITORY:-}}
 
-usage() { sed -n '2,24p' "$0" >&2; exit 2; }
+usage() { sed -n '2,/^set -euo/{/^set -euo/d;p}' "$0" >&2; exit 2; }
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/ci_alarm.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
-# gh_run ARGS...: run gh; on failure print its stderr and exit 3 (issues
-# disabled) or 1 (anything else).
+# gh_run ARGS...: run gh (5xx retried); on failure print its stderr and exit 3
+# (issues disabled) or 1 (anything else).
 gh_run() {
-    if gh "$@" > "$TMP/gh.out" 2> "$TMP/gh.err"; then
+    if gh_retry "$@" > "$TMP/gh.out" 2> "$TMP/gh.err"; then
         cat "$TMP/gh.out"
         return 0
     fi
@@ -45,6 +72,23 @@ gh_run() {
     if grep -qi 'disabled issues' "$TMP/gh.err"; then exit 3; fi
     exit 1
 }
+
+check_key() {
+    [[ "$1" =~ ^[A-Za-z0-9._:/@+-]+$ ]] || { echo "ci_alarm: bad key '$1' (want [A-Za-z0-9._:/@+-]+)" >&2; exit 2; }
+}
+
+# repo_info: $TMP/repo.json, the repository (has_issues, default_branch); sets REPO.
+repo_info() {
+    [ -n "$REPO" ] || REPO=$(gh_run repo view --json nameWithOwner -q .nameWithOwner)
+    [[ "$REPO" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]] || { echo "ci_alarm: cannot tell the repository (got '$REPO')" >&2; exit 1; }
+    gh_run api "repos/$REPO" > "$TMP/repo.json"
+    jq -e 'type == "object" and has("has_issues")' "$TMP/repo.json" >/dev/null \
+        || { echo "ci_alarm: repos/$REPO names no has_issues" >&2; exit 1; }
+}
+issues_on() { [ "$(jq -r .has_issues "$TMP/repo.json")" != false ]; }
+page_url() { echo "${GITHUB_SERVER_URL:-https://github.com}/$REPO/blob/$BRANCH/ALARMS.md"; }
+
+# ── Issues ───────────────────────────────────────────────────────────────────
 
 # open_issues: JSON array of the open ci-alarm issues.
 open_issues() {
@@ -58,16 +102,8 @@ issue_for() {
         'map(select(.title | startswith($p))) | sort_by(.number) | .[0] // empty' "$TMP/issues.json"
 }
 
-check_key() {
-    [[ "$1" =~ ^[A-Za-z0-9._:/@+-]+$ ]] || { echo "ci_alarm: bad key '$1' (want [A-Za-z0-9._:/@+-]+)" >&2; exit 2; }
-}
-
-cmd_open() {
-    [ $# -eq 3 ] || usage
+issue_open() {
     local key=$1 title=$2 file=$3 full issue num old new last
-    check_key "$key"
-    [ -n "$title" ] || { echo "ci_alarm: empty title" >&2; exit 2; }
-    [ -r "$file" ] || { echo "ci_alarm: cannot read body file '$file'" >&2; exit 2; }
     full="[ci-alarm] $key: $title"
     # shellcheck disable=SC2016 # markdown backticks, not a command substitution
     { printf '@%s ci-alarm `%s`\n\n' "$OWNER" "$key"; cat "$file"; } > "$TMP/body"
@@ -100,10 +136,8 @@ cmd_open() {
     fi
 }
 
-cmd_close() {
-    [ $# -eq 2 ] || usage
+issue_close() {
     local key=$1 comment=$2 issue num
-    check_key "$key"
     issue=$(issue_for "$key") || exit $?
     if [ -z "$issue" ]; then
         echo "ci_alarm: no open alarm $key"
@@ -114,20 +148,208 @@ cmd_close() {
     echo "ci_alarm: $key closed (#$num)"
 }
 
-cmd_list() {
-    [ $# -eq 0 ] || usage
-    open_issues > "$TMP/issues.json"
-    jq -r '.[].title | capture("^\\[ci-alarm\\] (?<k>[^ ]+): ") | .k' "$TMP/issues.json"
+# ── ci-status (Issues disabled) ──────────────────────────────────────────────
+
+# store_read: the branch head on stdout; alarms.json (an object, {} when absent) in $TMP/cur.json.
+store_read() {
+    local head
+    head=$("$STORE" get alarms.json "$TMP/cur.json") || exit 1
+    [ -s "$TMP/cur.json" ] || echo '{}' > "$TMP/cur.json"
+    jq -e 'type == "object"' "$TMP/cur.json" >/dev/null \
+        || { echo "ci_alarm: alarms.json on $BRANCH at $head is not a JSON object" >&2; exit 1; }
+    echo "$head"
 }
 
-# Issues disabled: `open` still reaches the run's log and summary.
+# render NEXT OUT: ALARMS.md for the alarms in NEXT.
+render() {
+    jq -r --arg owner "$OWNER" --arg now "$NOW_ISO" --arg branch "$BRANCH" '
+        "# Open ci-alarms", "",
+        "This repository has Issues disabled, so hack/ci_alarm keeps its alarms on branch `\($branch)`:",
+        "alarms.json, rendered here. A new alarm, or a new text, notifies @\($owner) by a commit comment",
+        "on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main'"'"'s newest",
+        "commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.", "",
+        "Updated \($now). \(length) open.", "",
+        (if length == 0 then "No open alarm.", "" else empty end),
+        (to_entries | sort_by(.key)[]
+         | "## `\(.key)`: \(.value.title)", "",
+           "Opened \(.value.opened_at), updated \(.value.updated_at)\(if .value.acked then ", acknowledged" else "" end).", "",
+           .value.body, "")' "$1" > "$2"
+}
+
+# store_write HEAD MESSAGE: put $TMP/next.json (and its page) on top of HEAD; 0 written, 4 the branch moved.
+store_write() {
+    render "$TMP/next.json" "$TMP/ALARMS.md"
+    "$STORE" put "$1" "$2" "alarms.json=$TMP/next.json" "ALARMS.md=$TMP/ALARMS.md" >/dev/null
+}
+
+# store_update MESSAGE PROGRAM [jq args...]: re-read, apply PROGRAM to alarms.json
+# (it prints {next, action}), write unless action is "unchanged"; again when the
+# branch moved. Leaves the last result in $TMP/res.json.
+store_update() {
+    local msg=$1 prog=$2 head rc n
+    shift 2
+    for n in 1 2 3 4 5; do
+        head=$(store_read) || exit 1
+        jq --arg now "$NOW_ISO" "$@" "$prog" "$TMP/cur.json" > "$TMP/res.json" || exit 1
+        [ "$(jq -r .action "$TMP/res.json")" != unchanged ] || return 0
+        jq '.next' "$TMP/res.json" > "$TMP/next.json"
+        rc=0; store_write "$head" "$msg" || rc=$?
+        case $rc in
+            0) return 0;;
+            4) [ "$n" -lt 5 ] || { echo "ci_alarm: $BRANCH kept moving: 5 attempts" >&2; exit 1; };;
+            *) exit 1;;
+        esac
+    done
+}
+
+# main_head: the SHA of the default branch's HEAD.
+main_head() {
+    gh_run api "repos/$REPO/commits/$(jq -r '.default_branch // "main"' "$TMP/repo.json")" | jq -r .sha
+}
+
+# comment_main BODY_FILE: a commit comment on main's HEAD (GitHub notifies the @mentioned owner).
+comment_main() {
+    local sha
+    sha=$(main_head)
+    gh_run api -X POST "repos/$REPO/commits/$sha/comments" -F "body=@$1" >/dev/null
+}
+
+store_open() {
+    local key=$1 title=$2 file=$3 action
+    store_update "ci-alarm: open $key" '
+        (.[$key]) as $old
+        | ($body | gsub("\r\n"; "\n") | sub("\\s+$"; "")) as $b
+        | (if $old == null then "new"
+           elif $old.title != $title or $old.body != $b then "changed"
+           elif ($nowsec - ($old.notified_at | fromdateiso8601)) >= 86400 then "remind"
+           else "unchanged" end) as $a
+        | {action: $a,
+           next: (. + {($key): {title: $title, body: $b,
+                                opened_at: ($old.opened_at // $now),
+                                updated_at: (if $a == "remind" then $old.updated_at else $now end),
+                                notified_at: $now,
+                                acked: ($old.acked // false)}})}' \
+        --arg key "$key" --arg title "$title" --rawfile body "$file" --argjson nowsec "$NOW"
+    action=$(jq -r .action "$TMP/res.json")
+    {
+        # shellcheck disable=SC2016 # markdown backticks
+        printf '### ci-alarm `%s`: %s\n\n' "$key" "$title"; cat "$file"; echo
+        echo "(on branch $BRANCH: $(page_url))"; echo
+    } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    case $action in
+        new|changed)
+            {
+                # shellcheck disable=SC2016 # markdown backticks
+                printf '@%s ci-alarm `%s`: %s (%s)\n\n' "$OWNER" "$key" "$title" "$([ "$action" = new ] && echo opened || echo updated)"
+                cat "$file"
+                printf '\nEvery open alarm: %s (Issues are disabled here, so alarms live on branch %s).\n' "$(page_url)" "$BRANCH"
+            } > "$TMP/comment"
+            comment_main "$TMP/comment"
+            echo "::error title=ci-alarm ${key}::${title} (on branch $BRANCH: $(page_url))";;
+        remind)
+            printf '@%s still open: [ci-alarm] %s: %s\n\n%s\n' "$OWNER" "$key" "$title" "$(page_url)" > "$TMP/comment"
+            comment_main "$TMP/comment"
+            echo "::error title=ci-alarm ${key}::${title} (still open; on branch $BRANCH: $(page_url))";;
+    esac
+    echo "ci_alarm: $key $(case $action in new) echo opened;; changed) echo updated;; remind) echo reminded;; *) echo unchanged;; esac) (branch $BRANCH)"
+}
+
+store_close() {
+    local key=$1
+    store_update "ci-alarm: close $key: $2" \
+        'if has($key) then {action: "closed", next: del(.[$key])} else {action: "unchanged"} end' --arg key "$key"
+    if [ "$(jq -r .action "$TMP/res.json")" = closed ]; then
+        echo "ci_alarm: $key closed (branch $BRANCH)"
+    else
+        echo "ci_alarm: no open alarm $key"
+    fi
+}
+
+store_list_json() {
+    store_read >/dev/null
+    jq --arg url "$(page_url)" '[to_entries | sort_by(.key)[]
+        | {number: null, title: "[ci-alarm] \(.key): \(.value.title)", body: .value.body, url: $url,
+           labels: ([{name: "ci-alarm"}] + (if .value.acked then [{name: "alarm-ack"}] else [] end))}]' "$TMP/cur.json"
+}
+
+store_status() {
+    local sha state desc
+    store_read >/dev/null
+    sha=$(main_head)
+    if [ "$(jq length "$TMP/cur.json")" -gt 0 ]; then
+        state=failure
+        desc=$(jq -r '"\(length) open: \(keys | join(", "))"' "$TMP/cur.json")
+        [ "${#desc}" -le 140 ] || desc="${desc:0:137}..."
+    else
+        state=success desc="no open ci-alarm"
+    fi
+    gh_run api -X POST "repos/$REPO/statuses/$sha" -f state="$state" -f context=ci-alarm \
+        -f description="$desc" -f target_url="$(page_url)" >/dev/null
+    echo "ci_alarm: status $state on $sha: $desc"
+}
+
+# The alarm could not be filed: it still reaches the run's log and summary.
 annotate() {
-    local key=$1 title=$2 file=$3
-    echo "::error title=ci-alarm ${key}::${title} (not filed: this repository has issues disabled)"
+    local key=$1 title=$2 file=$3 why=$4
+    echo "::error title=ci-alarm ${key}::${title} (not filed: ${why})"
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         # shellcheck disable=SC2016 # markdown backticks
-        { printf '### ci-alarm `%s`: %s\n\n' "$key" "$title"; cat "$file"; echo; } >> "$GITHUB_STEP_SUMMARY"
+        { printf '### ci-alarm `%s`: %s (not filed)\n\n' "$key" "$title"; cat "$file"; echo; } >> "$GITHUB_STEP_SUMMARY"
     fi
+}
+
+cmd_open() {
+    [ $# -eq 3 ] || usage
+    check_key "$1"
+    [ -n "$2" ] || { echo "ci_alarm: empty title" >&2; exit 2; }
+    [ -r "$3" ] || { echo "ci_alarm: cannot read body file '$3'" >&2; exit 2; }
+    repo_info
+    if issues_on; then issue_open "$@"; else store_open "$@"; fi
+}
+
+cmd_close() {
+    [ $# -eq 2 ] || usage
+    check_key "$1"
+    repo_info
+    if issues_on; then issue_close "$@"; else store_close "$@"; fi
+}
+
+cmd_list() {
+    [ $# -le 1 ] || usage
+    [ $# -eq 0 ] || [ "$1" = --json ] || usage
+    repo_info
+    if issues_on; then
+        if [ $# -eq 1 ]; then
+            gh_run issue list --label "$LABEL" --state open --limit 200 --json number,title,body,url,labels
+        else
+            open_issues > "$TMP/issues.json"
+            jq -r '.[].title | capture("^\\[ci-alarm\\] (?<k>[^ ]+): ") | .k' "$TMP/issues.json"
+        fi
+    elif [ $# -eq 1 ]; then
+        store_list_json
+    else
+        store_read >/dev/null
+        jq -r 'keys[]' "$TMP/cur.json"
+    fi
+}
+
+cmd_ack() {
+    [ $# -eq 1 ] || usage
+    check_key "$1"
+    repo_info
+    if issues_on; then
+        echo "ci_alarm: Issues are on: add the alarm-ack label to the key's issue (gh issue edit N --add-label alarm-ack)"
+        return 0
+    fi
+    store_update "ci-alarm: ack $1" \
+        'if has($key) then {action: "acked", next: (.[$key].acked = true)} else {action: "unchanged"} end' --arg key "$1"
+    if [ "$(jq -r .action "$TMP/res.json")" = acked ]; then echo "ci_alarm: $1 acked"; else echo "ci_alarm: no open alarm $1"; fi
+}
+
+cmd_status() {
+    [ $# -eq 0 ] || usage
+    repo_info
+    if issues_on; then echo "ci_alarm: Issues are on: the alarms are issues, no status"; else store_status; fi
 }
 
 [ $# -ge 1 ] || usage
@@ -138,9 +360,15 @@ case "$cmd" in
         (cmd_open "$@")
         rc=$?
         set -e
-        if [ "$rc" -eq 3 ] && [ $# -eq 3 ]; then annotate "$@"; fi
+        if [ "$rc" -eq 3 ] && [ $# -eq 3 ]; then
+            annotate "$@" "this repository has issues disabled"
+        elif [ "$rc" -eq 1 ] && [ $# -eq 3 ] && [ -r "$3" ]; then
+            annotate "$@" "the alarm write failed"
+        fi
         exit "$rc" ;;
-    close) cmd_close "$@" ;;
-    list)  cmd_list "$@" ;;
+    close)  cmd_close "$@" ;;
+    list)   cmd_list "$@" ;;
+    ack)    cmd_ack "$@" ;;
+    status) cmd_status "$@" ;;
     *) usage ;;
 esac
