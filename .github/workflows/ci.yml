@@ -648,36 +648,44 @@ jobs:
       - run: tests/bot_merge_test.sh
 
   # ─── Bot PR CI and alarm surfacing ───────────────────────────────────────
-  # The watchdog files a ci-alarm issue for a red or missing scheduled run or a
-  # broken release (email went unread for 9 nights). Every open alarm, and a
-  # Watchdog workflow that is missing, disabled or without a success in 3 h,
-  # shows as a warning on every CI run. It never fails CI: the script exits 0,
-  # and the job is continue-on-error.
+  # The watchdog files a ci-alarm (an issue; with Issues disabled an entry on branch
+  # ci-status) for a red or missing scheduled run or a broken release (email went
+  # unread for 9 nights). Every open alarm, and a Watchdog workflow that is missing,
+  # disabled or without a success in 3 h, shows as a warning on every CI run. It
+  # never fails CI: the script exits 0, and the job is continue-on-error.
   alarms:
     name: Open CI alarms
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true
     permissions:
+      contents: read
       issues: read
       actions: read
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - name: Warn on open ci-alarm issues and a quiet Watchdog
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Warn on open ci-alarms and a quiet Watchdog
         run: |
           set +e
           err=$(mktemp)
           # Workflow-command data escapes %, CR and LF.
           oneline() { tr '\r\n' '  ' < "$err" | sed 's/ *$//; s/%/%25/g'; }
-          if alarms=$(gh issue list --label ci-alarm --state open --limit 100 --json number,title,url,labels 2>"$err"); then
+          # hack/ci_alarm list --json: the ci-alarm issues, or the alarms on branch ci-status.
+          if alarms=$(hack/ci_alarm list --json 2>"$err"); then
             jq -r '.[]
-              | "open ci-alarm #\(.number): \(.title) \(.url) (\(if any(.labels[]; .name == "alarm-ack") then "acked"
-                  else "NOT acked; after reading it: gh issue edit \(.number) --add-label alarm-ack" end))"
+              | (.title | capture("^\\[ci-alarm\\] (?<k>[^ ]+): ").k // "?") as $k
+              | "open ci-alarm \(if .number then "#\(.number)" else "on ci-status" end): \(.title) \(.url) (\(
+                  if any(.labels[]; .name == "alarm-ack") then "acked"
+                  elif .number then "NOT acked; after reading it: gh issue edit \(.number) --add-label alarm-ack"
+                  else "NOT acked; after reading it: hack/ci_alarm ack \($k)" end))"
               | "::warning::" + (gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A"))' <<<"$alarms"
           else
-            echo "::warning::could not list the open ci-alarm issues: $(oneline)"
+            echo "::warning::could not list the open ci-alarms: $(oneline)"
           fi
           if ! wd=$(gh workflow list --all --json name,path,state \
                     -q '[.[] | select(.name == "Watchdog")][0] // empty | "\(.state) \(.path)"' 2>"$err"); then

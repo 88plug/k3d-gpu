@@ -25,11 +25,22 @@
 # PR list was read waits for the next call; a policy that fails is an error for
 # that PR.
 #
+# A dispatch is confirmed by reading: the workflow_dispatch run of the workflow on
+# the branch at the head SHA, the run hack/bot-merge (ci_status, and its canary
+# check) reads as that head's evidence, must be listed within 30 s; one that is
+# not is an error for that PR (the next call looks again before dispatching).
+# GitHub's 5xx: every read is retried (hack/gh_retry.sh); a dispatch answered with
+# a 5xx is sent again, at most 3 sends, only while no run is listed at the head,
+# since the answer can come after the run was queued.
+#
 # A branch whose workflow file lacks the workflow_dispatch trigger (cut before
 # ci.yml had it) is skipped; the nightly's hack/autobump-branch-reset recreates it.
 # Prints one line per decision. Idempotent. Exit 0, or 1 when a gh call failed
 # (the rest still ran), 2 on bad usage.
 set -uo pipefail
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=hack/gh_retry.sh
+. "$HERE/gh_retry.sh"
 
 usage() { echo "usage: hack/bot-ci-dispatch [--branch autobump/<name>] [--workflow ci.yml|canary.yml]" >&2; exit 2; }
 wf=ci.yml only=
@@ -60,7 +71,7 @@ canary_engines() {
   hack/pins policy "$mb" "$2" | jq -ce '.canary | arrays'
 }
 
-prs=$(gh pr list --state open --base main --limit 200 \
+prs=$(gh_retry pr list --state open --base main --limit 200 \
       --json number,headRefName,headRefOid,baseRefName,isCrossRepository,author) \
   || { echo "error: cannot list open PRs"; exit 1; }
 cands=$(jq -r --arg only "$only" '
@@ -73,10 +84,10 @@ cands=$(jq -r --arg only "$only" '
 [ -n "$cands" ] || { echo "no open github-actions[bot] PR from ${only:-an autobump/ branch}"; exit 0; }
 
 # The pool: bot runs of the workflow in flight, and queued ci.yml runs of human PRs.
-recent=$(gh run list -w "$wf" -L 100 --json status,event,headBranch) || { echo "error: cannot list $wf runs"; exit 1; }
+recent=$(gh_retry run list -w "$wf" -L 100 --json status,event,headBranch) || { echo "error: cannot list $wf runs"; exit 1; }
 inflight=$(jq '[.[] | select(.status != "completed" and ((.headBranch // "") | startswith("autobump/")))] | length' <<<"$recent")
 if [ "$wf" != ci.yml ]; then
-  recent=$(gh run list -w ci.yml -L 100 --json status,event,headBranch) || { echo "error: cannot list ci.yml runs"; exit 1; }
+  recent=$(gh_retry run list -w ci.yml -L 100 --json status,event,headBranch) || { echo "error: cannot list ci.yml runs"; exit 1; }
 fi
 human=$(jq '[.[] | select(.event == "pull_request" and (.status | IN("queued", "requested", "pending", "waiting"))
                           and ((.headBranch // "") | startswith("autobump/") | not))] | length' <<<"$recent")
@@ -88,9 +99,37 @@ busy() {
   return 1
 }
 
+# listed BR SHA: the id of the workflow_dispatch run of $wf on BR at SHA (the run the
+# merge job reads), or nothing.
+listed() {
+  gh_retry run list -w "$wf" -b "$1" -e workflow_dispatch -c "$2" -L 1 --json databaseId -q '.[0].databaseId // empty' 2>/dev/null
+}
+# dispatch BR SHA: gh workflow run $wf on BR; after a 5xx, send again (3 sends at most)
+# only while no run is listed at SHA. Prints gh's error when the last send failed.
+dispatch() {
+  local n out
+  for n in 1 2 3; do
+    out=$(gh workflow run "$wf" --ref "$1" "${inputs[@]}" 2>&1) && return 0
+    grep -qiE "$GH_RETRY_TRANSIENT" <<<"$out" || break
+    sleep "$(( ${GH_RETRY_DELAY:-2} * n ))"
+    [ -z "$(listed "$1" "$2")" ] || return 0
+  done
+  echo "$out"
+  return 1
+}
+# confirm BR SHA: the run's id once listed (10 reads, 3 s apart), else nothing.
+confirm() {
+  local new
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    new=$(listed "$1" "$2")
+    [ -n "$new" ] && { echo "$new"; return 0; }
+    sleep 3
+  done
+}
+
 while read -r num br sha; do
   tag="#$num $br ${sha:0:7}"
-  runs=$(gh run list -w "$wf" -c "$sha" -L 100 --json "$RUNF") \
+  runs=$(gh_retry run list -w "$wf" -c "$sha" -L 100 --json "$RUNF") \
     || { echo "$tag: error: cannot list its $wf runs"; rc=1; continue; }
   # "<count> <held> <latest id> <status> <conclusion> <attempt> <re-run already>"
   read -r count held id st co att reran <<<"$(jq -r --arg b "$br" '
@@ -111,15 +150,16 @@ while read -r num br sha; do
       esac
     fi
     busy "$tag: $why" && continue
-    if out=$(gh workflow run "$wf" --ref "$br" "${inputs[@]}" 2>&1); then
+    if out=$(dispatch "$br" "$sha"); then
       inflight=$((inflight + 1))
-      # Wait until the run shows, so that a call right after this one sees it.
-      new=
-      for _ in 1 2 3 4 5 6 7 8 9 10; do
-        new=$(gh run list -w "$wf" -b "$br" -e workflow_dispatch -c "$sha" -L 1 --json databaseId -q '.[0].databaseId // empty' 2>/dev/null)
-        [ -n "$new" ] && break; sleep 3
-      done
-      echo "$tag: $why; dispatched $wf${new:+ (run $new)}"
+      # The run must show at the head, where the merge job (and the next call) reads it.
+      new=$(confirm "$br" "$sha")
+      if [ -n "$new" ]; then
+        echo "$tag: $why; dispatched $wf (run $new)"
+      else
+        echo "$tag: error: dispatched $wf, but no $wf run at ${sha:0:7} is listed on $br after 30 s, so the merge job reads no CI there; the next call looks again"
+        rc=1
+      fi
     elif grep -qi 'workflow_dispatch' <<<"$out"; then
       echo "$tag: skipped, $wf on $br has no workflow_dispatch trigger (the nightly recreates the branch from main)"
     else

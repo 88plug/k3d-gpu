@@ -216,6 +216,7 @@ comment_main() {
 
 store_open() {
     local key=$1 title=$2 file=$3 action
+    # shellcheck disable=SC2016 # jq variables
     store_update "ci-alarm: open $key" '
         (.[$key]) as $old
         | ($body | gsub("\r\n"; "\n") | sub("\\s+$"; "")) as $b
@@ -256,6 +257,7 @@ store_open() {
 
 store_close() {
     local key=$1
+    # shellcheck disable=SC2016 # jq variables
     store_update "ci-alarm: close $key: $2" \
         'if has($key) then {action: "closed", next: del(.[$key])} else {action: "unchanged"} end' --arg key "$key"
     if [ "$(jq -r .action "$TMP/res.json")" = closed ]; then
@@ -341,6 +343,7 @@ cmd_ack() {
         echo "ci_alarm: Issues are on: add the alarm-ack label to the key's issue (gh issue edit N --add-label alarm-ack)"
         return 0
     fi
+    # shellcheck disable=SC2016 # jq variables
     store_update "ci-alarm: ack $1" \
         'if has($key) then {action: "acked", next: (.[$key].acked = true)} else {action: "unchanged"} end' --arg key "$1"
     if [ "$(jq -r .action "$TMP/res.json")" = acked ]; then echo "ci_alarm: $1 acked"; else echo "ci_alarm: no open alarm $1"; fi

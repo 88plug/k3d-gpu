@@ -25,7 +25,7 @@ Until `pins/classes` exists, `hack/pinlib/classes.py` gives every path its class
 | `hack/pins check` | offline, CI job `pins`: schema, every site resolves, derived values equal their parents, holds not expired, one owner per pin, known-issue sites inside registry sites, every pinned image / `==` pin / Hugging Face revision in an ours or eat-stock file owned |
 | `hack/pins outdated [--json] [--group G]` | network, read-only: the pins behind upstream |
 | `hack/pins policy <base> <head>` | the verdict of a bump diff (JSON `{verdict, reasons, group, update_type, urgent, canary, fixes}`) |
-| `hack/pins report` | the 'Freshness dashboard' issue body and the lag tripwire |
+| `hack/pins report` | the Freshness dashboard (the 'Freshness dashboard' issue body, or with Issues disabled `freshness-dashboard.md` on branch `ci-status`; always the job summary) and the lag tripwire |
 | `hack/pins propose-amendment <row>` | a PENDING row's runner image pins under a dated amendment stub |
 | `hack/bump <group>` | resolve, rewrite the sites, run the hooks, substitute goldens, run the group's tests, write the PR body and verdict |
 | `hack/pin-only-diff <base> <head>` | is the diff only pin moves (else: changes-defaults) |
