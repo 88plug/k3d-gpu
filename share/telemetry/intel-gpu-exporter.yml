@@ -1,6 +1,6 @@
 # Intel iGPU/dGPU exporter (drm-exporter): per-engine busy ratio, frequency, power, memory
 # Source: https://github.com/home-operations/drm-exporter (helm chart
-# oci://ghcr.io/home-operations/charts/drm-exporter 0.3.4, image pinned by digest),
+# oci://ghcr.io/home-operations/charts/drm-exporter 0.3.6, image pinned by digest),
 # rendered with `helm template drm-exporter --namespace k3d-gpu-telemetry --skip-tests`
 # and the values below, then metadata.namespace added. Re-render to bump.
 # Reads the i915/xe perf PMU and sysfs through qmlib (the qmassa library), so it covers
@@ -23,10 +23,10 @@ metadata:
   name: drm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: drm-exporter-0.3.4
+    helm.sh/chart: drm-exporter-0.3.6
     app.kubernetes.io/name: drm-exporter
     app.kubernetes.io/instance: drm-exporter
-    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/version: "0.3.6"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: exporter
 automountServiceAccountToken: false
@@ -38,10 +38,10 @@ metadata:
   name: drm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: drm-exporter-0.3.4
+    helm.sh/chart: drm-exporter-0.3.6
     app.kubernetes.io/name: drm-exporter
     app.kubernetes.io/instance: drm-exporter
-    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/version: "0.3.6"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: exporter
 spec:
@@ -62,10 +62,10 @@ metadata:
   name: drm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: drm-exporter-0.3.4
+    helm.sh/chart: drm-exporter-0.3.6
     app.kubernetes.io/name: drm-exporter
     app.kubernetes.io/instance: drm-exporter
-    app.kubernetes.io/version: "0.3.4"
+    app.kubernetes.io/version: "0.3.6"
     app.kubernetes.io/managed-by: Helm
     app.kubernetes.io/component: exporter
 spec:
@@ -91,7 +91,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: drm-exporter
-          image: "ghcr.io/home-operations/drm-exporter:0.3.4@sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60"
+          image: "ghcr.io/home-operations/drm-exporter:0.3.6@sha256:d39c531a0032a7c021e8f0da03b24c6e1e469aab8cf2babc78be68a300d7ec5f"
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
