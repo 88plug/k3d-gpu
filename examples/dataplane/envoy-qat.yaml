@@ -110,7 +110,7 @@ spec:
     spec:
       containers:
       - name: envoy
-        image: envoyproxy/envoy:contrib-v1.40.0@sha256:366ea8bbbbaded6d95f3a1aafedd12c6def9f0d6eea02f3123b69c41e46e54f5
+        image: envoyproxy/envoy:contrib-v1.40.2@sha256:dc50a95c3d54a8f98cf682494db6fc42d77fde4ef12404fac3654d866a1f405d
         args: ["-c", "/etc/envoy/envoy.yaml", "--log-level", "info"]
         env:
         # The image entrypoint drops to uid 101 unless ENVOY_UID=0; the VFIO group
