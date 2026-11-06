@@ -214,29 +214,32 @@ comment_main() {
     gh_run api -X POST "repos/$REPO/commits/$sha/comments" -F "body=@$1" >/dev/null
 }
 
+# The open program: what an open of $key with $title and $body does to alarms.json,
+# {action: new | changed | remind | unchanged, next}. A notification is recorded
+# (notified_at) only by the write that follows a comment that was posted.
+# shellcheck disable=SC2016 # jq variables
+OPEN_PROGRAM='
+    (.[$key]) as $old
+    | ($body | gsub("\r\n"; "\n") | sub("\\s+$"; "")) as $b
+    | (if $old == null then "new"
+       elif $old.title != $title or $old.body != $b then "changed"
+       elif ($nowsec - ($old.notified_at | fromdateiso8601)) >= 86400 then "remind"
+       else "unchanged" end) as $a
+    | {action: $a,
+       next: (. + {($key): {title: $title, body: $b,
+                            opened_at: ($old.opened_at // $now),
+                            updated_at: (if $a == "remind" then $old.updated_at else $now end),
+                            notified_at: (if $notified == "yes" or $old == null then $now else $old.notified_at end),
+                            acked: ($old.acked // false)}})}'
+
 store_open() {
-    local key=$1 title=$2 file=$3 action
-    # shellcheck disable=SC2016 # jq variables
-    store_update "ci-alarm: open $key" '
-        (.[$key]) as $old
-        | ($body | gsub("\r\n"; "\n") | sub("\\s+$"; "")) as $b
-        | (if $old == null then "new"
-           elif $old.title != $title or $old.body != $b then "changed"
-           elif ($nowsec - ($old.notified_at | fromdateiso8601)) >= 86400 then "remind"
-           else "unchanged" end) as $a
-        | {action: $a,
-           next: (. + {($key): {title: $title, body: $b,
-                                opened_at: ($old.opened_at // $now),
-                                updated_at: (if $a == "remind" then $old.updated_at else $now end),
-                                notified_at: $now,
-                                acked: ($old.acked // false)}})}' \
-        --arg key "$key" --arg title "$title" --rawfile body "$file" --argjson nowsec "$NOW"
+    local key=$1 title=$2 file=$3 action args
+    args=(--arg key "$key" --arg title "$title" --rawfile body "$file" --argjson nowsec "$NOW")
+    # The comment goes first: when it fails nothing is written, so the next open
+    # notifies again; when the write after it fails, the next open comments twice.
+    store_read >/dev/null
+    jq --arg now "$NOW_ISO" --arg notified no "${args[@]}" "$OPEN_PROGRAM" "$TMP/cur.json" > "$TMP/res.json" || exit 1
     action=$(jq -r .action "$TMP/res.json")
-    {
-        # shellcheck disable=SC2016 # markdown backticks
-        printf '### ci-alarm `%s`: %s\n\n' "$key" "$title"; cat "$file"; echo
-        echo "(on branch $BRANCH: $(page_url))"; echo
-    } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
     case $action in
         new|changed)
             {
@@ -245,12 +248,20 @@ store_open() {
                 cat "$file"
                 printf '\nEvery open alarm: %s (Issues are disabled here, so alarms live on branch %s).\n' "$(page_url)" "$BRANCH"
             } > "$TMP/comment"
-            comment_main "$TMP/comment"
-            echo "::error title=ci-alarm ${key}::${title} (on branch $BRANCH: $(page_url))";;
+            comment_main "$TMP/comment";;
         remind)
             printf '@%s still open: [ci-alarm] %s: %s\n\n%s\n' "$OWNER" "$key" "$title" "$(page_url)" > "$TMP/comment"
-            comment_main "$TMP/comment"
-            echo "::error title=ci-alarm ${key}::${title} (still open; on branch $BRANCH: $(page_url))";;
+            comment_main "$TMP/comment";;
+    esac
+    store_update "ci-alarm: open $key" "$OPEN_PROGRAM" --arg notified "$([ "$action" = unchanged ] && echo no || echo yes)" "${args[@]}"
+    {
+        # shellcheck disable=SC2016 # markdown backticks
+        printf '### ci-alarm `%s`: %s\n\n' "$key" "$title"; cat "$file"; echo
+        echo "(on branch $BRANCH: $(page_url))"; echo
+    } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    case $action in
+        new|changed) echo "::error title=ci-alarm ${key}::${title} (on branch $BRANCH: $(page_url))";;
+        remind) echo "::error title=ci-alarm ${key}::${title} (still open; on branch $BRANCH: $(page_url))";;
     esac
     echo "ci_alarm: $key $(case $action in new) echo opened;; changed) echo updated;; remind) echo reminded;; *) echo unchanged;; esac) (branch $BRANCH)"
 }

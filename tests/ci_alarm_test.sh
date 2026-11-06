@@ -204,6 +204,7 @@ URL=https://github.com/88plug/k3d-gpu/blob/ci-status/ALARMS.md
 #     a ::error annotation and the step summary.
 nostore store_open
 GITHUB_STEP_SUMMARY="$FAKE_GH/summary" alarm open red:freshness.yml "scheduled run failure" "$(body "run 42280586432 failed")"; rc=$?
+# shellcheck disable=SC2016 # the markdown backticks in the patterns are literal
 if [ "$rc" -eq 0 ] && [ ! -s "$FAKE_GH/issues.json" ] \
    && [ "$(branch alarms.json | jq -r '."red:freshness.yml".title')" = "scheduled run failure" ] \
    && branch alarms.json | jq -r '."red:freshness.yml".body' | grep -q 'run 42280586432 failed' \
@@ -310,7 +311,8 @@ else
 fi
 
 # 19. an HTTP 502 on the ref update is retried; a write GitHub refuses is exit 1, an
-#     ::error that the alarm was not filed, and the body in the step summary.
+#     ::error that the alarm was not filed, and the body in the step summary (the
+#     owner's comment went out first, and the next open sends it again).
 nostore store_502
 printf '^api -X PATCH repos/88plug/k3d-gpu/git/refs/heads/ci-status\t-\t1\tgh: Server Error (HTTP 502)\t1\n' > "$FAKE_GH/routes.tsv"
 alarm open simulate "simulated red" "$(body s)"
@@ -324,10 +326,26 @@ nostore store_refused
 printf '^api -X POST repos/88plug/k3d-gpu/git/trees\t-\t1\tgh: Resource not accessible by integration (HTTP 403)\n' > "$FAKE_GH/routes.tsv"
 GITHUB_STEP_SUMMARY="$FAKE_GH/summary" alarm open simulate "simulated red" "$(body "the simulated body")"; rc=$?
 if [ "$rc" -eq 1 ] && grep -q '^::error title=ci-alarm simulate::simulated red (not filed' "$FAKE_GH/out" \
-   && grep -q 'the simulated body' "$FAKE_GH/summary" && grep -q 'HTTP 403' "$FAKE_GH/err" && [ "$(ncomments)" = 0 ]; then
+   && grep -q 'the simulated body' "$FAKE_GH/summary" && grep -q 'HTTP 403' "$FAKE_GH/err" && [ "$(ncomments)" = 1 ] \
+   && [ "$(head_of)" = none ]; then
     ok "issues disabled, the branch write refused: exit 1, ::error not filed, the body in the summary"
 else
     fail "store refused: rc=$rc out=$(cat "$FAKE_GH/out") err=$(cat "$FAKE_GH/err")"
+fi
+
+# 19b. the commit comment GitHub refuses: exit 1 and nothing written, so the next open
+#      notifies (it does not read as already notified).
+nostore store_comment_refused
+printf '^api -X POST repos/88plug/k3d-gpu/commits/[0-9a-f]+/comments\t-\t1\tgh: Resource not accessible by integration (HTTP 403)\t1\n' \
+    > "$FAKE_GH/routes.tsv"
+alarm open simulate "simulated red" "$(body s)"; rc1=$?
+written=$(head_of)
+alarm open simulate "simulated red" "$(body s)"; rc2=$?
+if [ "$rc1" -eq 1 ] && [ "$written" = none ] && [ "$rc2" -eq 0 ] && [ "$(ncomments)" = 1 ] \
+   && [ "$(branch alarms.json | jq -r 'keys | join(",")')" = simulate ]; then
+    ok "issues disabled, the comment refused: nothing written, the next open notifies"
+else
+    fail "store comment refused: rc=$rc1/$rc2 head=$written comments=$(ncomments) err=$(cat "$FAKE_GH/err")"
 fi
 
 # 20. with issues on: list --json is the issue list; status and ack leave main alone.
@@ -341,6 +359,38 @@ if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$(jq -r '.[0].title' "$FAKE_GH/lis
     ok "issues on: list --json is the issue list; status posts nothing"
 else
     fail "issues list --json: rc=$rc1/$rc2 out=$(cat "$FAKE_GH/list.json")"
+fi
+
+# 21. hack/status-branch publish (the Freshness dashboard): the file lands next to the
+#     alarms, which stay; a concurrent writer is re-read; url names the page.
+nostore publish
+alarm open simulate "simulated red" "$(body s)"
+printf '# Freshness dashboard\n\nall current\n' > "$T/dashboard.md"
+echo 1 > "$FAKE_GH/ref_race"
+"${ROOT}/hack/status-branch" publish freshness-dashboard.md "$T/dashboard.md" "Freshness dashboard, run 1" \
+    > "$FAKE_GH/out" 2> "$FAKE_GH/err"; rc=$?
+url=$("${ROOT}/hack/status-branch" url freshness-dashboard.md)
+if [ "$rc" -eq 0 ] && [ "$(branch freshness-dashboard.md)" = "$(cat "$T/dashboard.md")" ] \
+   && [ "$(branch alarms.json | jq -r 'keys | join(",")')" = simulate ] && [ "$(cat "$FAKE_GH/ref_race")" = 0 ] \
+   && [ "$url" = https://github.com/88plug/k3d-gpu/blob/ci-status/freshness-dashboard.md ]; then
+    ok "status-branch publish: the dashboard lands beside the alarms, a race is re-read"
+else
+    fail "publish: rc=$rc dashboard=$(branch freshness-dashboard.md) err=$(cat "$FAKE_GH/err") url=$url"
+fi
+
+# 22. hack/gh_retry.sh under set -e: two HTTP 502s then the answer (rc 0, the answer
+#     printed); a 404 is not retried (rc 1, one call).
+fresh gh_retry
+printf '^api repos/88plug/k3d-gpu/pulls$\t-\t1\tgh: Server Error (HTTP 502)\t2\n^api repos/88plug/k3d-gpu/pulls$\tpulls.json\t0\n^api repos/88plug/k3d-gpu/nope$\t-\t1\tgh: Not Found (HTTP 404)\n' \
+    > "$FAKE_GH/routes.tsv"
+echo '[{"number": 1}]' > "$FAKE_GH/pulls.json"
+out=$(bash -ec '. "$1"; gh_retry api repos/88plug/k3d-gpu/pulls' _ "${ROOT}/hack/gh_retry.sh" 2>/dev/null); rc1=$?
+bash -ec '. "$1"; gh_retry api repos/88plug/k3d-gpu/nope' _ "${ROOT}/hack/gh_retry.sh" 2>/dev/null; rc2=$?
+if [ "$rc1" -eq 0 ] && [ "$out" = '[{"number": 1}]' ] && [ "$(grep -c '^api repos/88plug/k3d-gpu/pulls$' "$FAKE_GH/calls.log")" = 3 ] \
+   && [ "$rc2" -eq 1 ] && [ "$(grep -c '^api repos/88plug/k3d-gpu/nope$' "$FAKE_GH/calls.log")" = 1 ]; then
+    ok "gh_retry: a 5xx is retried under set -e, a 404 is not"
+else
+    fail "gh_retry: rc=$rc1/$rc2 out=$out calls=$(tr '\n' ';' < "$FAKE_GH/calls.log")"
 fi
 
 echo "${PASS} passed, ${FAILS} failed"

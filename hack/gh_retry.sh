@@ -7,6 +7,7 @@
 #                      last attempt's stdout and stderr and returns its exit code. For
 #                      reads and other calls that are safe to repeat; a dispatch that
 #                      may have landed is confirmed by reading, not by sending it again.
+#                      Safe under set -e: a failed attempt does not end the shell.
 
 GH_RETRY_TRANSIENT='HTTP 5[0-9][0-9]|Server Error|Bad Gateway|Service Unavailable|Gateway Timeout|connection reset|connection refused|i/o timeout|TLS handshake timeout|unexpected EOF'
 
@@ -14,7 +15,7 @@ gh_retry() {
   local d n rc delay=${GH_RETRY_DELAY:-2}
   d=$(mktemp -d "${TMPDIR:-/tmp}/gh_retry.XXXXXX") || return 1
   for n in 1 2 3 4; do
-    command gh "$@" > "$d/out" 2> "$d/err"; rc=$?
+    if command gh "$@" > "$d/out" 2> "$d/err"; then rc=0; else rc=$?; fi
     if [ "$rc" -eq 0 ] || [ "$n" -eq 4 ] || ! grep -qiE "$GH_RETRY_TRANSIENT" "$d/err"; then
       cat "$d/out"; cat "$d/err" >&2; rm -rf "$d"
       return "$rc"
