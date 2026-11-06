@@ -20,6 +20,9 @@
 # Usage: tests/gate_merge_test.sh
 
 set -uo pipefail
+# The fake gh below is repository o/r (its `gh repo view`). hack/ci_alarm takes
+# GH_REPO, then GITHUB_REPOSITORY, which every Actions job sets to the real one.
+unset GH_REPO GITHUB_REPOSITORY
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GATE=${GATE:-${ROOT}/hack/gate_merge.sh}
