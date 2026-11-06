@@ -29,7 +29,7 @@
       "docs": "https://github.com/ollama/ollama/blob/v0.40.13/openai/openai.go",
       "health": "/api/version",
       "ignore_eos": false,
-      "image": "ollama/ollama:0.40.13@sha256:b2f0122c476bc9fe7ce679d8bb4bd555351e25e2554eefb156f61cb0a89cf429",
+      "image": "ollama/ollama:0.40.15@sha256:0e59999e0e8f9fd4e704bd788a89b7e4cad399367fb1365f8c102ac662288761",
       "model": "qwen3:4b-q4_K_M",
       "model_revision": "registry.ollama.ai/library/qwen3:4b-q4_K_M manifest sha256:2bfd38a7daaf4b1037efe517ccb73d1a3bbd4822cf89f1a82be1569050a114e0, model layer sha256:163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5",
       "port": 11434,

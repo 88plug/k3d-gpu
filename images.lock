@@ -154,12 +154,12 @@
       "tag": "1.36"
     },
     {
-      "digest": "sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec",
+      "digest": "sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4",
       "name": "docker.io/library/busybox",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_DEVICE_TEST_IMAGE"
       ],
-      "tag": "1.37"
+      "tag": "1.38"
     },
     {
       "digest": "sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
