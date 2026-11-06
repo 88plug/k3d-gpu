@@ -502,6 +502,8 @@ fi
 # (hack/ci_alarm), so they are filed, each notifies the owner by a commit comment on
 # main's HEAD, the run sets the ci-alarm status there, and it exits 0. The dispatch
 # records live in the ci-status alarms: one re-dispatch each, none on the next run.
+# (Checks read store's output whole: under pipefail, `store X | grep -q` fails whenever grep
+# exits on its match before the writer is done, which a loaded runner makes likely.)
 store() {  # store FILE: FILE at ci-status's head in the fake's object store
     python3 - "$C/git.json" "$1" <<'PY'
 import json, sys
@@ -519,9 +521,9 @@ watch; rc1=$?
 watch; rc2=$?
 if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ ! -s "$C/issues.json" ] && [ "$(ndispatch)" = 3 ] \
    && [ "$(dispatched 'watchdog.yml ref=main')" = 1 ] && [ "$(dispatched 'build-and-push.yml ref=main release=0.1.80')" = 1 ] \
-   && store alarms.json | jq -r '."red:watchdog.yml".body' | grep -q 'watchdog:dispatched=4201' \
-   && store alarms.json | jq -r '."release:0.1.80".body' | grep -q 'watchdog:dispatched=0.1.80' \
-   && store ALARMS.md | grep -qF '## `red:watchdog.yml`: scheduled run failure' \
+   && grep -q 'watchdog:dispatched=4201' <<< "$(store alarms.json | jq -r '."red:watchdog.yml".body')" \
+   && grep -q 'watchdog:dispatched=0.1.80' <<< "$(store alarms.json | jq -r '."release:0.1.80".body')" \
+   && grep -qF '## `red:watchdog.yml`: scheduled run failure' <<< "$(store ALARMS.md)" \
    && jq -e --arg h "$HEAD_SHA" 'length >= 3 and all(.[]; .commit_id == $h and (.body | startswith("@88plug ci-alarm")))' \
         "$C/commit_comments.json" >/dev/null \
    && [ "$(jq -r '.[-1].sha' "$C/statuses.json")" = "$HEAD_SHA" ] && [ "$(jq -r '.[-1].state' "$C/statuses.json")" = failure ] \
@@ -535,7 +537,7 @@ setup store_green
 echo false > "$C/has_issues"
 cp "$T/store_red/git.json" "$C/git.json"
 watch; rc=$?
-if [ "$rc" -eq 0 ] && [ "$(store alarms.json | jq 'keys | length')" = 0 ] && store ALARMS.md | grep -q 'No open alarm' \
+if [ "$rc" -eq 0 ] && [ "$(store alarms.json | jq 'keys | length')" = 0 ] && grep -q 'No open alarm' <<< "$(store ALARMS.md)" \
    && [ "$(jq -r '.[-1].state' "$C/statuses.json")" = success ]; then
     ok "issues disabled: a healthy run closes the ci-status alarms and sets main's HEAD green"
 else

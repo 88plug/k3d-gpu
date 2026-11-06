@@ -207,9 +207,9 @@ GITHUB_STEP_SUMMARY="$FAKE_GH/summary" alarm open red:freshness.yml "scheduled r
 # shellcheck disable=SC2016 # the markdown backticks in the patterns are literal
 if [ "$rc" -eq 0 ] && [ ! -s "$FAKE_GH/issues.json" ] \
    && [ "$(branch alarms.json | jq -r '."red:freshness.yml".title')" = "scheduled run failure" ] \
-   && branch alarms.json | jq -r '."red:freshness.yml".body' | grep -q 'run 42280586432 failed' \
-   && branch ALARMS.md | grep -qF '## `red:freshness.yml`: scheduled run failure' \
-   && branch ALARMS.md | grep -q 'run 42280586432 failed' \
+   && grep -q 'run 42280586432 failed' <<< "$(branch alarms.json | jq -r '."red:freshness.yml".body')" \
+   && grep -qF '## `red:freshness.yml`: scheduled run failure' <<< "$(branch ALARMS.md)" \
+   && grep -q 'run 42280586432 failed' <<< "$(branch ALARMS.md)" \
    && [ "$(ncomments)" = 1 ] \
    && [ "$(jq -r '.[0].commit_id' "$FAKE_GH/commit_comments.json")" = "$FAKE_GH_HEAD" ] \
    && jq -r '.[0].body' "$FAKE_GH/commit_comments.json" | grep -q '^@88plug ci-alarm `red:freshness.yml`' \
@@ -236,7 +236,7 @@ same=$(head_of)
 alarm open red:freshness.yml "scheduled run failure" "$(body "run 42290000000 failed")"; rc2=$?
 if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$same" = "$before" ] && [ "$(head_of)" != "$before" ] \
    && [ "$(ncomments)" = 2 ] && jq -r '.[1].body' "$FAKE_GH/commit_comments.json" | grep -q 'run 42290000000 failed' \
-   && branch alarms.json | jq -r '."red:freshness.yml".body' | grep -q 'run 42290000000 failed' \
+   && grep -q 'run 42290000000 failed' <<< "$(branch alarms.json | jq -r '."red:freshness.yml".body')" \
    && [ "$(branch alarms.json | jq -r '."red:freshness.yml".opened_at')" = 2026-10-29T13:00:00Z ]; then
     ok "issues disabled: the same body within 24 h adds nothing; a changed body commits and comments"
 else
@@ -297,8 +297,8 @@ alarm close red:freshness.yml "again"; rc2=$?
 alarm close bot-pr-stuck "no PR is stuck"; rc3=$?
 alarm status; rc4=$?
 if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$rc3" -eq 0 ] && [ "$rc4" -eq 0 ] \
-   && [ "$(branch alarms.json | jq length)" = 0 ] && ! branch ALARMS.md | grep -q 'red:freshness' \
-   && branch ALARMS.md | grep -q 'No open alarm' \
+   && [ "$(branch alarms.json | jq length)" = 0 ] && ! grep -q 'red:freshness' <<< "$(branch ALARMS.md)" \
+   && grep -q 'No open alarm' <<< "$(branch ALARMS.md)" \
    && [ "$(jq -r '.[-1].state' "$FAKE_GH/statuses.json")" = success ] && [ "$(ncomments)" = 4 ]; then
     ok "issues disabled: close drops the alarm, a second close is a no-op, status turns green"
 else
