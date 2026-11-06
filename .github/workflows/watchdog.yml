@@ -3,8 +3,11 @@ name: Watchdog
 # hack/watchdog checks, hourly and after each listed workflow completes on main:
 # scheduled workflows that went red or stopped succeeding, disabled workflows,
 # main without CI or with red CI, release tags without their images, packages or
-# AUR update, and autobump PRs stuck without green CI. Each finding is one issue
-# labelled ci-alarm (hack/ci_alarm), assigned to the owner with an @mention; it
+# AUR update, and autobump PRs stuck without green CI. Each finding is one alarm
+# (hack/ci_alarm): an issue labelled ci-alarm, assigned to the owner with an
+# @mention; with Issues disabled (has_issues=false) an entry on branch ci-status
+# (ALARMS.md) and a commit comment on main that @mentions the owner, and every run
+# sets the ci-alarm commit status on main's HEAD (red while one is open). An alarm
 # closes itself once the finding clears. Dispatch with simulate_red=true to file
 # the `simulate` alarm; the next run without it closes it.
 #
@@ -37,7 +40,8 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write # the ci-status branch, and commit comments, when Issues are disabled
+  statuses: write # the ci-alarm commit status on main's HEAD
   issues: write
   actions: write
   pull-requests: read

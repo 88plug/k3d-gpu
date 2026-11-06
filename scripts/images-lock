@@ -489,17 +489,19 @@ def pins(root):
     return problems
 
 
-def repin(root, paths, exclude=(), write=True):
+def repin(root, paths, exclude=(), write=True, digest_of=None):
     """Rewrite each name:tag reference to name:tag@<the registry's digest>, except in
     files whose repo-relative path matches an exclude glob and in frozen() files.
     Returns [(path, line, written text, new text, name:tag, old digest or None)];
-    write=False changes nothing (drift)."""
+    write=False changes nothing (drift). digest_of(name, tag) resolves a digest
+    (default registry_digest)."""
     allow, digests, changes = read_allow(root), {}, []
+    digest_of = digest_of or registry_digest
 
     def resolved(ref):
         name, tag, _ = parse_ref(ref)
         if (name, tag) not in digests:
-            digests[(name, tag)] = registry_digest(name, tag)
+            digests[(name, tag)] = digest_of(name, tag)
         return digests[(name, tag)]
 
     for path in paths or scanned_files(root):

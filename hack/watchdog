@@ -3,7 +3,9 @@
 
 Each run (.github/workflows/watchdog.yml: hourly, and after every listed workflow
 completes on main) checks the repository and opens or closes one hack/ci_alarm
-issue per finding:
+alarm per finding (an issue; with Issues disabled an entry on branch ci-status,
+which notifies the owner by a commit comment, and the run ends by setting the
+ci-alarm commit status on main's HEAD from the open alarms):
 
   a. scheduled workflows  Every .github/workflows/*.yml with a cron. stale:<file>
                           when its last successful scheduled run is older than the
@@ -40,16 +42,17 @@ issue per finding:
   f. simulate_red         SIMULATE_RED=true opens simulate; a run without it closes it.
 
 A re-dispatch (a and d) is recorded in its alarm before it runs, and the record is
-what stops the next one. A run that cannot read or file the alarm (issues
-disabled, the open alarms could not be listed, the alarm write failed) therefore
-dispatches nothing; a dispatch that fails is not recorded, and the next run tries
-again. Recording after dispatching let every watchdog run that could not file
-alarms re-dispatch the red workflows, watchdog.yml among them, without end.
+what stops the next one. A run that cannot read or file the alarm (Issues turned
+off mid-run, the open alarms could not be listed, the alarm write failed)
+therefore dispatches nothing; a dispatch that fails is not recorded, and the next
+run tries again. Recording after dispatching let every watchdog run that could
+not file alarms re-dispatch the red workflows, watchdog.yml among them, without end.
 
 A failed gh, git, registry or AUR call is collected and filed as watchdog-error
 with its text (the other checks still run); a run with no error closes it. Exit 0
-unless an alarm could not be filed (the repository has issues disabled, or
-ci_alarm failed for watchdog-error itself): then ::error annotations and exit 1.
+unless an alarm could not be filed (ci_alarm exit 3, or a failure filing
+watchdog-error itself) or the ci-alarm status could not be set: then ::error
+annotations and exit 1.
 
 Usage: hack/watchdog [--root DIR] [--list-scheduled]
   --root DIR        the checkout to read workflows and aur-v* tags from (default:
@@ -224,29 +227,31 @@ def marker(body, name):
 
 
 class Alarms:
-    """hack/ci_alarm, plus the open alarms (key -> issue body) read once per run."""
+    """hack/ci_alarm, plus the open alarms (key -> body) read once per run through
+    `ci_alarm list --json` (the issues, or the ci-status branch with Issues off)."""
 
-    def __init__(self, gh, script):
+    def __init__(self, script):
         self.script = script
         self.open = None  # None: unknown (the listing failed)
         self.disabled = False
         self.undelivered = []
         self.opened, self.closed = [], []
+        self.list_error = None
+        p = self._call("list", "--json", echo=False)
         try:
-            issues = gh.json("issue", "list", "--label", "ci-alarm", "--state", "open", "--limit", "200",
-                             "--json", "number,title,body") or []
+            if p.returncode != 0:
+                raise ToolError("ci_alarm list --json: exit %d: %s" % (p.returncode, p.stderr.strip()[-800:]))
             self.open = {}
-            for it in issues:
+            for it in json.loads(p.stdout or "[]"):
                 m = re.match(r"^\[ci-alarm\] (\S+): ", it["title"])
                 if m:
                     self.open.setdefault(m.group(1), it.get("body") or "")
-        except ToolError as e:
-            if "disabled issues" in str(e).lower():
+        except (ToolError, ValueError, KeyError, TypeError) as e:
+            self.open = None
+            if p.returncode == 3:  # Issues turned off since the repository was read
                 self.disabled = True
                 self.open = {}
-            self.list_error = e
-        else:
-            self.list_error = None
+            self.list_error = e if isinstance(e, ToolError) else ToolError("ci_alarm list --json: %s" % e)
 
     def body(self, key):
         return (self.open or {}).get(key)
@@ -254,11 +259,20 @@ class Alarms:
     def keys(self, prefix):
         return [k for k in (self.open or {}) if k.startswith(prefix)]
 
-    def _call(self, *args):
+    def _call(self, *args, echo=True):
         p = subprocess.run([self.script, *args], capture_output=True, text=True)
-        sys.stdout.write(p.stdout)
+        if echo:
+            sys.stdout.write(p.stdout)
         sys.stderr.write(p.stderr)
         return p
+
+    def status(self):
+        """The ci-alarm commit status on main's HEAD (ci-status only; with Issues on, nothing)."""
+        if self.disabled:
+            return
+        p = self._call("status")
+        if p.returncode != 0:
+            raise ToolError("ci_alarm status: exit %d: %s" % (p.returncode, p.stderr.strip()[-400:]))
 
     def raise_(self, key, title, body):
         with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
@@ -293,7 +307,7 @@ class Watchdog:
         self.root, self.repo, self.now = root, repo, now
         self.gh = Gh(repo)
         self.errors = []
-        self.alarms = Alarms(self.gh, os.environ.get("WATCHDOG_ALARM") or os.path.join(HERE, "ci_alarm"))
+        self.alarms = Alarms(os.environ.get("WATCHDOG_ALARM") or os.path.join(HERE, "ci_alarm"))
         if self.alarms.list_error:
             self.errors.append("listing open alarms: %s" % self.alarms.list_error)
         self._registry = None
@@ -654,10 +668,15 @@ class Watchdog:
                 fatal = True
 
         if self.alarms.undelivered:
-            print("::error title=watchdog::%d alarm(s) not filed (%s): this repository has issues disabled; "
-                  "enable Issues in Settings > General > Features" % (len(self.alarms.undelivered),
-                                                                     ", ".join(self.alarms.undelivered)),
+            print("::error title=watchdog::%d alarm(s) not filed (%s): the issue calls said Issues are disabled; "
+                  "the next run files them on branch ci-status" % (len(self.alarms.undelivered),
+                                                                  ", ".join(self.alarms.undelivered)),
                   file=sys.stderr)
+            fatal = True
+        try:
+            self.alarms.status()
+        except ToolError as e:
+            print("::error title=watchdog::cannot set the ci-alarm status on main: %s" % e, file=sys.stderr)
             fatal = True
         self.summary()
         return 1 if fatal else 0

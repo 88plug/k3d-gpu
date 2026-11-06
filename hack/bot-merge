@@ -31,8 +31,9 @@
 #      title names the group (a title naming no group counts for every group), and
 #      never while such a freshness run is queued or running.
 #   e. Circuit breaker: the newest completed ci.yml run on main (push or dispatch)
-#      succeeded, and no open ci-alarm issue's key starts with ci-main, ci-missing,
-#      release: or red:canary.
+#      succeeded, and no open alarm's key starts with ci-main, ci-missing, release: or
+#      red:canary (hack/ci_alarm list --json: the ci-alarm issues, or with Issues
+#      disabled the alarms on branch ci-status).
 #   f. Fewer than MAX_BOT_MERGES_PER_DAY (default 6) bot merges on main today (UTC).
 #      A PR the policy marks urgent is exempt.
 # Urgent PRs merge first, then the oldest. The merge is a squash pinned with
@@ -94,7 +95,7 @@ git fetch -q --force origin '+refs/heads/*:refs/remotes/origin/*' '+refs/tags/au
 # breaker: why merging stops for every PR (empty when closed).
 breaker() {
   local ci alarms
-  ci=$(gh run list -w ci.yml -b main -s completed -L 20 --json event,conclusion,url,createdAt \
+  ci=$(gh_retry run list -w ci.yml -b main -s completed -L 20 --json event,conclusion,url,createdAt \
        | jq -r '[.[] | select(.event == "push" or .event == "workflow_dispatch")] | max_by(.createdAt) // empty
                 | "\(.conclusion) \(.url)"') || { echo "cannot read ci.yml runs on main"; return; }
   case $ci in
@@ -104,7 +105,8 @@ breaker() {
   esac
   alarms=$(open_alarms) || { echo "cannot read ci-alarm issues"; return; }
   jq -r '[.[] | (.title | capture("^\\[ci-alarm\\] (?<k>.+?): ") | .k) as $k
-          | select($k | test("^(ci-main|ci-missing|release:|red:canary)"; "i")) | "\($k) (#\(.number))"]
+          | select($k | test("^(ci-main|ci-missing|release:|red:canary)"; "i"))
+          | "\($k) (\(if .number then "#\(.number)" else .url end))"]
          | if length > 0 then "open alarm " + join(", ") else empty end' <<<"$alarms"
 }
 BREAKER=$(breaker)
@@ -184,7 +186,7 @@ canary() {
 }
 # ci_url SHA BRANCH: the newest successful ci.yml run that ci_status counts.
 ci_url() {
-  gh run list -w ci.yml -c "$1" -L 100 --json event,conclusion,headBranch,createdAt,url \
+  gh_retry run list -w ci.yml -c "$1" -L 100 --json event,conclusion,headBranch,createdAt,url \
     | jq -r --arg b "$2" '[.[] | select(.conclusion == "success")
         | select(.event == "pull_request" or (.event == "workflow_dispatch" and .headBranch == $b))]
         | max_by(.createdAt) // empty | .url'
@@ -270,6 +272,7 @@ while read -r c <&3; do
     green) ;;
     pending) why "CI is pending at this head";;
     failed) why "CI failed at this head";;
+    error) why "cannot read the ci.yml runs at this head"; RC=1;;
     *) why "no ci.yml run at this head yet (bot-ci-dispatch starts one)";;
   esac
 

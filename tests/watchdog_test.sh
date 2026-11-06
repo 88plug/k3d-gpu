@@ -23,7 +23,7 @@ fail() { FAILS=$((FAILS + 1)); echo "FAIL $1"; }
 mkdir -p "$T/bin"
 printf '#!/bin/sh\nexec python3 %q "$@"\n' "${ROOT}/tests/ops/fake_gh.py" > "$T/bin/gh"
 chmod +x "$T/bin/gh"
-export PATH="$T/bin:$PATH" GH_REPO=88plug/k3d-gpu
+export PATH="$T/bin:$PATH" GH_REPO=88plug/k3d-gpu GH_RETRY_DELAY=0
 export WATCHDOG_IMAGES_LOCK="${ROOT}/tests/ops/stub_registry.py"
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 unset GITHUB_STEP_SUMMARY SIMULATE_RED ALARM_OWNER
@@ -485,7 +485,7 @@ fi
 # records survive, so the run after it dispatches nothing new.
 redsetup listfail
 watch; rc1=$?
-route '^issue list .*--json number,title,body$' - 1 'HTTP 502: Bad Gateway (https://api.github.com/graphql)'
+route '^issue list .*--json number,title,body,url,labels$' - 1 'HTTP 502: Bad Gateway (https://api.github.com/graphql)'
 watch; rc2=$?
 b2=$(jq -r .body <<< "$(issue red:watchdog.yml)")
 sed -i '1d' "$C/routes.tsv"
@@ -496,6 +496,52 @@ if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ "$rc3" -eq 0 ] && [ "$(ndispatch)" 
     ok "a run that cannot list the alarms keeps their dispatch records: no second dispatch"
 else
     rc=$rc3; fail "listing failure: rc1=$rc1 rc2=$rc2 $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null)"
+fi
+
+# 13d. has_issues=false (this repository today): the alarms go to branch ci-status
+# (hack/ci_alarm), so they are filed, each notifies the owner by a commit comment on
+# main's HEAD, the run sets the ci-alarm status there, and it exits 0. The dispatch
+# records live in the ci-status alarms: one re-dispatch each, none on the next run.
+# (Checks read store's output whole: under pipefail, `store X | grep -q` fails whenever grep
+# exits on its match before the writer is done, which a loaded runner makes likely.)
+store() {  # store FILE: FILE at ci-status's head in the fake's object store
+    python3 - "$C/git.json" "$1" <<'PY'
+import json, sys
+try:
+    g = json.load(open(sys.argv[1]))
+except FileNotFoundError:
+    sys.exit(0)
+c = g["commits"][g["refs"]["heads/ci-status"]]
+sys.stdout.write(g["trees"][c["tree"]].get(sys.argv[2], ""))
+PY
+}
+redsetup store_red
+echo false > "$C/has_issues"
+watch; rc1=$?
+watch; rc2=$?
+if [ "$rc1" -eq 0 ] && [ "$rc2" -eq 0 ] && [ ! -s "$C/issues.json" ] && [ "$(ndispatch)" = 3 ] \
+   && [ "$(dispatched 'watchdog.yml ref=main')" = 1 ] && [ "$(dispatched 'build-and-push.yml ref=main release=0.1.80')" = 1 ] \
+   && grep -q 'watchdog:dispatched=4201' <<< "$(store alarms.json | jq -r '."red:watchdog.yml".body')" \
+   && grep -q 'watchdog:dispatched=0.1.80' <<< "$(store alarms.json | jq -r '."release:0.1.80".body')" \
+   && grep -qF '## `red:watchdog.yml`: scheduled run failure' <<< "$(store ALARMS.md)" \
+   && jq -e --arg h "$HEAD_SHA" 'length >= 3 and all(.[]; .commit_id == $h and (.body | startswith("@88plug ci-alarm")))' \
+        "$C/commit_comments.json" >/dev/null \
+   && [ "$(jq -r '.[-1].sha' "$C/statuses.json")" = "$HEAD_SHA" ] && [ "$(jq -r '.[-1].state' "$C/statuses.json")" = failure ] \
+   && [ "$(jq -r '.[-1].context' "$C/statuses.json")" = ci-alarm ] && ! grep -q 'not filed' "$C/out"; then
+    ok "issues disabled: alarms on ci-status, owner notified by commit comment, main's HEAD red, one re-dispatch each"
+else
+    rc=$rc2; fail "issues disabled, store: rc1=$rc1 $(why) dispatched=$(tr '\n' ',' < "$C/dispatches.log" 2>/dev/null) comments=$(jq length "$C/commit_comments.json" 2>/dev/null) status=$(jq -c '.[-1]' "$C/statuses.json" 2>/dev/null)"
+fi
+# ...and once everything is green the alarms close and main's HEAD turns green.
+setup store_green
+echo false > "$C/has_issues"
+cp "$T/store_red/git.json" "$C/git.json"
+watch; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(store alarms.json | jq 'keys | length')" = 0 ] && grep -q 'No open alarm' <<< "$(store ALARMS.md)" \
+   && [ "$(jq -r '.[-1].state' "$C/statuses.json")" = success ]; then
+    ok "issues disabled: a healthy run closes the ci-status alarms and sets main's HEAD green"
+else
+    fail "issues disabled, green: $(why) alarms=$(store alarms.json | jq -c 'keys') status=$(jq -c '.[-1]' "$C/statuses.json" 2>/dev/null)"
 fi
 
 # 13c. An autobump/* branch on a fork is not a bot PR: a fork could otherwise hold

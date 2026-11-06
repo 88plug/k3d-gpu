@@ -102,13 +102,15 @@ say(set(listed) == want and len(listed) == len(want) and set(listed) <= names,
     "listed %s, want %s, no such workflow %s" % (sorted(listed), sorted(want), sorted(set(listed) - names)))
 job = (wd.get("jobs") or {}).get("watchdog") or {}
 perms = wd.get("permissions") or {}
-say(perms.get("issues") == "write" and perms.get("actions") == "write" and perms.get("contents") == "read"
+say(perms.get("issues") == "write" and perms.get("actions") == "write" and perms.get("contents") == "write"
+    and perms.get("statuses") == "write"
     and wd.get("concurrency") == {"group": "watchdog", "cancel-in-progress": False}
     and "head_branch == 'main'" in str(job.get("if", ""))
     and (on(wd).get("workflow_run") or {}).get("branches") == ["main"]
     and on(wd).get("schedule") == [{"cron": "47 * * * *"}]
     and ((on(wd).get("workflow_dispatch") or {}).get("inputs") or {}).get("simulate_red", {}).get("type") == "boolean",
-    "watchdog.yml: hourly at :47, simulate_red, issues+actions write, one queue, workflow_run on main only")
+    "watchdog.yml: hourly at :47, simulate_red, issues+actions+contents+statuses write, one queue, "
+    "workflow_run on main only")
 # workflow_run's branches: filter matches a fork's branch named main too (a fork PR
 # from <fork>:main), so the job also requires the run to come from this repository.
 say("github.event.workflow_run.head_repository.full_name == github.repository" in str(job.get("if", "")),

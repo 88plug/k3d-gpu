@@ -19,11 +19,13 @@
 # by workflow_dispatch instead; once that run is green, the held entries of 'CI'
 # and 'Auto-merge Dependabot PRs' no longer block. Held runs alone still exit 1.
 #
-# Alarms: the gate first prints every open ci-alarm issue. While any of them
-# lacks the label alarm-ack, it refuses (exit 4) a PR that changes .github/ or a
-# shipped path (see gated_paths in gate_lib.sh), at the start and again right
-# before merging; a PR that changes only EXPERIMENTS.md, docs/, bench/ or tests/
-# is never refused. Read the alarm, then ack it: gh issue edit N --add-label alarm-ack.
+# Alarms: the gate first prints every open alarm (hack/ci_alarm: a ci-alarm issue,
+# or with Issues disabled an entry on branch ci-status). While any of them is not
+# acked, it refuses (exit 4) a PR that changes .github/ or a shipped path (see
+# gated_paths in gate_lib.sh), at the start and again right before merging; a PR
+# that changes only EXPERIMENTS.md, docs/, bench/ or tests/ is never refused. Read
+# the alarm, then ack it: gh issue edit N --add-label alarm-ack (an issue), or
+# hack/ci_alarm ack KEY (on ci-status).
 #
 # Derived file: console/ledger-rules.json is EXPERIMENTS.md's rule rows as packages
 # ship them. A ledger-only PR (or base) merges without a CI re-run, so the gate
@@ -77,8 +79,8 @@ alarm_check() {
     rm -f "$e"; return 0
   fi
   rm -f "$e"
-  [ "${1:-}" = list ] && jq -r '.[] | "open ci-alarm #\(.number): \(.title) \(.url)\(if any(.labels[]; .name == "alarm-ack") then " (acked)" else " (NOT acked)" end)"' <<<"$a"
-  un=$(jq -r '.[] | select(any(.labels[]; .name == "alarm-ack") | not) | "  #\(.number) \(.title) \(.url)"' <<<"$a")
+  [ "${1:-}" = list ] && jq -r '.[] | "open ci-alarm \(if .number then "#\(.number): " else "" end)\(.title) \(.url)\(if any(.labels[]; .name == "alarm-ack") then " (acked)" else " (NOT acked)" end)"' <<<"$a"
+  un=$(jq -r '.[] | select(any(.labels[]; .name == "alarm-ack") | not) | "  \(if .number then "#\(.number) " else "" end)\(.title) \(.url)"' <<<"$a")
   [ -n "$un" ] || return 0
   if paths=$(gh api --paginate "repos/{owner}/{repo}/pulls/$pr/files" -q '.[].filename' 2>/dev/null); then
     gated=$(gated_paths <<<"$paths")
@@ -88,7 +90,9 @@ alarm_check() {
     echo "PR$pr REFUSED: its changed files could not be listed, and these ci-alarm issues are open and not acked:"
   fi
   echo "$un"
-  jq -r '.[] | select(any(.labels[]; .name == "alarm-ack") | not) | "Read #\(.number), then ack it: gh issue edit \(.number) --add-label alarm-ack"' <<<"$a"
+  jq -r '.[] | select(any(.labels[]; .name == "alarm-ack") | not)
+         | if .number then "Read #\(.number), then ack it: gh issue edit \(.number) --add-label alarm-ack"
+           else "Read \(.url), then ack it: hack/ci_alarm ack \(.title | capture("^\\[ci-alarm\\] (?<k>[^ ]+): ").k)" end' <<<"$a"
   exit 4
 }
 alarm_check list

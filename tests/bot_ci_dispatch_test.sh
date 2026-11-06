@@ -5,8 +5,11 @@
 # -e event, -L count, newest first). `gh workflow run` appends a queued
 # workflow_dispatch run at the branch's head, unless the branch is listed in
 # no_dispatch (its workflow file lacks the trigger: HTTP 422) or dispatch_fail
-# exists (HTTP 500). `gh run rerun ID --failed` queues attempt 2 of that run.
-# Every dispatch and rerun is logged to actions.
+# exists (HTTP 500). dispatch_fail_n (a count) fails that many dispatches with an
+# HTTP 502 first; dispatch_lands_502 queues the run and still answers HTTP 502;
+# dispatch_no_run accepts the dispatch and queues nothing. runlist_fail_n fails
+# that many `gh run list` calls with an HTTP 502. `gh run rerun ID --failed`
+# queues attempt 2 of that run. Every dispatch and rerun is logged to actions.
 #
 # Usage: tests/bot_ci_dispatch_test.sh
 
@@ -25,9 +28,12 @@ cat > "$T/bin/gh" <<'STUB'
 #!/usr/bin/env bash
 F=$FIX
 echo "gh $*" >> "$F/calls"
+# countdown NAME: true (and one less) while the count in $F/NAME is above 0.
+countdown() { local n; n=$(cat "$F/$1" 2>/dev/null || echo 0); [ "$n" -gt 0 ] || return 1; echo $((n - 1)) > "$F/$1"; }
 case "$1 $2" in
   "pr list") cat "$F/prs.json"; exit 0;;
   "run list")
+    countdown runlist_fail_n && { echo "HTTP 502: Server Error (https://api.github.com/repos/o/r/actions/runs)" >&2; exit 1; }
     shift 2; wf= c= b= e= q= L=1000
     while [ $# -gt 0 ]; do case $1 in
       -w|--workflow) wf=$2; shift 2;; -c|--commit) c=$2; shift 2;; -b|--branch) b=$2; shift 2;;
@@ -47,6 +53,8 @@ case "$1 $2" in
       exit 1
     fi
     [ -f "$F/dispatch_fail" ] && { echo "could not create workflow dispatch event: HTTP 500: Server Error" >&2; exit 1; }
+    countdown dispatch_fail_n && { echo "could not create workflow dispatch event: HTTP 502: Bad Gateway" >&2; exit 1; }
+    [ -f "$F/dispatch_no_run" ] && { echo "dispatch $wf $ref" >> "$F/actions"; exit 0; }
     sha=$(jq -r --arg b "$ref" '[.[] | select(.headRefName == $b)][0].headRefOid // "unknown"' "$F/prs.json")
     n=$(( $(jq length "$F/runs.json") + 900 ))
     jq --arg w "$wf" --arg b "$ref" --arg s "$sha" --argjson id "$n" \
@@ -54,6 +62,7 @@ case "$1 $2" in
              status: "queued", conclusion: "", attempt: 1, createdAt: "2026-10-29T23:00:00Z"}]' \
       "$F/runs.json" > "$F/runs.tmp" && mv "$F/runs.tmp" "$F/runs.json"
     echo "dispatch $wf $ref" >> "$F/actions"
+    [ -f "$F/dispatch_lands_502" ] && { echo "could not create workflow dispatch event: HTTP 502: Bad Gateway" >&2; exit 1; }
     exit 0;;
   "run rerun")
     id=$3; echo "rerun $id ${*:4}" >> "$F/actions"
@@ -163,6 +172,33 @@ bcd
 if [ "$RC" -eq 1 ] && grep -q 'HTTP 500' <<<"$OUT"; then ok "dispatch_error: exit 1"
 else fail "dispatch_error: rc=$RC out=$(tr '\n' ';' <<<"$OUT")"; fi
 
+# 6b. GitHub's 5xx. A dispatch answered HTTP 502 that queued nothing is sent again;
+#     one answered HTTP 502 whose run is listed at the head is not sent twice; a run
+#     list answered HTTP 502 is read again. Each ends with the run the merge job reads.
+fixture dispatch_502_once "[$(pr 1 autobump/a a111)]" '[]'; echo 1 > "$FIX/dispatch_fail_n"
+bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && grep -q '#1 autobump/a.*dispatched ci.yml (run 900)' <<<"$OUT"; then
+  ok "dispatch_502_once: sent again, one run, confirmed at the head"
+else fail "dispatch_502_once: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+fixture dispatch_landed_502 "[$(pr 1 autobump/a a111)]" '[]'; touch "$FIX/dispatch_lands_502"
+bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && grep -q '#1 autobump/a.*dispatched ci.yml (run 900)' <<<"$OUT"; then
+  ok "dispatch_landed_502: the run it queued is found, no second dispatch"
+else fail "dispatch_landed_502: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+fixture runlist_502 "[$(pr 1 autobump/a a111),$(pr 2 autobump/b b222)]" "[$(run 7 ci.yml workflow_dispatch autobump/b b222 completed success)]"
+echo 2 > "$FIX/runlist_fail_n"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a && grep -q '#2 autobump/b.*run 7 at the head is completed/success' <<<"$OUT"; then
+  ok "runlist_502: the run lists are read again, the decisions stand"
+else fail "runlist_502: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a dispatch GitHub accepted whose run never shows at the head: the merge job would
+# read no CI there, so it is an error (exit 1), named.
+fixture dispatch_unlisted "[$(pr 1 autobump/a a111)]" '[]'; touch "$FIX/dispatch_no_run"
+bcd
+if [ "$RC" -eq 1 ] && [ "$(acts dispatch)" -eq 1 ] && grep -q '#1 autobump/a a111: error: dispatched ci.yml, but no ci.yml run at a111 is listed' <<<"$OUT"; then
+  ok "dispatch_unlisted: exit 1, the missing run named"
+else fail "dispatch_unlisted: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+
 # 7. --branch limits it to one PR.
 fixture one_branch "[$(pr 1 autobump/a a111),$(pr 2 autobump/b b222)]" '[]'
 BOT_CI_MAX_INFLIGHT=10 bcd --branch autobump/b
@@ -186,7 +222,7 @@ canary_repo() {
     echo base > f; git add f; git commit -qm base; git remote add origin "$FIX/origin.git"; git push -q origin main
     for b in a b c; do git switch -qc "autobump/$b" main; echo "$b" > f; git commit -qam "$b"; git push -q origin "autobump/$b"; done
     git switch -q main; git fetch -q origin
-    mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch
+    mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch; cp "$ROOT/hack/gh_retry.sh" hack/
     printf '%s\n' '#!/usr/bin/env bash' \
       '[ "$1" = policy ] && git rev-parse -q --verify "$2^{commit}" >/dev/null && git cat-file -e "$3^{commit}" || exit 1' \
       'git merge-base --is-ancestor "$2" "$3" || { echo "pins: $2 is not an ancestor of $3" >&2; exit 1; }' \

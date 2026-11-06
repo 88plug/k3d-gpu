@@ -25,6 +25,7 @@ docker-suffix.
 """
 
 import fnmatch
+import itertools
 import os
 import re
 import string
@@ -171,11 +172,24 @@ def _values_regex(name, tmpl, patterns=None):
                       + DIGEST + r")", re.M)
 
 
+# A backreference (?P=name) in a site regex: the same value written again.
+BACKREF_RE = re.compile(r"(?<!\\)\(\?P=([A-Za-z_][A-Za-z0-9_]*)\)")
+BACKREF_GROUP = "%s__ref%d"
+
+
+def _capture_backrefs(regex):
+    """regex with each (?P=name) wrapped in a group of its own, name__refN, so that the
+    repeated value is a span too and a bump moves every copy of it."""
+    n = itertools.count(1)
+    return BACKREF_RE.sub(lambda m: "(?P<%s>%s)" % (BACKREF_GROUP % (m.group(1), next(n)), m.group(0)), regex)
+
+
 def site_regex(site, patterns=None):
-    """(compiled regex, {group: key}) for a site; patterns: key_patterns(pin)."""
+    """(compiled regex, {group: key}) for a site; patterns: key_patterns(pin). A
+    regex site's backreference (?P=v) is a group of key v as well."""
     if "regex" in site:
-        rx = re.compile(site["regex"], re.M)
-        return rx, {g: g for g in rx.groupindex}
+        rx = re.compile(_capture_backrefs(site["regex"]), re.M)
+        return rx, {g: re.sub(r"__ref\d+$", "", g) for g in rx.groupindex}
     key = site.get("key", "v")
     if "var" in site:
         rx = re.compile(r"""^[ \t]*(?:export[ \t]+|local[ \t]+|readonly[ \t]+)?%s=["']?(?P<%s>[^"'\s;]+)["']?"""
@@ -223,6 +237,9 @@ def locate(tree, pin):
             for g, key in groups.items():
                 if m.group(g) is None:
                     continue
+                if g != key and any(o != g and m.group(o) is not None and m.start(o) <= m.start(g)
+                                    and m.end(g) <= m.end(o) for o in groups):
+                    continue  # a backreference inside another group moves with that group
                 spans.append(Span(site["file"], m.start(g), m.end(g), key, m.group(g), site,
                                   image=site.get("ref"), tag_tmpl=site.get("tag", "{v}") if "ref" in site else None,
                                   match=(m.start(), m.end())))

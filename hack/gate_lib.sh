@@ -10,14 +10,18 @@
 #                      workflowName,status,conclusion,createdAt` (takes --argjson
 #                      held_ok BOOL): "<green|pending|failed> <bad names>", the latest
 #                      run per workflow.
-#   ci_status SHA BR   green | pending | failed | none: ci.yml at SHA, through a
-#                      pull_request run or a workflow_dispatch run on branch BR.
+#   ci_status SHA BR   green | pending | failed | none | error: ci.yml at SHA, through a
+#                      pull_request run or a workflow_dispatch run on branch BR; error
+#                      when the runs cannot be read (gh_retry retried a 5xx first).
 #   ci_eval SHA BR     "<ci_status> <held_ok> <latest run>", held_ok as below.
 #   base_ok SHA        main is an ancestor of SHA, or main moved only in the ledger or
 #                      by release-only bot commits, or SHA changes only the ledger.
 #   rules_stale SHA    the tree main + SHA would merge to carries a
 #                      console/ledger-rules.json its EXPERIMENTS.md does not generate.
-#   open_alarms        the open ci-alarm issues as a JSON array (gh issue list).
+#   open_alarms        the open alarms as a JSON array: hack/ci_alarm list --json (the
+#                      ci-alarm issues, or with Issues disabled the alarms on branch
+#                      ci-status), else gh issue list when ci_alarm is not beside this file.
+#   gh_retry           hack/gh_retry.sh beside this file (gh again on a 5xx), else plain gh.
 #   gated_paths        reads paths on stdin, prints those a merge must not ship while
 #                      an alarm is open and not acked (see below).
 #
@@ -29,6 +33,12 @@
 # entry stays terminal, as for a fork PR.
 
 GATE_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [ -f "$GATE_LIB_DIR/gh_retry.sh" ]; then
+  # shellcheck source=hack/gh_retry.sh
+  . "$GATE_LIB_DIR/gh_retry.sh"
+else
+  gh_retry() { gh "$@"; }
+fi
 # The workflows whose held pull_request runs a green dispatched ci.yml run stands in for.
 GATE_HELD_WORKFLOWS='["CI", "Auto-merge Dependabot PRs"]'
 
@@ -78,8 +88,9 @@ CI_EVAL='def ok: .conclusion == "success";
   | "\($s) \($held_ok) \($show.via | word):\($show.status | word)/\($show.conclusion | word)"'
 ci_eval() {
   local p d
-  p=$(gh run list -w ci.yml -c "$1" -e pull_request -L 100 --json event,headBranch,status,conclusion,createdAt 2>/dev/null) || p=
-  d=$(gh run list -w ci.yml -c "$1" -e workflow_dispatch -b "$2" -L 100 --json event,headBranch,status,conclusion,createdAt 2>/dev/null) || d=
+  p=$(gh_retry run list -w ci.yml -c "$1" -e pull_request -L 100 --json event,headBranch,status,conclusion,createdAt 2>/dev/null) \
+    && d=$(gh_retry run list -w ci.yml -c "$1" -e workflow_dispatch -b "$2" -L 100 --json event,headBranch,status,conclusion,createdAt 2>/dev/null) \
+    || { echo "error false -"; return 0; }
   jq -rn --arg b "$2" --argjson p "${p:-[]}" --argjson d "${d:-[]}" "$CI_EVAL"
 }
 ci_status() { local s; read -r s _ <<<"$(ci_eval "$1" "$2")"; echo "${s:-none}"; }
@@ -146,10 +157,16 @@ rules_stale() {
   return "$rc"
 }
 
-# open_alarms: the open ci-alarm issues, [{number, title, url, labels}]; fails when gh does.
+# open_alarms: the open alarms, [{number, title, url, labels}] (number null for an alarm
+# on branch ci-status); fails when the read does.
 open_alarms() {
-  local a
-  a=$(gh issue list --label ci-alarm --state open --limit 100 --json number,title,url,labels) || return 1
+  local a ca
+  for ca in "$GATE_LIB_DIR/ci_alarm" hack/ci_alarm ""; do [ -x "$ca" ] && break; done
+  if [ -n "$ca" ]; then
+    a=$("$ca" list --json) || return 1
+  else
+    a=$(gh_retry issue list --label ci-alarm --state open --limit 100 --json number,title,url,labels) || return 1
+  fi
   jq -c 'if type == "array" then . else error("not an array") end' <<<"${a:-[]}"
 }
 # gated_paths: of the paths on stdin, print those a merge must not ship while an
