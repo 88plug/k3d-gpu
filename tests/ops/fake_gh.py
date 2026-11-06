@@ -25,6 +25,7 @@ directory $FAKE_GH:
   ref_race     N: the next N ref updates find the branch moved by another writer
                (a foreign commit lands first), so they fail as GitHub's do (HTTP 422)
   commit_comments.json, statuses.json   what the commit comment and status calls posted
+               (api repos/R/commits/SHA/status combines statuses.json: the newest per context)
 
 Built in (shapes as gh 2.88 prints them for --json):
   api repos/R                      {full_name, has_issues, default_branch: main}
@@ -254,6 +255,17 @@ def api(args):
         st.append(dict(fields, sha=rest[1], created_at=NOW))
         save("statuses.json", st)
         print(json.dumps({"state": fields.get("state")}))
+        return 0
+    if rest[:1] == ["commits"] and rest[2:] == ["status"] and method == "GET":
+        latest = {}  # the newest status of each context at the SHA, as GitHub combines them
+        for s in load("statuses.json", []):
+            if s["sha"] == rest[1]:
+                latest[s.get("context", "default")] = s
+        sts = [{"context": c, "state": s.get("state"), "description": s.get("description"),
+                "target_url": s.get("target_url")} for c, s in latest.items()]
+        state = ("failure" if any(s["state"] in ("failure", "error") for s in sts)
+                 else "pending" if not sts or any(s["state"] == "pending" for s in sts) else "success")
+        print(json.dumps({"sha": rest[1], "state": state, "statuses": sts, "total_count": len(sts)}))
         return 0
     return git_api(method, rest, body)
 

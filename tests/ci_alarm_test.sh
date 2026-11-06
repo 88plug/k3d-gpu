@@ -281,6 +281,15 @@ if [ "$rc" -eq 0 ] && [ "$(jq -r .sha <<< "$st")" = "$FAKE_GH_HEAD" ] && [ "$(jq
 else
     fail "store status: rc=$rc status=$st err=$(cat "$FAKE_GH/err")"
 fi
+# 16b. GitHub keeps at most 1000 statuses per SHA and context, and the Watchdog sets it
+#      every run while main stays put: the same state and text again posts nothing.
+n_before=$(jq length "$FAKE_GH/statuses.json")
+alarm status; rc=$?
+if [ "$rc" -eq 0 ] && [ "$(jq length "$FAKE_GH/statuses.json")" = "$n_before" ] && grep -q 'unchanged' "$FAKE_GH/out"; then
+    ok "issues disabled: status unchanged on main's HEAD posts nothing"
+else
+    fail "store status again: rc=$rc posted=$(( $(jq length "$FAKE_GH/statuses.json") - n_before )) out=$(cat "$FAKE_GH/out") err=$(cat "$FAKE_GH/err")"
+fi
 
 # 17. close drops the key from the branch; a second close is a no-op; nothing open: status green.
 alarm close red:freshness.yml "the scheduled run is green"; rc1=$?

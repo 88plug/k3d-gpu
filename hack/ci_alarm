@@ -28,7 +28,8 @@
 #   hack/ci_alarm status
 #       ci-status: the commit status `ci-alarm` on main's HEAD: failure naming the
 #       open keys, success when none is open (the Watchdog sets it every run, so
-#       main's newest commit carries it). Issues: nothing to do.
+#       main's newest commit carries it; a status equal to the latest one there is
+#       not posted again). Issues: nothing to do.
 #
 # A key is [A-Za-z0-9._:/@+-]+ (no spaces), e.g. red:build-and-push.yml,
 # release:0.1.76, watchdog-error. The repository is GH_REPO, else
@@ -295,6 +296,16 @@ store_status() {
         [ "${#desc}" -le 140 ] || desc="${desc:0:137}..."
     else
         state=success desc="no open ci-alarm"
+    fi
+    # GitHub keeps at most 1000 statuses per SHA and context, and main can stay at one
+    # commit for weeks: post only when the latest ci-alarm status there differs. A
+    # failed read posts.
+    if gh_retry api "repos/$REPO/commits/$sha/status" > "$TMP/combined.json" 2>/dev/null \
+       && jq -e --arg s "$state" --arg d "$desc" --arg u "$(page_url)" \
+            'any(.statuses[]?; .context == "ci-alarm" and .state == $s and .description == $d and .target_url == $u)' \
+            "$TMP/combined.json" >/dev/null; then
+        echo "ci_alarm: status $state on $sha unchanged: $desc"
+        return 0
     fi
     gh_run api -X POST "repos/$REPO/statuses/$sha" -f state="$state" -f context=ci-alarm \
         -f description="$desc" -f target_url="$(page_url)" >/dev/null
