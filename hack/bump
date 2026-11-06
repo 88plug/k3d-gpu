@@ -284,9 +284,11 @@ def hook_repin(root, ctx):
     il = oci.images_lock()
     files = [p for p in il.scanned_files(root) if path_writable(root, p) and not registry.is_test_input(p)
              and classes.effective(root, p) == "ours"]
-    changes = il.repin(root, files)
-    ctx["notes"] += ["repin: %s" % c for c in changes]
-    ctx["touched"].update(c.split(":", 1)[0] for c in changes)
+    # images-lock repin returns (path, line, written text, new text, name:tag, old digest)
+    changes = il.repin(root, files, digest_of=oci.digest)
+    ctx["notes"] += ["repin: %s:%d %s %s -> %s" % (path, line, ref, old or "(tag only)", new)
+                     for path, line, _, new, ref, old in changes]
+    ctx["touched"].update(path for path, *_ in changes)
 
 
 HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,

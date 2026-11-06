@@ -198,6 +198,71 @@ out=$(PINLIB_FIXTURES="${FIX}" python3 "${ROOT}/hack/bump" --root "${R2}" --reso
 check "a hook writing a historical file fails the bump (rc ${rc})" test "${rc}" -ne 0
 check "the failure names the file and its class" grep -q 'bench/h1/run.sh (historical)' <<< "${out}"
 
+# the digests group: its repin hook moves a same-tag respin (the registry re-pointed
+# x/img:1.0.0) in an ours file, notes each move, and leaves a ledger run's file alone
+R3="${WORK}/repo3"
+mkdir -p "${R3}/pins" "${R3}/share" "${R3}/bench/h1"
+cat > "${R3}/pins/registry.toml" <<'EOF'
+[groups.digests]
+tests = []
+hooks = ["repin"]
+EOF
+printf 'image: x/img:1.0.0@%s\n' "${D_OLD}" > "${R3}/share/app.yml"
+printf 'image: x/img:1.0.0@%s\n' "${D_OLD}" > "${R3}/bench/h1/app.yml"
+: > "${R3}/EXPERIMENTS.md"
+: > "${R3}/images.unpinned"
+git -C "${R3}" init -q -b main && git -C "${R3}" add -A && git -C "${R3}" commit -qm base
+FIX3="${WORK}/fixtures3.json"
+cat > "${FIX3}" <<EOF
+{"https://registry-1.docker.io/v2/x/img/manifests/1.0.0": {"status": 200, "headers": {"Docker-Content-Digest": "${D_NEW}"}, "body": ""}}
+EOF
+out=$(PINLIB_FIXTURES="${FIX3}" python3 "${ROOT}/hack/bump" --root "${R3}" --no-tests digests \
+    --summary "${WORK}/digests.json" 2>&1); rc=$?
+check "bump digests exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "the respun digest moved in the ours file" grep -qx "image: x/img:1.0.0@${D_NEW}" "${R3}/share/app.yml"
+check "the ledger run's file kept its digest" grep -qx "image: x/img:1.0.0@${D_OLD}" "${R3}/bench/h1/app.yml"
+check "the summary notes the repin by file and line" python3 - "${WORK}/digests.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s["changed"] is True, s
+assert any(n.startswith("repin: share/app.yml:1 ") for n in s["notes"]), s["notes"]
+PY
+
+# a site regex that repeats a value by backreference ((?P=v)): every occurrence
+# moves with it, so the site still matches after the bump
+R4="${WORK}/repo4"
+mkdir -p "${R4}/pins" "${R4}/share"
+cat > "${R4}/pins/registry.toml" <<'EOF'
+[groups.tools]
+tests = []
+
+[[pin]]
+id = "tool"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "o/tool", tag = "{v}" }
+sites = [
+  { file = "share/tool.env", regex = '^TOOL_DEB="tool_(?P<v>[0-9.]+)_amd64\.deb https://example\.com/download/v(?P=v)"$' },
+  { file = "share/tool.env", regex = '^TOOL_IMAGE=x/tool/(?P<v>[0-9.]+):(?P<tag>(?P=v)-[0-9]+)$' },
+]
+EOF
+printf 'TOOL_DEB="tool_1.2.0_amd64.deb https://example.com/download/v1.2.0"\nTOOL_IMAGE=x/tool/1.2.0:1.2.0-7\n' \
+    > "${R4}/share/tool.env"
+: > "${R4}/EXPERIMENTS.md"
+: > "${R4}/images.unpinned"
+git -C "${R4}" init -q -b main && git -C "${R4}" add -A && git -C "${R4}" commit -qm base
+echo '{"tool": {"v": "1.3.0", "tag": "1.3.0-9"}}' > "${WORK}/resolved4.json"
+out=$(python3 "${ROOT}/hack/bump" --root "${R4}" --resolved "${WORK}/resolved4.json" --no-tests tools 2>&1); rc=$?
+check "bump with a backreference site exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "the backreferenced URL version moved with the file name" \
+    grep -qx 'TOOL_DEB="tool_1.3.0_amd64.deb https://example.com/download/v1.3.0"' "${R4}/share/tool.env"
+check "a backreference inside another group moves with that group" grep -qx 'TOOL_IMAGE=x/tool/1.3.0:1.3.0-9' "${R4}/share/tool.env"
+git -C "${R4}" add -A && git -C "${R4}" commit -qm bump
+check "hack/pin-only-diff passes on the backreference bump" \
+    python3 "${ROOT}/hack/pin-only-diff" --root "${R4}" --group tools HEAD~1 HEAD
+
 # the registry: one group (one branch) for both NRI components
 check "nri-balloons and nri-balloons-guard bump in group nri (one branch)" python3 - "${ROOT}" <<'PY'
 import sys, tomllib
