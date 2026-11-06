@@ -14,7 +14,7 @@ ARG PGVECTOR_IMAGE=pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0
 ARG QPL_TAG=v1.9.0
 ARG ZLIB_ACCEL_TAG=v1.1.0
 
-FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4 AS build
+FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS build
 ARG QPL_TAG
 ARG ZLIB_ACCEL_TAG
 # The accelerator libraries are pinned to trixie's versions; the toolchain is not.
