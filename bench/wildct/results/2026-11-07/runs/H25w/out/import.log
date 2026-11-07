@@ -1,0 +1,4 @@
+[36mINFO[0m[0000] Importing image(s) into cluster 'k3dgpu-w-h25' 
+[33mWARN[0m[0000] Image 'openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58' is not a file and couldn't be found in the container runtime 
+[31mERRO[0m[0000] Failed to import image(s) into cluster 'k3dgpu-w-h25': no valid images specified 
+[33mWARN[0m[0000] At least one error occured while trying to import the image(s) into the selected cluster(s) 
