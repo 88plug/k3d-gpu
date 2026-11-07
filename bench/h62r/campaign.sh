@@ -5,6 +5,8 @@
 # also after an abort.
 #   - at most 3 setup attempts in all (attempts.txt, one line per start); a fourth start exits 10
 #     before anything is started
+#   - a start after any hold has run (a hold<N> directory in the records) exits 11 before anything
+#     is started, and is not an attempt
 #   - setup exit 6 (the host gate still failed after 60 min): the two qwen38 serving pairs are
 #     stopped under the box owner's grant (gpu-serving.sh stop, never rm) and setup runs once more;
 #     teardown.sh starts them again
@@ -20,6 +22,14 @@ R=${B}/results/H62r
 MAX_HOLDS=8 NOT_DELIVERABLE_MAX=2 ATTEMPTS_MAX=3
 mkdir -p "${R}"
 log() { echo "== campaign $* $(date -u +%FT%TZ)" | tee -a "${R}/campaign.log"; }
+# Holds count toward the 8 in all and their records are measured data. This script numbers its
+# holds from 1, so once any hold has run it refuses to start: a dated amendment says how the row
+# goes on.
+held=$(find "${R}" -mindepth 1 -maxdepth 1 -type d -name 'hold[0-9]*' -printf '%f\n' | sort -V | paste -sd' ')
+if [ -n "${held}" ]; then
+    log "holds already recorded (${held}): no start"
+    exit 11
+fi
 tries=$(grep -c . "${R}/attempts.txt" 2>/dev/null)
 if [ "${tries:-0}" -ge "${ATTEMPTS_MAX}" ]; then
     log "setup attempt bound reached (${tries:-0} of ${ATTEMPTS_MAX}): no further attempt"
