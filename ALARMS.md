@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-07T00:38:46Z. 7 open.
+Updated 2026-11-07T00:39:08Z. 7 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -184,7 +184,7 @@ Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch
 
 ## `red:watchdog.yml`: scheduled run failure
 
-Opened 2026-11-07T00:21:26Z, updated 2026-11-07T00:21:26Z.
+Opened 2026-11-07T00:21:26Z, updated 2026-11-07T00:39:08Z.
 
 The latest scheduled run of `watchdog.yml` failed.
 
@@ -193,48 +193,69 @@ Conclusion: **failure**, created 2026-11-06T23:31:16Z, commit 8e10b0943d8f4c841d
 Failed jobs: Watchdog
 Hint: no known signature matched
 
-<details><summary>Last 39 lines of the failed log</summary>
+<details><summary>Last 60 lines of the failed log</summary>
 
 ```text
-Watchdog Check and alarm ﻿2026-11-06T23:31:46.6960283Z ##[group]Run hack/watchdog
-Watchdog Check and alarm 2026-11-06T23:31:46.6960549Z ^[[36;1mhack/watchdog^[[0m
-Watchdog Check and alarm 2026-11-06T23:31:46.7008190Z shell: /usr/bin/bash -e {0}
-Watchdog Check and alarm 2026-11-06T23:31:46.7008407Z env:
-Watchdog Check and alarm 2026-11-06T23:31:46.7010369Z   GH_TOKEN: ***
-Watchdog Check and alarm 2026-11-06T23:31:46.7010558Z   GH_REPO: 88plug/k3d-gpu
-Watchdog Check and alarm 2026-11-06T23:31:46.7010746Z   SIMULATE_RED: 
-Watchdog Check and alarm 2026-11-06T23:31:46.7010913Z ##[endgroup]
-Watchdog Check and alarm 2026-11-06T23:31:49.1135317Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:31:51.5988431Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:31:53.5404306Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:00.3183937Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:01.8831127Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:04.1689043Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:17.5202474Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:17.5221882Z ##[error]listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:18.0671158Z the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:18.0674219Z ##[error]8 alarm(s) not filed (stale:bot-sweep.yml, red:bot-sweep.yml, stale:freshness.yml, red:freshness.yml, stale:watchdog.yml, red:watchdog.yml, bot-pr-stuck, watchdog-error): this repository has issues disabled; enable Issues in Settings > G
-Watchdog Check and alarm 2026-11-06T23:32:18.0677039Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0685021Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0686671Z ##[error]no successful scheduled run within 12 h (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0688927Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0690773Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0692668Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0694679Z ##[error]bot PRs open over 72 h without green CI (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0699102Z ##[error]the watchdog could not complete its checks (not filed: this repository has issues disabled)
-Watchdog Check and alarm 2026-11-06T23:32:18.0700218Z ## Watchdog 2026-11-06T23:31:46Z
-Watchdog Check and alarm 2026-11-06T23:32:18.0700430Z 
-Watchdog Check and alarm 2026-11-06T23:32:18.0700574Z - not filed: `stale:bot-sweep.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0700903Z - not filed: `red:bot-sweep.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0701241Z - not filed: `stale:freshness.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0701550Z - not filed: `red:freshness.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0701871Z - not filed: `stale:watchdog.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0702180Z - not filed: `red:watchdog.yml`
-Watchdog Check and alarm 2026-11-06T23:32:18.0702494Z - not filed: `bot-pr-stuck`
-Watchdog Check and alarm 2026-11-06T23:32:18.0702779Z - not filed: `watchdog-error`
-Watchdog Check and alarm 2026-11-06T23:32:18.0703601Z - error: listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
-Watchdog Check and alarm 2026-11-06T23:32:18.0704362Z 
-Watchdog Check and alarm 2026-11-06T23:32:18.0788409Z ##[error]Process completed with exit code 1.
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6142637Z Removing includeIf entries pointing to credentials config files
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6145755Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6171152Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6171755Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6172154Z includeif.gitdir:/github/workspace/.git.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6172445Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6178269Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6208529Z /home/runner/work/_temp/git-credentials-6219e688-9330-46da-a69c-74e16c4ed4ee.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6215728Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-6219e688\-9330\-46da\-a69c\-74e16c4ed4ee\.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6250339Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6273683Z /home/runner/work/_temp/git-credentials-6219e688-9330-46da-a69c-74e16c4ed4ee.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6280904Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-6219e688\-9330\-46da\-a69c\-74e16c4ed4ee\.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6331962Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6357322Z /github/runner_temp/git-credentials-6219e688-9330-46da-a69c-74e16c4ed4ee.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6368375Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-6219e688\-9330\-46da\-a69c\-74e16c4ed4ee\.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6397527Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6420406Z /github/runner_temp/git-credentials-6219e688-9330-46da-a69c-74e16c4ed4ee.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6426059Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-6219e688\-9330\-46da\-a69c\-74e16c4ed4ee\.config
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6459482Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6747087Z Removing credentials config '/home/runner/work/_temp/git-credentials-6219e688-9330-46da-a69c-74e16c4ed4ee.config'
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6764992Z ##[endgroup]
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6960291Z ##[group]Run hack/watchdog
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.6960551Z ^[[36;1mhack/watchdog^[[0m
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7008198Z shell: /usr/bin/bash -e {0}
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7008409Z env:
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7010371Z   GH_TOKEN: ***
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7010560Z   GH_REPO: 88plug/k3d-gpu
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7010748Z   SIMULATE_RED: 
+Watchdog UNKNOWN STEP 2026-11-06T23:31:46.7010914Z ##[endgroup]
+Watchdog UNKNOWN STEP 2026-11-06T23:31:49.1135354Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:31:51.5988469Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:31:53.5404344Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:00.3183983Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:01.8831168Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:04.1689094Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:17.5202509Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:17.5221989Z ##[error]listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0671191Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0674226Z ##[error]8 alarm(s) not filed (stale:bot-sweep.yml, red:bot-sweep.yml, stale:freshness.yml, red:freshness.yml, stale:watchdog.yml, red:watchdog.yml, bot-pr-stuck, watchdog-error): this repository has issues disabled; enable Issues in Settings > Gene
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0677048Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0685030Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0686677Z ##[error]no successful scheduled run within 12 h (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0688935Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0690806Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0692675Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0694688Z ##[error]bot PRs open over 72 h without green CI (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0699112Z ##[error]the watchdog could not complete its checks (not filed: this repository has issues disabled)
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0700223Z ## Watchdog 2026-11-06T23:31:46Z
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0700436Z 
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0700577Z - not filed: `stale:bot-sweep.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0700905Z - not filed: `red:bot-sweep.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0701244Z - not filed: `stale:freshness.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0701554Z - not filed: `red:freshness.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0701873Z - not filed: `stale:watchdog.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0702182Z - not filed: `red:watchdog.yml`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0702497Z - not filed: `bot-pr-stuck`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0702790Z - not filed: `watchdog-error`
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0703608Z - error: listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0704365Z 
+Watchdog UNKNOWN STEP 2026-11-06T23:32:18.0788421Z ##[error]Process completed with exit code 1.
 ```
 </details>
 
