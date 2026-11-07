@@ -9599,6 +9599,70 @@ cluster or container, no process of the hold and no network or volume of ours wa
 
 Holds used: 4 of at most 12. The next row in the registered order is H28w, its prep hold first.
 
+### Wildct amendment R8: H28w's NVIDIA plugin and its pod image (2026-11-07)
+
+Recorded 2026-11-07, after the H52w, H18w, H25w and H34w holds and before any H28w hold (neither
+`H28w-prep` nor `H28w` has run). Mechanics only. No row's hypothesis, prediction, arm, model,
+statistic, threshold, cap, disk need, hold count or order changes. No kernel module was loaded,
+and nothing on wildct changed.
+
+**What was found.**
+
+1. **The NVIDIA device plugin.** H28w's cluster comes from `probe.sh`'s plain `k3d cluster
+   create`, which never reads `K3D_GPU_VENDORS`. Amendment R1 gave it the two Intel GPU disables
+   that `up` passes when intel is not active. It left out what `up` does when nvidia is not
+   active: `up` labels the node `nvidia.com/gpu.present=false` ("Keeps the baked NVIDIA plugin off
+   the node", `scripts/k3d-gpu`). The node image bakes `nvidia-device-plugin-daemonset` into
+   k3s's auto-deploy manifests (`Dockerfile`, `share/nvidia-device-plugin.yml`). Its only node
+   affinity is `nvidia.com/gpu.present NotIn ["false"]`, which a node without that label matches,
+   and it runs under `runtimeClassName: nvidia`. So the registered H28w line, with R1's disables,
+   would run the NVIDIA device plugin on its node, on a host with two NVIDIA cards. Rule W8 rules
+   out any GPU device plugin. With the label, as on every `up` cluster of this campaign, the
+   DaemonSet has 0 pods desired (H52w: `nvidia-device-plugin-daemonset` 0 desired, no pod). The
+   other device plugins the image bakes select labels this node does not get:
+   `habana.ai/gaudi.present` and `k3d-gpu.io/wsl-gpu` are the launcher's, and of
+   `intel.feature.node.kubernetes.io/{npu,dsa,iaa,qat}` NFD set none on wildct (H52w's node read
+   only `intel.feature.node.kubernetes.io/gpu=true`, which only the two disabled Intel GPU stacks
+   select). The balloons policy needs the launcher's `k3d-gpu.io/hybrid-cpu=true`, so it does not
+   run on this node, as in H28 on the i9.
+2. **The pod image.** The wildct pre-registration (#181, `c247f3fb`) was written when
+   `probe.sh`'s `PYIMG` was `python:3.13-slim@sha256:70729b46...8c2f`, the image H28's run used
+   for its agent pods, prime pods and eviction helper. The nightly digest repin (#220,
+   `702c8d7b`, 2026-10-29) moved the default to `@sha256:2d44738e...86bb`. Neither the
+   pre-registration nor amendments R1-R7 list that change, and the pre-registration says a
+   replication keeps the original row's probe, with every change listed. H28x amendment R2 kept
+   H28x on the registered image for the same reason. Read on 2026-11-07: Docker Hub still
+   resolves `70729b46` (`docker buildx imagetools inspect`), and wildct holds it (image
+   `ce3ff9524414`, pulled by the campaign's setup on 2026-10-20 as the RAPL reader's image of
+   then). Rule W4's RAPL reader keeps `2d44738e` (amendment R2); it reads `energy_uj` only.
+
+**Runner change.** `bench/wildct/row.sh`:
+
+- `h28w` adds `--node-label=nvidia.com/gpu.present=false` to `K3D_GPU_K3S_ARGS`, after W3 and
+  R1's two disables. `probe.sh` passes each flag to `k3d cluster create` as `--k3s-arg
+  <flag>@server:*`, as it does W3. Both arms run on that one cluster, so both get it alike.
+- `h28w-prep` and `h28w` set
+  `PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f`.
+  `probe.sh` reads `PYIMG` from the environment, and its `meta` line records it. As in H28x run 2,
+  `k3d image import` imports the model images by tag and skips the digest ref, so the node pulls
+  the pod image at the warm-up round's prime pod.
+
+Tests: `tests/wildct_hold_test.sh` (the create arguments carry the label; the baked manifest's
+affinity is the one the label excludes, and the launcher still sets it; both rows set the pod image
+registered here), in CI.
+
+**Read during the H28w hold, not scored.** Rule W8's pod-level checks have not been read on a
+plain `k3d cluster create` node on this host. Once the level's two baseline windows are written
+(`out/typical/baseline.jsonl` has 2 lines), during the unscored warm-up round, the controller reads
+H28w's cluster once from the host, read-only, with the run's scratch kubeconfig: `kubectl get pods
+-A -o json` through `bench/wildct/gpu_scan.py`, `kubectl get ds -A`, and the node's labels and
+allocatable. If a GPU device plugin pod is there, the hold is stopped (a signal to `hold.sh`, whose
+cleanup deletes the cluster), and the hold counts as failed.
+
+**Resume procedure.** Before `H28w-prep`, step 3b ships main at this amendment's merge commit. Its
+`scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
+hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
