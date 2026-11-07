@@ -224,22 +224,33 @@ two ways, one per EAT generation. Its pins:
 - **EAT 1.x:** `integrations/eat/eat-up.sh` deploys the pinned tag
   [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)
   ([`0c726f5`](https://github.com/intel/enterprise-agent-toolkit/tree/0c726f576595971c53cc45b94e08ba969beb4a4a),
-  published 2026-10-22), still the latest tag on 2026-11-01
-  ([tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)) and the merge of
+  published 2026-10-22), the latest tag on 2026-11-01 and, since EAT
+  [`release-2.0.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-2.0.0)
+  (2026-11-06), the newest 1.x release
+  ([tags](https://api.github.com/repos/intel/enterprise-agent-toolkit/tags)). It is the merge of
   [PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21). Its tree, `04969afa`,
   is the same as that of #21's head `c86c42b`. Until 2026-10-29 the pin was
   `release-1.0.3-hotfix`
   ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
   [compare](https://github.com/intel/enterprise-agent-toolkit/compare/0d3438d7119de44cafc5903f66665c0b623e3333...0c726f576595971c53cc45b94e08ba969beb4a4a),
   204 files). `bench/eatflow` keeps its own EAT pins (`bench/eatflow/agent.lock`).
-- **EAT 2.0:** `k3d-gpu eas up --agent-toolkit` installs EAT through Intel's EAS installer
-  (`es_auto_installer.sh install agent-toolkit`) on the cluster. It pins EAS `main`
-  `97f6157`, enterprise-inference `main` `3e8a244` and EAT `release-2.0.0` `036b662` in
-  `integrations/eas/pins.json`, with EAS `v1.2.0-rc.1` as an opt-in profile. Choices,
-  patches, refusals and limits: [intel/eas.md](intel/eas.md). F3 ran it once end to end
-  and is REFUTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the
-  install, `eas check` and the teardown passed, and the secret scan found the Keycloak admin
-  password on a process command line (enterprise-inference's `keycloak_config` role).
+- **EAT 2.0:** `k3d-gpu eat up` (`k3d-gpu eas up --agent-toolkit`) installs EAT through
+  Intel's EAS installer (`es_auto_installer.sh install agent-toolkit`) on the cluster. Its
+  default profile in `integrations/eas/pins.json` is Intel's GA tags of 2026-11-06: EAS
+  [`v1.2.0`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0) (`a051f00`),
+  enterprise-inference [`v1.1.0`](https://github.com/intel/enterprise-inference/releases/tag/v1.1.0)
+  (`d035b1e`) and EAT `release-2.0.0` (`7b827e2`, four docs-only commits after `036b662`:
+  [compare](https://github.com/intel/enterprise-agent-toolkit/compare/036b66234801e9bd950afd90830821859780d668...7b827e2d95cec826a20c7e3f5a30eb4818ed2992)).
+  The profiles `main` (EAS `main` `97f6157`, enterprise-inference `main` `3e8a244`, EAT
+  `036b662`) and `v1.2.0-rc.1` stay as recorded. Choices, patches, refusals and limits:
+  [intel/eas.md](intel/eas.md). F5 ran it once at the GA tags on the Xeon 6741P and is
+  SUPPORTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up`
+  with `failed=0` and no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed.
+  F3 ran the `main` profile once end to end and is REFUTED
+  ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check`
+  and the teardown passed, and the secret scan found the Keycloak admin password on a process
+  command line (enterprise-inference's `keycloak_config` role). H62r is pre-registered on the
+  GA tags.
 - `docs/intel.md`, `contrib/eat/` and `integrations/eat/upstream/` read `main` at
   [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a8331e8b502ef41e08bf6d2881416178c5).
 
@@ -267,8 +278,9 @@ Upstream work that changes this integration:
 
 - [EAT PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19) replaces
   `deploy-agentic-stack.sh` with `es_auto_installer.sh install agent-toolkit`. It merged
-  on 2026-10-27 into the `release-2.0.0` branch, not `main`, and no EAT tag carries it yet;
-  EAS's pre-release `v1.2.0-rc.1` pins it. `k3d-gpu eas` is the EAT 2.0 path.
+  on 2026-10-27 into the `release-2.0.0` branch, not `main`. EAS's pre-release
+  `v1.2.0-rc.1` pinned it, and since 2026-11-06 the EAT tag `release-2.0.0` carries it, with
+  EAS `v1.2.0`. `k3d-gpu eas` is the EAT 2.0 path.
   The status of each EAT PR is in the table below.
 - [enterprise-inference PR #22](https://github.com/intel/enterprise-inference/pull/22)
   merged on 2026-10-22 as "Integrate Agentic toolkit" (`4bc7fed`), the inference-layer
@@ -293,6 +305,8 @@ were re-read that day; EAT `main` was still `4a2e930`. Re-read on 2026-11-01: `m
 OpenClaw stack (#20-#26) reopened as [#28](https://github.com/intel/enterprise-agent-toolkit/pull/28)
 on `feature/openclaw-openshell`, beside [#29](https://github.com/intel/enterprise-agent-toolkit/pull/29)
 (an OpenClaw OpenShell adapter); neither reaches a tag or `main`, so neither changes a pin here.
+On 2026-11-07 the `release-2.0.0` tag points at `7b827e2` and `main` is `4efb2c0`; the rows
+below are as of the 2026-11-01 re-read.
 
 | PR | Head | What it changes | Impact on k3d-gpu | Action |
 |---|---|---|---|---|
