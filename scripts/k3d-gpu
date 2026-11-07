@@ -10903,7 +10903,7 @@ cmd_tune_trial() {
 }
 
 cmd_tune_run() {
-    local objective=throughput dry="" full="" budget=10 arg inputs facts_file fp workdir
+    local objective=throughput dry="" full="" budget=10 arg inputs facts facts_file fp workdir
     local -a extra=()
     while [ $# -gt 0 ]; do
         arg=$1
@@ -10929,19 +10929,27 @@ cmd_tune_run() {
     [ "${AGENT_BACKEND}" = ovms ] || err "'k3d-gpu tune' searches the OVMS agent; unset K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND}"
     require kubectl
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
-    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
-    facts_file="${workdir}/facts.json"
-    tune_facts > "${facts_file}"
+    facts=$(tune_facts)
     if [ -n "${dry}" ]; then
         local n0=27 seed=1 i
         for ((i = 0; i < ${#extra[@]}; i += 2)); do
             case "${extra[i]}" in --n0) n0=${extra[i+1]} ;; --seed) seed=${extra[i+1]} ;; esac
         done
-        tune_py space --facts "${facts_file}" --n0 "${n0}" --seed "${seed}"
-        return 0
+        # The preview keeps nothing: its facts file goes with its temp dir.
+        (
+            workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+            trap 'rm -rf "${workdir}"' EXIT
+            printf '%s\n' "${facts}" > "${workdir}/facts.json"
+            tune_py space --facts "${workdir}/facts.json" --n0 "${n0}" --seed "${seed}"
+        )
+        return
     fi
     require curl
     tune_need_bench
+    # The run's workdir holds its trials and logs, and stays after the run.
+    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+    facts_file="${workdir}/facts.json"
+    printf '%s\n' "${facts}" > "${facts_file}"
     fp=$(tune_fingerprint)
     inputs=$(tune_fingerprint_inputs | python3 -c 'import json, sys; print(json.dumps(dict(l.rstrip("\n").split("=", 1) for l in sys.stdin)))')
     mkdir -p "${TUNE_DIR}"
