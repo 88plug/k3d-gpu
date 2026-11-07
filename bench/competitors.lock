@@ -35,7 +35,9 @@
       "port": 11434,
       "pull": "ollama",
       "quant_tier": "4-bit (GGUF Q4_K_M)",
-      "served_model": "qwen3:4b-q4_K_M"
+      "served_model": "qwen3:4b-q4_K_M",
+      "threads_env": "LLAMA_ARG_THREADS",
+      "threads_note": "Ollama's llama-server takes llama.cpp's default thread count, which pins itself to each online CPU in turn to find the P-cores (common/common.cpp common_cpu_get_num_math). Under --cpuset the first pin outside the cpuset fails and the count falls back to the host's physical cores: 24 threads in a 16-CPU cpuset on an i9-13900T. Ollama's CPU backend has no OpenMP, so the extra threads spin, and Qwen3-4B Q4_K_M decoded at 0.30 tok/s with 24 threads against 10.4 with 8 (Ollama 0.40.13 and 0.40.15, cpuset 0-15, 2026-11-07). With --cpuset, bench sets threads_env to the count llama.cpp picks on the cpuset's CPUs alone, one thread per physical P-core. Ollama passes its environment to llama-server, which reads LLAMA_ARG_THREADS (common/arg.cpp)."
     },
     "ovms": {
       "api": "/v3",
