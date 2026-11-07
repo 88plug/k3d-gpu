@@ -94,11 +94,12 @@ bundle under `tests/fixtures/hf` that recorded it at the old one.
 
 After the rewrite and the hooks, `hack/bump` replaces each exact old pin string
 (a whole site match, a digest, a revision, a version or tag) with its new one in
-`tests/**`. A test keeps the old string when
+`tests/**`; a digest or revision also moves cut to its first 12 hex digits, as
+plans and audits print it. A test keeps the old string when
 
 - another pin's site outside `tests/` still holds it (two images at one digest);
-- the test names a file outside `tests/` that still holds it: it reads that
-  record (a ledger arm's or a historical run's pin), which never moves;
+- the test names a kept record that still holds it (a file no bumper writes,
+  prose aside: a ledger arm's or a historical run's pin), so it reads that record;
 - the old string is a bare version or tag (`v1.37.1-k3s1`, `release-1.1.0`) and
   the test is code (`.py`, `.sh` or a `#!` script), where it is as likely the
   test's own input. In a recorded file (a golden transcript, a fixture) it moves.
