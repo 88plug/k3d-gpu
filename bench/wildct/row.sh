@@ -11,9 +11,11 @@
 #   h25w         H25's bench/shared-prefix/run.sh, with the CPU Fast Draft the H25w line registers
 #                in both arms (K3D_GPU_AGENT_DRAFT=CPU, wildct amendment R7)
 #   h34w         H34's bench/hetero-spec/h34.sh
-#   h28w-prep    bench/zero-copy-models/probe.sh prep (typical's model images only, r0-r6)
-#   h28w         bench/zero-copy-models/probe.sh run (its plain k3d cluster create gets W3 and the
-#                two Intel GPU disables `up` passes with intel not active: W8, amendment R1)
+#   h28w-prep    bench/zero-copy-models/probe.sh prep (typical's model images only, r0-r6), with
+#                H28's registered pod image (PYIMG, wildct amendment R8)
+#   h28w         bench/zero-copy-models/probe.sh run (its plain k3d cluster create gets W3, the
+#                two Intel GPU disables `up` passes with intel not active (amendment R1) and the
+#                node label `up` sets with nvidia not active (amendment R8): W8), with H28's pod image
 #   h57w HOLD MODE [ARM...]  H57d's bench/h57d/hold.sh with the wildct knobs (inner lock): holds
 #                1-3 perf and 4 quality, in their registered arm order (no ARM); the spare hold is
 #                HOLD 5 with the failed hold's mode and its arms in its order (H57d's rule)
@@ -43,6 +45,14 @@ OPTOUT=auto,-nvidia,-intel
 # only nodeSelector is the architecture. These are the two disables `up` passes when intel is not
 # active (wildct amendment R1).
 NOINTEL='--disable=intel-gpu-plugin --disable=intel-gpu-dra'
+# W8, NVIDIA, for the same create: the baked NVIDIA device plugin's only node affinity is
+# nvidia.com/gpu.present NotIn ["false"], so it runs on a node without that label. This is the
+# label `up` sets when nvidia is not active (wildct amendment R8).
+NONVIDIA='--node-label=nvidia.com/gpu.present=false'
+# H28's pod image (agent, prime and eviction pods), as the H28w line registers it: probe.sh's
+# default moved after the pre-registration (#220). H28x amendment R2 kept it the same way (wildct
+# amendment R8).
+H28_PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
 G=${W}/h57
 OUT=${OUT:-${W}/runs/${WILDCT_HOLD:-${row}}/out}
 need_image() { [[ "${IMAGE:-}" =~ ^[^@]+:[^@]+@sha256:[0-9a-f]{64}$ ]] || { echo "row.sh: set IMAGE to the release node image as name:tag@sha256:<digest>" >&2; exit 2; }; }
@@ -73,12 +83,12 @@ case ${row} in
         ARGV=(bash "${REPO}/bench/hetero-spec/h34.sh" "${OUT}") ;;
     h28w-prep)
         need_image
-        E=(IMAGE="${IMAGE}" LEVELS=typical)
+        E=(IMAGE="${IMAGE}" LEVELS=typical PYIMG="${H28_PYIMG}")
         ARGV=(bash "${REPO}/bench/zero-copy-models/probe.sh" prep) ;;
     h28w)
         need_image
         E=(WORK="${OUT}" IMAGE="${IMAGE}" CLUSTER=k3dgpu-w-h28 LEVELS=typical HOLD=1440 LOCK="${W}/inner.lock" NODE_CPUS=0-15
-           LOAD_CPUS=20-23 K3D_GPU_K3S_ARGS="${W3} ${NOINTEL}")
+           LOAD_CPUS=20-23 K3D_GPU_K3S_ARGS="${W3} ${NOINTEL} ${NONVIDIA}" PYIMG="${H28_PYIMG}")
         ARGV=(bash "${REPO}/bench/zero-copy-models/probe.sh" run) ;;
     h57w)
         need_image

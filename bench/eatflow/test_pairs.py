@@ -1092,6 +1092,45 @@ class H62Test(unittest.TestCase):
         self.assertIn("REMOTE=()", live[:live.index("cleanup() {")])
 
 
+class H62rTest(unittest.TestCase):
+    """H62r (EXPERIMENTS.md "H62r pre-registration"): H62 re-run with B5 at the GA tags. Its own
+    row, seed and pairs registration; live.sh runs it through H62's remote-arm branch."""
+
+    REG = {"hyp": "H62r", "rule": "L3", "seed": "H62r-crescent-2026-11-06"}
+
+    def test_h62r_is_h62s_design_and_rule_with_its_own_seed(self):
+        self.assertEqual(PR.design("H62r"), ("H49", "L3"))
+        self.assertEqual(PR.ORDER_SEEDS["H62r"], self.REG["seed"])
+        self.assertIn("H62r", AB.PAIRS_HYPS)
+        at = [dict(r, arm="B5") if r["arm"] == "B1" else r for r in L2Test.h49_like(L2Test())]
+        res = PR.analyze(at, pairs_of(24), "H62r", "A1", "B5", registration=self.REG)
+        ref = PR.analyze(at, pairs_of(24), "H62", "A1", "B5", registration=H62Test.REG)
+        self.assertEqual((res["rule"], res["arms"]), ("L3", ["A1", "B5"]))
+        self.assertEqual((res["verdict"], res["paired_diff"]), (ref["verdict"], ref["paired_diff"]))   # H62's statistic
+        with self.assertRaises(ValueError):                           # H62's registration is not H62r's
+            PR.analyze(at, pairs_of(24), "H62r", "A1", "B5", registration=H62Test.REG)
+
+    def test_h62r_draws_its_own_arm_order(self):
+        h62 = [PR.order(j, "A1", "B5", PR.ORDER_SEEDS["H62"]) for j in range(24)]
+        h62r = [PR.order(j, "A1", "B5", PR.ORDER_SEEDS["H62r"]) for j in range(24)]
+        self.assertNotEqual(h62, h62r)
+        self.assertEqual(h62r, [PR.order(j, "A1", "B5", "H62r-crescent-2026-11-06") for j in range(24)])
+
+    def test_registration_names_h62r(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        self.assertEqual(PR.register(tmp, "H62r"), self.REG)
+        with self.assertRaises(PR.HoldAborted):                       # an H62 hold cannot reuse the directory
+            PR.register(tmp, "H62")
+
+    def test_live_sh_runs_h62r_through_the_remote_arm_branch(self):
+        with open(os.path.join(HERE, "live.sh")) as f:
+            live = f.read()
+        self.assertIn('[ "${ARM}" = H62r ] && DESIGN=H62', live)
+        pairs = live[live.index('if [ "${MODE}" = pairs ]; then'):]
+        self.assertLess(pairs.index('[ "${ARM}" = H62r ] && DESIGN=H62'), pairs.index("case ${DESIGN} in"))
+
+
 class B3RecordsTest(unittest.TestCase):
     """H50o amendment O1 item 2: the records of B3's pulled model that the pre-registration names
     (the init container's log, every file's sha256, the graph each hold serves), read from the
