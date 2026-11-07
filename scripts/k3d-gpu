@@ -361,8 +361,9 @@ Usage: k3d-gpu <command>
             (competitors.lock) with its defaults next to this cluster's 'agent up'
             server, drive both with one client, interleaved rounds and RAPL
             J/token, and write the result JSON plus an EXPERIMENTS.md run section.
-            --cpuset pins the competitor to LIST; ollama then runs one thread per
-            physical P-core in LIST (its default counts the whole host's cores).
+            --cpuset pins the competitor to LIST; ollama then gets the thread
+            count llama.cpp picks on LIST's CPUs alone (8 for 0-15 on an
+            i9-13900T), since its default counts the whole host's cores.
             The model cache volume is removed after unless --keep-cache;
             K3D_GPU_SIGNOFF="Name <email>" signs the run section
   bench agent plan|run|apb|control|bfcl|report|proxy|manifest|tasks ...
@@ -12547,15 +12548,22 @@ physical_cores_of() {
 }
 
 # cpuset_math_threads <cpulist>: the thread count llama.cpp's default picks when it
-# can see every CPU (common/common.cpp common_cpu_get_num_math: one thread per
-# physical non-E-core, else one per physical core), counted inside the list.
+# can see every CPU (common/common.cpp common_cpu_get_num_math), counted inside the
+# list. On a hybrid CPU it walks the CPU numbers in order, skips the E-cores, and
+# counts a CPU and skips the next number as its hyperthread: one thread per physical
+# P-core where P-cores are pairs like 0-1, every other P-core where they have no
+# hyperthreads. With no count from that, or one core type, it is one per physical core.
 cpuset_math_threads() {
-    local cpus ecores c n
-    local -a noneff=()
-    cpus=$(cpulist_expand "$1") && [ -n "${cpus}" ] || return 1
-    ecores=$(cpulist_expand "$(ecore_kind_cpus)" || true)
-    for c in ${cpus}; do grep -qxF "${c}" <<< "${ecores}" || noneff+=("${c}"); done
-    n=$(physical_cores_of ${noneff[@]+"${noneff[@]}"})
+    local cpus ecores c skip=-1 n=0
+    cpus=$(cpulist_expand "$1" | sort -nu) && [ -n "${cpus}" ] || return 1
+    if has_hybrid; then
+        ecores=$(cpulist_expand "$(ecore_kind_cpus)" || true)
+        for c in ${cpus}; do
+            [ "${c}" != "${skip}" ] || continue
+            if grep -qxF "${c}" <<< "${ecores}"; then continue; fi
+            n=$((n + 1)) skip=$((c + 1))
+        done
+    fi
     # shellcheck disable=SC2086 # one CPU number per word
     [ "${n}" -gt 0 ] || n=$(physical_cores_of ${cpus})
     echo "${n}"
