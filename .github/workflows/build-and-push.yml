@@ -249,11 +249,15 @@ jobs:
           done <<< "$tags"
           echo "moved $n floating tags"
 
+      # The image release has no assets, so it is never "Latest": GitHub marks a new
+      # release "Latest" by default, and /releases/latest must serve the aur-v* package
+      # release that packages.yml publishes.
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          make_latest: false
           tag_name: ${{ steps.current.outputs.k3s }}-ndp${{ steps.current.outputs.plugin }}
           name: k3d-gpu ${{ steps.current.outputs.k3s }} (device-plugin ${{ steps.current.outputs.plugin }})
           body: |

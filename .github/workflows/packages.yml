@@ -2,8 +2,9 @@ name: Release packages (deb, rpm, Homebrew)
 
 # Publishes k3d-gpu beyond the AUR for each aur-vX.Y.Z tag:
 #   deb-rpm   builds the .deb and .rpm with nfpm (packaging/check.sh pins every image), tests
-#             them in Debian and Fedora, and attaches them to the aur-vX.Y.Z GitHub release
-#             (created with --latest=false so the image release from build-and-push.yml keeps "Latest").
+#             them in Debian and Fedora, and attaches them to the aur-vX.Y.Z GitHub release,
+#             marked "Latest" when aur-vX.Y.Z is the highest aur-v* tag (--latest=false otherwise),
+#             so /releases/latest serves the newest packages.
 #   homebrew  points Formula/k3d-gpu.rb at the tag's tarball, tests it in the Homebrew image
 #             and commits it to main (this repo is the tap).
 #   install-pin  after deb-rpm, points packaging/install.sh at the release: the version plus
@@ -71,6 +72,14 @@ jobs:
           TAG: ${{ steps.ver.outputs.tag }}
           VER: ${{ steps.ver.outputs.ver }}
         run: |
+          # GitHub's "Latest" release (/releases/latest) is the newest package release: this
+          # one when VER is the highest aur-v* tag on origin now (sort -V), so an older release
+          # that publishes late leaves "Latest" on the newer one.
+          refs=$(git ls-remote --tags origin 'aur-v*')
+          highest=$(sed -n 's|^[0-9a-f]*[[:space:]]*refs/tags/aur-v\([0-9]*\.[0-9]*\.[0-9]*\)$|\1|p' <<< "${refs}" | sort -V | tail -n 1)
+          latest=false
+          if [ "${VER}" = "${highest}" ]; then latest=true; fi
+          echo "highest aur-v* tag on origin: ${highest:-none}; Latest: ${latest}"
           cd dist
           sha256sum k3d-gpu* > SHA256SUMS
           cat SHA256SUMS
@@ -78,8 +87,10 @@ jobs:
           # publishes only after every upload succeeds (it deletes the draft otherwise).
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release upload "${TAG}" k3d-gpu* SHA256SUMS --clobber
+            # A rerun, or a release made by hand: mark it "Latest" when it is the newest.
+            if [ "${latest}" = true ]; then gh release edit "${TAG}" --latest; fi
           else
-            gh release create "${TAG}" k3d-gpu* SHA256SUMS --verify-tag --latest=false --title "k3d-gpu ${VER}" \
+            gh release create "${TAG}" k3d-gpu* SHA256SUMS --verify-tag --latest="${latest}" --title "k3d-gpu ${VER}" \
               --notes "k3d-gpu ${VER}: .deb (Debian/Ubuntu) and .rpm (Fedora/RHEL/openSUSE). Install docs: https://github.com/88plug/k3d-gpu#install"
           fi
 
