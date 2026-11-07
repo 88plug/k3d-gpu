@@ -96,6 +96,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | F2b | EAT's LiteLLM gateway serves the remote model registered by `integrations/eat/eat-remote.sh`, with the key only as an env reference. | Pre-registered 2026-10-17, before measuring: one completion through LiteLLM returns (0.7); the key string appears 0 times in the gateway DB dump, `kubectl describe` of the gateway Deployment/pods/Secret, and events (0.9). | `eat-remote.sh --remote https://gaudi.farmgpu.net --model zai-org/GLM-5.3` against EAT's genai-gateway in the same cluster, then one chat through LiteLLM (max_tokens <= 64, temperature 0.6), then `grep -c` of the key over `pg_dump`, `kubectl describe` and `kubectl get events -A`. SUPPORTED: completion returns and 0 key hits. REFUTED: any key hit, or no completion. Run (2026-10-17, same host, EAT release-1.0.3-hotfix, LiteLLM v1.83.14-stable.patch.2): first with eat-remote.sh as shipped, REFUTED: the chat came back 401 from the endpoint. LiteLLM resolves `os.environ/` only for config-file models; a `/model/new` model is loaded from its database with the reference string as the api_key (proxy_server.py `_add_deployment` decrypts only). Fixed eat-remote.sh to write a config-file `model_list` entry instead and delete the stale database entry; rerun: `eat-check.sh` passed (chat, tool call get_weather, sandbox printed 385), and the key (raw and base64) had 0 hits in `pg_dumpall` of the gateway's Postgres (169 KB), `kubectl describe` of the gateway namespace's Deployments, pods, Secrets and ConfigMaps, the Deployment YAML and `kubectl get events -A`. The verdict is for the fixed script. | SUPPORTED |
 | F4 | `integrations/eat/eat-up.sh` on EAT `release-1.1.0` (`0c726f5`) runs on a single non-Xeon machine: H1b's user path, unchanged except that `eat-up.sh` now deploys `release-1.1.0` (guardrail, vLLM Semantic Router, OpenShell, Kata, Ceph and rack-scale explicitly off; vLLM CPU `v0.28.0` by digest). Functional, n = 1, not a performance row. | Pre-registered 2026-10-29, before any F4 step. SUPPORTED (0.6): steps 1-4 exit 0 and `eat-check.sh` passes. The risks, read from source and not run: the GenAI Gateway's new hybrid-router callback, loaded into LiteLLM `v1.83.14-stable.patch.2` from a ConfigMap, fails to import and the gateway never turns Ready (0.15); vLLM CPU `v0.28.0` on this AVX2-only CPU does not load or answer Qwen3-1.7B inside the wait (0.15); anything else (0.1). | i9-13900T, one fresh cluster `k3dgpu-f4-eat`, scratch `KUBECONFIG`, empty `EAT_WORK`, the README's user path run once, each step timed: (1) `k3d-gpu up` with the README's EAT env; (2) `eat-up.sh`; (3) `eat-up.sh model cpu-qwen3-1-7b`; (4) `kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m`; (5) `eat-check.sh`; (6) `k3d-gpu down`. SUPPORTED only if steps 1-4 exit 0 and step 5 prints `EAT check passed` (non-empty chat, a `get_weather` tool call, sandbox stdout exactly `385`) with no Xeon-only instruction or node label needed. REFUTED by any of steps 1-3 or 5 failing, or by step 4 ending non-zero with a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox pod not Ready. Grading, lock and the INCONCLUSIVE cases in [F4 pre-registration](#f4-pre-registration-i9-13900t-2026-10-29). Until this row is SUPPORTED no doc says the `release-1.1.0` path is verified. | PENDING |
 | F3 | `k3d-gpu eas up --agent-toolkit` takes a fresh, default k3d-gpu cluster on one non-Xeon host to Intel EAS's platform, inference and agent-toolkit (EAT 2.0) layers at the pinned upstream commits with no hand edits, and its own check and teardown work. | Pre-registered 2026-10-29, before any F3 step ([F3 pre-registration](#f3-pre-registration-i9-13900t-2026-10-29)): on the i9-13900T at the `main` profile pins (EAS `97f6157`, enterprise-inference `3e8a244`, EAT `release-2.0.0` `036b662`), `eas up` exits 0 with every PLAY RECAP `failed=0`; its choices and patch decisions equal the pre-registered table (`istio_platform: k3d`, MetalLB off, `best-effort`, NFD off, `require_amx: false`, k3s CIDRs, Kata off, accelerator `cpu`, agent sandbox on; 0002 and 0006 variant a applied, 0003, 0004 and 0005 skipped) and the model pick follows the fit rule; every pod not in phase Succeeded turns Ready; `eas check` passes through the EAS gateway; no secret value appears in a log or in sampled argv; `eas down` exits 0 within 15 min (0.35). | One fresh cluster `k3dgpu-f3-eas` from plain `k3d-gpu up`, then `eas up --agent-toolkit --dry-run`, `eas up --agent-toolkit`, a Ready wait, `eas check`, `eas status`, a secret scan, `eas down` and `k3d-gpu down`, each once, inside the host lock, from the first `main` commit that holds `k3d-gpu eas`. SUPPORTED, REFUTED and INCONCLUSIVE are fixed in the section. Run 2026-11-01 from `48e1da90` ([F3 run](#f3-run-i9-13900t-2026-11-01)): every step exited 0; `eas up` took 2453 s with its one `PLAY RECAP` at `failed=0`; the choices, the overlay decisions and the model pick (`qwen2-5-coder-7b`) equal the table; all 63 pods not Succeeded turned Ready; `eas check` passed through the EAS gateway (chat, a `get_weather` tool call, the guard's block, sandbox stdout `385`); `eas down` took 208 s. The secret scan counted 1: the Keycloak admin password, in one 2 s `ps` sample, on the command line of `kcadm.sh config credentials`, which enterprise-inference `3e8a244`'s `keycloak_config` role runs in the Keycloak pod with `--password <value>`. A count above 0 is REFUTED. | REFUTED |
+| F5 | `k3d-gpu eat up` (`eas up --agent-toolkit` on the `release` profile: EAS `v1.2.0` `a051f00`, enterprise-inference `v1.1.0` `d035b1e`, EAT `release-2.0.0` `7b827e2`) takes a fresh, default k3d-gpu cluster on the Xeon 6741P (crescent) to Intel EAS's platform, inference and agent-toolkit layers at the GA tags with no hand edits; `k3d-gpu eat check` (Intel's `validate agent-toolkit`, then chat, a tool call, the guard's block and a sandbox run through the EAS gateway) passes; and `eat down` and `k3d-gpu down` clean up. Functional, n = 1, not a performance row. | Pre-registered 2026-11-06, before any F5 step ([F5 pre-registration](#f5-pre-registration-xeon-6741p-2026-11-06)): every step exits 0 with every `PLAY RECAP` at `failed=0`; the choices and overlay decisions equal the pre-registered table (`kubernetes_cpu_policy: nri-balloons` with overlay 0003, `auth_provider: "litellm"` from the manifest, `qwen2-5-coder-14b` with `cpu: auto` as shipped; 0002 a, 0003 a and 0006 b applied, 0004 and 0005 skipped); every pod not Succeeded turns Ready; `eat check` passes; no secret value in a log or a sampled argv; `eat down` exits 0 within 20 min. SUPPORTED (0.35). Recorded, not graded: the model pod's CPU request, predicted 40 (enterprise-inference's `cpu: auto` with EAS's 48 SMT siblings reserved and Qwen3Guard's 8). | One fresh cluster `k3dgpu-f5-eat` from plain `k3d-gpu up`, inside crescent's bench lock, from the PR head commit after the unscored wiring smoke: (0b) EAT's inotify prerequisite set on the host and put back at exit; (1) `k3d-gpu up`; (2) `eat up --dry-run`; (3) `eat up`; (4) a Ready wait; (5) `eat check`; (6) `eat status`; (7) a secret scan; (8) `eat down`; (9) `k3d-gpu down`, each once. SUPPORTED, REFUTED and INCONCLUSIVE are fixed in the section. | PENDING |
 | H27x | H27's hypothesis on an AMX host (H27's "re-open for an AMX host"): on the Xeon 6741P (Granite Rapids, AMX), the <=60 s on-box probe (`bench/amx-autoquant/probe.sh`) picks the weight precision for agents better than the static int4 default. Same weights (`OpenVINO/Qwen3-4B-{int4,int8,fp16}-ov` at H27's commits), same parts (a) fidelity, (b) value, (c) cost. A replication: the original model is kept. | Written 2026-10-20, before any H27x measurement. (a) holds (0.85). (b) REFUTED (0.65, outcomes O1 + O2): the quality gate is a property of the weights (NLL at `INFERENCE_PRECISION_HINT=f32`), so int4 fails it again and the pick is int8, and decode stays bandwidth-bound, so int8 stays slower than int4 on the turn (outcome O2 again). (c) holds (0.9). Numbers: decode int4 25-45, int8 18-35, fp16 (bf16 on AMX) 10-22 tok/s; TTFT on 396 tokens 0.15-1.0 s for every arm; turn int4 2-4.5 s, int8 2.5-6 s, fp16 4-9 s. Priors: O1 0.05, O2 0.6, O3 0.05, O4 (int8 beats int4) 0.15, O5 0.15. | H27's row, outcome table and amendments A1-A3, unchanged except as listed in [the cross-host pre-registration](#cross-host-pre-registration-h25x-h27x-h28x-h34x-on-the-xeon-6741p-2026-10-20): OVMS containers on CPUs 0-23,48-71 (the CPUs outside `load.py`'s load set), `typical` only, weights downloaded at H27's pinned commits. Scorer `bench/amx-autoquant/summarize.py`. Run 2026-10-20 ([H27x run](#h27x-run-xeon-6741p-2026-10-20)): load MATCHED, int4 failed the gate again (dNLL +0.072), the probe and the reference both picked fp16 (bf16 on AMX; 5/5 rounds over int8, 3/3 repeats, 4 s per probe), and fp16's 4.23 s median turn is 1.24 s slower than the int4 default's 2.99 s (int4 faster in 5/5 rounds): (a) and (c) hold, (b) fails. | REFUTED |
 | H34x | H34's hypothesis on the Xeon 6741P: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, under matched background load. A replication: the original models are kept. | Written 2026-10-20, before any H34x measurement. At `typical`: median paired B/A decode tok/s 1.40 (1.15-1.70) and median paired B/A package J/token 0.75 (0.60-0.95); SUPPORTED by H34's rule (tok/s >= 1.20 with its CI above 1.0, J/token <= 0.85 with its CI below 1.0) at 0.6, REFUTED 0.25 (the draft's share of a faster target step grows), INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h34`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71, crescent amendment C1, `typical` only. Run 2026-10-20 ([H34x run](#h34x-run-xeon-6741p-2026-10-20)): load MATCHED, 12/12 pairs; B/A decode tok/s 0.758 (CI 0.688-0.809) and package J/token 1.241 (CI 1.168-1.347), B slower and costlier in 12/12 pairs (A 37.2, B 28.0 tok/s): the draft slows decode on this Xeon. | REFUTED |
 | H25x | H25's hypothesis (T part) on the Xeon 6741P: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: the original model and prefix shape are kept. | Written 2026-10-20, before any H25x measurement. Added-agent median TTFT OFF 1.2 s (0.5-2.5), ON 0.15 s (0.06-0.4), ratio 8x (4.5-14), the ratio's 95% CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.75; the risk is fixed per-request overhead, which a 5-10x faster prefill leaves as a larger share of the ON time. M (memory per agent) not measured, as in H25 run 4. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds, unchanged except as listed in the cross-host pre-registration: cluster `k3dgpu-x-h25`, `K3D_GPU_VENDORS=none`, node container on CPUs 0-23,48-71 (`NODE_CPUS`), crescent amendment C1, `typical` only. Run 2026-10-21 ([H25x run](#h25x-run-xeon-6741p-2026-10-21)): load MATCHED (amendment 27), no round void; added agent's first chunk 0.245 s ON vs 1.724 s OFF (7.05x, CI 6.94-7.13, n = 15 per arm), c/OFF 0.99, every round pair >= 4x: T SUPPORTED; M not measured (A3). | SUPPORTED |
@@ -12396,6 +12397,123 @@ Not scored:
   CPU requests on 32 CPUs, helm v3.22.1 with `kubernetes.core` 6.3.0, a `sudo` inside the
   bastion, inotify at 1024 instances, EAS #71 at teardown, and other tenants' memory) did not
   stop any step on this run.
+
+### F5 pre-registration (Xeon 6741P, 2026-11-06)
+
+Written 2026-11-06 and committed before any F5 step. F5 is a functional check of `k3d-gpu eat`,
+the EAT 2.0 path through `k3d-gpu eas` ([docs/intel/eas.md](docs/intel/eas.md)), at the GA
+tags: one scored run, graded only by what is written here. Nothing below is edited after the
+run starts; a change is a dated amendment written before the step it changes.
+
+**Why.** F3 ran `k3d-gpu eas up --agent-toolkit` on EAS `main` and was REFUTED by one sampled
+`kcadm --password` argv. On 2026-11-06 Intel tagged EAT `release-2.0.0` (`7b827e2`), EAS
+`v1.2.0` (`a051f00`) and enterprise-inference `v1.1.0` (`d035b1e`), and EAS's agent-toolkit
+manifest pins those two. At the GA tags `k3d-gpu eas up` stopped after `init`
+(`ei-kcadm.sh` found enterprise-inference's `keycloak_config` task changed), and an env inited
+before kept `auth_provider` unset, so EAT would install without LiteLLM. The change that adds
+the `release` profile fixes both and adds `k3d-gpu eat`. H62 (INCONCLUSIVE) also showed EAT's
+sandbox router left with no CPU on one Xeon guest shape. F5 checks the whole path at the GA
+tags on the Xeon, with nothing done by hand.
+
+**When.** F5 runs from the head commit of the PR that adds the `release` profile and
+`k3d-gpu eat` (branch `claude/eat2-eas12`), after its unscored wiring smoke; that SHA is the
+run header's `k3d-gpu commit`. The smoke runs first on a throwaway cluster `k3dgpu-f5-smoke`
+inside the same lock and is recorded in that PR, not here; anything it changes in the product
+is in that commit. If `integrations/eas/pins.json`'s `release` profile at that commit names
+other SHAs than below, F5 does not start until an amendment names the new ones.
+
+- **Pins (profile `release`).** EAS `a051f00fcb2dd473fe763610471cd509db82c433` (`v1.2.0`),
+  enterprise-inference `d035b1ef1981fbf5084ff05c9a337e620478bb87` (`v1.1.0`), EAT
+  `7b827e2d95cec826a20c7e3f5a30eb4818ed2992` (`release-2.0.0`). No `--eas-ref`, `--ei-ref`,
+  `--eat-ref` or `--model`.
+- **Host.** crescent: Xeon 6741P (48 cores, 96 threads, one socket, one NUMA node, AMX), 503
+  GiB, kernel 7.0.0-31, Docker 29.8.0, k3d v5.9.0, kubectl v1.37.2. The four Arc Pro B70s keep
+  serving `qwen38-a-hr` and `qwen38-b-hr`; nothing in F5 requests them (EAT 2.0 has no Arc
+  path). On 2026-11-06 `/` was 33% used and MemAvailable 410 GiB; `fs.inotify.max_user_instances`
+  was 128, below EAT's documented 8192 (`docs/prerequisites.md` at `release-2.0.0`).
+- **One fresh cluster.** `K3D_GPU_CLUSTER=k3dgpu-f5-eat`, created by this run and deleted after
+  it, through its own state dir and kubeconfig (never `~/.kube/config`). Plain `k3d-gpu up`: no
+  `K3D_GPU_K3S_ARGS`, `K3D_GPU_BALLOONS`, `K3D_GPU_NODE_LABELS` or `K3D_GPU_VENDORS`; the
+  node image is the one the launcher names (`cryptoandcoffee/k3d-gpu:0.1.89`), its digest
+  recorded. `HF_TOKEN` unset (every model is ungated). Every step runs once; nothing is retried;
+  no file in the state dir and no object in the cluster is edited by hand at any point.
+- **Steps, each timed (wall s) and logged in order, exit code recorded** (`bench/f5/run.sh`).
+  (0) Before the lock (`bench/f5/step0.sh`): `git ls-remote` of the three tags, peeled, and the
+  node image pulled. (0b) `sudo sysctl -w fs.inotify.max_user_instances=8192
+  fs.inotify.max_user_watches=1048576`, the values EAT's prerequisites name; the old values are
+  recorded and put back at exit. (1) `k3d-gpu up`. (2) `k3d-gpu eat up --dry-run`; `choices.txt`,
+  `overlay.txt`, the overrides, the edits and `facts.json` copied into the record. (3) `k3d-gpu
+  eat up`, full log, with the bastion image tag it built. (4) `kubectl wait --for=condition=Ready
+  pod -A --field-selector=status.phase!=Succeeded --timeout=30m`, then every Job's conditions, the
+  pod list and the CPU requests of the pods in `llm-inference`. (5) `k3d-gpu eat check`, output
+  verbatim. (6) `k3d-gpu eat status`, recorded, not graded. (7) Secret scan, below. (8) `k3d-gpu
+  eat down`, then `kubectl get ns`. (9) `k3d-gpu down`. During steps 3, 5 and 8, `ps -eo args` is
+  sampled every 2 s into one gzip file.
+- **Secret scan (step 7)**, as F3's with its amendment R2 (`bench/f5/scan.sh` is `bench/f3/scan.sh`):
+  Secret `litellm-master-key` (`litellm`), Secret `sandbox-router-auth`
+  (`agent-sandbox-system`), the `password` key of any `keycloak-admin-secret` (none is expected:
+  with `auth_provider: litellm` EAS installs no Keycloak), each raw and base64, counted with a
+  fixed-string `grep -c` over the step logs, the ps samples and every file under the EAS state
+  dir's `logs/`. Only counts are recorded; a file with a hit is deleted after counting. After step
+  8 the counts are taken again (recorded, not graded).
+- **Lock.** crescent's bench lock, `flock -o -w 21600 ~/k3dgpu-bench.lock` (K = 1), with a disk
+  gate (`/` under 90% used) once it is held; at most 180 min from taking it to releasing it. Step
+  3 is stopped 100 min after it starts. The cluster is deleted and inotify put back before release,
+  also on failure.
+
+**Predicted choices on this host (from step 2, graded).** Each is a value in `choices.txt`, the
+overrides or the dry run's overlay and manifest lines, not a wording:
+
+| Fact `eat up --dry-run` should read | Choice |
+|---|---|
+| a k3d-gpu cluster | `existing_kubernetes` set to the mounted per-cluster kubeconfig |
+| node CNI `bin_dirs` `["/usr/bin"]` | `istio_platform: k3d` |
+| ServiceLB on | `metallb_enabled: false` |
+| no baked balloons DaemonSet (one NUMA node, no hybrid CPU), the node's NRI socket present | `kubernetes_cpu_policy: nri-balloons`, overlay 0003 needed |
+| k3d-gpu's NFD in `node-feature-discovery` | `nfd_enabled: false` |
+| the AMXBF16 label | `require_amx: true` when `facts.json` lists the label, `false` when it does not yet (graded by that rule) |
+| no CIDR flags in `k3s.io/node-args` | `kubernetes_cluster_cidr: 10.42.0.0/16`, `kubernetes_service_cidr: 10.43.0.0/16` |
+| BYO cluster | `kata_containers_enabled: false` |
+| any accelerator resources | `kubernetes_accelerator: cpu` |
+| no agent-sandbox CRDs | `agent_sandbox_enabled: true` |
+| about 503 GiB node memory; fit for Qwen2.5-Coder-14B | `llm_services_autodeploy_models: [qwen2-5-coder-14b]`, its KV cache as shipped |
+| 96 logical CPUs, 2 per core, one NUMA node | EAS reserves the 48 SMT siblings; EI's `cpu: auto` about 40; with 96 allocatable the rest fits: `cpu: auto` as shipped (no `cpu` in `models.edit.yaml`) |
+| EAS `v1.2.0`'s `configs/repos/repos.agent-toolkit.yaml` | `auth_provider: "litellm"`, listed by the dry run and set in `env/k3d-gpu/global_config.yaml` |
+| 96 cores; inotify at 8192/1048576 after step 0b | no core-count or inotify warning |
+| overlay at EAS `a051f00`, `nri-balloons`, 1 node | 0002 apply (a), 0003 apply (a), 0004 skip, 0005 skip, 0006 apply (b) |
+
+**Grading, fixed now.**
+
+- **SUPPORTED** only if all hold: steps 0b, 1, 2 and 3 exit 0 and every `PLAY RECAP` line in
+  step 3's log reads `failed=0`; step 2's choices and overlay decisions equal the table above,
+  and step 3 applied the same; step 4 exits 0; step 5 exits 0 (Intel's `validate agent-toolkit`
+  passes, its chat through the EAS gateway returns HTTP 200 with non-empty content, the tool call
+  comes back as `tool_calls`, the guard blocks the probe it labels Unsafe, and the sandbox prints
+  `385`); every count in step 7 is 0; step 8 exits 0 within 20 min; and no step needed a hand
+  edit, a retry, or a flag not named here.
+- **REFUTED** if any of: step 1, 2 or 3 exits non-zero, or the overlay STOPs; a choice or decision
+  differs from the table (recorded; the run goes on so the rest is observed); step 4 ends non-zero
+  with a pod owned by a Deployment, StatefulSet, DaemonSet, ReplicaSet or Sandbox not Ready; step
+  3 stopped at 100 min with a pod Pending on insufficient CPU or memory, or in CrashLoopBackOff;
+  step 5 fails while every such pod is Ready; any count in step 7 above 0; step 8 non-zero or over
+  20 min.
+- **INCONCLUSIVE** if: an image or model download fails with a registry or Hugging Face error (HTTP
+  429 or 5xx, or a github.com 5xx such as EAS #114's, recorded verbatim); step 3 is stopped at 100
+  min while every pod not Ready is still pulling an image or downloading a model; step 4 ends
+  non-zero and every pod not Ready is a Job pod; crescent's other tenants take memory or disk so
+  that the gate or `fit` fails before step 3 (recorded); or the lock runs out before step 8.
+- **Precedence**, as F3's: a REFUTED condition that follows only from an INCONCLUSIVE one grades
+  INCONCLUSIVE; every other REFUTED condition, a choice or decision that differs from the table
+  included, grades REFUTED whatever else happened.
+
+**Prediction.** SUPPORTED. Prior P(SUPPORTED) = 0.35. The open risks, none observed yet:
+EAS's own balloons policy (nri-plugins v0.15.0, overlay 0003) inside a k3d node container, which
+`k3d-gpu eas` has not run before; EI's `cpu: auto` reading the node's SMT siblings as EAS's
+probe does (if it reads one thread per core, EAS reserves 12 and auto gives the model 76, which
+still fits 96 allocatable CPUs); Intel's `validate` and the toolkit's node preflight on a
+bring-your-own k3d node; LiteLLM `v1.84.0`'s guard block shape (HTTP 500 with the reason in
+`error.message`, which `eat-check.sh` accepts); the model and image downloads; and EAS #71 at
+teardown (worked around by `eas down`).
 
 ### H2 run (i9-13900T, 2026-10-16)
 

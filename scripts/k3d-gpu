@@ -7051,7 +7051,7 @@ eas_pin_refs() {
     local dir=$1 layer=$2 eas_ref=$3 profiles name repo ref sha mf rows L U R
     local -A given=([ei]=$4 [eat]=$5) repos=([eas]=intel/enterprise-ai-solutions [ei]=intel/enterprise-inference
                                            [eat]=intel/enterprise-agent-toolkit) of_layer=([inference]=ei [agent-toolkit]=eat)
-    local missing=()
+    local need=()
     EAS_REF_ARGS=()
     profiles=" $(python3 -c 'import json, sys
 print(" ".join(sorted({r["profile"] for r in json.load(open(sys.argv[1]))["pins"]})))' "${dir}/pins.json") " \
@@ -7073,17 +7073,17 @@ print(" ".join(sorted({r["profile"] for r in json.load(open(sys.argv[1]))["pins"
         EAS_REF_ARGS+=(--eas-ref "${sha}")
         resolved eas "${sha}" "${eas_ref}"
         case "${layer}" in
-            inference)     [ -n "${given[ei]}" ] || missing=(ei) ;;
-            agent-toolkit) for name in ei eat; do [ -n "${given[${name}]}" ] || missing+=("${name}"); done ;;
+            inference)     [ -n "${given[ei]}" ] || need=(ei) ;;
+            agent-toolkit) for name in ei eat; do [ -n "${given[${name}]}" ] || need+=("${name}"); done ;;
         esac
-        if [ "${#missing[@]}" -gt 0 ]; then
+        if [ "${#need[@]}" -gt 0 ]; then
             require curl
             mf=$(mktemp)
             curl -fsSL -o "${mf}" "https://raw.githubusercontent.com/${repos[eas]}/${sha}/configs/repos/repos.${layer}.yaml" \
                 || { rm -f "${mf}"; err "cannot read configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7}: give the EI and EAT commits with --ei-ref and --eat-ref"; }
             rows=$(python3 "${dir}/eas-config.py" --manifest-revs "${mf}") || { rm -f "${mf}"; err "cannot read the repos of configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7}"; }
             rm -f "${mf}"
-            for name in "${missing[@]}"; do
+            for name in "${need[@]}"; do
                 ref=""
                 while IFS=$'\t' read -r L U R; do
                     if [ "${of_layer[${L}]:-}" = "${name}" ]; then
