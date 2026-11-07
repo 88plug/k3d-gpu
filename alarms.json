@@ -30,5 +30,13 @@
     "updated_at": "2026-11-07T00:21:10Z",
     "notified_at": "2026-11-07T00:21:10Z",
     "acked": false
+  },
+  "stale:watchdog.yml": {
+    "title": "no successful scheduled run within 7 h",
+    "body": "`watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).\n\nLast successful scheduled run: none found\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-07T00:21:19Z",
+    "updated_at": "2026-11-07T00:21:19Z",
+    "notified_at": "2026-11-07T00:21:19Z",
+    "acked": false
   }
 }
