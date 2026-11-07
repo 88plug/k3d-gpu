@@ -286,6 +286,9 @@ changes the host.
 | Issue | Symptom | What `k3d-gpu eas` does |
 |---|---|---|
 | EAS [#71](https://github.com/intel/enterprise-ai-solutions/issues/71) (open) | `teardown platform` hangs on the Envoy AI Gateway CRD uninstall once a model was deployed | `eas down` clears the `AIGatewayRoute` finalizers first, then runs `teardown platform --env k3d-gpu --force` (teardown refuses a non-terminal run without `--force`, [#L1517-L1523](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L1517-L1523)) |
+| Gateway API on k3s v1.37 | EAS `release-1.2` installs Gateway API v1.2.1 (istio) and v1.4.1 (gateway-helm's `crds/`) over the newer CRDs k3s bundles, whose safe-upgrades policy refuses both | overlay rows 0007 and 0008 keep the newer install, as EAS `main` does since #42 |
+| `init` keeps an existing `global_config.yaml` | an env inited before keeps `auth_provider` as it was, and the agent toolkit installs without LiteLLM | sets the manifest's `global_config:` keys after `init`, and refuses an env set up for another layer or other pins until `eas down` and `--reset-env` |
+| EI's `cpu: auto` | sizes the model without the pods outside the balloons, so EAT's sandbox router can find no CPU (H62) | an explicit `cpu` for the model when the estimate leaves no room |
 | `require_amx: true` in EI's catalog | on a host without AMX every model pod stays Pending | writes `require_amx: false` when the node has no AMXBF16 label |
 | kubectl skew | EAS installs kubectl v1.34.3, three minors behind k3s v1.37 | the bastion carries kubectl v1.37.2 |
 | inotify minimum | file watchers fail with `too many open files` under the kernel default | warns and prints the `sysctl` line |
@@ -293,10 +296,10 @@ changes the host.
 | `--skip-models` in EI's docs ([config.yaml#L92](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/config.yaml#L92)) | EAS's installer has no such flag and stops on it ([#L1348](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L1348)) | nothing to replace on the inference layer: EI's seeded config already has `llm_services_deploy_models: false` ([config.yaml#L93](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/config.yaml#L93)). With `--agent-toolkit`, EAT's chat model and the Qwen3Guard guard model deploy whatever that key says ([EI llm_services install.yaml#L143-L162](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/llm_services/tasks/install.yaml#L143-L162)); `k3d-gpu eas up --agent-toolkit -- -e '{"llm_services_autodeploy_models": []}'` skips the chat model ([EAT config.yaml#L34](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/config.yaml#L34)), and the guard model stays while the guardrail is on |
 
 Findings that are not workarounds in `known-issues.json` (EI's stale guardrail docs, the
-master-key command line, EI's `cpu: auto` sizing that left EAT's sandbox
-router unschedulable in H62, and the EAT 1.1.x findings) are listed in
+master-key command line and the EAT 1.1.x findings) are listed in
 [intel.md, Upstream findings](../intel.md#upstream-findings), with unsent issue drafts in
-[upstream-eat.md](upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent).
+[upstream-eat.md](upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent) and, at the
+GA tags, [upstream-eat.md](upstream-eat.md#issue-drafts-at-the-ga-tags-2026-11-07-unsent).
 
 ## State and secrets
 
