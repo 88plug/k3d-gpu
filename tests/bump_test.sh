@@ -503,6 +503,61 @@ git -C "${R7}" add -A && git -C "${R7}" commit -qm bump
 check "hack/pin-only-diff passes on the hf-meta bump" \
     python3 "${ROOT}/hack/pin-only-diff" --root "${R7}" --group hf HEAD~1 HEAD
 
+# render-latest then lock (the nri group): the manifest render-component writes (the
+# component's OUTPUT) is this bump's file too, so the lock hook names it in
+# `scripts/images-lock update --only`, which refuses a moved image whose file it is
+# not given (here a stub that records its arguments and refuses the same way).
+R8="${WORK}/repo8"
+mkdir -p "${R8}/pins" "${R8}/hack/components/c1" "${R8}/share" "${R8}/scripts"
+cat > "${R8}/pins/registry.toml" <<'EOF'
+[groups.comp]
+tests = []
+hooks = ["render-latest", "lock"]
+outputs = ["hack/components/c1/component.conf", "share/c1.yml", "images.lock"]
+
+[[pin]]
+id = "c1"
+class = "ours"
+group = "comp"
+family = "comp"
+scheme = "semver"
+source = { kind = "helm", repo = "https://example.com/charts", chart = "c1" }
+sites = [{ file = "hack/components/c1/component.conf", var = "CHART_VERSION" }]
+EOF
+printf 'KIND=helm\nCHART_VERSION=v0.15.0\nOUTPUT=share/c1.yml\n' > "${R8}/hack/components/c1/component.conf"
+printf 'image: x/c1:v0.15.0\n' > "${R8}/share/c1.yml"
+cat > "${R8}/hack/render-component" <<'EOF'
+#!/usr/bin/env bash
+# stub: render each named component's CHART_VERSION into its OUTPUT
+set -euo pipefail
+[ "$1" = --latest ] && shift
+for n in "$@"; do
+  conf="${RENDER_ROOT}/hack/components/${n}/component.conf"
+  v=$(sed -n 's/^CHART_VERSION=//p' "${conf}"); out=$(sed -n 's/^OUTPUT=//p' "${conf}")
+  printf 'image: x/%s:%s\n' "${n}" "${v}" > "${RENDER_ROOT}/${out}"
+  echo "rendered ${n} ${v} -> ${out}"
+done
+EOF
+cat > "${R8}/scripts/images-lock" <<'EOF'
+#!/usr/bin/env bash
+# stub: `--root R update --only FILE...`; records the files, refuses without share/c1.yml
+root=$2; shift 3; [ "$1" = --only ] && shift
+printf '%s\n' "$@" > "${root}/../images-lock.only"
+for f in "$@"; do [ "${f}" = share/c1.yml ] && exit 0; done
+echo "images-lock: x/c1 (from share/c1.yml): not in images.lock; name its file in --only" >&2; exit 1
+EOF
+chmod +x "${R8}/hack/render-component" "${R8}/scripts/images-lock"
+echo '{}' > "${R8}/images.lock"
+: > "${R8}/EXPERIMENTS.md"
+: > "${R8}/images.unpinned"
+git -C "${R8}" init -q -b main && git -C "${R8}" add -A && git -C "${R8}" commit -qm base
+echo '{"c1": {"v": "v0.15.1"}}' > "${WORK}/resolved8.json"
+out=$(python3 "${ROOT}/hack/bump" --root "${R8}" --resolved "${WORK}/resolved8.json" --no-tests comp 2>&1); rc=$?
+check "render-latest + lock: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "render-latest + lock: images-lock --only names the rendered manifest" \
+    grep -qx share/c1.yml "${WORK}/images-lock.only"
+check "render-latest + lock: the manifest moved" grep -qx 'image: x/c1:v0.15.1' "${R8}/share/c1.yml"
+
 # the registry: one group (one branch) for both NRI components
 check "nri-balloons and nri-balloons-guard bump in group nri (one branch)" python3 - "${ROOT}" <<'PY'
 import sys, tomllib
