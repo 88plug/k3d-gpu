@@ -1,0 +1,16 @@
+run=1 date=2026-11-07T04:22:29Z idle_pkg_w=35.6 load1=0.48 swap_used_mib=0
+sandbox_up_rc=0 sandbox_up_s=12.3
+status: ok: python-ecores-hfgtf: CPUs 17 (E-cores 16-23)
+warm_ready=1
+pod=python-ecores-hfgtf cpus=17 host_atom=16-23 host_core=0-15
+probe ns=agent-sandbox dst=100.66.38.121:22 rc=1 s=0.12 NOCONNECT ConnectionRefusedError [Errno 111] Connection refused
+probe ns=sbx-control dst=100.66.38.121:22 rc=0 s=0.09 CONNECT
+probe ns=agent-sandbox dst=192.168.8.238:22 rc=1 s=0.12 NOCONNECT ConnectionRefusedError [Errno 111] Connection refused
+probe ns=sbx-control dst=192.168.8.238:22 rc=0 s=0.09 CONNECT
+probe ns=agent-sandbox dst=pypi.org:443 rc=0 s=2.33 CONNECT
+probe ns=sbx-control dst=pypi.org:443 rc=0 s=0.10 CONNECT
+policy_chain=KUBE-NWPLCY-MPEOAIZRZ6XJTD26 policy_drop_pkts=2
+dns_pypi=151.101.0.223
+env=HOME=/tmp uid=1000
+pip_rc=0 pip_s=7.4 [notice] To update, run: pip install --upgrade pip IMPORT /tmp/.local/lib/python3.14/site-packages/tomli_w/__init__.py 
+throttle_delta=0
