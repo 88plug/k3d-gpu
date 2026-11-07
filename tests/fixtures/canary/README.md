@@ -20,7 +20,7 @@ them, nothing imports them.
 | File | Command |
 |---|---|
 | `vllm-0.32.0-cpu-serve-help-all.txt` | `vllm/vllm-openai-cpu:v0.32.0` `vllm serve --help=all` |
-| `llama-server-b11960-help.txt` | `ghcr.io/ggml-org/llama.cpp:server-b11960` `llama-server --help` (commit 8642541b255bfb5dc39cd351a178be09013a55d6) |
+| `llama-server-b11960-help.txt` | `ghcr.io/ggml-org/llama.cpp:server-b11960` `llama-server --help` (commit cd959bae99ff4bed22bef2604f45241c09bbb8c8) |
 | `ovms-2026.4.1-help.txt` | `openvino/model_server:2026.4.1-gpu` `ovms --help` |
 | `sglang-0.5.22-xeon-help.txt` | `lmsysorg/sglang:v0.5.22-xeon` `python3 -m sglang.launch_server --help` (stdout and stderr, its deprecation warning included) |
 
