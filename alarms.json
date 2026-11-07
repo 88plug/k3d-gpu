@@ -14,5 +14,13 @@
     "updated_at": "2026-11-07T00:20:52Z",
     "notified_at": "2026-11-07T00:20:52Z",
     "acked": false
+  },
+  "stale:freshness.yml": {
+    "title": "no successful scheduled run within 12 h",
+    "body": "`freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).\n\nLast successful scheduled run: none found\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-07T00:20:59Z",
+    "updated_at": "2026-11-07T00:20:59Z",
+    "notified_at": "2026-11-07T00:20:59Z",
+    "acked": false
   }
 }
