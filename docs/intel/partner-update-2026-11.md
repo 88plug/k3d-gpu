@@ -1,9 +1,9 @@
 # k3d-gpu partner update, November 2026
 
-Status: 2026-11-07. k3d-gpu release 0.1.91. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
+Status: 2026-11-07. k3d-gpu release 0.1.92. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
 83 rows. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
 as the ledger graded them. Every number here is in the ledger with its protocol and
-reproduce block. Nothing in this page has been sent to an `intel/*` repository.
+reproduce block, unless its line cites a merged pull request as the source. Nothing in this page has been sent to an `intel/*` repository.
 
 k3d-gpu turns one Linux host into a single-node Kubernetes cluster that detects the host's
 Intel hardware and configures it. The aim of this work is to make Intel's own stacks (EAS,
@@ -53,6 +53,13 @@ llama.cpp arm was OOMKilled at the 45Gi pod limit the fit gave it. The fit now c
 locked GGUF, the copies of the repacked weights (AMX buffers at their packed size), both
 contexts' compute buffers, the drafter and the per-slot logits
 ([#294](https://github.com/88plug/k3d-gpu/pull/294)).
+
+**A real-hardware check of a bump found a benchmark bug on hybrid CPUs.** Checking the Ollama
+bump (#321) on the i9-13900T found that `k3d-gpu bench --vs ollama --cpuset 0-15` started
+Ollama's llama-server with 24 threads on 16 CPUs. llama.cpp's default thread count falls back
+to the host's physical core count inside a cpuset, and Ollama's CPU backend spins its extra
+threads at the barriers. `bench --cpuset` now sets `LLAMA_ARG_THREADS` to the count llama.cpp would pick on the cpuset's own CPUs, one per physical P-core on the i9-13900T, and that run's Ollama arm decoded at 10.5 tok/s instead of 0.30 ([#337](https://github.com/88plug/k3d-gpu/pull/337)).
+The fix changes only the Ollama competitor arm of `bench`, and only with `--cpuset`.
 
 ## What was new on 2026-11-01
 
