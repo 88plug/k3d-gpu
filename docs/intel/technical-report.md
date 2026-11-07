@@ -147,7 +147,7 @@ The external bake-offs are in the tables above: the Ollama, llama.cpp and plain 
 
 ## Limitations
 
-1. **Three hosts, one of each.** Every measurement comes from the i9-13900T, the Xeon 6741P (Granite Rapids, AMX) with 4x Arc Pro B70, or wildct's i7-13700, and the abstract names which rows ran on the Xeon and on wildct. No result transfers to another host or family without its own row. On the Xeon, the Gemma 4 microbench row H54a has no scored stock arm, the B70 rows H54b and H54c ran with a placement failure (every pod saw all four cards), and H62r is pre-registered and not yet run. On wildct, whose GPUs the box owner opted out, only CPU rows run.
+1. **Three hosts.** Every measurement comes from the i9-13900T, the Xeon 6741P (Granite Rapids, AMX) with 4x Arc Pro B70, or wildct's i7-13700, and the abstract names which rows ran on the Xeon and on wildct. No result transfers to another host or family without its own row. On the Xeon, the Gemma 4 microbench row H54a has no scored stock arm, the B70 rows H54b and H54c ran with a placement failure (every pod saw all four cards), and H62r is pre-registered and not yet run. On wildct, whose GPUs the box owner opted out, only CPU rows run.
 2. **Shared, throttling host.** The host is live and shared, and the package throttles under the probes' own load. Most INCONCLUSIVE verdicts come from this. H22 throttles itself, so it is barred from this host.
 3. **The XMX half of the device rule is untested.** H6 supports "stay on the P-cores when the iGPU has no XMX". Whether the iGPU wins when it has XMX is an open prediction.
 4. **Small n.** Most SUPPORTED rows are n=3 per arm, so they show direction and correctness, not effect-size precision.
