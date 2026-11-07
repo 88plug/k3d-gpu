@@ -15,8 +15,9 @@ name: Canary
 # every selected engine's verdict is pass with hard true.
 #
 # Read-only: no secrets, no registry login (public images), GitHub-hosted runners only.
-# The re-dispatch job alone may write: it starts this workflow again (attempt + 1, at most
-# 3) when an engine was isa-skip, the runner's CPU lacking an instruction set it needs.
+# Two jobs may write, each only to dispatch a workflow: re-dispatch starts this workflow
+# again (attempt + 1, at most 3) when an engine was isa-skip, the runner's CPU lacking an
+# instruction set it needs; sweep starts bot-sweep.yml after a run dispatched on autobump/*.
 
 on:
   schedule:
@@ -235,3 +236,41 @@ jobs:
             exit 0
           fi
           gh workflow run canary.yml --repo "$REPO" --ref "$REF" -f engines="$ENGINES" -f attempt="$((ATTEMPT + 1))"
+
+  # A run dispatched on autobump/* (a bot PR's canary) is evidence bot-sweep.yml acts
+  # on, and a run dispatched with GITHUB_TOKEN starts no workflow_run, so the sweep
+  # would wait for its hourly cron, which GitHub starts hours apart here. After
+  # every other job this one dispatches the sweep with after_run set to this run's id;
+  # the sweep waits for this run to complete before it reads it. It never fails the
+  # canary (continue-on-error, exit 0). The step is ci.yml's job sweep's step.
+  sweep:
+    name: Hand off to the bot sweep
+    needs: [plan, runtime, surface, node, report, redispatch]
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/autobump/') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch bot-sweep.yml, which waits for this run to complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # GITHUB_TOKEN: 1,000 REST requests an hour for the repository, every workflow's;
+          # a sweep reads about 10 per open bot PR. GET /rate_limit costs none.
+          left=$(gh api rate_limit --jq .resources.core.remaining 2>/dev/null) || left=
+          if [[ $left =~ ^[0-9]+$ ]] && [ "$left" -lt 500 ]; then
+            echo "::notice::$left GITHUB_TOKEN requests left this hour; no hand-off, the next scheduled sweep reads this run"
+            exit 0
+          fi
+          for n in 1 2 3; do
+            if gh workflow run bot-sweep.yml --ref main -f after_run="$RUN_ID"; then
+              echo "dispatched bot-sweep.yml with after_run=$RUN_ID"
+              exit 0
+            fi
+            if [ "$n" -lt 3 ]; then sleep $((10 * n)); fi
+          done
+          echo "::warning::could not dispatch bot-sweep.yml; its next scheduled run reads this run"

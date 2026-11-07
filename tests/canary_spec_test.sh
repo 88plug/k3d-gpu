@@ -298,7 +298,8 @@ assert jobs["runtime"]["timeout-minutes"] == 45 and jobs["runtime"]["strategy"][
 assert jobs["surface"]["timeout-minutes"] == 30 and jobs["node"]["timeout-minutes"] == 40
 assert "always()" in jobs["report"]["if"]
 writes = {n for n, j in jobs.items() if any(v == "write" for v in (j["permissions"] or {}).values())}
-assert writes <= {"redispatch"}, writes
+assert writes <= {"redispatch", "sweep"}, writes
+assert jobs["sweep"]["permissions"] == {"actions": "write"}, jobs["sweep"]["permissions"]
 assert "secrets." not in src, "no secrets"
 for u in re.findall(r"uses:\s*(\S+)", src):
     assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", u), "not pinned by SHA: " + u
