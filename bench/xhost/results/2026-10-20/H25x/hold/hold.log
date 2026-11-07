@@ -1,0 +1,179 @@
+load typical: started typical on 24-47,72-95 (3 containers, ttl 1500s)
+node k3d-k3dgpu-x-h25-server-0 pinned to CPUs 0-23,48-71
+settle: settled after 5 s
+level=typical round=1 arm=ON seed=2541 graph_prefix_caching=true pod_cpus=0-23,48-71 load1=18.74 swap_used_mib=0 containers=20
+{"arm": "ON", "seed": 2541, "added_ttft": [0.2514905398711562, 0.24384911311790347, 0.25180244632065296, 0.24271856807172298, 0.24174558324739337], "a1": 1.9486847459338605, "c": 1.7366127306595445, "drss_per_agent_mib": null}
+settle: settled after 5 s
+level=typical round=2 arm=OFF seed=2542 graph_prefix_caching=false pod_cpus=0-23,48-71 load1=23.16 swap_used_mib=0 containers=20
+{"arm": "OFF", "seed": 2542, "added_ttft": [1.7271018200553954, 1.7191138179041445, 1.737174549140036, 1.706517112441361, 1.7230204590596259], "a1": 1.9534107223153114, "c": 1.744796470273286, "drss_per_agent_mib": null}
+settle: settled after 5 s
+level=typical round=3 arm=ON seed=2543 graph_prefix_caching=true pod_cpus=0-23,48-71 load1=27.90 swap_used_mib=0 containers=20
+{"arm": "ON", "seed": 2543, "added_ttft": [0.24640380404889584, 0.2454223488457501, 0.23415827425196767, 0.24677801318466663, 0.2499865791760385], "a1": 1.9486712622456253, "c": 1.7154941316694021, "drss_per_agent_mib": null}
+settle: settled after 5 s
+level=typical round=4 arm=OFF seed=2544 graph_prefix_caching=false pod_cpus=0-23,48-71 load1=28.33 swap_used_mib=0 containers=20
+{"arm": "OFF", "seed": 2544, "added_ttft": [1.7059553721919656, 1.7391322432085872, 1.7555416389368474, 1.7242856831289828, 1.7301033097319305], "a1": 1.964392120949924, "c": 1.718083718791604, "drss_per_agent_mib": null}
+settle: settled after 5 s
+level=typical round=5 arm=ON seed=2545 graph_prefix_caching=true pod_cpus=0-23,48-71 load1=30.88 swap_used_mib=0 containers=20
+{"arm": "ON", "seed": 2545, "added_ttft": [0.25880474084988236, 0.23958231508731842, 0.23945516487583518, 0.24278886104002595, 0.24456709902733564], "a1": 1.9634370869025588, "c": 1.7153382757678628, "drss_per_agent_mib": null}
+settle: settled after 5 s
+level=typical round=6 arm=OFF seed=2546 graph_prefix_caching=false pod_cpus=0-23,48-71 load1=29.15 swap_used_mib=0 containers=20
+{"arm": "OFF", "seed": 2546, "added_ttft": [1.7491995082236826, 1.7196824070997536, 1.7312311218120158, 1.7048360141925514, 1.710126212798059], "a1": 2.0160435317084193, "c": 1.7005909471772611, "drss_per_agent_mib": null}
+{
+  "n_rounds": {
+    "ON": 3,
+    "OFF": 3
+  },
+  "void": {},
+  "median_added_ttft_s": {
+    "ON": 0.24456709902733564,
+    "OFF": 1.7242856831289828
+  },
+  "n_added": {
+    "ON": 15,
+    "OFF": 15
+  },
+  "per_round_median_s": {
+    "ON": [
+      0.24384911311790347,
+      0.24640380404889584,
+      0.24278886104002595
+    ],
+    "OFF": [
+      1.7230204590596259,
+      1.7301033097319305,
+      1.7196824070997536
+    ]
+  },
+  "spread_s": {
+    "ON": 0.0036149430088698864,
+    "OFF": 0.010420902632176876
+  },
+  "ratio": 7.0503583269647265,
+  "ci95": [
+    6.9403401436883065,
+    7.132001510982324
+  ],
+  "confidence_pairs_ge_4x": 1.0,
+  "c_on_over_off": 0.9949013370895552,
+  "a1_on_over_off": 0.9920039513249178,
+  "prompt_tokens": [
+    "1634"
+  ],
+  "inconclusive_parts": [],
+  "T": "SUPPORTED",
+  "M": "INCONCLUSIVE (not measured: phase B not run, amendment A3)",
+  "load": {
+    "matched": true,
+    "void": false,
+    "verdict": "MATCHED",
+    "rule": "amendment-27",
+    "checks": [
+      {
+        "metric": "busy_pct",
+        "arms": {
+          "ON": 37.423,
+          "OFF": 37.15
+        },
+        "spread": 0.273,
+        "limit": 5.0,
+        "status": "ok",
+        "phase": "pre"
+      },
+      {
+        "metric": "throttle_per_min",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0,
+        "limit": 10.0,
+        "status": "ok",
+        "phase": "pre"
+      },
+      {
+        "metric": "swap_used_mib",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0,
+        "limit": 256.0,
+        "status": "ok",
+        "phase": "pre"
+      },
+      {
+        "metric": "swap_delta_mib",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0,
+        "limit": 64.0,
+        "status": "ok",
+        "phase": "pre"
+      },
+      {
+        "metric": "busy_pct",
+        "arms": {
+          "ON": 39.948,
+          "OFF": 40.391
+        },
+        "spread": 0.443,
+        "limit": 5.0,
+        "status": "ok",
+        "phase": "during"
+      },
+      {
+        "metric": "swap_used_mib",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0,
+        "limit": 256.0,
+        "status": "ok",
+        "phase": "during"
+      },
+      {
+        "metric": "swap_delta_mib",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0,
+        "limit": 64.0,
+        "status": "ok",
+        "phase": "during"
+      }
+    ],
+    "outcomes": [
+      {
+        "metric": "pkg_w",
+        "arms": {
+          "ON": 244.114,
+          "OFF": 257.464
+        },
+        "spread": 13.35
+      },
+      {
+        "metric": "throttle_per_min",
+        "arms": {
+          "ON": 0.0,
+          "OFF": 0.0
+        },
+        "spread": 0.0
+      },
+      {
+        "metric": "load1",
+        "arms": {
+          "ON": 27.256,
+          "OFF": 28.873
+        },
+        "spread": 1.617
+      }
+    ],
+    "unsettled": {}
+  }
+}
+elapsed=329s
+cluster k3dgpu-x-h25 deleted at 332s

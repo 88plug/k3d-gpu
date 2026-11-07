@@ -1,0 +1,21 @@
+{
+ "source": {
+  "repo": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant",
+  "revision": "9537141506fe8875b3ed45b264af13580cb29166"
+ },
+ "image": "ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e",
+ "steps": [
+  "convert_hf_to_gguf.py --outtype bf16 (transformers 5.5.4)",
+  "--quantize Q4_0"
+ ],
+ "files": {
+  "gemma-4-26B-A4B-it-qat-assistant-bf16.gguf": {
+   "sha256": "033e8562af6a218b8d5b5b78feeb01888ccee0659af6f156630f138c1735bccf",
+   "bytes": 855247712
+  },
+  "gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf": {
+   "sha256": "8eb21d5b7efad6e9761b81066e0b094b73623c60e46ba4c0925cdbbf49c93ca9",
+   "bytes": 321145696
+  }
+ }
+}

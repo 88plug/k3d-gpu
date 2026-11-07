@@ -1,0 +1,89 @@
+23:13:58 +0s H34 probe -> /home/devcloud/k3dgpu-xhost/runs/H34x/out (levels='typical', pairs=12, level budget 1200s)
+a825757982ac08ec75d71e378f7b1e4a9106a8a9fab6127566f9fad8f4901962  /home/devcloud/k3dgpu-xhost/k3d-gpu/bench/hetero-spec/prompts.jsonl
+removed 0 container(s)
+[32m==>[0m Accelerators: none (K3D_GPU_VENDORS=none)
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-x-h34' with image cryptoandcoffee/k3d-gpu:0.1.61...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-x-h34'           
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-x-h34-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-x-h34-tools'       
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-x-h34-server-0'    
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-x-h34'              
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-x-h34-server-0'    
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-x-h34' created successfully! 
+[36mINFO[0m[0006] You can now use it like this:                
+kubectl cluster-info
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-x-h34-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m No accelerators requested; cluster ready.
+k3d-k3dgpu-x-h34-server-0
+23:14:27 +29s node k3d-k3dgpu-x-h34-server-0 pinned to CPUs 0-23,48-71
+namespace/spec-decode-cpu created
+configmap/graphs created
+pod/ovms created
+pod/ovms condition met
+NAME   READY   STATUS    RESTARTS   AGE   IP           NODE                        NOMINATED NODE   READINESS GATES
+ovms   1/1     Running   0          26s   10.42.0.10   k3d-k3dgpu-x-h34-server-0   <none>           <none>
+Forwarding from 127.0.0.1:18034 -> 8000
+Forwarding from [::1]:18034 -> 8000
+Handling connection for 18034
+Handling connection for 18034
+23:15:58 +120s server warm
+23:16:00 +122s level typical: start load (started typical on 24-47,72-95 (3 containers, ttl 1500s))
+Handling connection for 18034
+Handling connection for 18034
+Handling connection for 18034
+Handling connection for 18034
+23:17:47 +229s level typical: pair 1 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:18:15 +257s level typical: pair 2 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+23:18:44 +286s level typical: pair 3 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:19:13 +315s level typical: pair 4 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+23:19:42 +344s level typical: pair 5 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:20:10 +372s level typical: pair 6 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+23:20:40 +402s level typical: pair 7 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:21:10 +432s level typical: pair 8 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+23:21:39 +461s level typical: pair 9 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:22:07 +489s level typical: pair 10 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+23:22:36 +518s level typical: pair 11 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+23:23:04 +546s level typical: pair 12 done (B A)
+removed 3 container(s)
+23:23:04 +546s level typical: done, load stopped
+removed 0 container(s)
+23:23:04 +546s deleting cluster k3dgpu-x-h34
+[36mINFO[0m[0000] Deleting cluster 'k3dgpu-x-h34'              
+[36mINFO[0m[0001] Deleting cluster network 'k3d-k3dgpu-x-h34'  
+[36mINFO[0m[0001] Deleting 1 attached volumes...               
+[36mINFO[0m[0001] Removing cluster details from default kubeconfig... 
+[36mINFO[0m[0001] Removing standalone kubeconfig file (if there is one)... 
+[36mINFO[0m[0001] Successfully deleted cluster k3dgpu-x-h34!   

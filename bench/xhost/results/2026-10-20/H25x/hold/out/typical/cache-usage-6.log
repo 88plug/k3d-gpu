@@ -1,0 +1,3 @@
+[2026-10-21 00:12:57.232][566][llm_executor][info][llm_executor.hpp:104] All requests: 0; Scheduled requests: 1; Cache type: dynamic, cache usage: 30.8% of 135.3 MB;
+[2026-10-21 00:13:00.400][566][llm_executor][info][llm_executor.hpp:104] All requests: 0; Scheduled requests: 1; Cache type: dynamic, cache usage: 46.2% of 135.3 MB;
+[2026-10-21 00:13:03.577][566][llm_executor][info][llm_executor.hpp:104] All requests: 0; Scheduled requests: 1; Cache type: dynamic, cache usage: 61.5% of 135.3 MB;

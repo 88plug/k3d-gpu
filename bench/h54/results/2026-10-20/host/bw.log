@@ -1,0 +1,108 @@
+2026-10-20T22:16:35Z waiting for lock
+2026-10-20T22:18:52Z lock acquired
+df=94%
+ 22:18:52 up 34 days, 23:33, 12 users,  load average: 2.00, 4.49, 4.06
+qwen38-b-hr qwen38-a-hr dynamo-frontend llmd-envoy llmd-epp aiperf010 xe-exporter grafana otel-collector tempo node-exporter prometheus alloy drm-exporter loki xpumd 
+=== STREAM threads=48 rep=1
+Number of Threads requested = 48
+Number of Threads counted = 48
+Copy:          299429.4     0.021667     0.021374     0.022416
+Scale:         289380.8     0.022459     0.022116     0.022990
+Add:           304212.9     0.032241     0.031557     0.033322
+Triad:         305575.0     0.032219     0.031416     0.033408
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=48 rep=2
+Number of Threads requested = 48
+Number of Threads counted = 48
+Copy:          301958.9     0.021564     0.021195     0.021747
+Scale:         290144.0     0.022276     0.022058     0.022727
+Add:           301705.5     0.032230     0.031819     0.032631
+Triad:         303721.9     0.032215     0.031608     0.032708
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=48 rep=3
+Number of Threads requested = 48
+Number of Threads counted = 48
+Copy:          301887.6     0.021528     0.021200     0.021874
+Scale:         289815.1     0.022263     0.022083     0.022482
+Add:           305811.8     0.032036     0.031392     0.032614
+Triad:         307465.1     0.031966     0.031223     0.032642
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=48 rep=4
+Number of Threads requested = 48
+Number of Threads counted = 48
+Copy:          302101.7     0.021584     0.021185     0.022330
+Scale:         288693.0     0.022455     0.022169     0.023152
+Add:           303011.0     0.032318     0.031682     0.033855
+Triad:         304684.8     0.032167     0.031508     0.034090
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=48 rep=5
+Number of Threads requested = 48
+Number of Threads counted = 48
+Copy:          300512.1     0.021711     0.021297     0.022453
+Scale:         287823.2     0.022631     0.022236     0.022966
+Add:           304482.1     0.032856     0.031529     0.034090
+Triad:         304675.6     0.032680     0.031509     0.034225
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=96 rep=1
+Number of Threads requested = 96
+Number of Threads counted = 96
+Copy:          291812.6     0.027448     0.021932     0.045435
+Scale:         287730.7     0.027756     0.022243     0.032545
+Add:           283914.5     0.039962     0.033813     0.049149
+Triad:         293838.8     0.037557     0.032671     0.043355
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=96 rep=2
+Number of Threads requested = 96
+Number of Threads counted = 96
+Copy:          299780.5     0.028485     0.021349     0.035184
+Scale:         275921.2     0.029481     0.023195     0.038858
+Add:           277095.6     0.038325     0.034645     0.043167
+Triad:         289549.4     0.038126     0.033155     0.042393
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=96 rep=3
+Number of Threads requested = 96
+Number of Threads counted = 96
+Copy:          293160.6     0.027339     0.021831     0.032431
+Scale:         291476.7     0.028129     0.021957     0.032558
+Add:           291446.1     0.038499     0.032939     0.044871
+Triad:         284639.0     0.037667     0.033727     0.041992
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=96 rep=4
+Number of Threads requested = 96
+Number of Threads counted = 96
+Copy:          295324.8     0.025761     0.021671     0.029859
+Scale:         290090.7     0.026691     0.022062     0.031806
+Add:           281930.5     0.038376     0.034051     0.043294
+Triad:         284393.7     0.036862     0.033756     0.040408
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== STREAM threads=96 rep=5
+Number of Threads requested = 96
+Number of Threads counted = 96
+Copy:          284899.8     0.026250     0.022464     0.032733
+Scale:         281576.6     0.027313     0.022729     0.031118
+Add:           282736.3     0.036685     0.033954     0.042087
+Triad:         280054.0     0.037450     0.034279     0.040983
+Solution Validates: avg error less than 1.000000e-13 on all three arrays
+=== MLC max_bandwidth
+*** Unable to modify prefetchers (try executing 'modprobe msr')
+*** So, enabling random access for latency measurements
+In custom latency loop for BHS and OKS 
+
+Measuring Maximum Memory Bandwidths for the system
+Will take several minutes to complete as multiple injection rates will be tried to get the best bandwidth
+Bandwidths are in MB/sec (1 MB/sec = 1,000,000 Bytes/sec)
+Using all the threads from each core if Hyper-threading is enabled
+Using traffic with the following read-write ratios
+ALL Reads        :	371918.7
+3:1 Reads-Writes :	329062.2
+2:1 Reads-Writes :	320352.6
+1:1 Reads-Writes :	308982.5
+Stream-triad like:	314909.2
+
+=== MLC idle_latency
+*** Unable to modify prefetchers (try executing 'modprobe msr')
+*** So, enabling random access for latency measurements
+In custom latency loop for BHS and OKS 
+Each iteration took 288.7 base frequency clocks (	115.5	ns)
+
+2026-10-20T22:22:12Z done, releasing lock

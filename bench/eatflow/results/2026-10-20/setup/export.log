@@ -1,0 +1,27 @@
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/optimum/intel/openvino/modeling_base.py:633: SyntaxWarning: invalid escape sequence '\.'
+  pattern=cls._search_pattern if not kwargs.get("from_onnx", False) else ".*\.onnx$",
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/398 [00:00<?, ?it/s]Loading weights: 100%|██████████| 398/398 [00:00<00:00, 15561.83it/s]
+`loss_type=None` was set in the config but it is unrecognized. Using the default loss: `ForCausalLMLoss`.
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/transformers/cache_utils.py:131: TracerWarning: Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means that the trace might not generalize to other inputs!
+  if not self.is_initialized or self.keys.numel() == 0:
+`cache_position` is deprecated as an arg, and will be removed in Transformers v5.6. Please use `q_length` and `q_offset` instead, similarly to `kv_length` and `kv_offset`
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/transformers/masking_utils.py:192: TracerWarning: Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means that the trace might not generalize to other inputs!
+  if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/optimum/exporters/openvino/patching_utils.py:247: TracerWarning: torch.tensor results are registered as constants in the trace. You can safely ignore this warning if you use this function to create tensors out of constant variables that would be the same every time you call this function. In any other case, this might cause the trace to be incorrect.
+  torch.tensor(0.0, device=mask.device, dtype=dtype),
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/optimum/exporters/openvino/patching_utils.py:248: TracerWarning: torch.tensor results are registered as constants in the trace. You can safely ignore this warning if you use this function to create tensors out of constant variables that would be the same every time you call this function. In any other case, this might cause the trace to be incorrect.
+  torch.tensor(torch.finfo(torch.float16).min, device=mask.device, dtype=dtype),
+/home/devcloud/k3dgpu-bench/ovenv/lib/python3.12/site-packages/transformers/integrations/sdpa_attention.py:77: TracerWarning: Converting a tensor to a Python boolean might cause the trace to be incorrect. We can't record the data flow of Python values, so this value will be treated as a constant in the future. This means that the trace might not generalize to other inputs!
+  is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
+INFO:nncf:Statistics of the bitwidth distribution:
+┍━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┑
+│ Weight compression mode   │ % all parameters (layers)   │ % ratio-defining parameters (layers)   │
+┝━━━━━━━━━━━━━━━━━━━━━━━━━━━┿━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┿━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┥
+│ float                     │ 0% (1 / 254)                │ 0% (0 / 252)                           │
+├───────────────────────────┼─────────────────────────────┼────────────────────────────────────────┤
+│ int8_asym, per-channel    │ 10% (1 / 254)               │ 0% (0 / 252)                           │
+├───────────────────────────┼─────────────────────────────┼────────────────────────────────────────┤
+│ int4_sym, group size 128  │ 90% (252 / 254)             │ 100% (252 / 252)                       │
+┕━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┙
+Applying Weight Compression ━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% • 0:00:12 • 0:00:00
