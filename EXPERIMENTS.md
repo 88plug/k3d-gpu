@@ -5157,10 +5157,10 @@ merged before the data it governs.
 
 **Why.**
 
-- H62's pre-registration names this row: when an EAS release at v1.2.0 or later or an EAT
-  release at 2.0.0 or later is tagged, "a new row, H62r, is pre-registered: the same design with
-  B5 at the tagged release (its release notes' component table)". H62 ended at setup with no hold
-  (INCONCLUSIVE, not deliverable), so it keeps its verdict and its records stay as they are.
+- H62's pre-registration names this row for an EAS release at v1.2.0 or later or an EAT release
+  at 2.0.0 or later: "A new row, H62r, is pre-registered: the same design with B5 at the tagged
+  release (its release notes' component table)." H62 ended at setup with no hold (INCONCLUSIVE,
+  not deliverable), so it keeps its verdict and its records stay as they are.
 - The trigger has fired. `bench/h62/upstream.sh`, run 2026-11-07T04:06Z: `fired: eas v1.2.0, eat
   release-2.0.0`.
 - H62's question stands at the release Intel now ships: does k3d-gpu's CPU stack deliver far more
