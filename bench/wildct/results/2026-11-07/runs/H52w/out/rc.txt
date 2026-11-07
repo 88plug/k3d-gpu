@@ -1,0 +1,9 @@
+detect(auto) rc=0
+detect rc=0
+doctor rc=0
+up rc=0 in 32 s
+pods ready: yes after 20 s
+GPU-SCAN clean
+test rc=0
+down rc=0
+inventory unchanged
