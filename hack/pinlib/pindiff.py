@@ -19,6 +19,8 @@ TOKENS = re.compile("|".join((
     r"(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])",       # git / Hugging Face revisions
     r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])",       # bare sha256
     r"(?<![0-9a-f])[0-9a-f]{7,12}(?![0-9a-f])(?=…)",  # a digest cut short in prose
+    r"sha256:[0-9a-f]{12}(?![0-9a-f])",               # a digest cut to 12, as audits print it
+    r"(?<=@)[0-9a-f]{12}(?![0-9a-f])",                # a revision or digest cut to 12, as plans print it
     r"\d{4}-\d{2}-\d{2}",                            # ISO date
     r"(?<!\d)\d{8}(?!\d)",                           # YYYYMMDD
     r"(?<!\d)\d{9,11}(?!\d)",                        # epoch seconds (flake.lock lastModified)

@@ -122,6 +122,32 @@ class RealTree(unittest.TestCase):
         used = {p["group"] for p in reg["pin"]} | {x["group"] for x in reg["images"]["default"]["groups"]}
         self.assertEqual(set(reg["groups"]) - used - {"digests"}, set(), "groups with no pin")
 
+    def test_every_canary_derived_constant_moves_with_its_pin(self):
+        """A package version canary/engines.toml checks against an engine's image (the
+        vLLM version the launcher hands the optimizer, say) lies inside a site or
+        derived value of the pin whose canary names that engine, so a bump moves it
+        too. A deb or firmware inside the image is a fact only the canary reads."""
+        import re
+        import tomllib
+        sys.path.insert(0, str(ROOT / "hack"))
+        from pinlib import registry
+        reg = registry.load(str(ROOT / "pins" / "registry.toml"))
+        tree = registry.Tree(str(ROOT))
+        with open(ROOT / "canary" / "engines.toml", "rb") as f:
+            engines = tomllib.load(f)["engine"]
+        missing = []
+        for e in engines:
+            pins = [p for p in reg["pin"] if e["id"] in p.get("canary", [])]
+            spans = [s for p in pins for s in registry.locate(tree, p)]
+            for d in (d for d in e.get("derived", []) if d.get("of") == "package"):
+                m = re.search(d["regex"], tree.read(d["file"]) or "", re.M)
+                self.assertIsNotNone(m, "%s: %s matches nothing in %s" % (e["id"], d["regex"], d["file"]))
+                a, b = m.span("v")
+                if not any(s.file == d["file"] and s.start <= a and b <= s.end for s in spans):
+                    missing.append("%s: %s %r (pins %s)" % (e["id"], d["file"], m.group(0),
+                                                          ", ".join(p["id"] for p in pins) or "none"))
+        self.assertEqual(missing, [], "canary derived constants no registry site or derived value covers")
+
 
 class Check(unittest.TestCase):
     def run_check(self, registry=REGISTRY, files=None):
