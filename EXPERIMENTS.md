@@ -5552,9 +5552,12 @@ of the layout. The runner was used as merged; no amendment was needed.
 - Paired J per attempt, A1/B5: 0.99 (95% CI 0.89-1.13). RAPL package energy includes both
   guests.
 - The serving covariate (`serving.py`) averaged 0.12 CPU-s/s, from the host's observability
-  containers, and no aiperf process ran. Each guest's CPU (`vm_cpu`): during A1's attempts VM a
-  used 29.2 CPU-s/s and VM b 2.2; during B5's, VM b used 22.4 and VM a 0.3. So VM b's own
-  background (Kubernetes, Istio, observability and Qwen3Guard) is about 2 CPU-s/s.
+  containers, and no aiperf process ran. Each guest's CPU while its arm answered: over each
+  attempt's own window, A1's pod in VM a 45.9 CPU-s/s on average (its CPU limit is 48) and B5's
+  pod in VM b 39.0 (its 40 CPUs). The host's 10 s `vm_cpu` samples whose whole window lies inside
+  an attempt agree: VM a 47.2 and VM b 2.2 in A1's (7 samples), VM b 42.0 and VM a 0.3 in B5's (3
+  samples). So VM b's own background (Kubernetes, Istio, observability and Qwen3Guard) is about 2
+  CPU-s/s.
 - B5's pod in the hold (`hold1/remote-b/`): CPU request and limit 40, cpuset the 40 even vCPUs
   16-94, `nproc` 40, `amx_tile` on 96 lines of its /proc/cpuinfo, image
   `vllm/vllm-openai-cpu@sha256:197354e6...`, and `max_model_len` 262144.
