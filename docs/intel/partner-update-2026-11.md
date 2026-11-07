@@ -1,6 +1,6 @@
 # k3d-gpu partner update, November 2026
 
-Status: 2026-11-07. k3d-gpu release 0.1.90. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
+Status: 2026-11-07. k3d-gpu release 0.1.91. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
 83 rows. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
 as the ledger graded them. Every number here is in the ledger with its protocol and
 reproduce block. Nothing in this page has been sent to an `intel/*` repository.
