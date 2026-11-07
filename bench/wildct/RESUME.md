@@ -24,8 +24,9 @@ passes.
   (hold 8, 09:07:05Z to 09:11:42Z, rc 0; 6 scored rounds, none void, load MATCHED), from the same
   archive. Amendment R8's read of each cluster found no GPU device plugin pod. The host's
   containers, start times, restart counts, port codes and firewall rules read the same before and
-  after each hold, and nothing of the holds was left but the build cache of the two preps' `docker
-  build` (below).
+  after each hold, and nothing of the holds was left but `ghcr.io/k3d-io/k3d-proxy:5.9.0`, which
+  H28w's cluster pulled for its load balancer (`docker system df` read 497 images before hold 5 and
+  498 after holds 6 and 8), and the build cache of the two preps' `docker build` (both below).
 - **Row 4, `H34w`,** ran on 2026-11-07 (05:54:52Z to 06:10:05Z, rc 0; `out/verdict.json` written
   by `h34.py`, 12 of 12 pairs) and is scored INCONCLUSIVE, effect size not resolved by the CIs
   (EXPERIMENTS.md "H34w run"; records in `results/2026-11-07/runs/H34w/`, the host before and

@@ -9900,8 +9900,9 @@ network or volume of ours and no `h28-model` image (after holds 6 and 8) was lef
 free. After the last hold (09:14Z) all 18 modules of `/etc/modules-load.d/k3dgpu-wildct.conf` were loaded,
 the host had 224 modules loaded, and `kernel.modprobe` was empty. No GPU command was run.
 
-Holds used: 8 of at most 12 (H28w-prep, the failed H28w, H28w-prep-r2 and H28w-r2). The next row in the
-registered order is H57wb's reading. Then H57wa and H57wm have holds 1-4 and no spare (amendment R9).
+Holds used: 8 of at most 12; H28w took holds 5-8 (H28w-prep, the failed H28w, H28w-prep-r2 and
+H28w-r2). The next row in the registered order is H57wb's reading. Then H57wa and H57wm have holds 1-4
+and no spare (amendment R9).
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
