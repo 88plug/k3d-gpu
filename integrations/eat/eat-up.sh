@@ -82,7 +82,7 @@ case "$(cfg_value "${EAT_CONFIG}" deploy_nri_balloon_policy)" in
     *) err "${EAT_CONFIG}: deploy_nri_balloon_policy must be off: ${EAT_TAG} deploys its own NRI balloons policy when it is on or absent, beside k3d-gpu's, which must remain the only one, and in model mode it moves vLLM to a balloon type k3d-gpu's policy does not define" ;;
 esac
 case "$(cfg_value "${EAT_CONFIG}" compute_platform)" in
-    x|xpu) err "compute_platform=xpu: ${EAT_TAG} then applies intel-device-plugins' gpu_plugin from its main branch, unpinned, beside the GPU plugin k3d-gpu bakes; for vLLM on an Intel GPU run K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up" ;;
+    x|xpu) err "compute_platform=xpu: ${EAT_TAG} then applies intel-device-plugins' gpu_plugin from its main branch, unpinned, beside the GPU plugin k3d-gpu bakes. k3d-gpu's own vLLM on an Intel GPU (K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up) has not yet served end to end on Arc: see README.md, vLLM backends for discrete Arc" ;;
 esac
 case "$(cfg_value "${EAT_CONFIG}" deploy_kata_containers)" in
     on|yes) err "deploy_kata_containers=on: Kata needs /dev/kvm on the node, and a k3d node is a container without it; set deploy_kata_containers=off" ;;

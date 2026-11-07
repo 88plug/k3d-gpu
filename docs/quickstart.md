@@ -67,6 +67,8 @@ You see five steps, each with a progress bar:
    used for this LLM, and neither is an iGPU without XMX (UHD, Iris Xe,
    N-series). On a Gaudi the server is vLLM instead, and the
    chat UI step needs `--no-ui` (the UI talks to OpenVINO Model Server only).
+   No release up to 0.1.93 serves with vLLM, so on a Gaudi this step does not
+   finish ([status](../README.md#vllm-on-gaudi)).
 4. **Chat UI**: Open WebUI, with an admin account created for you.
 5. **Port-forward**: the UI on `127.0.0.1` only, not on your network.
 
