@@ -1,0 +1,5 @@
+farmgpu-telemetry_alloy-data
+farmgpu-telemetry_grafana-data
+farmgpu-telemetry_loki-data
+farmgpu-telemetry_prom-data
+farmgpu-telemetry_tempo-data

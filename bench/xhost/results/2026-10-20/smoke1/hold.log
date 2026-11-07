@@ -1,0 +1,44 @@
+load cpus 24-47,72-95; node cpus 0-23,48-71
+up: 31 s
+[32m==>[0m Accelerators: none (K3D_GPU_VENDORS=none)
+node cpuset: 0-23,48-71
+96 {"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/instance-type":"k3s","beta.kubernetes.io/os":"linux","experimental.k3d-gpu.io/dra":"true","experimental.k3d-gpu.io/image-volume":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512BF16":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512F":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI":"true","feature.node.kubernetes.io/cpu-cpuid.
+[32m==>[0m agent: OpenVINO/Qwen3-4B-int4-ov as 'Qwen3-4B-int4-ov' on CPU, 48 CPU(s)
+[32m==>[0m agent: Fast Draft OpenVINO/Qwen3-0.6B-int4-ov on CPU
+44:            - --target_device=CPU
+45:            - --draft_source_model=OpenVINO/Qwen3-0.6B-int4-ov
+46:            - --draft_device=CPU
+73:              cpu: "48"
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+error: timed out waiting for the condition
+      cpu:        48
+      memory:     6Gi
+    Readiness:    http-get http://:http/v2/health/ready delay=0s timeout=1s period=5s #success=1 #failure=3
+    Environment:  <none>
+    Mounts:
+      /models from models (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-vcsvl (ro)
+Conditions:
+  Type           Status
+  PodScheduled   False 
+Volumes:
+  models:
+    Type:          HostPath (bare host directory volume)
+    Path:          /var/lib/xh-models
+    HostPathType:  Directory
+  kube-api-access-vcsvl:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason            Age    From               Message
+  ----     ------            ----   ----               -------
+  Warning  FailedScheduling  10m    default-scheduler  0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+  Warning  FailedScheduling  4m57s  default-scheduler  0/1 nodes are available: 1 node(s) had untolerated taint(s). preemption: 0/1 nodes are available: 1 Preemption is not helpful for scheduling.
+cluster k3dgpu-x-smoke deleted

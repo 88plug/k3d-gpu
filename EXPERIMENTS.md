@@ -3549,6 +3549,49 @@ It is now committed unchanged at
 cites (the 24 pinned Hub repos' cards and configs, `INDEX.txt` and the `probes/` behind its
 `[probe:*]` keys), so its section numbers and line citations read as they did when cited.
 
+### Crescent note N2: the records that were only on crescent (2026-11-07)
+
+Recorded 2026-11-07. A records fix, not a protocol change: no arm, model, rule, prediction or
+measured value changes, and no row is re-graded. A comparison of crescent's workspaces with the
+repo found records that this ledger cites, or that a row's run wrote, only on the host. They are
+now committed byte for byte. Each directory below has a `SHA256SUMS` made from the host's own
+`sha256sum` output, and `tests/results_records_test.sh` checks those files in CI. A host script is
+kept as `<name>.sh.txt`, a record that is not run. The copies were read-only reads of the host;
+no bench lock was taken.
+
+- **H52's inventory**, which the H52 pre-registration keeps as `~/k3dgpu-bench/inventory/`:
+  `host-inventory-before.txt`, `host-inventory-before-v2.txt`, `images-before.txt`,
+  `images-now.txt`, `containers-before.txt`, `networks-before.txt` and `volumes-before.txt`, in
+  `bench/eatflow/results/2026-10-20/H52/inventory/`.
+- **Shared rule 5's tools and A1's re-export** (H50-H52 pre-registration):
+  `~/k3dgpu-bench/c6-setup.sh`, which installed k3d v5.9.0, kubectl v1.35.2, helm v4.1.1 and
+  uv 0.8.0 into `~/k3dgpu-bench/bin` before amendment E4's `setup.sh`, and
+  `~/k3dgpu-bench/export.log`, the output of A1's int4 re-export of `Qwen/Qwen3-4B-Instruct-2507`
+  (the log names no model; it was last written at 20:47:16Z, one second before the host's
+  `models/Qwen3-4B-Instruct-2507-int4-ov`), in `bench/eatflow/results/2026-10-20/setup/`
+  (`c6-setup.sh.txt`, `export.log`).
+- **What H54's pre-registration read**: `~/k3dgpu-gemma/bw.log` (STREAM and MLC) with `bw.sh`,
+  which wrote it; `deleted-bak-listing.txt.gz`, the listing of the deleted 137.3 GB directory;
+  `weights.sha256`; the model downloads `dl.sh` and `dl2.sh` with their logs; and
+  `weights-autoround.sha256`, which `dl2.sh` wrote. All in `bench/h54/results/2026-10-20/host/`.
+- **H54a's builds** (amendment R2 and the H54a run's Reproduce block): the build `manifest.json`
+  of the OVQ IR and of the drafter GGUF (from `~/k3dgpu-gemma/models/k3dgpu/<dir>/`),
+  `convert.log` (`convert.sh`'s drafter build, 2026-10-21 03:48Z), and `drafter-try2.sh` with its
+  log, the trial conversion with transformers 5.5.4 that R2 adopted. All in
+  `bench/h54/results/2026-10-21/builds/`.
+- **The cross-host rows' logs** (from `~/k3dgpu-xhost/runs/`): `hold.log` of H25x, H27x, H34x
+  and the two setup smokes (the host's `smoke` is `smoke1/`), H25x's `out/import.log`,
+  `out/up.log` and six `out/typical/cache-usage-*.log`, H34x's `out/probe.log`, and H27x's
+  `run/probe.log` (from `~/k3dgpu-xhost/amx-autoquant/run-20261020T224624Z-typical/`). They are
+  in each row's directory under `bench/xhost/results/2026-10-20/`, with one `SHA256SUMS` there.
+  H25x's Reproduce block lists the cache-usage logs, and H27x's and H34x's list `probe.log`.
+  `.gitignore` ignored every `*.log`, so a plain `git add` of these rows skipped their logs. It
+  now keeps logs under a `results/` directory of `bench/`.
+
+H51's two `apb/turns.jsonl` were checked as well. They have been committed as `turns.jsonl.gz`
+since the H51 run, and decompress to the host files' sha256. Kubeconfigs, pid files and the
+scratch build outputs stay on the host.
+
 ### Crescent amendment A3: analysis rule L3 for the crescent pairs rows (2026-10-20)
 
 Recorded 2026-10-20, before any H50 or H50o measurement (no `H50*` directory exists on

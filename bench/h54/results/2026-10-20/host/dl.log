@@ -1,0 +1,14 @@
+2026-10-20T22:05:07Z OpenVINO/gemma-4-26b-a4b-it-int4-ov@4e5885c3f03844f5887982def09708bdc9f53f7a now=92% projected=92% limit=96
+Fetching 22 files:   0%|          | 0/22 [00:00<?, ?it/s]Fetching 22 files:  36%|███▋      | 8/22 [00:00<00:00, 14.52it/s]Fetching 22 files:  73%|███████▎  | 16/22 [00:01<00:00, 15.10it/s]Fetching 22 files:  86%|████████▋ | 19/22 [00:20<00:03,  1.05s/it]Fetching 22 files:  91%|█████████ | 20/22 [00:28<00:02,  1.40s/it]Fetching 22 files:  95%|█████████▌| 21/22 [00:57<00:02,  2.73s/it]Fetching 22 files: 100%|██████████| 22/22 [02:26<00:00,  6.64s/it]Fetching 22 files: 100%|██████████| 22/22 [02:26<00:00,  6.64s/it]
+done OpenVINO/gemma-4-26b-a4b-it-int4-ov now=93%
+2026-10-20T22:07:33Z google/gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3c8a514acf63b8761f4b41935842e now=93% projected=92% limit=96
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files:  25%|██▌       | 1/4 [00:00<00:00,  3.45it/s]Fetching 4 files:  50%|█████     | 2/4 [00:00<00:00,  5.08it/s]Fetching 4 files:  75%|███████▌  | 3/4 [01:14<00:24, 24.95s/it]Fetching 4 files: 100%|██████████| 4/4 [02:19<00:00, 34.88s/it]Fetching 4 files: 100%|██████████| 4/4 [02:19<00:00, 34.88s/it]
+done google/gemma-4-26B-A4B-it-qat-q4_0-gguf now=92%
+2026-10-20T22:09:53Z google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166 now=92% projected=91% limit=95
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s]Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:01,  3.72it/s]Fetching 8 files:  88%|████████▊ | 7/8 [00:00<00:00,  7.34it/s]Fetching 8 files: 100%|██████████| 8/8 [00:08<00:00,  1.01s/it]
+done google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant now=92%
+2026-10-20T22:10:02Z google/gemma-4-26B-A4B-it-qat-q4_0-unquantized@f1e06dc520982d9b9edd76859fdb7ab209449949 now=92% projected=93% limit=95
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files:  73%|███████▎  | 8/11 [00:00<00:00, 14.16it/s]Fetching 11 files:  82%|████████▏ | 9/11 [00:19<00:04,  2.22s/it]Fetching 11 files:  91%|█████████ | 10/11 [01:00<00:06,  6.05s/it]Fetching 11 files: 100%|██████████| 11/11 [06:19<00:00, 34.53s/it]Fetching 11 files: 100%|██████████| 11/11 [06:19<00:00, 34.53s/it]
+done google/gemma-4-26B-A4B-it-qat-q4_0-unquantized now=94%
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p1  3.4T  3.2T  239G  94% /

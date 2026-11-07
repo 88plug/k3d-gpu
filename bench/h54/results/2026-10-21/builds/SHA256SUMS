@@ -1,0 +1,5 @@
+ddfb303b8960fe4beb08b679bad979c4345c9c4ffe6fd03de015ea427bfe363b  ./convert.log
+594cb4a223fa24afc1056e6c7a4ebaacef6dd7e78b58a65be22c56bd46574635  ./drafter-try2.log
+bb9a55702772bffa66f1ea574d6ce072707a62af7d0b856d2f1ada916e2bd823  ./drafter-try2.sh.txt
+125ca2efa8c1488088ec261c7c9b3bccff2d7e6011d49970be2ddb90cb0aa236  ./gemma-4-26B-A4B-it-qat-assistant-gguf/manifest.json
+6aac49fb811982d3ae12aa24693bb80e3f26bb6480dd84988af4ecf217419a2c  ./gemma-4-26b-a4b-it-qat-int4-sym-g32-ov/manifest.json

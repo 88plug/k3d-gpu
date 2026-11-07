@@ -1,0 +1,20 @@
+#!/bin/bash
+set -euo pipefail
+cd ~/k3dgpu-gemma
+export HF_HUB_DISABLE_TELEMETRY=1
+pct(){ df --output=pcent / | tail -1 | tr -dc 0-9; }
+dl(){ r=$1 sha=$2 lim=$3 need=$4
+  avail=$(df -B1 --output=avail / | tail -1); size=$(df -B1 --output=size / | tail -1)
+  proj=$(( ( (size-avail) + need ) * 100 / size ))
+  echo "$(date -u +%FT%TZ) $r@$sha now=$(pct)% projected=${proj}% limit=$lim"
+  if [ $proj -ge $lim ]; then echo "SKIP $r projected ${proj}% >= $lim"; return 0; fi
+  d=models/$(echo $r | tr / _)
+  .venv/bin/hf download "$r" --revision "$sha" --local-dir "$d" >/dev/null
+  echo "$r $sha" > "$d/.pinned-revision"
+  echo "done $r now=$(pct)%"
+}
+dl OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3f03844f5887982def09708bdc9f53f7a 96 16000000000
+dl google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be9cf3c8a514acf63b8761f4b41935842e 96 16000000000
+dl google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 9537141506fe8875b3ed45b264af13580cb29166 95 1000000000
+dl google/gemma-4-26B-A4B-it-qat-q4_0-unquantized f1e06dc520982d9b9edd76859fdb7ab209449949 95 52000000000
+df -h /

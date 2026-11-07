@@ -1,0 +1,63 @@
+load cpus 24-47,72-95; node cpus 0-23,48-71
+up: 48 s
+[32m==>[0m Accelerators: none (K3D_GPU_VENDORS=none)
+node cpuset: 0-23,48-71
+96 {"beta.kubernetes.io/arch":"amd64","beta.kubernetes.io/instance-type":"k3s","beta.kubernetes.io/os":"linux","experimental.k3d-gpu.io/dra":"true","experimental.k3d-gpu.io/image-volume":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512BF16":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512F":"true","feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI":"true","feature.node.kubernetes.io/cpu-cpuid.
+[32m==>[0m agent: OpenVINO/Qwen3-4B-int4-ov as 'Qwen3-4B-int4-ov' on CPU, 48 CPU(s)
+[32m==>[0m agent: Fast Draft OpenVINO/Qwen3-0.6B-int4-ov on CPU
+44:            - --target_device=CPU
+45:            - --draft_source_model=OpenVINO/Qwen3-0.6B-int4-ov
+46:            - --draft_device=CPU
+73:              cpu: "48"
+Waiting for deployment "ovms" rollout to finish: 0 of 1 updated replicas are available...
+deployment "ovms" successfully rolled out
+pod ready: 89 s
+Cpus_allowed_list:	0-23,48-71
+# File created with: OpenVINO Model Server 2026.4.1.cfc9ac721
+# OVMS_GRAPH_QUEUE_MAX_SIZE: AUTO
+    input_stream: "HTTP_REQUEST_PAYLOAD:input"
+    output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+    node: {
+    name: "LLMExecutor"
+    calculator: "HttpLLMCalculator"
+    input_stream: "LOOPBACK:loopback"
+    input_stream: "HTTP_REQUEST_PAYLOAD:input"
+    input_side_packet: "LLM_NODE_RESOURCES:llm"
+    input_side_packet: "LLM_NODE_EXECUTION_CONTEXTS:llm_ctx"
+    output_stream: "LOOPBACK:loopback"
+    output_stream: "HTTP_RESPONSE_PAYLOAD:output"
+    input_stream_info: {
+        tag_index: 'LOOPBACK:0',
+        back_edge: true
+    }
+    node_options: {
+        [type.googleapis.com / mediapipe.LLMCalculatorOptions]: {
+            max_num_seqs:256,
+            device: "CPU",
+            models_path: "./",
+            enable_prefix_caching: true,
+            cache_size: 0,
+            reasoning_parser: "qwen3",
+            tool_parser: "hermes3",
+            # Speculative decoding configuration
+            draft_models_path: "OpenVINO-Qwen3-0.6B-int4-ov",
+            draft_device: "CPU",
+        }
+    }
+    input_stream_handler {
+        input_stream_handler: "SyncSetInputStreamHandler",
+        options {
+        [mediapipe.SyncSetInputStreamHandlerOptions.ext] {
+            sync_set {
+            tag_index: "LOOPBACK:0"
+            }
+        }
+        }
+[2026-10-20 22:16:53.569][1][modelmanager][info][modelmanager.cpp:252] Available devices for Open VINO: CPU
+[2026-10-20 22:16:53.814][9][serving][info][servable_initializer.cpp:242] Draft model strategy: Fast Draft
+name: input; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+name: output; mapping: ; shape: (); precision: UNDEFINED; layout: ...
+taints after 89 s: 
+plain create args: --k3s-arg --kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<1%,imagefs.available<1%,nodefs.inodesFree<1%@server:*
+plain create taints after 90 s: 
+cluster k3dgpu-x-smoke deleted

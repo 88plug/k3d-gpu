@@ -16,6 +16,8 @@ Thumbs.db
 
 # Build artifacts
 *.log
+# Benchmark records keep their logs (tests/results_records_test.sh)
+!bench/**/results/**/*.log
 
 # Docs site build output (mkdocs)
 site/

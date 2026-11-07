@@ -233,6 +233,7 @@ jobs:
       - run: tests/pe_premise_check_test.sh
       - run: tests/pe_premise_check.sh
       - run: python3 tests/model_cards_license_test.py
+      - run: tests/results_records_test.sh
 
   bench-tests:
     name: Bench harness tests
