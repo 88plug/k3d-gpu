@@ -68,6 +68,12 @@ k3d-gpu eat up [--legacy] [eas up options]   # EAT 2.0 = eas up --agent-toolkit;
 k3d-gpu eat status | down | check [--legacy] [--model NAME]
 ```
 
+- Before `eat up`, set EAT's node kernel settings on the host (the k3d node is a container
+  on it): `sudo sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576`
+  ([prerequisites.md#L21-L34](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/prerequisites.md#L21-L34);
+  the kernel default of 128 instances runs out on a node with many pods). `eas up` warns and
+  prints that line when they are lower ([EAT's minimums](#eats-minimums-on-a-smaller-host));
+  F5 set them before its `eat up` ([run](../../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)).
 - The cluster is `K3D_GPU_CLUSTER` and its own kubeconfig, `${STATE_DIR}/kubeconfig-<cluster>`.
   When the cluster does not exist, `eas up` runs `k3d-gpu up` first, so EAS is one command
   on an Intel host.

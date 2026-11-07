@@ -27,6 +27,17 @@ k3d-gpu eat down            # teardown platform; the cluster stays
 k3d-gpu eat up --legacy     # EAT 1.x (release-1.1.0) through its own installer, integrations/eat/eat-up.sh (from a checkout; not packaged)
 ```
 
+EAT's node kernel settings apply to the host, since the k3d node is a container on it:
+`fs.inotify.max_user_instances = 8192` and `fs.inotify.max_user_watches = 1048576`
+([prerequisites.md#L21-L34](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/prerequisites.md#L21-L34):
+the kernel default of 128 instances runs out on a node with many pods). Set them before
+`eat up`, which warns and prints the `sysctl` line when they are lower; F5 set them first
+([run](../../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)):
+
+```bash
+sudo sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576
+```
+
 `eas up` without `--agent-toolkit` installs platform and inference. `--layer erag` reaches
 `eas-config.py`, which refuses it with the reason.
 
