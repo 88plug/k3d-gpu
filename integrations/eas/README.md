@@ -110,7 +110,9 @@ CRDs (EAS #42); 0007 is the same on `release-1.2`.
 `eas check` (and `eat check`) needs the agent toolkit (LiteLLM and the sandbox come with it).
 It runs Intel's own `es_auto_installer.sh validate agent-toolkit --env k3d-gpu` in the
 bastion first, with install's extra vars (every enabled component's validate checks; a
-failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`:
+failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`.
+Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` validate so its
+`redis-cli` takes the Redis password from the pod's environment, not from `-a <value>`:
 
 1. `eas-ready.py` on `kubectl get pods,daemonsets -A -o json`, before any request. Every
    pod and DaemonSet in `istio-system`, `envoy-gateway-system`, `litellm`, `llm-inference`
@@ -155,6 +157,7 @@ failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_M
 | `eas-ready.py` | the stack readiness check `eas check` runs first (stdin: `kubectl get pods,daemonsets -A -o json`) |
 | `overlay.py`, `overlay.json`, `patches/` | the k3s/k3d patch overlay |
 | `ei-kcadm.sh`, `patches/ei/` | enterprise-inference's `keycloak_config` patch (variant a for EI `main`, b for `release-1.1`), applied after `init`: kcadm gets the Keycloak admin password from its environment and the client secret from Keycloak, never as an argument; stops the install when the task changed shape. With `auth_provider: litellm` (the agent toolkit) EI runs no `keycloak_config` |
+| `eat-redis-cli.sh`, `patches/eat/` | enterprise-agent-toolkit's `redis_stack` validate patch (release-2.0.0), applied after `init` and before each `validate`: `redis-cli` gets the Redis password as `REDISCLI_AUTH` from the `REDIS_PASSWORD` the chart sets in the pod, never as `-a <value>`; stops when the task changed shape or another `redis-cli` call in EAT's roles, playbooks or charts passes the password as an argument |
 
 ## Verification
 

@@ -557,6 +557,53 @@ vLLM CPU default at or above 0.32.0. A newer LiteLLM answers a guardrail block w
 and `finish_reason: content_filter` instead of HTTP 500 (the draft above), so the guardrail
 docs would change with it. `k3d-gpu eas` keeps Intel's pins as shipped.
 
+### EAT `redis_stack` validate passes the Redis password as `redis-cli -a`
+
+`k3d-gpu eas check` applies the patch below before Intel's `validate` runs
+([`integrations/eas/eat-redis-cli.sh`](../../integrations/eas/eat-redis-cli.sh)), so
+nothing on our side waits on this issue.
+
+**Title:** redis_stack validate: the Redis password is on redis-cli's command line while it runs
+
+**Versions:** intel/enterprise-agent-toolkit `release-2.0.0` `7b827e2` (the same file at
+`036b662`), `roles/redis_stack/tasks/validate.yaml`; chart image
+`redis/redis-stack-server:7.4.0-v8` (redis-cli 7.4.7); kubernetes.core 6.3.0.
+
+**What happens:** the validate action reads the password from
+`redis-stack-server-credentials` and runs `redis-cli -a <password> --no-auth-warning PING`,
+then `MODULE LIST`, through `k8s_exec`
+([validate.yaml#L20-L55](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/roles/redis_stack/tasks/validate.yaml#L20-L55)).
+`k8s_exec` execs the command's argv as a process in the container, and redis-cli keeps `-a`
+in that argv for its whole run
+([redis-cli.c#L2700-L2703](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L2700-L2703)),
+so `ps` shows the password to any user on the node. `no_log` keeps it out of Ansible's
+output only.
+
+**How we saw it:** reading the role, then with the chart's image in Docker
+(`REDIS_PASSWORD` and `REDIS_ARGS="--requirepass ..."` as the chart sets them): during
+`redis-cli -a <password> PING` in the container, an unprivileged `ps -eo args` on the host
+listed the root-owned redis-cli process with the password in its arguments. On a k3d
+cluster the node is a container on the host, so the host's `ps` lists the Redis pod's
+processes the same way.
+
+**Suggested change** (the patch k3d-gpu applies,
+[0001-redis-stack-validate-redis-cli-auth.patch](../../integrations/eas/patches/eat/0001-redis-stack-validate-redis-cli-auth.patch);
+checked with a `ps` sampler against a stand-in for redis-cli, and its commands against the
+chart's image, not yet on a live cluster): redis-cli reads `REDISCLI_AUTH` when `-a` is
+absent ([redis-cli.c#L3058-L3061](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L3058-L3061)),
+and the chart already sets `REDIS_PASSWORD` in the pod from the same Secret
+([redis-stack-server.yaml#L55-L65](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/charts/redis-stack/charts/redis-stack-server/templates/redis-stack-server.yaml#L55-L65)),
+so a shell in the pod can hand it over and the task that reads the password into Ansible
+can go:
+
+    ```yaml
+    command: >-
+      /bin/sh -c '[ -z "$REDIS_PASSWORD" ] || export REDISCLI_AUTH="$REDIS_PASSWORD"; exec redis-cli PING'
+    ```
+
+The shell's argv holds the variable's name, and redis-cli's argv holds no password. With
+auth off the chart sets no `REDIS_PASSWORD`, and redis-cli connects without one, as before.
+
 ### EAT `release-2.0.0` docs
 
 - `docs/single-node-deployment.md` and `docs/README.md` clone the branch `release-1.2`

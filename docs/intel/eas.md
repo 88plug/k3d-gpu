@@ -351,6 +351,26 @@ GA tags, [upstream-eat.md](upstream-eat.md#issue-drafts-at-the-ga-tags-2026-11-0
   holds either, for both variants. No live EAS run has checked the patch yet, and F3
   stays REFUTED. The EI
   issue is drafted and unsent ([upstream-eat.md](upstream-eat.md#ei-the-keycloak-admin-password-and-the-client-secret-are-kcadmsh-arguments)).
+- EAT's `redis_stack` role, as it ships at release-2.0.0, has Intel's `validate` run
+  `redis-cli -a <password> --no-auth-warning PING` (and `MODULE LIST`) in the Redis pod
+  ([validate.yaml#L20-L55](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/roles/redis_stack/tasks/validate.yaml#L20-L55)).
+  redis-cli keeps `-a` in its argv while it runs
+  ([redis-cli.c#L2700-L2703](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L2700-L2703)),
+  so the host's `ps` lists the password for each call. `eas check` (and `eat check`) runs
+  that validate, so before it does, and after each `init`, `eas.sh` applies
+  [`patches/eat/0001`](../../integrations/eas/patches/eat/0001-redis-stack-validate-redis-cli-auth.patch)
+  with [`eat-redis-cli.sh`](../../integrations/eas/eat-redis-cli.sh): redis-cli reads the
+  password from `REDISCLI_AUTH`
+  ([redis-cli.c#L3058-L3061](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L3058-L3061)),
+  copied in the pod from the `REDIS_PASSWORD` the chart sets there from the same Secret
+  ([redis-stack-server.yaml#L55-L65](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/charts/redis-stack/charts/redis-stack-server/templates/redis-stack-server.yaml#L55-L65)).
+  `eat-redis-cli.sh` stops when the task changed shape or another `redis-cli` call in EAT's
+  roles, playbooks or charts passes the password as an argument, and takes the patch out
+  before `init`. `tests/eas_test.sh rediscli` runs the validate both ways under
+  `ansible-playbook` while `ps` samples every argv: as shipped, the password is on
+  redis-cli's argv; patched, no sample holds it and the PING and RediSearch checks pass.
+  F5's scan did not count the Redis password; no live run has checked the patch yet. The
+  EAT issue is drafted and unsent ([upstream-eat.md](upstream-eat.md#eat-redis_stack-validate-passes-the-redis-password-as-redis-cli--a)).
 - `eas check` (after `--agent-toolkit`, the layer that brings LiteLLM) mints a LiteLLM
   virtual key from the `litellm-master-key` Secret (namespace `litellm`), uses it once
   against the gateway, and deletes it.

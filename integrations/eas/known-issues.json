@@ -58,6 +58,14 @@
       "checked": "2026-11-06"
     },
     {
+      "id": "eat-redis-stack-validate-rediscli-argv",
+      "upstream": "https://github.com/intel/enterprise-agent-toolkit",
+      "symptom": "redis_stack's validate runs redis-cli -a <Redis password> --no-auth-warning PING and MODULE LIST in the Redis pod through k8s_exec, so the password is in redis-cli's argv, which ps lists on the node (on k3d, on the host), for each call; no_log hides it from Ansible's output only",
+      "workaround": "eas.sh applies patches/eat/0001-redis-stack-validate-redis-cli-auth.patch after init and before each validate (eat-redis-cli.sh): redis-cli reads the password from REDISCLI_AUTH, copied in the pod from the REDIS_PASSWORD the chart sets from redis-stack-server-credentials; it stops when the task changed shape or another redis-cli call in EAT's roles, playbooks or charts passes the password as an argument. EAT issue drafted, unsent (docs/intel/upstream-eat.md)",
+      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/roles/redis_stack/tasks/validate.yaml#L20-L55; https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L3058-L3061",
+      "checked": "2026-11-06"
+    },
+    {
       "id": "eas-release-1.2-gateway-api-downgrade-on-k3s",
       "upstream": "https://github.com/intel/enterprise-ai-solutions",
       "symptom": "on k3s v1.37 (its gateway-api-crd addon installs Gateway API CRDs at v1.5.0 or later, with the safe-upgrades.gateway.networking.k8s.io ValidatingAdmissionPolicy), EAS v1.2.0's install stops at 'istio | Install Gateway API CRDs' (v1.2.1) and then at the gateway-helm install (its crds/ carry v1.4.1): 'Installing CRDs with version before v1.5.0 is prohibited by default'",

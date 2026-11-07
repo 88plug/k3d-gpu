@@ -13,7 +13,9 @@
 #          EI's keycloak_config role gets patches/ei/0001 (variant a or b), which keeps the
 #          Keycloak admin password and the client secret out of kcadm's argv (ei-kcadm.sh:
 #          it stops the install when the role's task changed shape; the patch comes out
-#          again before init, so `init --upgrade` finds ext/ clean)
+#          again before init, so `init --upgrade` finds ext/ clean), and EAT's redis_stack
+#          validate gets patches/eat/0001, which keeps the Redis password off redis-cli's
+#          argv (eat-redis-cli.sh, the same way)
 #       5. the layer manifest's global_config: keys into env/k3d-gpu/global_config.yaml:
 #          init writes them only into a global_config.yaml it creates (_init_seed_defaults,
 #          #L930-L950), so an env inited before keeps its own (for the agent toolkit,
@@ -28,7 +30,8 @@
 #                            steps 1-2 without applying: the overlay decisions only, then
 #                            the layer manifest's global_config: keys step 5 sets
 #   eas.sh validate <layer>  es_auto_installer.sh validate <layer> --env k3d-gpu -- install's
-#                            extra vars: Intel's post-deploy checks of every enabled component
+#                            extra vars: Intel's post-deploy checks of every enabled component,
+#                            EAT's redis_stack validate patched first (eat-redis-cli.sh)
 #   eas.sh down              es_auto_installer.sh teardown platform --env k3d-gpu --force -- -e
 #                            @k3d-gpu-images.yaml -e @k3d-gpu-overrides.yaml: install's extra
 #                            vars, so teardown skips what install skipped (k3d-gpu's NFD)
@@ -217,6 +220,13 @@ ei_kcadm() {
     bash "${HERE}/ei-kcadm.sh" "$1" "${ei}"
 }
 
+# eat_redis_cli apply|revert: eat-redis-cli.sh on EAT's checkout, once init has cloned it.
+eat_redis_cli() {
+    local eat="${CHECKOUT}/ext/enterprise.agent-toolkit"
+    [ -d "${eat}" ] || return 0
+    bash "${HERE}/eat-redis-cli.sh" "$1" "${eat}"
+}
+
 cmd_up() {
     local layer=${1:-}
     [ -n "${layer}" ] || err "usage: eas.sh up <layer> [-- <ansible-playbook args>]"
@@ -227,6 +237,7 @@ cmd_up() {
     pin_manifest "${layer}"
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
     ei_kcadm revert
+    eat_redis_cli revert
     if [ -f "${CHECKOUT}/env/${ENV_NAME}/.solutions.yaml" ]; then
         # --upgrade moves already-cloned ext/ repos onto the manifest's new revs (never
         # rewriting a config); without it a changed pin is refused (#L896-L926).
@@ -236,6 +247,7 @@ cmd_up() {
     fi
     key_argv_guard
     ei_kcadm apply
+    eat_redis_cli apply
     manifest_globals "${layer}"
     env_edits
     installer install "${layer}" --env "${ENV_NAME}" -- \
@@ -250,6 +262,8 @@ cmd_validate() {
         || err "${EAS_STATE}/k3d-gpu-overrides.yaml missing: validate needs install's extra vars (run 'k3d-gpu eas up --dry-run' to write it again)"
     extra_vars
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
+    # An env installed before eat-redis-cli.sh existed has EAT's validate as it ships.
+    eat_redis_cli apply
     installer validate "${layer}" --env "${ENV_NAME}" -- "${EXTRA[@]}"
 }
 

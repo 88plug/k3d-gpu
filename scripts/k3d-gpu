@@ -6961,7 +6961,8 @@ EAS_DEFAULT_DOMAIN="solutions.ai"   # base_domain_name in EAS configs/defaults/g
 EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy ES_LOG_LEVEL)
 EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json
            ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch
-           patches/ei/0001-release-1.1-keycloak-config-kcadm-argv.patch)
+           patches/ei/0001-release-1.1-keycloak-config-kcadm-argv.patch
+           eat-redis-cli.sh patches/eat/0001-redis-stack-validate-redis-cli-auth.patch)
 # Files eas-config.py writes (and pins.resolved.json, from its choices.txt). `eas up`
 # writes them into <state>/next and they replace the state's once eas_env_check passes,
 # so a refused run leaves the files the installed stack was set up with, which check,

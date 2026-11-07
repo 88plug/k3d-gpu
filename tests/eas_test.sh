@@ -61,6 +61,18 @@
 #              sample holds either, kcadm gets the password from KC_CLI_PASSWORD, and the
 #              Secret stores the client secret Keycloak holds; the same for the v1.1.0
 #              role with variant b. Needs ansible-playbook.
+#   rediscli EAT's redis_stack role (tests/fixtures/eas/rediscli, verbatim) at release-2.0.0
+#            7b827e2, and integrations/eas/eat-redis-cli.sh with patches/eat/0001:
+#            - the role is byte-identical to upstream (blob shas in SOURCES)
+#            - apply patches a git checkout of it, a re-run is a no-op, revert leaves the
+#              checkout clean; a task of another shape, a redis-cli call elsewhere with -a,
+#              or a directory that is no git checkout stops it, the checkout as it was
+#            - the role's validate runs under ansible-playbook with kubernetes.core stubbed
+#              (k8s_exec execs the command, in a "pod" whose environment holds the chart's
+#              REDIS_PASSWORD) and a fake redis-cli, while ps samples every argv for a fake
+#              password. As shipped (the control) the password is on redis-cli's argv;
+#              patched no sample holds it, redis-cli gets it from REDISCLI_AUTH, and the
+#              PING and RediSearch checks pass. Needs ansible-playbook.
 #   cli     `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
 #            bastion, against stub docker, kubectl, k3d, git, yq and `k3d-gpu fit`, with the
 #            real eas-config.py (so the facts it gathers are the facts the generator reads)
@@ -71,7 +83,9 @@
 #            - the bastion run: host network, root with the state handed back to this
 #              uid:gid, state dir rw, kubeconfig ro, secrets by name only
 #            - eas.sh order: clone at the SHA, overlay, manifest pins, init, the edits,
-#              install with the overrides last; never configure
+#              install with the overrides last; never configure; EI's kcadm patch and
+#              EAT's redis-cli patch out before init and in after it, and the redis-cli
+#              patch in before validate (its STOP stops validate)
 #            - eas.sh stops before install when EI's model deploy takes the master key
 #              from anything but _deploy_litellm_secret, or has no deploy_models.yaml
 #            - refs: a profile and a SHA go as given, any other ref through git ls-remote
@@ -943,13 +957,22 @@ section_cli() {
     # section tests it on real EAS trees).
     cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/eas-ready.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
        "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
-    mkdir -p "${K}/eas/patches/ei"
+    mkdir -p "${K}/eas/patches/ei" "${K}/eas/patches/eat"
     cp "${EAS_DIR}"/patches/ei/*.patch "${K}/eas/patches/ei/"
+    cp "${EAS_DIR}"/patches/eat/*.patch "${K}/eas/patches/eat/"
     # ei-kcadm.sh as a recorder too (section kcadm runs the real one on EI's role).
     cat > "${K}/eas/ei-kcadm.sh" <<'EOF'
 echo "ei-kcadm $*" >> "${STUB_LOG}"
 if [ "$1" = apply ] && [ -n "${STUB_EI_KCADM_STOP:-}" ]; then
     echo "ERROR: EI's roles/keycloak_config/tasks/install.yaml is not the task 0001-keycloak-config-kcadm-argv.patch was cut against" >&2
+    exit 1
+fi
+EOF
+    # eat-redis-cli.sh as a recorder too (section rediscli runs the real one on EAT's role).
+    cat > "${K}/eas/eat-redis-cli.sh" <<'EOF'
+echo "eat-redis-cli $*" >> "${STUB_LOG}"
+if [ "$1" = apply ] && [ -n "${STUB_EAT_REDIS_STOP:-}" ]; then
+    echo "ERROR: EAT's roles/redis_stack/tasks/validate.yaml is not the task 0001-redis-stack-validate-redis-cli-auth.patch was cut against" >&2
     exit 1
 fi
 EOF
@@ -1406,13 +1429,26 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
         "yq -i (.models[] | select(.name == strenv(N))).cpu = strenv(C) ${ES}/eas/env/k3d-gpu/models.yaml [N=qwen2-5-coder-7b C=72]"
     cli_before "cli: the cpu edit, then install" "$(cat "${LOG}")" ".cpu = strenv(C)" "installer install"
     command cp -f "${ES}/models.edit.saved" "${ES}/models.edit.yaml"
-    # validate: Intel's post-deploy checks with install's extra vars.
+    # validate: Intel's post-deploy checks with install's extra vars, EAT's redis_stack
+    # validate patched first (its redis-cli takes the password from the pod's environment).
+    mkdir -p "${ES}/eas/ext/enterprise.agent-toolkit"
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" \
         bash "${K}/eas/eas.sh" validate agent-toolkit 2>&1); rc=$?
     cli_eq     "cli: eas.sh validate exits 0" "${rc}" 0
     cli_has    "cli: validate <layer> with install's extra vars" "$(cat "${LOG}")" \
         "installer validate agent-toolkit --env k3d-gpu -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml"
+    cli_before "cli: EAT's redis-cli patch in, then validate" "$(cat "${LOG}")" \
+        "eat-redis-cli apply ${ES}/eas/ext/enterprise.agent-toolkit" "installer validate"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_EAT_REDIS_STOP=1 EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" \
+        bash "${K}/eas/eas.sh" validate agent-toolkit 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'was cut against' <<< "${out}"; then
+        ok "cli: eas.sh validate stops when eat-redis-cli.sh finds EAT's redis_stack validate changed"
+    else
+        fail "cli: eat-redis-cli.sh STOP on validate: rc=${rc} ${out}"
+    fi
+    cli_lacks  "cli: ...before Intel's validate runs" "$(cat "${LOG}")" "installer validate"
     # overlay-check <layer>: the decisions, then the manifest's global_config, read only.
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
@@ -1454,6 +1490,10 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_before "cli: the kcadm patch out, then init" "${log}" "ei-kcadm revert" "installer init"
     cli_before "cli: init, then the kcadm patch in" "${log}" "installer init" "ei-kcadm apply ${ES}/eas/ext/enterprise.ai-inference"
     cli_before "cli: the kcadm patch in, then install" "${log}" "ei-kcadm apply" "installer install"
+    # EAT's redis_stack validate patch: the same, out before init and in after it.
+    cli_before "cli: EAT's redis-cli patch out, then init" "${log}" "eat-redis-cli revert ${ES}/eas/ext/enterprise.agent-toolkit" "installer init"
+    cli_before "cli: init, then EAT's redis-cli patch in" "${log}" "installer init" "eat-redis-cli apply ${ES}/eas/ext/enterprise.agent-toolkit"
+    cli_before "cli: EAT's redis-cli patch in, then install" "${log}" "eat-redis-cli apply" "installer install"
     : > "${LOG}"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_EI_KCADM_STOP=1 EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort \
         EAS_NODES=1 EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
@@ -2186,6 +2226,129 @@ section_kcadm() {
     fi
 }
 
+section_rediscli() {
+    local D="${ROOT}/tests/fixtures/eas/rediscli" A="${WORK}/rediscli" H="${ROOT}/integrations/eas/eat-redis-cli.sh"
+    local pw="rd-ARGVPROBE3a9c41e7d05b4f62" T="roles/redis_stack/tasks/validate.yaml" sha path got out rc pb n hits
+    mkdir -p "${A}/tmp"
+    # The role is EAT release-2.0.0's, byte for byte.
+    while read -r sha path; do
+        got=$(git hash-object "${D}/${path}")
+        if [ "${got}" = "${sha}" ]; then ok "rediscli: ${path} is EAT's"; else fail "rediscli: ${path} is blob ${got}, want ${sha}"; fi
+    done < <(grep -v '^#' "${D}/SOURCES")
+    if [ -f "${H}" ]; then ok "rediscli: integrations/eas/eat-redis-cli.sh exists"; else fail "rediscli: no ${H}"; fi
+    # eat_checkout <dir>: a git checkout holding the role, as EAS's init clones EAT.
+    eat_checkout() {
+        rm -rf "$1" && mkdir -p "$1" && cp -r "${D}/roles" "$1/" && git -C "$1" init -q \
+            && git -C "$1" add -A && git -C "$1" -c user.name=t -c user.email=t@t.invalid commit -qm eat
+    }
+    rd_eq() { if [ "$2" = "$3" ]; then ok "$1"; else fail "$1: got '$2', want '$3'"; fi; }
+    # ---- eat-redis-cli.sh on a checkout ----
+    eat_checkout "${A}/eat"
+    out=$(bash "${H}" apply "${A}/eat" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'REDISCLI_AUTH' <<< "${out}"; then
+        ok "rediscli: apply patches EAT's redis_stack validate"
+    else
+        fail "rediscli: apply: rc=${rc} ${out}"
+    fi
+    if grep -vE '^[[:space:]]*#' "${A}/eat/${T}" | grep -E 'redis-cli' | grep -qE -- "(^|[[:space:]\"'])(-a|--pass)([[:space:]]|$)"; then
+        fail "rediscli: the patched task still passes the password to redis-cli: $(grep -n 'redis-cli' "${A}/eat/${T}")"
+    else
+        ok "rediscli: the patched task gives redis-cli no -a and no --pass"
+    fi
+    if grep -qF 'export REDISCLI_AUTH="$REDIS_PASSWORD"' "${A}/eat/${T}"; then
+        ok "rediscli: the patched task hands redis-cli the pod's REDIS_PASSWORD as REDISCLI_AUTH"
+    else
+        fail "rediscli: the patched task has no REDISCLI_AUTH from REDIS_PASSWORD"
+    fi
+    sha=$(sha256sum < "${A}/eat/${T}")
+    out=$(bash "${H}" apply "${A}/eat" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'already' <<< "${out}" && [ "$(sha256sum < "${A}/eat/${T}")" = "${sha}" ]; then
+        ok "rediscli: a second apply is a no-op"
+    else
+        fail "rediscli: second apply: rc=${rc} ${out}"
+    fi
+    bash "${H}" revert "${A}/eat" > /dev/null 2>&1; rc=$?
+    if [ "${rc}" -eq 0 ] && [ -z "$(git -C "${A}/eat" status --porcelain)" ]; then
+        ok "rediscli: revert leaves the checkout clean (EAS's init --upgrade can move it)"
+    else
+        fail "rediscli: revert: rc=${rc}, $(git -C "${A}/eat" status --porcelain)"
+    fi
+    if bash "${H}" revert "${A}/eat" > /dev/null 2>&1; then ok "rediscli: revert without the patch is a no-op"; else fail "rediscli: revert without the patch fails"; fi
+    # A task of another shape: the patch does not fit, nothing is written.
+    eat_checkout "${A}/moved"
+    sed -i 's/--no-auth-warning /--no-auth-warning --raw /' "${A}/moved/${T}"
+    git -C "${A}/moved" -c user.name=t -c user.email=t@t.invalid commit -qam moved
+    out=$(bash "${H}" apply "${A}/moved" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'was cut against' <<< "${out}" && [ -z "$(git -C "${A}/moved" status --porcelain)" ]; then
+        ok "rediscli: a changed task stops apply, the checkout untouched"
+    else
+        fail "rediscli: changed task: rc=${rc} ${out} $(git -C "${A}/moved" status --porcelain)"
+    fi
+    # Another redis-cli call with the password as an argument, in a role or a chart.
+    eat_checkout "${A}/other"
+    mkdir -p "${A}/other/charts/x/templates"
+    printf '%s\n' '        livenessProbe:' '          exec:' \
+        '            command: ["sh", "-c", "redis-cli -a $(REDIS_PASSWORD) ping"]' \
+        > "${A}/other/charts/x/templates/probe.yaml"
+    git -C "${A}/other" add -A && git -C "${A}/other" -c user.name=t -c user.email=t@t.invalid commit -qm other
+    out=$(bash "${H}" apply "${A}/other" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'charts/x/templates/probe.yaml' <<< "${out}"; then
+        ok "rediscli: a redis-cli call elsewhere with -a stops apply, naming its file"
+    else
+        fail "rediscli: redis-cli -a elsewhere: rc=${rc} ${out}"
+    fi
+    mkdir -p "${A}/plain"
+    out=$(bash "${H}" apply "${A}/plain" 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'usage' <<< "${out}"; then ok "rediscli: a directory that is no git checkout stops apply"; else fail "rediscli: plain dir: rc=${rc} ${out}"; fi
+    # ---- the role's validate under ansible-playbook, ps sampling every argv ----
+    if ! command -v ansible-playbook >/dev/null; then
+        fail "rediscli: needs ansible-playbook (the bastion runs EAS under it)"
+        return
+    fi
+    # role_run <out> <roles dir>: the role's validate while ps samples every process's argv;
+    # hits counts sampled lines holding the password.
+    role_run() {
+        local out=$1
+        mkdir -p "${out}/state"
+        printf '%s\n' "${pw}" > "${out}/pattern"
+        PATH="${D}/bin:${PATH}" REDISCLI_FAKE_PASSWORD="${pw}" REDISCLI_STATE="${out}/state" \
+            ANSIBLE_COLLECTIONS_PATH="${D}/collections" ANSIBLE_COLLECTIONS_SCAN_SYS_PATH=false ANSIBLE_ROLES_PATH="$2" \
+            ANSIBLE_LOCAL_TEMP="${A}/tmp" ANSIBLE_REMOTE_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ANSIBLE_RETRY_FILES_ENABLED=0 \
+            ansible-playbook -i localhost, "${D}/play/play.yml" -e "ansible_python_interpreter=$(command -v python3)" \
+            < /dev/null > "${out}/play.log" 2>&1 &
+        pb=$!
+        hits=0
+        while kill -0 "${pb}" 2>/dev/null; do
+            n=$(ps -eo args | grep -c -F -f "${out}/pattern")
+            hits=$((hits + n))
+            sleep 0.2
+        done
+        wait "${pb}" && rc=0 || rc=$?
+    }
+    # The control: the role as EAT ships it.
+    role_run "${A}/control" "${D}/roles"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -gt 0 ]; then
+        ok "rediscli: control: as shipped, the Redis password is on redis-cli's argv (${hits} sampled lines)"
+    else
+        fail "rediscli: control: rc=${rc}, ${hits} sampled lines hold the password (want rc 0 and > 0): $(tail -5 "${A}/control/play.log")"
+    fi
+    rd_eq "rediscli: control: redis-cli got the password from -a, twice" "$(sort "${A}/control/state/auth" 2>/dev/null | uniq -c | tr -s ' ')" " 2 argv ok"
+    # Patched by eat-redis-cli.sh.
+    bash "${H}" apply "${A}/eat" > /dev/null 2>&1 || fail "rediscli: apply before the patched run"
+    role_run "${A}/fixed" "${A}/eat/roles"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
+        ok "rediscli: patched, no process argv holds the Redis password, and validate passes (PING, RediSearch)"
+    else
+        fail "rediscli: patched: rc=${rc}, ${hits} sampled lines hold the password: $(tail -5 "${A}/fixed/play.log")"
+    fi
+    rd_eq "rediscli: patched, redis-cli got the right password from REDISCLI_AUTH, twice" "$(sort "${A}/fixed/state/auth" 2>/dev/null | uniq -c | tr -s ' ')" " 2 env ok"
+    if grep -qF -f "${A}/fixed/pattern" "${A}/fixed/play.log"; then
+        fail "rediscli: patched, the password reached ansible's output"
+    else
+        ok "rediscli: patched, no password in ansible's output"
+    fi
+}
+
 # gwapi: overlay 0007's condition, the `when:` of release-1.2's patched "istio | Install
 # Gateway API CRDs" task, evaluated by ansible-playbook on the CRD reads it can meet: the
 # CRDs absent, a lower bundle-version (EAS upgrades them, as shipped), the same one, a
@@ -2246,7 +2409,7 @@ PY
     done
 }
 
-SECTIONS=(overlay config cli ready argv kcadm gwapi)
+SECTIONS=(overlay config cli ready argv kcadm rediscli gwapi)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then
