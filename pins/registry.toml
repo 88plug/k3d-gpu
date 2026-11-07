@@ -151,7 +151,7 @@ hooks = ["constraints"]
 outputs = ["examples/agents/*/constraints.txt"]
 
 [groups.eat-stock]
-tests = ["tests/eat_test.sh", "tests/image_pins_test.sh"]
+tests = ["tests/eat_test.sh", "tests/eas_test.sh", "tests/image_pins_test.sh"]
 hooks = ["lock"]
 outputs = ["images.lock"]
 
@@ -1278,17 +1278,19 @@ sites = [
 # =============================================================================
 # Intel EAT stock (always review)
 # =============================================================================
+# EAT 1.x, the standalone installer integrations/eat/eat-up.sh drives (`k3d-gpu eat up
+# --legacy`). EAT release-2.0.0's tree is charts/, config.yaml, playbooks/ and roles/, with no
+# core/; eat-up.sh copies its config into eat/core/inventory and brownfield.sh runs EAT's
+# core/lib path, so this pin lists every release and takes the newest 1.x (a hotfix included)
+# below the hold. EAT 2.x is a layer of EAS and moves with the eas-release pin below.
 [[pin]]
 id = "eat"
 class = "eat-stock"
 group = "eat-stock"
 family = "eat-stock"
 scheme = "eat"
-source = { kind = "eat", what = "tag" }
-# EAT release-2.0.0's tree is charts/, config.yaml, playbooks/ and roles/, with no core/;
-# integrations/eat/eat-up.sh copies its config into eat/core/inventory and brownfield.sh
-# runs EAT's core/lib path. integrations/eas is the EAT 2.0 integration.
-hold = { max = "release-2.0.0", reason = "release-2.0.0 removed the standalone installer: no core/ directory, and integrations/eat/eat-up.sh copies into eat/core/inventory and reads core/lib; EAT 2.0 goes through integrations/eas", review_by = "2027-01-31" }
+source = { kind = "github-release", repo = "intel/enterprise-agent-toolkit", tag = "{v}", select = "highest", commit = true }
+hold = { max = "release-2.0.0", reason = "the standalone installer exists only below release-2.0.0: no core/ directory there, and integrations/eat/eat-up.sh copies into eat/core/inventory and reads core/lib; EAT 2.x goes through integrations/eas (pin eas-release)", review_by = "2027-01-31" }
 sites = [
   { file = "integrations/eat/eat-up.sh", regex = '^EAT_TAG="(?P<v>release-[0-9.]+(?:-[a-z0-9]+)?)"$' },
   { file = "integrations/eat/eat-up.sh", var = "EAT_COMMIT", key = "commit" },
@@ -1300,8 +1302,8 @@ class = "eat-stock"
 group = "eat-stock"
 family = "eat-stock"
 scheme = "zerover"
-notes = "The tag EAT's core/helm-charts/vllm/xeon-values.yaml names at EAT's latest release."
-source = { kind = "eat", file = "core/helm-charts/vllm/xeon-values.yaml", repository = "vllm/vllm-openai-cpu" }
+notes = "The tag EAT's core/helm-charts/vllm/xeon-values.yaml names at EAT's newest 1.x release (release-2.0.0 has no core/)."
+source = { kind = "eat", file = "core/helm-charts/vllm/xeon-values.yaml", repository = "vllm/vllm-openai-cpu", below = "release-2.0.0" }
 canary = ["eat-vllm-cpu"]
 sites = [
   { file = "integrations/eat/vllm-values.yaml", ref = "vllm/vllm-openai-cpu", values = true },
@@ -1313,13 +1315,37 @@ class = "eat-stock"
 group = "eat-stock"
 family = "eat-stock"
 scheme = "docker-suffix"
-# The gateway example's litellm client is the release of EAT's litellm image.
-source = { kind = "eat", file = "core/helm-charts/genai-gateway/values.yaml", repository = "docker.litellm.ai/berriai/litellm", derive = { pypi = { from = "v", regex = '^v([0-9]+\.[0-9]+\.[0-9]+)' } } }
+# The gateway example's litellm client is the release of EAT's litellm image, at EAT's
+# newest 1.x release (release-2.0.0 has no core/helm-charts).
+source = { kind = "eat", file = "core/helm-charts/genai-gateway/values.yaml", repository = "docker.litellm.ai/berriai/litellm", below = "release-2.0.0", derive = { pypi = { from = "v", regex = '^v([0-9]+\.[0-9]+\.[0-9]+)' } } }
 sites = [
   { file = "integrations/eat/gateway-values.yaml", ref = "docker.litellm.ai/berriai/litellm", values = true },
   { file = "examples/agents/litellm-gateway/requirements.txt", regex = '^litellm==(?P<pypi>[0-9.]+)$' },
 ]
 derived = [{ file = "examples/agents/README.md", regex = '`litellm==(?P<v>[^`]+)`', from = "{pypi}", count = "any" }]
+
+# EAT 2.x and the EAS release it ships in: integrations/eas/pins.json's release profile,
+# the default of `k3d-gpu eas` and `k3d-gpu eat`. hack/eas-release-pins reads EAS's latest
+# release, the enterprise-inference and EAT commits its configs/repos/repos.agent-toolkit.yaml
+# pins and the tags its release notes link for them (it refuses a rev no linked tag points
+# at). A move also needs the overlay's verified cases at the new commit
+# (integrations/eas/overlay.json, tests/fixtures/eas/trees) and the config goldens, which
+# tests/eas_test.sh checks.
+[[pin]]
+id = "eas-release"
+class = "eat-stock"
+group = "eat-stock"
+family = "eat-stock"
+scheme = "semver"
+source = { kind = "cmd", run = ["hack/eas-release-pins"], parse = "kv" }
+sites = [
+  { file = "integrations/eas/pins.json", regex = '^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise-ai-solutions", "ref": "(?P<v>v[0-9]+\.[0-9]+\.[0-9]+)", "sha": "(?P<commit>[0-9a-f]{40})", "date": "(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})", "source": "https://github\.com/intel/enterprise-ai-solutions/releases/tag/(?P=v)"\},$' },
+  { file = "integrations/eas/pins.json", regex = '^    \{"profile": "release", "name": "ei", "repo": "intel/enterprise-inference", "ref": "(?P<ei>v[0-9]+\.[0-9]+\.[0-9]+)", "sha": "(?P<ei_commit>[0-9a-f]{40})", "date": "(?P<ei_date>[0-9]{4}-[0-9]{2}-[0-9]{2})", "source": "https://github\.com/intel/enterprise-ai-solutions/blob/(?P<commit>[0-9a-f]{40})/configs/repos/repos\.agent-toolkit\.yaml#L(?P<ei_line>[0-9]+)"\},$' },
+  { file = "integrations/eas/pins.json", regex = '^    \{"profile": "release", "name": "eat", "repo": "intel/enterprise-agent-toolkit", "ref": "(?P<eat>release-[0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9]+)?)", "sha": "(?P<eat_commit>[0-9a-f]{40})", "date": "(?P<eat_date>[0-9]{4}-[0-9]{2}-[0-9]{2})", "source": "https://github\.com/intel/enterprise-ai-solutions/blob/(?P<commit>[0-9a-f]{40})/configs/repos/repos\.agent-toolkit\.yaml#L(?P<eat_line>[0-9]+)"\},$' },
+  # the bastion's Python lock is EAS's requirements.txt at the release commit
+  { file = "integrations/eas/requirements.in", regex = '^# enterprise-ai-solutions@(?P<commit>[0-9a-f]{40}) requirements\.txt$' },
+  { file = "integrations/eas/requirements.lock", regex = '^# enterprise-ai-solutions@(?P<commit>[0-9a-f]{40}) requirements\.txt$' },
+]
 
 # =============================================================================
 # Base images with a line policy of their own

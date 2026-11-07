@@ -11,7 +11,7 @@
 # under bench/ or oracle/ that holds a pin: hack/pin-classes coverage fails on it.
 #
 # ours        k3d-gpu's own pins: always the latest stable release.
-# eat-stock   tracks Intel EAT's latest release (intel/enterprise-agent-toolkit); reviewed.
+# eat-stock   tracks Intel's releases: EAS's latest (EAT 2.x, integrations/eas) and EAT's newest 1.x (integrations/eat); reviewed.
 # ledger      a ledger row's runner or records. While any listed row is PENDING in the
 #             EXPERIMENTS.md Hypotheses table the path is an arm: a pin changes only
 #             with a dated amendment in the same diff whose heading names a PENDING
@@ -22,17 +22,18 @@
 #             often as it does.
 
 # --- EAT stock: what Intel's Enterprise Agent Toolkit ships --------------------------
-integrations/eat/**                     eat-stock   EAT's Helm values, gateway charts and bastion, tracked to EAT's latest release
+integrations/eat/**                     eat-stock   EAT's Helm values, gateway charts and bastion, tracked to EAT's newest 1.x release (the standalone installer)
 examples/kuberay/**                     eat-stock   the RayCluster EAT's KubeRay path deploys
 examples/agents/litellm-gateway/**      eat-stock   EAT's genai-gateway (LiteLLM) agent example
 contrib/eat/**                          eat-stock   the patch and values contributed to EAT
-integrations/eas/**                     eat-stock   EAS, the stack EAT 2.0 deploys through: pins.json freezes what EAS's own configs resolve to
+integrations/eas/**                     eat-stock   EAS, the stack EAT 2.0 deploys through: pins.json follows EAS's latest release (pin eas-release) and freezes the records
 
 # --- Finished records ------------------------------------------------------------------
 console/matrix.v1.json                  historical  the measured cells of H6 and H8 the planner reads
 oracle/seed/**                          historical  the maintainer bundles of the H6 and H8 runs
 oracle/raw/**                           historical  the raw H6 and H8 records the seed bundles were built from
 bench/f3/**                             historical  F3's runner and records (a functional row; ledger lines take H ids only)
+bench/f5/**                             historical  F5's runner and records: its pins are the pre-registration's (a functional row; ledger lines take H ids only)
 
 # --- Runners of finished rows. Ledger lines, so the class follows the ledger: every row
 # listed has a verdict, so each resolves to historical (hack/pin-classes effective).
