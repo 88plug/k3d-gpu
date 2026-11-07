@@ -12680,6 +12680,44 @@ So the overlay decisions F5 grades at `a051f00`, `nri-balloons`, one node, are: 
 other table row changes. A second smoke runs from the fixed commit before the scored run, as the
 pre-registration's **When** allows, and is recorded in the PR too.
 
+### F5 amendment R2: what the second and third wiring smokes found (2026-11-07)
+
+Written 2026-11-07, after the second and third unscored wiring smokes and before any F5 step.
+Nothing in the F5 pre-registration or amendment R1 is edited, and the prediction (0.35)
+stands.
+
+- **Smoke 2** (`7f06f458`, 04:58-05:02Z) passed its dry run and got past Istio with overlay
+  0007, then stopped at the Envoy Gateway release: gateway-helm v1.7.1 creates Gateway API
+  v1.4.1's CRDs from its `crds/`, and k3s v1.37's safe-upgrades policy refused each of them.
+  Overlay row 0008
+  (`integrations/eas/patches/0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch`)
+  has the envoy_gateway role keep a Gateway API install at v1.5.0 or later: Envoy Gateway's
+  own CRDs come from `gateway-crds-helm` and the chart installs with `skip_crds`, as EAS
+  `main` does since #42.
+- **Smoke 3** (`8fccd55c`, 05:07-05:39Z) ran from that commit; its dry run read every choice
+  and decision in the table, 0008 included. Every step exited 0: `eat up` in 1556 s with its one `PLAY RECAP` at `failed=0` and
+  0002, 0003, 0006 (b), 0007 and 0008 applied; the Ready wait; `eat check` (Intel's `validate
+  agent-toolkit` at `failed=0`, then the chat, `get_weather({"city": "Portland"})`, the guard
+  blocking the probe it labels Unsafe, and the sandbox printing `385`); a secret scan of 0; and
+  `eat down` in 129 s. The model pod requested 40 CPUs. It is recorded in
+  `bench/f5/results/2026-11-07/smoke3/`, with smokes 1 and 2 beside it.
+- **Node image.** main cut release 0.1.90 at 05:24Z on 2026-11-07, after the pre-registration,
+  and the PR head F5 runs from merges main, so plain `k3d-gpu up` there uses
+  `cryptoandcoffee/k3d-gpu:0.1.90`, not the `0.1.89` the **One fresh cluster** bullet names.
+  Between the two releases (`14a11b4d..071ca5c4`) the files the node image is built from
+  (`Dockerfile`, `share/`, `images.lock`, `build.sh`) are unchanged, and in `scripts/k3d-gpu`
+  only `VERSION` moved. Step 0 pulls it and records its digest, as for 0.1.89.
+
+The predicted table gains one more row, graded like the others:
+
+| Fact `eat up --dry-run` should read | Choice |
+|---|---|
+| overlay row 0008 at EAS `a051f00` | 0008 apply (a) |
+
+So the overlay decisions F5 grades at `a051f00`, `nri-balloons`, one node, are: 0002 apply (a),
+0003 apply (a), 0004 skip, 0005 skip, 0006 apply (b), 0007 apply (a), 0008 apply (a). Apart from
+the node image above, no step, ceiling, grade or other table row changes.
+
 ### H2 run (i9-13900T, 2026-10-16)
 
 ```text
