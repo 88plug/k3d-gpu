@@ -13,9 +13,25 @@ secrets.
 
 | Kind | Engines | What it proves |
 |---|---|---|
-| runtime | `vllm-cpu`, `ovms-cpu`, `llama-cpu`; `eat-vllm-cpu` (informational) | The pinned image serves a pinned Qwen3-0.6B the way the launcher runs it. It returns one completion (HTTP 200, `finish_reason` stop or length, tokens > 0, the text matches `/Paris/`) and one stream (at least 2 chunks, then `[DONE]`), and the server reports the version its tag names. |
+| runtime | `vllm-cpu`, `ovms-cpu`, `llama-cpu`; `eat-vllm-cpu` (informational) | The pinned image serves a pinned Qwen3-0.6B under `docker run`, with the arguments and environment `engines.toml` gives it (the launcher's, or the fit's for vLLM on the CPU), not in the launcher's pod. It returns one completion (HTTP 200, `finish_reason` stop or length, tokens > 0, the text matches `/Paris/`) and one stream (at least 2 chunks, then `[DONE]`), and the server reports the version its tag names. |
 | surface | `vllm-xpu`, `llm-scaler`, `gaudi-vllm`, `llama-sycl`, `llama-vulkan`, `llama-full`, `dlstreamer`, `sglang-xeon`, `npu-umd`, `ovms` (and the runtime engines first) | Every flag and env name the launcher and `console/model_opt.py` emit (`canary/flags.sh`) exists in the image, and the constants derived from it still match: `console/plan.py`'s vLLM versions, and the NPU driver and firmware date. No device is needed. |
 | node | `node` | The root Dockerfile builds. `k3d cluster create --image` it with the k3d `packaging/install.sh` pins and the arguments the launcher passes on a host without NVIDIA (no load balancer, no traefik, the node labelled `nvidia.com/gpu.present=false`). Within 5 minutes the node is Ready, every baked manifest is in place, every DaemonSet they define exists, and every pod in every namespace (kube-system, NFD, the device plugins) is Running and ready or Succeeded; then the pods hold for 20 s with no container restarting. A plugin that needs hardware gets no pod on a hosted runner (its node selector), so a pod still Pending at the timeout, such as one whose image does not pull, fails. |
+
+## What it does not cover
+
+The runtime check runs the image, not the launcher's pod. Kubernetes adds nothing to its
+environment (no Service link variables such as `<SERVICE>_PORT=tcp://...`), and
+`probe.py` sends its own requests with `Content-Type: application/json`, not the
+launcher's warm-up. A fault in the pod around the engine, or in how the launcher asks
+it, therefore passes. The two faults that kept the launcher's vLLM agent from serving in
+every release up to 0.1.93 were of that kind: its Service, named `vllm`, gave the pod
+`VLLM_PORT=tcp://...`, on which vLLM exits, and its warm-up reached vLLM with no
+`Content-Type`, which vLLM answers with 400
+([#339](https://github.com/88plug/k3d-gpu/pull/339)). The images that agent serves
+(`vllm-xpu`, `llm-scaler`, `gaudi-vllm`) are surface engines only: a hosted runner has
+no Intel GPU or Gaudi, so the canary never serves them. `tests/detect_test.sh` checks
+the rendered pod spec and the warm-up command against stubs; nothing in CI serves
+through them.
 
 ## Files
 
