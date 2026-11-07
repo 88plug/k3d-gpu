@@ -897,7 +897,9 @@ class ScriptsTest(unittest.TestCase):
             "teardown.sh": f'echo teardown >> "{calls}"',
             "pairs-hold.sh": f'echo "hold$1" >> "{calls}"; echo $(( $(cat "{tmp}/left") - 1 )) > "{tmp}/left"',
             "upstream.sh": (f'echo upstream >> "{calls}"; r=$(head -1 "{tmp}/reads"); sed -i 1d "{tmp}/reads"; '
-                            '[ "${r}" != ERR ] || { echo "ls-remote failed" >&2; exit 1; }; echo "${r}"'),
+                            '[ "${r}" != ERR ] || { echo "ls-remote failed" >&2; exit 1; }; '
+                            '[ "${r}" != WARN ] || { echo "warning: redirecting to https://example/" >&2; r="fired: none"; }; '
+                            'echo "${r}"'),
         }
         for name, body in stubs.items():
             with open(os.path.join(here, name), "w") as f:
@@ -950,6 +952,18 @@ class ScriptsTest(unittest.TestCase):
         # Unreadable before setup: nothing starts.
         r, res, order = self.campaign_with_stubs(["ERR"] * 3)
         self.assertEqual((r.returncode, order), (11, ["upstream"] * 3), r.stdout + r.stderr)
+
+    def test_campaign_reads_the_triggers_line_not_its_warnings(self):
+        # git ls-remote may warn on stderr; only upstream.sh's own line decides whether it fired.
+        r, res, order = self.campaign_with_stubs(["WARN", "WARN", "fired: none", "fired: none"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([c for c in order if c.startswith("hold")], ["hold1", "hold2", "hold3"])
+        self.assertEqual([ln.split(" ", 1)[1] for ln in read(res, "upstream.txt").splitlines()][:2],
+                         ["setup fired: none", "hold1 fired: none"])
+        # A read that prints no trigger line is unreadable, not fired.
+        r, res, order = self.campaign_with_stubs(["", "", ""])
+        self.assertEqual((r.returncode, order), (11, ["upstream"] * 3), r.stdout + r.stderr)
+        self.assertIn("setup unreadable", read(res, "upstream.txt"))
 
     def test_setup_caps_and_gates(self):
         sh = read(HERE, "setup.sh")

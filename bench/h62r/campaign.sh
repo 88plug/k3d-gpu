@@ -25,18 +25,19 @@ R=${B}/results/H62r
 MAX_HOLDS=8 NOT_DELIVERABLE_MAX=2 ATTEMPTS_MAX=3
 mkdir -p "${R}"
 log() { echo "== campaign $* $(date -u +%FT%TZ)" | tee -a "${R}/campaign.log"; }
-# trigger PHASE: the re-run trigger's line into upstream.txt. Status 0 fired, 1 not, 2 unreadable.
+# trigger PHASE: the re-run trigger's line ("fired: ...", upstream.sh's stdout) into upstream.txt.
+# Status 0 fired, 1 not, 2 unreadable (no such line in 3 reads; its errors are recorded).
 trigger() {
-    local out="" i
+    local out="" err="${R}/upstream.err" i
     for i in 1 2 3; do
-        if out=$(bash "${HERE}/upstream.sh" 2>&1); then
+        if out=$(bash "${HERE}/upstream.sh" 2> "${err}") && [[ "${out}" == "fired: "* ]]; then
             echo "$(date -u +%FT%TZ) $1 ${out}" >> "${R}/upstream.txt"
             [ "${out}" != "fired: none" ]
             return
         fi
         [ "${i}" = 3 ] || sleep "${H62R_TRIGGER_RETRY_S:-60}"
     done
-    echo "$(date -u +%FT%TZ) $1 unreadable: ${out//$'\n'/ }" >> "${R}/upstream.txt"
+    echo "$(date -u +%FT%TZ) $1 unreadable: $(paste -sd' ' "${err}")${out:+ (output: ${out//$'\n'/ })}" >> "${R}/upstream.txt"
     return 2
 }
 tries=$(grep -c . "${R}/attempts.txt" 2>/dev/null)
