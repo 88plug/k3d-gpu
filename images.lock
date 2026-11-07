@@ -180,12 +180,12 @@
       "tag": "26.04"
     },
     {
-      "digest": "sha256:e2eb43e25d404e2c48716f80afdb8989a84c4da588f5509330322842084d97b0",
+      "digest": "sha256:2b8fc7b402eb045b809c3bb6296853e7d6e99a5acaded62b28f9494b357fbb4f",
       "name": "docker.io/nvidia/cuda",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_TEST_IMAGE"
       ],
-      "tag": "13.4.3-base-ubuntu26.04"
+      "tag": "13.5.0-base-ubuntu26.04"
     },
     {
       "digest": "sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
