@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-07T02:51:20Z. 4 open.
+Updated 2026-11-07T04:15:01Z. 3 open.
 
 ## `red:freshness.yml`: scheduled run failure
 
@@ -172,16 +172,6 @@ Re-dispatched `watchdog.yml` on main once after this run; a further re-dispatch 
 Opened 2026-11-07T00:20:59Z, updated 2026-11-07T00:20:59Z.
 
 `freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).
-
-Last successful scheduled run: none found
-
-A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
-
-## `stale:watchdog.yml`: no successful scheduled run within 7 h
-
-Opened 2026-11-07T00:21:19Z, updated 2026-11-07T00:21:19Z.
-
-`watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
 
 Last successful scheduled run: none found
 
