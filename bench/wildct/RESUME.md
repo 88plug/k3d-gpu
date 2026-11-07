@@ -362,12 +362,16 @@ whose `runs/` entry exists.
 ```bash
 # launch NAME CAP NEED ROW [ARGS]: one hold, detached from the ssh session. row.sh runs every check
 # of the row first (IMAGE, the row's arguments, H57w's mode and arms, the k3d shim): a usage error
-# inside the hold would be a failed hold, which counts.
+# inside the hold would be a failed hold, which counts. wildct's logind runs KillUserProcesses=yes:
+# when the ssh connection that started a hold closes, systemd kills every process of that session,
+# setsid or not (H28w, 2026-11-07, amendment R9). systemd-run moves hold.sh into a transient scope
+# of the user manager (linger is on), which outlives the session; --expand-environment=no keeps
+# systemd-run from expanding `$` in the command line.
 launch() {
     [ ! -e "$W/runs/$1" ] || { echo "runs/$1 exists: use a new NAME"; return 1; }
     IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_CHECK=1 bash "$R/bench/wildct/row.sh" "${@:4}" \
         || { echo "row.sh ${*:4}: not a row it runs; nothing launched"; return 1; }
-    IMAGE=$(cat $W/runs/IMAGE) setsid nohup bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
+    IMAGE=$(cat $W/runs/IMAGE) setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
         bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
     echo "launched $1"
 }
@@ -472,6 +476,17 @@ Notes on the holds:
 - **H28w's model images.** `hold.sh` deletes every `h28-model` image after a command that ran and
   did not end 0, as the H28w row registers. A failed `H28w-prep` or `H28w` therefore leaves none,
   so a repeat of `H28w` needs `H28w-prep` again first (a hold, counted toward the 12).
+- **H28w's repeat (amendment R9).** The `H28w` hold of 2026-11-07 (hold 6) ended rc 143 when its
+  ssh session closed. Its repeat is two holds, from the archive `H28w-prep` and `H28w` ran
+  (`repo-fd822b337155`, amendment R8's merge), with the `launch` above:
+
+  ```bash
+  launch H28w-prep-r2 900 35 h28w-prep     # hold 7; pass: docker images 'h28-model' lists r0-r6
+  launch H28w-r2 1500 35 h28w              # hold 8; pass: as row 6, in runs/H28w-r2/out
+  ```
+
+  `hold_wait` takes the same NAMEs and CAPs. Then 4 of the 12 holds are left: `H57w-1` to
+  `H57w-4`, with no room for a spare `H57w-5`.
 - **H57w's inner gate.** H57d's own `hold.sh` re-checks `load1` <= 12, `/` >= 15 GB and
   MemAvailable >= 20 GiB. A busy inner wait eats the outer 4600 s cap. A hold the cap cuts
   counts as failed.
