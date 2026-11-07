@@ -466,6 +466,153 @@ own Level Zero and oneAPI runtime.
 
 **Suggested fix:** drop the `source`, or guard it (`[ -f ... ] && source ...`).
 
+## Issue drafts at the GA tags (2026-11-07, unsent)
+
+Drafted 2026-11-07 against EAS `v1.2.0` (`a051f00`), enterprise-inference `v1.1.0`
+(`d035b1e`) and EAT `release-2.0.0` (`7b827e2`), from reading those trees and from the
+F5 wiring smokes on the Xeon 6741P (k3s v1.37.1 in k3d). None is sent. Each one helps the
+GA install run cleanly on more clusters; `k3d-gpu eas` already carries a workaround for
+each, so nothing on our side waits on them. The two drafts above still hold at `v1.1.0`:
+the kcadm arguments are at `roles/keycloak_config/tasks/install.yaml`
+[#L167-L196](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/keycloak_config/tasks/install.yaml#L167-L196)
+(`k3d-gpu eas` carries a `release-1.1` variant of the patch), and `auto_cpu` is at
+`model_manager/core/nri_policy.py`
+[#L569-L591](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/nri_policy.py#L569-L591).
+
+### EAS `release-1.2`: a newer Gateway API install stops the platform layer
+
+**Where:** `roles/istio/tasks/install.yaml`, "istio | Install Gateway API CRDs"
+([#L70-L73](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/roles/istio/tasks/install.yaml#L70-L73),
+Gateway API `v1.2.1`), and the gateway-helm install in `roles/envoy_gateway/tasks/install.yaml`
+([#L23-L47](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/roles/envoy_gateway/tasks/install.yaml#L23-L47),
+whose chart creates Gateway API `v1.4.1` from its `crds/`).
+
+**What happens:** k3s v1.37 installs the Gateway API CRDs itself (its `gateway-api-crd` addon),
+and Gateway API v1.5.0 and later ship the `safe-upgrades.gateway.networking.k8s.io`
+ValidatingAdmissionPolicy, which refuses a lower version. On such a cluster `install
+agent-toolkit` (and `install platform`) stops at each step in turn: "Installing CRDs with
+version before v1.5.0 is prohibited by default."
+
+**Suggested change:** the `main` gateway role already handles this since #42: it keeps newer
+foreign Gateway API CRDs and renders Envoy Gateway's own from `gateway-crds-helm`
+([crds.yaml#L10-L28](https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/envoy_gateway/tasks/crds.yaml#L10-L28)).
+A backport to `release-1.2` would cover the v1.2.x line. The smallest form is what
+`k3d-gpu eas` applies
+([0007](../../integrations/eas/patches/0007-release-1.2-istio-keep-newer-gateway-api.patch),
+[0008](../../integrations/eas/patches/0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch)):
+the istio role applies its CRDs only when `gatewayclasses` is absent or its
+`gateway.networking.k8s.io/bundle-version` is older, and the envoy_gateway role, with
+v1.5.0 or later installed, applies Envoy Gateway's CRDs from `gateway-crds-helm` and installs
+the chart with `skip_crds`.
+
+### EAS: `init` keeps an existing `global_config.yaml`'s `auth_provider`
+
+**Where:** `es_auto_installer.sh` `_init_seed_defaults`
+([#L930-L950](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L930-L950))
+with `_init_globals_drift` (#L982-L991), and the agent-toolkit manifest's
+`global_config: auth_provider: "litellm"`
+([repos.agent-toolkit.yaml#L8-L10](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.agent-toolkit.yaml#L8-L10)).
+
+**What happens:** the manifest's keys go only into a `global_config.yaml` that `init` creates.
+An env inited before for another layer keeps `auth_provider: keycloak` with an info line
+("kept as is"), and `install agent-toolkit` then runs without LiteLLM, its guardrail or the
+models' LiteLLM registration (EI `components.yaml`
+[#L41-L49](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/components.yaml#L41-L49)).
+
+**Suggested change:** stop, or warn with the command to fix it, when a key the layer's
+manifest sets differs in an existing `global_config.yaml`, since the key decides which
+components install. `k3d-gpu eas` sets the manifest's keys in the env after `init`.
+
+### EAS: `configure` refuses `--force`
+
+**Where:** `es_auto_installer.sh` usage
+([#L171-L172](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L171-L172))
+and `parse_args` ([#L1336-L1337](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L1336-L1337)).
+
+**What happens:** the usage says `--force` is needed in CI, and `confirm` honours `FORCE`, but
+`configure --force` stops with "'configure' takes no arguments", so `configure` cannot run
+unattended (H62 amendment V2 met it at `v1.2.0-rc.1`).
+
+**Suggested change:** accept `--force` for `configure`.
+
+### EI `v1.1.0`: the stock LiteLLM and vLLM CPU images are below published fixes
+
+**Where:** `roles/litellm/defaults/main.yaml`, `litellm_version: "v1.84.0"`
+([#L18](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/litellm/defaults/main.yaml#L18)),
+and the vLLM CPU catalog default `0.28.0` (`model_manager/models.yaml`, e.g.
+[#L300](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L300)).
+
+**What happens:** LiteLLM `1.84.0` is inside the ranges of
+[GHSA-g5ff-637f-6q2m](https://github.com/advisories/GHSA-g5ff-637f-6q2m) (high, fixed in
+1.95.0), [GHSA-hhww-mrg2-969h](https://github.com/advisories/GHSA-hhww-mrg2-969h) (medium,
+fixed in 1.85.0) and [GHSA-3cv6-jpf6-8222](https://github.com/advisories/GHSA-3cv6-jpf6-8222)
+(medium, fixed in 1.88.6); vLLM `0.28.0` is inside
+[GHSA-h3rc-6mm3-gc2m](https://github.com/advisories/GHSA-h3rc-6mm3-gc2m) (high, fixed in
+0.31.0) and [GHSA-6757-hggm-hp2w](https://github.com/advisories/GHSA-6757-hggm-hp2w) (high,
+fixed in 0.32.0). Read from the GitHub advisory database on 2026-11-07; the newest releases
+were LiteLLM 1.108.2 and vLLM 0.33.0.
+
+**Suggested change:** a `release-1.1` patch release with LiteLLM at or above 1.95.0 and the
+vLLM CPU default at or above 0.32.0. A newer LiteLLM answers a guardrail block with HTTP 200
+and `finish_reason: content_filter` instead of HTTP 500 (the draft above), so the guardrail
+docs would change with it. `k3d-gpu eas` keeps Intel's pins as shipped.
+
+### EAT `redis_stack` validate passes the Redis password as `redis-cli -a`
+
+`k3d-gpu eas check` applies the patch below before Intel's `validate` runs
+([`integrations/eas/eat-redis-cli.sh`](../../integrations/eas/eat-redis-cli.sh)), so
+nothing on our side waits on this issue.
+
+**Title:** redis_stack validate: the Redis password is on redis-cli's command line while it runs
+
+**Versions:** intel/enterprise-agent-toolkit `release-2.0.0` `7b827e2` (the same file at
+`036b662`), `roles/redis_stack/tasks/validate.yaml`; chart image
+`redis/redis-stack-server:7.4.0-v8` (redis-cli 7.4.7); kubernetes.core 6.3.0.
+
+**What happens:** the validate action reads the password from
+`redis-stack-server-credentials` and runs `redis-cli -a <password> --no-auth-warning PING`,
+then `MODULE LIST`, through `k8s_exec`
+([validate.yaml#L20-L55](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/roles/redis_stack/tasks/validate.yaml#L20-L55)).
+`k8s_exec` execs the command's argv as a process in the container, and redis-cli keeps `-a`
+in that argv for its whole run
+([redis-cli.c#L2700-L2703](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L2700-L2703)),
+so `ps` shows the password to any user on the node. `no_log` keeps it out of Ansible's
+output only.
+
+**How we saw it:** reading the role, then with the chart's image in Docker
+(`REDIS_PASSWORD` and `REDIS_ARGS="--requirepass ..."` as the chart sets them): during
+`redis-cli -a <password> PING` in the container, an unprivileged `ps -eo args` on the host
+listed the root-owned redis-cli process with the password in its arguments. On a k3d
+cluster the node is a container on the host, so the host's `ps` lists the Redis pod's
+processes the same way.
+
+**Suggested change** (the patch k3d-gpu applies,
+[0001-redis-stack-validate-redis-cli-auth.patch](../../integrations/eas/patches/eat/0001-redis-stack-validate-redis-cli-auth.patch);
+checked with a `ps` sampler against a stand-in for redis-cli, and its commands against the
+chart's image, not yet on a live cluster): redis-cli reads `REDISCLI_AUTH` when `-a` is
+absent ([redis-cli.c#L3058-L3061](https://github.com/redis/redis/blob/7.4.7/src/redis-cli.c#L3058-L3061)),
+and the chart already sets `REDIS_PASSWORD` in the pod from the same Secret
+([redis-stack-server.yaml#L55-L65](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/charts/redis-stack/charts/redis-stack-server/templates/redis-stack-server.yaml#L55-L65)),
+so a shell in the pod can hand it over and the task that reads the password into Ansible
+can go:
+
+    ```yaml
+    command: >-
+      /bin/sh -c '[ -z "$REDIS_PASSWORD" ] || export REDISCLI_AUTH="$REDIS_PASSWORD"; exec redis-cli PING'
+    ```
+
+The shell's argv holds the variable's name, and redis-cli's argv holds no password. With
+auth off the chart sets no `REDIS_PASSWORD`, and redis-cli connects without one, as before.
+
+### EAT `release-2.0.0` docs
+
+- `docs/single-node-deployment.md` and `docs/README.md` clone the branch `release-1.2`
+  (`git clone -b release-1.2`), which moves; the tag `v1.2.0` would pin the GA install.
+- Some pages still point at 1.x paths that `release-2.0.0` removed (`core/`,
+  `deploy-agentic-stack.sh`, `deploy-inference-models.yml`): `kuberay.md`,
+  `vllm-semantic-router.md`, `agent-sandbox.md`, `hybrid-router.md`,
+  `xeon-model-configuration.md` and `intel-arc-xpu-deployment.md`.
+
 ## What this draft does not claim
 
 - That the toolkit is supported on any Intel client CPU. The data points are three runs on one i9-13900T: H1 INCONCLUSIVE [ledger:H1] and one SUPPORTED run, n=1 [ledger:H1b].

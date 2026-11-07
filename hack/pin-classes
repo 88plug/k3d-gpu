@@ -25,7 +25,7 @@ fnmatch patterns on repo-relative paths, where * also matches /):
   historical-ref <path> <exact string>
 
 ours        k3d-gpu's own pins: always the latest stable release
-eat-stock   tracks Intel EAT's latest release; every change is reviewed
+eat-stock   tracks Intel's EAS and EAT releases; every change is reviewed
 ledger      a ledger row's runner or records. The rows are the Hypotheses table ids
             that use the path; the aliases are the heading prefixes its amendments
             use ("### <alias> amendment <ID>: ...")

@@ -1,0 +1,52 @@
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 6 Nov 2026 21:00:00 -0800
+Subject: [PATCH] istio: keep a newer Gateway API install (release-1.2)
+
+The istio role applies Gateway API v1.2.1's standard-install.yaml over whatever
+the cluster has. k3s v1.37 bundles the Gateway API CRDs itself (its
+gateway-api-crd addon, manifests/gateway-api-crd.yaml at v1.37.1+k3s1), and
+Gateway API v1.5.0 and later ship the safe-upgrades.gateway.networking.k8s.io
+ValidatingAdmissionPolicy, which refuses to install a lower version:
+
+  customresourcedefinitions.apiextensions.k8s.io
+  "gatewayclasses.gateway.networking.k8s.io" is forbidden: ValidatingAdmissionPolicy
+  'safe-upgrades.gateway.networking.k8s.io' ... denied request: Installing CRDs
+  with version before v1.5.0 is prohibited by default.
+
+so `install agent-toolkit` (and `install inference`) stops at
+"istio | Install Gateway API CRDs" on every k3s v1.37 cluster. EAS main's
+gateway role already keeps newer Gateway API CRDs another tool installed
+(EAS #42, roles/envoy_gateway/tasks/crds.yaml); this does the same in
+release-1.2's istio role: the CRDs are applied only when gatewayclasses is
+absent or its gateway.networking.k8s.io/bundle-version is lower than
+istio_gateway_api_crds_version. Istio uses the v1 resources both serve.
+---
+--- a/roles/istio/tasks/install.yaml
++++ b/roles/istio/tasks/install.yaml
+@@ -67,10 +67,26 @@
+       ansible.builtin.include_tasks: install_csr.yaml
+       when: istio_enabled | default(true) | bool
+ 
++    # A newer Gateway API install another tool owns stays: k3s v1.37 bundles the CRDs
++    # (its gateway-api-crd addon), and from Gateway API v1.5.0 their safe-upgrades
++    # ValidatingAdmissionPolicy refuses a lower version. Istio reads the v1 resources
++    # either serves, as main's gateway role keeps newer foreign CRDs (EAS #42).
++    - name: "istio | Read the installed Gateway API version"
++      kubernetes.core.k8s_info:
++        api_version: apiextensions.k8s.io/v1
++        kind: CustomResourceDefinition
++        name: gatewayclasses.gateway.networking.k8s.io
++      register: _istio_gateway_api_crd
++
+     - name: "istio | Install Gateway API CRDs"
+       kubernetes.core.k8s:
+         state: present
+         src: "{{ istio_gateway_api_crds_url }}"
++      when: >-
++        (_istio_gateway_api_crd.resources | default([]) | length == 0)
++        or ((_istio_gateway_api_crd.resources[0].metadata.annotations | default({}, true))
++            ['gateway.networking.k8s.io/bundle-version'] | default('v0.0.0', true) | regex_replace('^v', ''))
++           is version(istio_gateway_api_crds_version | regex_replace('^v', ''), '<')
+ 
+     - name: "istio | Install Helm chart"
+       kubernetes.core.helm:

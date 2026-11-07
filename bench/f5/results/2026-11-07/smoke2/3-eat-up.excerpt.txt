@@ -1,0 +1,15 @@
+511:TASK [envoy_gateway : envoy_gateway | Install Envoy Gateway via Helm (OCI) — standalone] ***
+512-FAILED - RETRYING: [localhost]: envoy_gateway | Install Envoy Gateway via Helm (OCI) — standalone (3 retries left).
+513-FAILED - RETRYING: [localhost]: envoy_gateway | Install Envoy Gateway via Helm (OCI) — standalone (2 retries left).
+514-FAILED - RETRYING: [localhost]: envoy_gateway | Install Envoy Gateway via Helm (OCI) — standalone (1 retries left).
+515-[ERROR]: Task failed: Module failed: Failure when executing Helm command. Exited 1.
+516-stdout: Release "envoy-gateway" does not exist. Installing it now.
+517-
+518-stderr: Pulled: docker.io/envoyproxy/gateway-helm:v1.7.1
+519-Digest: sha256:9c74b9b34f62d5627846e9a399fd67d044a70f7fe184d1022a27174fd2280454
+Error: failed to install CRD crds/gatewayapi-crds.yaml: 12 errors occurred:
+	* customresourcedefinitions.apiextensions.k8s.io "referencegrants.gateway.networking.k8s.io" is forbidden: ValidatingAdmissionPolicy 'safe-upgrades.gateway.networking.k8s.io' with binding 'safe-upgrades.gateway.networking.k8s.io' denied request: Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions.
+	* customresourcedefinitions.apiextensions.k8s.io "xmeshes.gateway.networking.x-k8s.io" already exists
+	* customresourcedefinitions.apiextensions.k8s.io "gatewayclasses.gateway.networking.k8s.io" is forbidden: ValidatingAdmissionPolicy 'safe-upgrades.gateway.networking.k8s.io' with binding 'safe-upgrades.gateway.networking.k8s.io' denied request: Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions.
+PLAY RECAP *********************************************************************
+localhost                  : ok=101  changed=18   unreachable=0    failed=1    skipped=30   rescued=0    ignored=0   

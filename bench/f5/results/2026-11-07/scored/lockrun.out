@@ -1,0 +1,22 @@
+[2026-11-07T05:47:58+00:00] step 0b-inotify: start (timeout 60s): sudo -n sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576
+[2026-11-07T05:47:58+00:00] step 0b-inotify: rc=0 wall=0s
+[2026-11-07T05:47:58+00:00] step 1-up: start (timeout 1800s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu up
+[2026-11-07T05:48:42+00:00] step 1-up: rc=0 wall=44s
+[2026-11-07T05:48:42+00:00] step 2-dry-run: start (timeout 900s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu eat up --dry-run
+[2026-11-07T05:48:45+00:00] step 2-dry-run: rc=0 wall=3s
+[2026-11-07T05:48:45+00:00] step 3-eat-up: start (timeout 6000s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu eat up
+[2026-11-07T06:14:18+00:00] step 3-eat-up: rc=0 wall=1533s
+[2026-11-07T06:14:18+00:00] step 4-wait: start (timeout 1800s): env KUBECONFIG=/home/devcloud/k3dgpu-bench/f5/out/state/kubeconfig-k3dgpu-f5-eat kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+[2026-11-07T06:14:25+00:00] step 4-wait: rc=0 wall=7s
+[2026-11-07T06:14:25+00:00] step 5-check: start (timeout 1200s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu eat check
+[2026-11-07T06:16:34+00:00] step 5-check: rc=0 wall=129s
+[2026-11-07T06:16:35+00:00] step 6-status: start (timeout 600s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu eat status
+[2026-11-07T06:16:45+00:00] step 6-status: rc=0 wall=10s
+[2026-11-07T06:16:45+00:00] step 7-scan: start (timeout 600s): bash -c bash "$1" read "$2" "$3" && bash "$1" count "$2" step7 "$4" "$4/steps" "$4/run.log" "$4/ps-samples.gz" "$5/logs" _ /home/devcloud/k3dgpu-bench/k3d-gpu-f5/bench/f5/scan.sh /home/devcloud/k3dgpu-bench/k3d-gpu-f5/bench/f5/.vals-k3dgpu-f5-eat /home/devcloud/k3dgpu-bench/f5/out/state/kubeconfig-k3dgpu-f5-eat /home/devcloud/k3dgpu-bench/f5/out /home/devcloud/k3dgpu-bench/f5/out/state/eas-k3dgpu-f5-eat
+[2026-11-07T06:16:47+00:00] step 7-scan: rc=0 wall=2s
+[2026-11-07T06:16:47+00:00] step 8-eat-down: start (timeout 1200s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu eat down
+[2026-11-07T06:18:57+00:00] step 8-eat-down: rc=0 wall=130s
+[2026-11-07T06:18:58+00:00] step 9-down: start (timeout 600s): /home/devcloud/k3dgpu-bench/k3d-gpu-f5/scripts/k3d-gpu down
+[2026-11-07T06:19:13+00:00] step 9-down: rc=0 wall=15s
+[2026-11-07T06:19:14+00:00] inotify put back to 128 1048576
+[2026-11-07T06:19:14+00:00] run.sh done (rc 0)

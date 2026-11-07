@@ -25,7 +25,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "hack"))
 
-from pinlib import http, sources  # noqa: E402
+from pinlib import http, registry, sources  # noqa: E402
 from pinlib import versions as V  # noqa: E402
 
 with open(ROOT / "pins" / "registry.toml", "rb") as f:
@@ -262,37 +262,118 @@ class NvidiaApt(Fixtures):
 
 
 class Eat(Fixtures):
-    VALUES = "vllm:\n  image:\n    repository: vllm/vllm-openai-cpu\n    tag: v0.28.0\n"
+    """EAT 1.x (the eat pin, integrations/eat/eat-up.sh) reads every release below
+    release-2.0.0, which removed the standalone installer and its core/helm-charts."""
 
-    def records(self, latest):
+    VALUES = "vllm:\n  image:\n    repository: vllm/vllm-openai-cpu\n    tag: v0.28.0\n"
+    RELEASES = GH + "repos/intel/enterprise-agent-toolkit/releases?per_page=100&page=1"
+
+    def records(self, releases):
         return {
-            GH + "repos/intel/enterprise-agent-toolkit/releases/latest": ok(latest),
+            self.RELEASES: ok(releases),
             GH + "repos/intel/enterprise-agent-toolkit/commits/release-1.1.0": ok({"sha": SHA_B}),
             "https://raw.githubusercontent.com/intel/enterprise-agent-toolkit/release-1.1.0/core/helm-charts/vllm/"
             "xeon-values.yaml": ok(body=self.VALUES),
             HUB + "vllm/vllm-openai-cpu/manifests/v0.28.0": manifest(D1),
         }
 
-    def test_latest_release_after_the_hotfix_became_a_prerelease(self):
-        self.serve(self.records(rel("release-1.1.0", published="2026-10-22T17:16:26Z")))
+    def test_the_newest_1x_release_after_the_hotfix_became_a_prerelease(self):
+        self.serve(self.records([rel("release-2.0.0"), rel("release-1.1.0", published="2026-10-22T17:16:26Z"),
+                                 rel("release-1.0.3-hotfix", prerelease=True)]))
         r = sources.resolve(PINS["eat"], "release-1.0.3-hotfix")
         self.assertEqual((r.v, r.values["commit"]), ("release-1.1.0", SHA_B))
+        self.assertFalse(r.values.get("held"))
         r = sources.resolve(PINS["eat-vllm-cpu"], "v0.24.0")
-        self.assertEqual((r.v, r.values["digest"]), ("v0.28.0", D1))
+        self.assertEqual((r.v, r.values["digest"], r.values["eat"]), ("v0.28.0", D1, "release-1.1.0"))
 
-    def test_a_prerelease_latest_is_an_error(self):
-        self.serve(self.records(rel("release-1.2.0-rc1", prerelease=True)))
+    def test_the_chart_pins_read_below_release_2_0_0(self):
+        # release-2.0.0 has no core/helm-charts (a 404 there since it shipped): eat-vllm-cpu
+        # and eat-litellm read the newest release below it
+        for pid in ("eat-vllm-cpu", "eat-litellm"):
+            self.assertEqual(PINS[pid]["source"].get("below"), "release-2.0.0", pid)
+        self.serve(self.records([rel("release-2.0.0"), rel("release-1.1.0")]))
+        self.assertEqual(sources.resolve(PINS["eat-vllm-cpu"], "v0.28.0").values["eat"], "release-1.1.0")
+
+    def test_only_prereleases_is_an_error(self):
+        self.serve(self.records([rel("release-1.2.0-rc1", prerelease=True)]))
         with self.assertRaises(sources.SourceError):
             sources.resolve(PINS["eat"], "release-1.1.0")
+        with self.assertRaises(sources.SourceError):
+            sources.resolve(PINS["eat-vllm-cpu"], "v0.28.0")
 
     def test_the_eat_tag_never_moves_backwards(self):
         # EAT's tags order as one stream (hack/pinver.py scheme eat): a hotfix after
-        # its release, a latest release older than the pin is an error
+        # its release, a newest release older than the pin is an error
         self.assertEqual(PINS["eat"]["scheme"], "eat")
-        self.serve(self.records(rel("release-1.1.0")))
+        self.serve(self.records([rel("release-1.1.0")]))
         with self.assertRaises(sources.SourceError):
             sources.resolve(PINS["eat"], "release-1.2.0")
         self.assertEqual(sources.resolve(PINS["eat"], "release-1.1.0").v, "release-1.1.0")
+
+
+class EasRelease(Fixtures):
+    """EAS's latest release and the enterprise-inference and EAT commits its agent-toolkit
+    manifest pins (hack/eas-release-pins, the eas-release pin), each a tagged release the
+    release notes name."""
+
+    EAS = "a051f00fcb2dd473fe763610471cd509db82c433"
+    EI = "d035b1ef1981fbf5084ff05c9a337e620478bb87"
+    EAT = "7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
+    NOTES = ("| [enterprise-agent-toolkit](https://github.com/intel/enterprise-agent-toolkit) | "
+             "[v2.0.0](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-2.0.0) |\n"
+             "| [ai-inference](https://github.com/intel/enterprise-inference) | "
+             "[v1.1.0](https://github.com/intel/enterprise-inference/releases/tag/v1.1.0) |\n")
+    MANIFEST = (ROOT / "tests/fixtures/eas/trees/a051f00/configs/repos/repos.agent-toolkit.yaml").read_text()
+
+    def records(self, notes=NOTES, ei_tag_commit=EI, manifest=MANIFEST):
+        eas = rel("v1.2.0", published="2026-11-06T13:53:39Z", body=notes)
+        return {
+            GH + "repos/intel/enterprise-ai-solutions/releases/latest": ok(eas),
+            GH + "repos/intel/enterprise-ai-solutions/commits/v1.2.0": ok({"sha": self.EAS}),
+            "https://raw.githubusercontent.com/intel/enterprise-ai-solutions/%s/configs/repos/repos.agent-toolkit.yaml"
+            % self.EAS: ok(body=manifest),
+            GH + "repos/intel/enterprise-inference/commits/v1.1.0": ok({"sha": ei_tag_commit}),
+            GH + "repos/intel/enterprise-agent-toolkit/commits/release-2.0.0": ok({"sha": self.EAT}),
+            GH + "repos/intel/enterprise-inference/releases/tags/v1.1.0": ok(rel("v1.1.0", published="2026-11-06T06:22:30Z")),
+            GH + "repos/intel/enterprise-agent-toolkit/releases/tags/release-2.0.0":
+                ok(rel("release-2.0.0", published="2026-11-06T06:05:17Z")),
+        }
+
+    def test_the_release_and_the_commits_its_manifest_pins(self):
+        pin = PINS["eas-release"]
+        self.assertEqual((pin["class"], pin["group"], pin["scheme"], pin["source"]["kind"]),
+                         ("eat-stock", "eat-stock", "semver", "cmd"))
+        self.assertNotIn("hold", pin)
+        self.serve(self.records())
+        r = sources.resolve(pin, "v1.2.0")
+        self.assertEqual(r.values, {
+            "v": "v1.2.0", "commit": self.EAS, "date": "2026-11-06",
+            "ei": "v1.1.0", "ei_commit": self.EI, "ei_date": "2026-11-06", "ei_line": "16",
+            "eat": "release-2.0.0", "eat_commit": self.EAT, "eat_date": "2026-11-06", "eat_line": "25"})
+
+    def test_the_pins_json_rows_are_its_sites(self):
+        tree = registry.Tree(str(ROOT))
+        vals = registry.current(PINS["eas-release"], registry.locate(tree, PINS["eas-release"]))
+        rows = {r["name"]: r for r in json.loads((ROOT / "integrations/eas/pins.json").read_text())["pins"]
+                if r["profile"] == "release"}
+        self.assertEqual((vals["v"], vals["commit"], vals["ei"], vals["ei_commit"], vals["eat"], vals["eat_commit"]),
+                         (rows["eas"]["ref"], rows["eas"]["sha"], rows["ei"]["ref"], rows["ei"]["sha"],
+                          rows["eat"]["ref"], rows["eat"]["sha"]))
+
+    def test_a_manifest_rev_no_named_tag_points_at_is_refused(self):
+        self.serve(self.records(ei_tag_commit=SHA_A))
+        with self.assertRaises(sources.SourceError):
+            sources.resolve(PINS["eas-release"], "v1.2.0")
+
+    def test_release_notes_that_do_not_name_the_component_are_refused(self):
+        self.serve(self.records(notes="| ai-inference | v1.1.0 |\n"))
+        with self.assertRaises(sources.SourceError):
+            sources.resolve(PINS["eas-release"], "v1.2.0")
+
+    def test_a_manifest_rev_that_is_a_branch_is_refused(self):
+        self.serve(self.records(manifest=self.MANIFEST.replace(self.EI, "release-1.1")))
+        with self.assertRaises(sources.SourceError):
+            sources.resolve(PINS["eas-release"], "v1.2.0")
 
 
 class Llama(Fixtures):
@@ -382,20 +463,25 @@ class Holds(Fixtures):
         self.assertTrue(r.values.get("held"))
         self.assertIn("upstream v0.9.0 reaches the hold v0.8.1", r.note)
 
+    EAT_RELEASES = GH + "repos/intel/enterprise-agent-toolkit/releases?per_page=100&page=1"
+
     def test_eat_stays_below_release_2_0_0(self):
+        # EAT 1.x's standalone installer is gone at release-2.0.0: the eat pin lists every
+        # release, takes the newest below the hold and is not "held" while 2.x moves on
         self.assertIn("integrations/eas", PINS["eat"]["hold"]["reason"])
-        self.serve({GH + "repos/intel/enterprise-agent-toolkit/releases/latest": ok(rel("release-2.0.0")),
-                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-2.0.0": ok({"sha": SHA_A})})
+        self.assertEqual(PINS["eat"]["hold"]["max"], "release-2.0.0")
+        self.serve({self.EAT_RELEASES: ok([rel("release-2.1.0"), rel("release-2.0.0"), rel("release-1.1.0")]),
+                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-1.1.0": ok({"sha": SHA_B})})
         r = sources.resolve(PINS["eat"], "release-1.1.0")
         self.assertEqual(r.v, "release-1.1.0")
-        self.assertTrue(r.values.get("held"))
-        self.assertIn("upstream release-2.0.0 reaches the hold release-2.0.0", r.note)
+        self.assertFalse(r.values.get("held"))
+        self.assertIsNone(r.note)
 
     def test_eat_below_the_hold_still_moves(self):
-        self.serve({GH + "repos/intel/enterprise-agent-toolkit/releases/latest": ok(rel("release-1.2.0")),
-                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-1.2.0": ok({"sha": SHA_A})})
+        self.serve({self.EAT_RELEASES: ok([rel("release-2.0.0"), rel("release-1.1.0-hotfix"), rel("release-1.1.0")]),
+                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-1.1.0-hotfix": ok({"sha": SHA_A})})
         r = sources.resolve(PINS["eat"], "release-1.1.0")
-        self.assertEqual((r.v, r.values["commit"]), ("release-1.2.0", SHA_A))
+        self.assertEqual((r.v, r.values["commit"]), ("release-1.1.0-hotfix", SHA_A))
         self.assertFalse(r.values.get("held"))
 
 

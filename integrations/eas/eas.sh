@@ -2,6 +2,7 @@
 # eas.sh — drives Intel's es_auto_installer.sh (intel/enterprise-ai-solutions) against a
 # k3d-gpu cluster in its bring-your-own mode (existing_kubernetes). `k3d-gpu eas` runs it in
 # the bastion (bastion.Dockerfile); `overlay-check` also runs on the host for --dry-run.
+# Line numbers below are es_auto_installer.sh at EAS v1.2.0 (a051f00).
 #
 #   eas.sh up <layer> [-- <ansible-playbook args>]
 #       1. clone EAS and check out EAS_SHA (a clean tree: earlier overlay hunks are dropped)
@@ -9,25 +10,38 @@
 #       3. the layer manifest's revs as commit SHAs (repos.<layer>.yaml from eas-config.py)
 #       4. es_auto_installer.sh init <layer> --env k3d-gpu; EI's model deploy must take the
 #          LiteLLM master key from the Secret read the overrides empty (key_argv_guard), and
-#          EI's keycloak_config role gets patches/ei/0001, which keeps the Keycloak admin
-#          password and the client secret out of kcadm's argv (ei-kcadm.sh: it stops the
-#          install when the role's task changed shape; the patch comes out again before
-#          init, so `init --upgrade` finds ext/ clean)
-#       5. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/:
-#          keys merge; a model's env merges and its args_append follows its catalog args
-#       6. es_auto_installer.sh install <layer> --env k3d-gpu -- -e @k3d-gpu-images.yaml
+#          EI's keycloak_config role gets patches/ei/0001 (variant a or b), which keeps the
+#          Keycloak admin password and the client secret out of kcadm's argv (ei-kcadm.sh:
+#          it stops the install when the role's task changed shape; the patch comes out
+#          again before init, so `init --upgrade` finds ext/ clean), and EAT's redis_stack
+#          validate gets patches/eat/0001, which keeps the Redis password off redis-cli's
+#          argv (eat-redis-cli.sh, the same way)
+#       5. the layer manifest's global_config: keys into env/k3d-gpu/global_config.yaml:
+#          init writes them only into a global_config.yaml it creates (_init_seed_defaults,
+#          #L930-L950), so an env inited before keeps its own (for the agent toolkit,
+#          auth_provider litellm: LiteLLM, its guardrail and the models' registration)
+#       6. global_config.edit.yaml and models.edit.yaml (eas-config.py) into env/k3d-gpu/:
+#          keys merge; a model's env merges, its args_append follows its catalog args and
+#          its cpu replaces the catalog's
+#       7. es_auto_installer.sh install <layer> --env k3d-gpu -- -e @k3d-gpu-images.yaml
 #          -e @k3d-gpu-overrides.yaml [args]: extra vars load last in es_auto_installer.sh
-#          main(), so the overrides win
-#   eas.sh overlay-check     steps 1-2 without applying: the overlay decisions only
+#          main() (#L1548), so the overrides win
+#   eas.sh overlay-check [<layer>]
+#                            steps 1-2 without applying: the overlay decisions only, then
+#                            the layer manifest's global_config: keys step 5 sets
+#   eas.sh validate <layer>  es_auto_installer.sh validate <layer> --env k3d-gpu -- install's
+#                            extra vars: Intel's post-deploy checks of every enabled component,
+#                            EAT's redis_stack validate patched first (eat-redis-cli.sh)
 #   eas.sh down              es_auto_installer.sh teardown platform --env k3d-gpu --force -- -e
 #                            @k3d-gpu-images.yaml -e @k3d-gpu-overrides.yaml: install's extra
 #                            vars, so teardown skips what install skipped (k3d-gpu's NFD)
 #   eas.sh status            es_auto_installer.sh status --env k3d-gpu
 #
-# `configure` is never run: it needs a terminal or --force, sudo and apt
-# (es_auto_installer.sh@97f6157 #L318-L351), and the bastion bakes everything it installs.
-# The installer reuses a venv that has ansible-playbook (#L801-L806), so .venv links to the
-# baked /opt/eas-venv, where it also finds kubernetes.core 6.3.0 (#L832-L847).
+# `configure` is never run: it needs a terminal or --force, sudo and apt (#L318-L351), and
+# at v1.2.0 it refuses --force ("'configure' takes no arguments"); the bastion bakes
+# everything it installs. The installer reuses a venv that has ansible-playbook
+# (#L801-L806), so .venv links to the baked /opt/eas-venv, whose purelib holds
+# kubernetes.core 6.3.0 where ansible-core finds collections on its sys.path.
 #
 # Environment (set by `k3d-gpu eas`):
 #   EAS_STATE        state dir: the EAS checkout and eas-config.py's files (default /eas-state)
@@ -36,7 +50,7 @@
 #   EAS_VENV         the baked venv (default /opt/eas-venv)
 #   EAS_OWNER        uid:gid that owns the state dir when this exits. The bastion runs as root:
 #                    es_auto_installer.sh ensure_sudo runs `sudo -k` under set -e unless EUID
-#                    is 0 (#L866-L875), and the image has no sudo.
+#                    is 0 (#L852-L861), and the image has no sudo.
 # Values from eas-config.py's files reach yq through the environment (strenv), never as
 # expression text.
 
@@ -96,6 +110,27 @@ pin_manifest() {
     done < <(yq -r '.repos[] | [.layer, .url, .rev] | @tsv' "${f}")
 }
 
+# manifest_globals <layer> [--list]: the layer manifest's top-level global_config: map
+# (plain values only, as _init_layer_globals #L954-L962 requires), merged into
+# env/k3d-gpu/global_config.yaml; with --list, only printed (eas-config.py reads it, so
+# the host's dry run needs no yq). Nothing when the manifest has none (EAS main 97f6157).
+manifest_globals() {
+    local M="${CHECKOUT}/configs/repos/repos.$1.yaml" G="${CHECKOUT}/env/${ENV_NAME}/global_config.yaml" rows
+    [ -f "${M}" ] || err "EAS has no configs/repos/repos.$1.yaml at ${EAS_SHA}"
+    export M
+    rows=$(python3 "${HERE}/eas-config.py" --manifest-globals "${M}") \
+        || err "configs/repos/repos.$1.yaml: global_config is not a map of plain values"
+    [ -n "${rows}" ] || return 0
+    if [ "${2:-}" = --list ]; then
+        info "configs/repos/repos.$1.yaml global_config, set in env/${ENV_NAME}/global_config.yaml after init:"
+        sed 's/^/  /' <<< "${rows}"
+        return 0
+    fi
+    [ -f "${G}" ] || err "init seeded no env/${ENV_NAME}/global_config.yaml"
+    yq -i '. *= (load(strenv(M)).global_config // {})' "${G}"
+    info "env/${ENV_NAME}/global_config.yaml: the global_config of repos.$1.yaml ($(echo "${rows}" | tr '\n' ' ' | sed 's/ $//'); init sets it only in a new file)"
+}
+
 # args_merge <current args JSON> <args_append JSON>: the catalog entry's args with
 # args_append after them, each --flag of args_append (and its value) taken out of the
 # current args first, so a re-run (init never reseeds models.yaml) replaces rather than
@@ -116,11 +151,12 @@ print(json.dumps(out + add))' "$1" "$2"
 }
 
 # env_edits: global_config.edit.yaml merged into env/k3d-gpu/global_config.yaml (where
-# _resolve_kubeconfig reads existing_kubernetes, #L1342-L1358), and models.edit.yaml into
+# _resolve_kubeconfig reads existing_kubernetes, #L1378-L1394), and models.edit.yaml into
 # env/k3d-gpu/models.yaml: defaults merge; each model is the catalog entry of its name,
-# which must exist once: its env merges, and its args_append goes after its args.
+# which must exist once: its env merges, its args_append goes after its args, and its cpu
+# (when the edit has one) replaces the catalog's.
 env_edits() {
-    local env="${CHECKOUT}/env/${ENV_NAME}" F N A cur add
+    local env="${CHECKOUT}/env/${ENV_NAME}" F N A C cur add
     F="${EAS_STATE}/global_config.edit.yaml"
     [ -f "${F}" ] || err "${F} missing (eas-config.py writes it)"
     export F
@@ -140,10 +176,23 @@ env_edits() {
         A=$(args_merge "${cur}" "${add}")
         export A
         yq -i '(.models[] | select(.name == strenv(N))).args = (strenv(A) | from_yaml)' "${env}/models.yaml"
+        C=$(yq -r '(.models[] | select(.name == strenv(N))).cpu // ""' "${F}")
+        if [ -n "${C}" ]; then
+            [[ "${C}" =~ ^[0-9]+$ ]] || err "models.edit.yaml: cpu for ${N} is not a whole number: '${C}'"
+            export C
+            yq -i '(.models[] | select(.name == strenv(N))).cpu = strenv(C)' "${env}/models.yaml"
+        fi
     done < <(yq -r '.models[].name' "${F}")
 }
 
 installer() { (cd "${CHECKOUT}" && ./es_auto_installer.sh "$@"); }
+
+# extra_vars: install's -e files, for teardown and validate too.
+extra_vars() {
+    EXTRA=()
+    [ ! -f "${EAS_STATE}/k3d-gpu-images.yaml" ] || EXTRA+=(-e "@${EAS_STATE}/k3d-gpu-images.yaml")
+    EXTRA+=(-e "@${EAS_STATE}/k3d-gpu-overrides.yaml")
+}
 
 # key_argv_guard: EI's model deploy hands model-manager the LiteLLM master key as
 # MM_LITELLM_MASTER_KEY in its ansible environment:, which ansible writes into the deploy's
@@ -171,6 +220,13 @@ ei_kcadm() {
     bash "${HERE}/ei-kcadm.sh" "$1" "${ei}"
 }
 
+# eat_redis_cli apply|revert: eat-redis-cli.sh on EAT's checkout, once init has cloned it.
+eat_redis_cli() {
+    local eat="${CHECKOUT}/ext/enterprise.agent-toolkit"
+    [ -d "${eat}" ] || return 0
+    bash "${HERE}/eat-redis-cli.sh" "$1" "${eat}"
+}
+
 cmd_up() {
     local layer=${1:-}
     [ -n "${layer}" ] || err "usage: eas.sh up <layer> [-- <ansible-playbook args>]"
@@ -181,18 +237,34 @@ cmd_up() {
     pin_manifest "${layer}"
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
     ei_kcadm revert
+    eat_redis_cli revert
     if [ -f "${CHECKOUT}/env/${ENV_NAME}/.solutions.yaml" ]; then
         # --upgrade moves already-cloned ext/ repos onto the manifest's new revs (never
-        # rewriting a config); without it a changed pin is refused (#L910-L940).
+        # rewriting a config); without it a changed pin is refused (#L896-L926).
         installer init "${layer}" --env "${ENV_NAME}" --upgrade
     else
         installer init "${layer}" --env "${ENV_NAME}"
     fi
     key_argv_guard
     ei_kcadm apply
+    eat_redis_cli apply
+    manifest_globals "${layer}"
     env_edits
     installer install "${layer}" --env "${ENV_NAME}" -- \
         -e "@${EAS_STATE}/k3d-gpu-images.yaml" -e "@${EAS_STATE}/k3d-gpu-overrides.yaml" "$@"
+}
+
+cmd_validate() {
+    local layer=${1:-}
+    [ -n "${layer}" ] || err "usage: eas.sh validate <layer>"
+    [ -d "${CHECKOUT}/env/${ENV_NAME}" ] || err "no env/${ENV_NAME} in ${CHECKOUT}: run 'k3d-gpu eas up' first"
+    [ -f "${EAS_STATE}/k3d-gpu-overrides.yaml" ] \
+        || err "${EAS_STATE}/k3d-gpu-overrides.yaml missing: validate needs install's extra vars (run 'k3d-gpu eas up --dry-run' to write it again)"
+    extra_vars
+    ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
+    # An env installed before eat-redis-cli.sh existed has EAT's validate as it ships.
+    eat_redis_cli apply
+    installer validate "${layer}" --env "${ENV_NAME}" -- "${EXTRA[@]}"
 }
 
 cmd_down() {
@@ -202,12 +274,10 @@ cmd_down() {
     # overrides, nfd_enabled is true again and EI's nfd teardown deletes k3d-gpu's own NFD.
     [ -f "${EAS_STATE}/k3d-gpu-overrides.yaml" ] \
         || err "${EAS_STATE}/k3d-gpu-overrides.yaml missing: without it teardown also removes what eas up left to k3d-gpu (its NFD); run 'k3d-gpu eas up --dry-run' to write it again"
-    local vars=()
-    [ ! -f "${EAS_STATE}/k3d-gpu-images.yaml" ] || vars+=(-e "@${EAS_STATE}/k3d-gpu-images.yaml")
-    vars+=(-e "@${EAS_STATE}/k3d-gpu-overrides.yaml")
+    extra_vars
     ln -sfn "${EAS_VENV}" "${CHECKOUT}/.venv"
-    # teardown's confirm refuses a non-terminal stdin without --force (#L129-L137, #L1486).
-    installer teardown platform --env "${ENV_NAME}" --force -- "${vars[@]}"
+    # teardown's confirm refuses a non-terminal stdin without --force (#L129-L136, #L1522).
+    installer teardown platform --env "${ENV_NAME}" --force -- "${EXTRA[@]}"
 }
 
 cmd_status() {
@@ -220,8 +290,9 @@ sub=${1:-}
 [ $# -eq 0 ] || shift
 case "${sub}" in
     up)            cmd_up "$@" ;;
-    overlay-check) checkout; overlay ;;
+    overlay-check) checkout; overlay; [ -z "${1:-}" ] || manifest_globals "$1" --list ;;
+    validate)      cmd_validate "$@" ;;
     down)          cmd_down ;;
     status)        cmd_status ;;
-    *) err "usage: eas.sh up <layer> [-- args] | overlay-check | down | status" ;;
+    *) err "usage: eas.sh up <layer> [-- args] | overlay-check [<layer>] | validate <layer> | down | status" ;;
 esac
