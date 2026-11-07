@@ -17,6 +17,7 @@
 97f6157 c2b89bf396954d5be4ab863c12f34b601097838d docs/customize/node_topology.md
 97f6157 054f7c435931ed9f834a61bd2d4281cd3ed75f83 docs/deploy/topologies.md
 97f6157 cf1824b2b106986c4425ae52d3c9c65aa7cc9862 roles/envoy_gateway/tasks/controller.yaml
+97f6157 1da4abb3c3258f6a9b877e675d22fd06bda2f8ca roles/envoy_gateway/tasks/crds.yaml
 97f6157 f91161e77611183f3752a82d011f369af6ec7938 roles/istio/defaults/main.yaml
 97f6157 e81c08ef92529c62c80d64cbd826bb59d496717d roles/istio/tasks/install.yaml
 97f6157 bb6dc68ff85bcf8d7f7bc25861b9d41406bc9bdc roles/istio/tasks/upgrade.yaml

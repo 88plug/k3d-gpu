@@ -102,6 +102,10 @@
 #            - no istio-cni-node or ztunnel DaemonSet: Istio ambient's data plane is
 #              missing
 #            - input that is not a kubectl List exits 2
+#   gwapi    overlay 0007's condition under ansible-playbook: release-1.2's istio role applies
+#            Gateway API v1.2.1 only when the CRDs are absent or older, and keeps a newer
+#            install (k3s v1.37's, whose safe-upgrades policy refuses a downgrade). Needs
+#            ansible-playbook.
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -241,14 +245,14 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     # 4. EAS main on the desktop (one node, k3d-gpu's balloons policy kept): the expected set.
     got=$(brief "${WORK}/main" best-effort 1)
     check "main best-effort 1 node: 0002 apply, 0003/0004/0005 skip, 0006 apply a" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" "${got}"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
     check "main: exit 0" 0 "$(cat "${WORK}/rc")"
     check "main kubelet-static 1 node: 0003 still skips (EAS installs balloons only for nri-balloons)" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" "$(brief "${WORK}/main" kubelet-static 1)"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" kubelet-static 1)"
     check "main nri-balloons 1 node: 0003 applies" \
-        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:a" "$(brief "${WORK}/main" nri-balloons 1)"
+        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" nri-balloons 1)"
     check "main best-effort 2 nodes: 0004 applies" \
-        "0002=apply:a 0003=skip 0004=apply:a 0005=skip 0006=apply:a" "$(brief "${WORK}/main" best-effort 2)"
+        "0002=apply:a 0003=skip 0004=apply:a 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" best-effort 2)"
     check "main: 0002 resolves to the upstream draft" "${ROOT}/integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch" \
         "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][0]["files"][0]')")"
     check "main: 0002 names the generator knob it needs" istio_platform "$(jq_ 'd["decisions"][0]["knob"]')"
@@ -263,7 +267,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     if [ -n "${xdev}" ]; then
         got=$(TMPDIR="${xdev}" brief "${WORK}/main" best-effort 1)
         check "main with the scratch index on another filesystem (TMPDIR ${d}): the same decisions" \
-            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" "${got}"
+            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
         check "main with the scratch index on another filesystem: exit 0" 0 "$(cat "${WORK}/rc")"
         rm -rf "${xdev}"
     else
@@ -274,7 +278,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     local sha sha7
     sha=$(git -C "${WORK}/main" rev-parse HEAD); sha7=${sha:0:7}
     out=$(python3 "${OVERLAY}" --eas "${WORK}/main" --policy best-effort --nodes 1)
-    check "text: five decision lines" 5 "$(grep -c -- ' -> ' <<< "${out}")"
+    check "text: six decision lines" 6 "$(grep -c -- ' -> ' <<< "${out}")"
     check "text: every decision line is fact -> choice [source]" 0 \
         "$(grep -v '^#' <<< "${out}" | grep -cvE '^.+ -> (apply|skip|drop-merged|drop-fixed|STOP)([: ].*)? \[[^]]+\]$')"
     has "text: 0006 apply cites the line it changes" \
@@ -292,16 +296,25 @@ for v in json.load(open(sys.argv[1]))["verified"]:
 
     # 4b. v1.2.0 (the release profile): the decisions measured at rc.1, on one node and three.
     check "v1.2.0 best-effort 1 node: 0002 apply, 0006 apply b, the rest skip" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" best-effort 1)"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" best-effort 1)"
     check "v1.2.0: exit 0" 0 "$(cat "${WORK}/rc")"
     check "v1.2.0 nri-balloons 1 node: 0003 applies too" \
-        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" nri-balloons 1)"
+        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" nri-balloons 1)"
     check "v1.2.0 nri-balloons 3 nodes: 0004 applies too" \
-        "0002=apply:a 0003=apply:a 0004=apply:a 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" nri-balloons 3)"
+        "0002=apply:a 0003=apply:a 0004=apply:a 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" nri-balloons 3)"
+
+    # 4c. 0007 (Gateway API): main's gateway role already keeps newer foreign CRDs (EAS #42)
+    #     and its istio role installs none; release-1.2's istio role applies v1.2.1 over them.
+    check "0007 on main: drop-fixed (EAS #42's crds.yaml)" "0007=drop-fixed" \
+        "$(brief "${WORK}/main" best-effort 1 | tr ' ' '\n' | grep '^0007=')"
+    check "0007 on v1.2.0: the release-1.2 patch applies" "0007=apply:a" \
+        "$(brief "${WORK}/ga" best-effort 1 | tr ' ' '\n' | grep '^0007=')"
+    check "0007 resolves to the overlay-only patch" "${ROOT}/integrations/eas/patches/0007-release-1.2-istio-keep-newer-gateway-api.patch" \
+        "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][5]["files"][0]')")"
 
     # 5. release-1.2: 0006 variant b; 0006a and 0005 do not apply there.
     got=$(brief "${WORK}/r12" best-effort 1)
-    check "release-1.2: 0006 variant b applies" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b" "${got}"
+    check "release-1.2: 0006 variant b applies" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "${got}"
     check "release-1.2: 0006 variant a does not apply" False "$(jq_ 'd["decisions"][4]["variants"][0]["applies"]')"
     check "release-1.2: 0006 variant b applies" True "$(jq_ 'd["decisions"][4]["variants"][1]["applies"]')"
     check "release-1.2: 0005 does not apply" False "$(jq_ 'd["decisions"][3]["variants"][0]["applies"]')"
@@ -327,7 +340,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         fail "pre-apply the patches"
     fi
     check "patches already in the tree: drop-merged" \
-        "0002=drop-merged:a 0003=drop-merged:a 0004=drop-merged:a 0005=skip 0006=drop-merged:a" \
+        "0002=drop-merged:a 0003=drop-merged:a 0004=drop-merged:a 0005=skip 0006=drop-merged:a 0007=drop-fixed" \
         "$(brief "${WORK}/merged" nri-balloons 3)"
     check "drop-merged: exit 0" 0 "$(cat "${WORK}/rc")"
     sha=$(git -C "${WORK}/merged" rev-parse HEAD)
@@ -352,7 +365,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'    release_namespace: "{{ nri_cpu_balloons.namespace }}"\n    chart_version: "{{ nri_cpu_balloons.helm.chart_version }}"\n    create_namespace: true\n    values_files:\n      - "{{ nri_tmp_dir }}/nri-values.yaml"'
     commit "${WORK}/fixed" "istio, envoy and balloons fixed another way"
     check "fixed another way, knob present: drop-fixed" \
-        "0002=drop-fixed 0003=drop-fixed 0004=skip 0005=skip 0006=drop-fixed" "$(brief "${WORK}/fixed" nri-balloons 1)"
+        "0002=drop-fixed 0003=drop-fixed 0004=skip 0005=skip 0006=drop-fixed 0007=drop-fixed" "$(brief "${WORK}/fixed" nri-balloons 1)"
     check "drop-fixed: exit 0" 0 "$(cat "${WORK}/rc")"
     sha=$(git -C "${WORK}/fixed" rev-parse HEAD)
     has "drop-fixed: 0002 cites where upstream wires global.platform" \
@@ -393,7 +406,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'        dependency_update: true\n        set_values:\n          - value: "global.platform={{ istio_cni_platform }}"\n        wait: "{{ helm_wait }}"'
     commit "${WORK}/renamed" "istio: istio_cni_platform"
     got=$(brief "${WORK}/renamed" best-effort 1)
-    check "knob renamed: 0002 STOP" "0002=STOP 0003=skip 0004=skip 0005=skip 0006=apply:a" "${got}"
+    check "knob renamed: 0002 STOP" "0002=STOP 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
     check "knob renamed: exit 3" 3 "$(cat "${WORK}/rc")"
     out=$(cat "${WORK}/d.txt")
     has "knob renamed: names the missing knob" "istio_platform" "${out}"
@@ -416,7 +429,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'          kubernetes: "{{ _eg_k8s_provider[_envoy_gateway_proxy_shape] }}"\n'
     commit "${WORK}/pr50" "platform layer"
     got=$(brief "${WORK}/pr50" best-effort 1)
-    check "#50 layout: 0006 STOP" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=STOP" "${got}"
+    check "#50 layout: 0006 STOP" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=STOP 0007=drop-fixed" "${got}"
     check "#50 layout: exit 3" 3 "$(cat "${WORK}/rc")"
     out=$(cat "${WORK}/d.txt")
     has "#50 layout: names the upstream PR" "${GH}/pull/50" "${out}"
@@ -485,7 +498,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply again: exit 0" 0 "$?"
     has "--apply again: a no-op" "already applied" "$(cat "${WORK}/a.txt")"
     check "--apply again: the tree is unchanged" "${before}" "$(git -C "${WORK}/app" diff)"
-    check "decisions read HEAD, not the patched working tree" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" \
+    check "decisions read HEAD, not the patched working tree" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" \
         "$(brief "${WORK}/app" best-effort 1)"
     # A re-run whose facts now pick one more patch: that one is applied, the rest kept.
     python3 "${OVERLAY}" --eas "${WORK}/app" --policy nri-balloons --nodes 1 --apply > "${WORK}/a.txt" 2>&1
@@ -505,7 +518,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply with --rev other than HEAD: exit 2" 2 "$?"
     rm -f "${WORK}/d.json"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --json "${WORK}/d.json" > /dev/null 2>&1
-    check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a" \
+    check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" \
         "$(python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' "${WORK}/d.json")"
 
     # 12. Inputs it refuses.
@@ -541,7 +554,8 @@ EOF
 import json, sys
 s = json.load(open(sys.argv[1]))
 s["verified"] = [{"profile": "fixture", "rev": sys.argv[3], "fixture": "-", "cases": [
-    {"policy": "best-effort", "nodes": 1, "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a"}}]}]
+    {"policy": "best-effort", "nodes": 1, "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a",
+                                                 "0007": "drop-fixed"}}]}]
 s["watch"] = [{"ref": "HEAD", "what": "the fixture"}, {"ref": "pull/999/head", "what": "absent"}]
 json.dump(s, open(sys.argv[2], "w"))
 EOF
@@ -759,6 +773,22 @@ PY
         ok "--manifest-revs: an entry without a rev exits 2"
     else
         fail "--manifest-revs without a rev: rc=${rc} $(cat "${WORK}/mf-norev.err")"
+    fi
+
+    # --manifest-globals: the manifest's top-level global_config: map, as `key: <JSON>`.
+    check "--manifest-globals on EAS v1.2.0's agent-toolkit manifest" 'auth_provider: "litellm"' \
+        "$(gen --manifest-globals "${ROOT}/tests/fixtures/eas/trees/a051f00/configs/repos/repos.agent-toolkit.yaml" 2>&1)"
+    check "--manifest-globals: a manifest without one prints nothing" "" \
+        "$(gen --manifest-globals "${ROOT}/tests/fixtures/eas/trees/a051f00/configs/repos/repos.inference.yaml" 2>&1)"
+    printf 'global_config:\n  a: 1\n  b: true   # c\n  d: x y\n  e: '"'"'q'"'"'\nrepos: []\n' > "${WORK}/mg.yaml"
+    check "--manifest-globals: numbers and booleans as JSON, bare and quoted strings quoted" \
+        "$(printf 'a: 1\nb: true\nd: "x y"\ne: "q"')" "$(gen --manifest-globals "${WORK}/mg.yaml" 2>&1)"
+    printf 'global_config:\n  a:\n    b: 1\n' > "${WORK}/mg-nested.yaml"
+    gen --manifest-globals "${WORK}/mg-nested.yaml" > /dev/null 2> "${WORK}/mg-nested.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'not a plain value' "${WORK}/mg-nested.err"; then
+        ok "--manifest-globals: a nested value exits 2, as EAS's init refuses it"
+    else
+        fail "--manifest-globals nested: rc=${rc} $(cat "${WORK}/mg-nested.err")"
     fi
 
     # A k3s.io/node-args annotation that is not a JSON list is an input error.
@@ -1034,10 +1064,6 @@ elif "-r" in a:
     elif ".models[].name" in a:
         for m in re.finditer(r'^  - name: "([^"]*)"', text, re.M):
             print(m.group(1))
-    elif ".global_config // {}" in a[a.index("-r") + 1]:   # the manifest's global_config rows
-        m = re.search(r"^global_config:\n((?:  .*\n)+)", text, re.M)
-        for row in re.finditer(r'^  ([a-z_]+):\s*("[^"]*")', m.group(1) if m else "", re.M):
-            print("%s: %s" % row.groups())
     elif ").cpu // " in a[a.index("-r") + 1]:   # one model's cpu in models.edit.yaml
         m = re.search(r'^  - name: "%s"\n(?:    .*\n)*?    cpu: "([0-9]+)"' % re.escape(os.environ.get("N", "")), text, re.M)
         print(m.group(1) if m else "")
@@ -1387,6 +1413,19 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_eq     "cli: overlay-check <layer> exits 0" "${rc}" 0
     cli_has    "cli: overlay-check lists the manifest's global_config" "${out}" '  auth_provider: "litellm"'
     cli_lacks  "cli: overlay-check writes no global_config" "$(cat "${LOG}")" "load(strenv(M))"
+    # The dry run runs overlay-check on the host, which has no yq (the bastion has): here
+    # yq is a stub that fails as a missing one would.
+    local B2="${WORK}/cli/bin-noyq" f
+    mkdir -p "${B2}"
+    for f in "${B}"/*; do [ "${f##*/}" = yq ] || ln -sf "${f}" "${B2}/${f##*/}"; done
+    printf '#!/bin/sh\necho "yq-missing $*" >> "${STUB_LOG}"\necho "yq: command not found" >&2\nexit 127\n' > "${B2}/yq"
+    chmod +x "${B2}/yq"
+    : > "${LOG}"
+    out=$(PATH="${B2}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        bash "${K}/eas/eas.sh" overlay-check agent-toolkit 2>&1); rc=$?
+    cli_eq    "cli: overlay-check <layer> runs without yq" "${rc}" 0
+    cli_has   "cli: ...and still lists the manifest's global_config" "${out}" '  auth_provider: "litellm"'
+    cli_lacks "cli: ...calling no yq" "$(cat "${LOG}")" "yq-missing"
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit >/dev/null 2>&1
@@ -2103,7 +2142,42 @@ section_kcadm() {
     fi
 }
 
-SECTIONS=(overlay config cli ready argv kcadm)
+# gwapi: overlay 0007's condition, the `when:` of release-1.2's patched "istio | Install
+# Gateway API CRDs" task, evaluated by ansible-playbook on the CRD reads it can meet: the
+# CRDs absent, a lower bundle-version (EAS upgrades them, as shipped), the same one, a
+# higher one (k3s v1.37's bundle, kept), and a CRD without the annotation.
+section_gwapi() {
+    local A="${WORK}/gwapi" P="${ROOT}/integrations/eas/patches/0007-release-1.2-istio-keep-newer-gateway-api.patch" cond c want got
+    mkdir -p "${A}/tmp"
+    if ! command -v ansible-playbook >/dev/null; then
+        fail "gwapi: needs ansible-playbook (the bastion runs EAS under it)"
+        return
+    fi
+    cond=$(python3 - "${P}" <<'PY'
+import re, sys
+text = "".join(l[1:] for l in open(sys.argv[1]) if l.startswith("+") and not l.startswith("+++"))
+m = re.search(r"      when: >-\n((?:        .*\n)+)", text)
+print(m.group(1) if m else "")
+PY
+)
+    [ -n "${cond}" ] || { fail "gwapi: no when: in the 0007 patch"; return; }
+    { printf '%s\n' '- hosts: localhost' '  connection: local' '  gather_facts: false' '  tasks:' \
+          '    - name: install' '      ansible.builtin.debug:' '        msg: INSTALL' '      when: >-'
+      printf '%s' "${cond}"; } > "${A}/play.yml"
+    for c in "absent|[]|INSTALL" "older|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.1.0\"}}}]|INSTALL" \
+             "same|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.2.1\"}}}]|KEEP" \
+             "k3s|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.5.1\"}}}]|KEEP" \
+             "no annotation|[{\"metadata\": {}}]|INSTALL"; do
+        IFS='|' read -r name res want <<< "${c}"
+        ANSIBLE_LOCAL_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ansible-playbook -i localhost, "${A}/play.yml" \
+            -e "{\"_istio_gateway_api_crd\": {\"resources\": ${res}}, \"istio_gateway_api_crds_version\": \"v1.2.1\"}" \
+            > "${A}/out" 2>&1
+        if grep -q '"msg": "INSTALL"' "${A}/out"; then got=INSTALL; elif grep -q 'skipping: \[localhost\]' "${A}/out"; then got=KEEP; else got="error: $(tail -3 "${A}/out")"; fi
+        check "gwapi: CRDs ${name} -> ${want}" "${want}" "${got}"
+    done
+}
+
+SECTIONS=(overlay config cli ready argv kcadm gwapi)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then

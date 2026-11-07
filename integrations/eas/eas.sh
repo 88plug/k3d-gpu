@@ -109,13 +109,13 @@ pin_manifest() {
 
 # manifest_globals <layer> [--list]: the layer manifest's top-level global_config: map
 # (plain values only, as _init_layer_globals #L954-L962 requires), merged into
-# env/k3d-gpu/global_config.yaml; with --list, only printed. Nothing when the manifest
-# has none (EAS main 97f6157).
+# env/k3d-gpu/global_config.yaml; with --list, only printed (eas-config.py reads it, so
+# the host's dry run needs no yq). Nothing when the manifest has none (EAS main 97f6157).
 manifest_globals() {
     local M="${CHECKOUT}/configs/repos/repos.$1.yaml" G="${CHECKOUT}/env/${ENV_NAME}/global_config.yaml" rows
     [ -f "${M}" ] || err "EAS has no configs/repos/repos.$1.yaml at ${EAS_SHA}"
     export M
-    rows=$(yq -r '.global_config // {} | to_entries[] | .key + ": " + (.value | to_json(0))' "${M}") \
+    rows=$(python3 "${HERE}/eas-config.py" --manifest-globals "${M}") \
         || err "configs/repos/repos.$1.yaml: global_config is not a map of plain values"
     [ -n "${rows}" ] || return 0
     if [ "${2:-}" = --list ]; then

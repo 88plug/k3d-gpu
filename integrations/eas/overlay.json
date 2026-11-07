@@ -129,6 +129,27 @@
         "filed": false,
         "evidence": "https://github.com/k3s-io/k3s/blob/843c32de489c25ccc1bde53d21c5fd7df23c706e/pkg/server/server.go#L550"
       }
+    },
+    {
+      "id": "0007",
+      "what": "istio: keep a newer Gateway API install (k3s v1.37 bundles Gateway API CRDs whose safe-upgrades policy refuses a lower version)",
+      "variants": [
+        {"name": "a", "files": ["0007-release-1.2-istio-keep-newer-gateway-api.patch"], "for": "release-1.2 (roles/istio/tasks/install.yaml applies Gateway API v1.2.1)"}
+      ],
+      "needed_when": "always",
+      "fixed_probe": [
+        {
+          "glob": "roles/envoy_gateway/tasks/crds.yaml",
+          "regex": "gateway_api_apply",
+          "knob": null,
+          "what": "the gateway role applies the Gateway API CRDs only when no newer foreign install is in place (EAS #42), and the istio role applies none"
+        }
+      ],
+      "moved": [],
+      "upstream": {
+        "filed": false,
+        "evidence": "https://github.com/k3s-io/k3s/blob/v1.37.1%2Bk3s1/manifests/gateway-api-crd.yaml"
+      }
     }
   ],
   "verified": [
@@ -138,9 +159,9 @@
       "fixture": "tests/fixtures/eas/trees/97f6157",
       "cases": [
         {"policy": "best-effort", "nodes": 1,
-         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a"}},
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a", "0007": "drop-fixed"}},
         {"policy": "nri-balloons", "nodes": 3,
-         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:a"}}
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:a", "0007": "drop-fixed"}}
       ]
     },
     {
@@ -149,11 +170,11 @@
       "fixture": "tests/fixtures/eas/trees/a051f00",
       "cases": [
         {"policy": "best-effort", "nodes": 1,
-         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b", "0007": "apply:a"}},
         {"policy": "nri-balloons", "nodes": 1,
-         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "skip", "0005": "skip", "0006": "apply:b", "0007": "apply:a"}},
         {"policy": "nri-balloons", "nodes": 3,
-         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b"}}
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b", "0007": "apply:a"}}
       ]
     },
     {
@@ -162,9 +183,9 @@
       "fixture": "tests/fixtures/eas/trees/5c27fb3",
       "cases": [
         {"policy": "best-effort", "nodes": 1,
-         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b", "0007": "apply:a"}},
         {"policy": "nri-balloons", "nodes": 3,
-         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b"}}
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b", "0007": "apply:a"}}
       ]
     }
   ],

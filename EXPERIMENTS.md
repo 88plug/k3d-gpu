@@ -12515,6 +12515,38 @@ bring-your-own k3d node; LiteLLM `v1.84.0`'s guard block shape (HTTP 500 with th
 `error.message`, which `eat-check.sh` accepts); the model and image downloads; and EAS #71 at
 teardown (worked around by `eas down`).
 
+### F5 amendment R1: what the first wiring smoke found (2026-11-07)
+
+Written 2026-11-07, after the first unscored wiring smoke and before any F5 step. Nothing in
+the F5 pre-registration above is edited, and its prediction (0.35) stands. The smoke ran
+`bench/f5/run.sh` at `0a18b565` on a throwaway cluster `k3dgpu-f5-smoke` inside the bench lock
+(04:46-04:50Z); it is recorded in the PR. It stopped twice, both in the product, and both are
+fixed in the commit F5 runs from:
+
+- **The dry run's manifest lines needed yq on the host.** `eas.sh overlay-check <layer>` read the
+  manifest's `global_config:` with yq, which the bastion has and crescent's host does not, so
+  step 2 exited 1 after the overlay decisions. `eas-config.py --manifest-globals` reads it now
+  (Python standard library), on the host and in the bastion.
+- **EAS `v1.2.0`'s istio role cannot install on k3s v1.37.** `install agent-toolkit` stopped at
+  `istio | Install Gateway API CRDs` (`failed=1`): k3s v1.37 bundles the Gateway API CRDs (its
+  `gateway-api-crd` addon), and their `safe-upgrades.gateway.networking.k8s.io`
+  ValidatingAdmissionPolicy refuses the role's Gateway API v1.2.1 ("Installing CRDs with version
+  before v1.5.0 is prohibited by default"). EAS `main` already keeps newer foreign Gateway API
+  CRDs (EAS #42); `release-1.2` does not. Overlay row 0007
+  (`integrations/eas/patches/0007-release-1.2-istio-keep-newer-gateway-api.patch`) has the istio
+  role apply its CRDs only when they are absent or older.
+
+The predicted table gains one row, graded like the others:
+
+| Fact `eat up --dry-run` should read | Choice |
+|---|---|
+| overlay row 0007 at EAS `a051f00` | 0007 apply (a) |
+
+So the overlay decisions F5 grades at `a051f00`, `nri-balloons`, one node, are: 0002 apply (a),
+0003 apply (a), 0004 skip, 0005 skip, 0006 apply (b), 0007 apply (a). No step, ceiling, grade or
+other table row changes. A second smoke runs from the fixed commit before the scored run, as the
+pre-registration's **When** allows, and is recorded in the PR too.
+
 ### H2 run (i9-13900T, 2026-10-16)
 
 ```text

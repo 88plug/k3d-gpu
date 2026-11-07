@@ -27,6 +27,9 @@ ansible-core 2.19 rejects a quoted "false" in a conditional.
   eas-config.py --list-sources
   eas-config.py --manifest-revs FILE   a layer manifest's repos (configs/repos/repos.<layer>.yaml
                                        at an EAS commit) as <layer> TAB <url> TAB <rev> rows
+  eas-config.py --manifest-globals FILE
+                                       its top-level global_config: map as `key: <JSON value>`
+                                       lines (what eas.sh sets in env/k3d-gpu/global_config.yaml)
 
 Facts (schema k3d-gpu.eas-facts/v1), each gathered read-only:
   cluster                  the k3d-gpu cluster name
@@ -266,6 +269,33 @@ def manifest_rows(text):
     if not out:
         raise InputError("the manifest lists no repos")
     return out
+
+
+def manifest_globals(text):
+    """[(key, JSON value)] of a layer manifest's top-level global_config: map, in order.
+    EAS's init accepts plain values only (_init_layer_globals), so a nested value is an
+    input error."""
+    rows, inside = [], False
+    for line in text.splitlines():
+        if re.match(r"^global_config:\s*(?:#.*)?$", line):
+            inside = True
+            continue
+        if not inside or not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            break
+        m = re.match(r"""^\s+([A-Za-z0-9_]+):\s*(?:"([^"]*)"|'([^']*)'|([^\s#][^#]*?))?\s*(?:#.*)?$""", line)
+        if not m or all(g is None for g in m.group(2, 3, 4)):
+            raise InputError(f"global_config: not a plain value: {line.strip()!r}")
+        key, dq, sq, bare = m.groups()
+        if dq is not None or sq is not None:
+            val = json.dumps(dq if dq is not None else sq)
+        elif re.fullmatch(r"true|false|null|-?\d+(\.\d+)?", bare):
+            val = bare
+        else:
+            val = json.dumps(bare)
+        rows.append((key, val))
+    return rows
 
 
 def resolve_pins(pins, eas_ref, ei_ref, eat_ref):
@@ -721,7 +751,18 @@ def main(argv):
     ap.add_argument("--explain", action="store_true")
     ap.add_argument("--list-sources", action="store_true")
     ap.add_argument("--manifest-revs", metavar="FILE")
+    ap.add_argument("--manifest-globals", metavar="FILE")
     a = ap.parse_args(argv)
+    if a.manifest_globals:
+        try:
+            with open(a.manifest_globals) as fh:
+                rows = manifest_globals(fh.read())
+        except (OSError, InputError) as e:
+            print(f"eas-config: {a.manifest_globals}: {e}", file=sys.stderr)
+            return 2
+        for key, val in rows:
+            print(f"{key}: {val}")
+        return 0
     if a.manifest_revs:
         try:
             with open(a.manifest_revs) as fh:
