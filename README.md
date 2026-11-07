@@ -1437,17 +1437,21 @@ not run yet; the previous pin, `release-1.0.3-hotfix`, passed end to end
 [ledger:H1b]. See [docs/platforms.md](docs/platforms.md#intel-enterprise-agent-toolkit-eat).
 
 EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer instead.
-`k3d-gpu eas up --agent-toolkit` runs it against the k3d-gpu cluster in EAS's
-bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
-k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
-layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
-layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. F3 ran
-it once end to end on the i9-13900T and is REFUTED
-([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check` and the
-teardown passed, but enterprise-inference's Keycloak step put the Keycloak admin password on a
-process command line, where the run's secret scan found it.
-The commands are `k3d-gpu eas up` (`--agent-toolkit`, `--dry-run`, `--explain`), `eas status`,
-`eas check` and `eas down`. See [docs/intel/eas.md](docs/intel/eas.md), and
+Intel released EAT `release-2.0.0` with EAS `v1.2.0` and enterprise-inference `v1.1.0` on
+2026-11-06, the default pins here. `k3d-gpu eat up` (`k3d-gpu eas up --agent-toolkit`)
+runs it against the k3d-gpu cluster in EAS's bring-your-own-cluster mode, choosing each k3d
+setting from the cluster and applying the k3d patches EAS has not merged yet. It covers
+EAS's platform, inference and agent-toolkit layers on the Xeon CPU path, where EAS and EAT
+ship them today; EAS's Enterprise RAG layer is not wired in yet, and an Arc or Gaudi card
+stays with `k3d-gpu agent up`. F3 ran it once end to end on EAS `main` on the i9-13900T and
+is REFUTED ([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas
+check` and the teardown passed, but enterprise-inference's Keycloak step put the Keycloak
+admin password on a process command line, where the run's secret scan found it. F5 ran it
+at the GA tags on the Xeon 6741P and is SUPPORTED
+([EXPERIMENTS.md](EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0` and
+no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. The commands are `k3d-gpu eat up` (`--dry-run`,
+`--explain`; `--legacy` runs EAT 1.x), `eat status`, `eat check` and `eat down`, or `k3d-gpu
+eas` with the layer named. See [docs/intel/eas.md](docs/intel/eas.md), and
 [docs/intel.md](docs/intel.md#upstream-findings) for the upstream findings and issue drafts.
 
 ### Experimental features (auto-adapting)

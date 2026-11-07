@@ -1,0 +1,4 @@
+waiting for the bench lock 2026-11-07T05:07:42+00:00 pid 3056574
+lock taken 2026-11-07T05:07:42+00:00
+disk gate: / 33% used
+lock released 2026-11-07T05:39:24+00:00 run rc 0

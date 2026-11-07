@@ -1,0 +1,11 @@
+# EAT's redis_stack role, its validate action (ANSIBLE_ROLES_PATH: roles/ as shipped, or a
+# copy eat-redis-cli.sh patched), with kubernetes.core replaced by collections/, for
+# tests/eas_test.sh section rediscli. EAS's validate runs each component's role with
+# component_action validate (playbooks/includes/run_component.yaml).
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    component_action: validate
+  roles:
+    - redis_stack

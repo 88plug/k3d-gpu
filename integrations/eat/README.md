@@ -1,5 +1,14 @@
 # Intel Enterprise Agent Toolkit on k3d-gpu
 
+> **EAT 2.0 (`release-2.0.0`, 2026-11-06) is a layer of Intel EAS.** It has no standalone
+> installer: `k3d-gpu eat up` installs it through EAS `v1.2.0`'s own installer
+> (`k3d-gpu eas up --agent-toolkit`; see [integrations/eas](../eas/README.md) and
+> [docs/intel/eas.md](../../docs/intel/eas.md)). This page is EAT 1.x, `release-1.1.0`,
+> the last release with the standalone installer; `k3d-gpu eat up --legacy` runs
+> `eat-up.sh` below on the current cluster, and `k3d-gpu eat check --legacy` runs
+> `eat-check.sh` on it. `eat-up.sh` and its files are in a checkout of this repository
+> only: the packages do not ship them.
+
 Runs Intel's [Enterprise Agent Toolkit](https://github.com/intel/enterprise-agent-toolkit)
 (EAT) [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)
 (commit `0c726f5`) on one k3d-gpu node, on a client CPU with no AVX-512 and no
@@ -316,7 +325,7 @@ Pinned here (checked 2026-10-29):
 
 | What | Pin | Source |
 |------|-----|--------|
-| EAT | `release-1.1.0`, commit `0c726f576595971c53cc45b94e08ba969beb4a4a`; `eat-up.sh` refuses any other HEAD | `eat-up.sh`; the latest EAT release ([releases](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0), published 2026-10-22) |
+| EAT | `release-1.1.0`, commit `0c726f576595971c53cc45b94e08ba969beb4a4a`; `eat-up.sh` refuses any other HEAD | `eat-up.sh`; EAT's newest 1.x release ([release-1.1.0](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0), published 2026-10-22); `release-2.0.0` removed the standalone installer (pin `eat` holds below it) |
 | bastion base | `ubuntu:24.04` by digest | `bastion.Dockerfile` |
 | Helm in the bastion | v3.14.0 by sha256, the version `setup-bastion.yml` asks for | `bastion.Dockerfile` |
 | vLLM CPU | `vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6...df9647`, the tag `release-1.1.0`'s `xeon-values.yaml` names (line 34); with `deploy_guardrails=on` the guard's image too (`guardrail-values.yaml`, line 30) | `vllm-values.yaml` |
