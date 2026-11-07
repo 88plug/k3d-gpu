@@ -5339,16 +5339,18 @@ amendment V4's records.
   `origin/main` commit at or after this PR's merge. PR #260 merged on 2026-11-01, so there is no
   run-branch condition. VM a gets the same commit (`git archive`), and every record names it.
 - Setup: at most 3 attempts in all. `campaign.sh` counts its starts in `attempts.txt` and
-  refuses a fourth before anything starts. Between attempts, a dated amendment names the cause and
-  the change. If the records trace a failed install to stock B5 itself (EAS's or EAT's own sizing,
-  images or defaults in this guest with D3's sibling read), H62r is INCONCLUSIVE (not
-  deliverable) with no further attempt, as H62 amendment V4 ruled. A router that is still not
-  placed with the sibling read is that case.
+  refuses a fourth before anything starts. It also refuses any start once a hold has run (its
+  holds number from 1, and the 8 holds are counted in all), and that refusal is not an attempt.
+  Between attempts, a dated amendment names the cause and the change. If the records trace a
+  failed install to stock B5 itself (EAS's or EAT's own sizing, images or defaults in this guest
+  with D3's sibling read), H62r is INCONCLUSIVE (not deliverable) with no further attempt, as H62
+  amendment V4 ruled. A router that is still not placed with the sibling read is that case.
 - Wiring smoke (`bench/h62r/smoke.sh`): `./es_auto_installer.sh validate agent-toolkit`, then
   `integrations/eat/eat-check.sh` with `EAT_MODE=eas` through EAS's own gateway on `gemma-4-26b`
   (#260's check, now on main, with `integrations/eas/eas-ready.py` beside it), both from the deploy
   commit and recorded by sha256. Then one hold, `H62r-smoke`, with the pair-start guard past its
-  end. All of it must pass before hold 1.
+  end. All of it must pass before hold 1. An earlier attempt's smoke records are moved aside first,
+  so none is overwritten and the warm-up count is this smoke's own.
 - Holds (`bench/h62r/pairs-hold.sh N` under `bench/eatflow/crescent/hold.sh`): at most 40 min each,
   until 24 pairs or 8 holds, each restarting both serving pods with H62's 900 s readiness rule,
   two not-deliverable holds in a row ending the row, the 600 s pair-start guard and the hold-start

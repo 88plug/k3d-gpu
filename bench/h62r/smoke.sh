@@ -9,7 +9,8 @@
 #      come from this checkout (the deploy commit) and are recorded by sha256
 #   2. one H62r hold with the pair-start guard past its end (pairs-hold.sh 0 smoke): both serving
 #      pods restart and answer through the harness's LiteLLM, both warm-ups answer, no pair starts
-# Exit 0 when both pass; 1 otherwise; 4 when the lock is not taken. Records: ~/k3dgpu-bench/smoke/H62r.
+# Exit 0 when both pass; 1 otherwise; 4 when the lock is not taken. Records: ~/k3dgpu-bench/smoke/H62r;
+# an earlier attempt's smoke records (and runs/H62r-smoke) are first moved to <dir>.<UTC stamp>.
 set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "${HERE}/../.." && pwd)
@@ -19,6 +20,12 @@ export H62R_STATE=${H62R_STATE:-${B}/h62r}
 S=${B}/smoke/H62r
 MODEL=$(P pin catalog_name)
 CHECK=${REPO}/integrations/eat/eat-check.sh READY=${REPO}/integrations/eas/eas-ready.py
+# An earlier setup attempt's smoke keeps its records as they were: they move aside, so this smoke
+# overwrites none of them and its gate reads only the warm-ups and pairs its own hold writes.
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+for d in "${S}" "${B}/runs/H62r-smoke"; do
+    [ ! -e "${d}" ] || mv "${d}" "${d}.${stamp}"
+done
 mkdir -p "${S}"
 log() { echo "== smoke $* $(date -u +%FT%TZ)" | tee -a "${S}/smoke.log"; }
 G() { ssh -F "${H62R_STATE}/ssh_config" h62r-b "$@" 9>&-; }

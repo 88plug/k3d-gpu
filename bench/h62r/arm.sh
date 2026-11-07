@@ -5,7 +5,8 @@
 #   restart SECONDS    delete its serving pod, then wait until a new pod is Ready; exit 3 when none is
 #                      Ready within SECONDS (the hold's 900 s readiness rule passes the time left)
 #   records DIR        the pod, the CPU ISA it sees (amx_tile lines), its cpuset and nproc, the nodes,
-#                      the guest's load and memory, and B5's LLMInferenceService
+#                      the guest's load and memory, B5's LLMInferenceService, and the image ID of every
+#                      container in the guest (B5's sandbox router runs a floating tag)
 #   logs DIR           every pod, events, the pod description and the server log (a hold that fails)
 #   forward            (re)start `kubectl port-forward` of its Service in the guest, on the serve port
 #   unforward          stop that port-forward
@@ -58,6 +59,8 @@ records)
     g "uptime; free -g; grep -c amx_tile /proc/cpuinfo; nproc" > "${d}/guest.txt" 2>&1
     [ -z "${EXTRA}" ] || g "kubectl -n ${NS} get ${EXTRA} -o yaml" > "${d}/extra.yaml" 2>&1
     g "kubectl get pods -A -o wide" > "${d}/pods.txt" 2>&1
+    g "kubectl get pods -A -o 'custom-columns=NS:.metadata.namespace,POD:.metadata.name,IMAGE_ID:.status.containerStatuses[*].imageID'" \
+        > "${d}/image-ids.txt" 2>&1
     echo "records: ${d}" ;;
 logs)
     d=${3:?usage: arm.sh ARM logs DIR}

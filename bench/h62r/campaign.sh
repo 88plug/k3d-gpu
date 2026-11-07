@@ -5,9 +5,11 @@
 # also after an abort.
 #   - at most 3 setup attempts in all (attempts.txt, one line per start); a fourth start exits 10
 #     before anything is started
+#   - a start after any hold has run (a hold<N> directory in the records) exits 11 before anything
+#     is started, and is not an attempt
 #   - the re-run trigger (upstream.sh, up to 3 reads 60 s apart) before setup and before each
-#     hold, into upstream.txt. Fired or unreadable before setup: exit 11 before anything starts,
-#     and no attempt is spent. Fired before hold 1: exit 11 with no hold, for the dated amendment
+#     hold, into upstream.txt. Fired or unreadable before setup: exit 12 before anything starts,
+#     and no attempt is spent. Fired before hold 1: exit 12 with no hold, for the dated amendment
 #     that re-pins B5. Unreadable before a hold, or fired after hold 1: recorded, and the holds go
 #     on at these pins
 #   - setup exit 6 (the host gate still failed after 60 min): the two qwen38 serving pairs are
@@ -40,6 +42,14 @@ trigger() {
     echo "$(date -u +%FT%TZ) $1 unreadable: $(paste -sd' ' "${err}")${out:+ (output: ${out//$'\n'/ })}" >> "${R}/upstream.txt"
     return 2
 }
+# Holds count toward the 8 in all and their records are measured data. This script numbers its
+# holds from 1, so once any hold has run it refuses to start: a dated amendment says how the row
+# goes on.
+held=$(find "${R}" -mindepth 1 -maxdepth 1 -type d -name 'hold[0-9]*' -printf '%f\n' | sort -V | paste -sd' ')
+if [ -n "${held}" ]; then
+    log "holds already recorded (${held}): no start"
+    exit 11
+fi
 tries=$(grep -c . "${R}/attempts.txt" 2>/dev/null)
 if [ "${tries:-0}" -ge "${ATTEMPTS_MAX}" ]; then
     log "setup attempt bound reached (${tries:-0} of ${ATTEMPTS_MAX}): no further attempt"
@@ -47,8 +57,8 @@ if [ "${tries:-0}" -ge "${ATTEMPTS_MAX}" ]; then
 fi
 trigger setup
 case $? in
-    0) log "re-run trigger fired before setup ($(tail -1 "${R}/upstream.txt")): no setup until a dated amendment re-pins B5"; exit 11 ;;
-    2) log "re-run trigger unreadable before setup: no setup"; exit 11 ;;
+    0) log "re-run trigger fired before setup ($(tail -1 "${R}/upstream.txt")): no setup until a dated amendment re-pins B5"; exit 12 ;;
+    2) log "re-run trigger unreadable before setup: no setup"; exit 12 ;;
 esac
 echo "$(date -u +%FT%TZ) $(git -C "${REPO}" rev-parse HEAD)" >> "${R}/attempts.txt"
 teardown() { bash "${HERE}/teardown.sh" >> "${R}/teardown.log" 2>&1; log "teardown exit $?"; }
@@ -78,7 +88,7 @@ for n in $(seq 1 "${MAX_HOLDS}"); do
     case $? in
         0) if [ "${n}" = 1 ]; then
                log "re-run trigger fired before hold 1 ($(tail -1 "${R}/upstream.txt")): no hold until a dated amendment re-pins B5"
-               exit 11
+               exit 12
            fi
            log "re-run trigger fired after hold 1: H62r's holds finish at these pins" ;;
         2) log "re-run trigger unreadable before hold ${n}: recorded" ;;

@@ -704,6 +704,20 @@ class ArmScriptTest(unittest.TestCase):
         self.arm("A1", "unforward")
         self.assertIn("kill", read(self.log).splitlines()[-1])
 
+    def test_records_name_every_pods_image_id(self):
+        # Pre-registration, risks: the sandbox router runs EAT's floating staging tag, so each
+        # hold records the image ID of every container in the guest, the router's included.
+        self.pods([pod("p1", "u1")])
+        d = os.path.join(self.tmp, "rec")
+        r = self.arm("B5", "records", d)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        cmds = [ln for ln in read(self.log).splitlines() if "imageID" in ln]
+        self.assertEqual(len(cmds), 1, read(self.log))
+        self.assertIn("kubectl get pods -A", cmds[0])
+        self.assertIn(".status.containerStatuses[*].imageID", cmds[0])
+        self.assertIn("'", cmds[0])                                                    # the [*] reaches kubectl quoted
+        self.assertTrue(os.path.isfile(os.path.join(d, "image-ids.txt")))
+
 
 class OnTtyTest(unittest.TestCase):
     """H62 amendment V2, kept: EAS v1.2.0's es_auto_installer.sh is byte-identical to rc.1's, so
@@ -879,6 +893,75 @@ class ScriptsTest(unittest.TestCase):
         self.assertEqual(read(res, "attempts.txt"), "a\nb\nc\n")
         self.assertFalse(os.path.exists(os.path.join(res, "teardown.log")))             # nothing was started
 
+    def tree(self, scripts):
+        """A copy of bench/h62r (scripts from this checkout) under a temp HOME, with every other
+        script it calls replaced by a stub that logs its call and exits 1."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        d = os.path.join(tmp, "repo", "bench", "h62r")
+        os.makedirs(d)
+        for s in scripts + ("h62r.py",):
+            shutil.copy2(os.path.join(HERE, s), d)
+        for s in ("setup.sh", "smoke.sh", "pairs-hold.sh", "teardown.sh"):
+            if s not in scripts:
+                stub(os.path.join(d, s), f'echo "{s} $*" >> "{tmp}/calls"; exit 1\n')
+        return tmp, d
+
+    def test_campaign_never_numbers_holds_over_recorded_ones(self):
+        # Holds are measured data and count toward the 8 in all: a start after any hold has run
+        # would number its holds from 1 again, over hold<N>/ and runs/H62r-hold<N>/, so it is
+        # refused before anything starts (a dated amendment says how the row goes on).
+        tmp, d = self.tree(("campaign.sh",))
+        res = os.path.join(tmp, "k3dgpu-bench", "results", "H62r")
+        os.makedirs(os.path.join(res, "hold1"))
+        with open(os.path.join(res, "attempts.txt"), "w") as f:
+            f.write("a\n")
+        r = subprocess.run(["bash", os.path.join(d, "campaign.sh")], capture_output=True, text=True,
+                           env=dict(os.environ, HOME=tmp), timeout=60)
+        self.assertEqual(r.returncode, 11, r.stdout + r.stderr)
+        self.assertIn("hold1", read(res, "campaign.log"))
+        self.assertEqual(read(res, "attempts.txt"), "a\n")                              # not an attempt
+        self.assertFalse(os.path.exists(os.path.join(tmp, "calls")))                    # nothing was started
+
+    def test_smoke_counts_only_its_own_warm_ups(self):
+        # An earlier attempt's smoke (its hold appended 2 answered warm-ups) is kept as it was and
+        # moved aside; this smoke's gate reads only the warm-ups its own hold wrote.
+        tmp, d = self.tree(("smoke.sh",))
+        repo = os.path.join(tmp, "repo")
+        for sub, name, text in (("eat", "eat-check.sh", "case x in\n    eas) ;;\nesac\n"), ("eas", "eas-ready.py", "")):
+            os.makedirs(os.path.join(repo, "integrations", sub))
+            with open(os.path.join(repo, "integrations", sub, name), "w") as f:
+                f.write(text)
+        smoke = os.path.join(tmp, "k3dgpu-bench", "smoke", "H62r")
+        ok = '{"hold": 0, "arm": "%s", "seconds": 1.0, "error": null, "answer": "ok"}\n'
+        os.makedirs(os.path.join(smoke, "pairs"))
+        with open(os.path.join(smoke, "pairs", "warmups.jsonl"), "w") as f:
+            f.write(ok % "A1" + ok % "B5")
+        with open(os.path.join(smoke, "eat-check.log"), "w") as f:
+            f.write("attempt 1\n")
+        runs = os.path.join(tmp, "k3dgpu-bench", "runs")
+        os.makedirs(os.path.join(runs, "H62r-smoke"))
+        with open(os.path.join(runs, "H62r-smoke", "hold.log"), "w") as f:
+            f.write("attempt 1\n")
+        stub(os.path.join(d, "pairs-hold.sh"), textwrap.dedent(f'''\
+            p="$HOME/k3dgpu-bench/smoke/H62r/pairs"; mkdir -p "$p"
+            printf '{ok % "A1"}{ok % "B5"}' >> "$p/warmups.jsonl"
+            '''))
+        bin_ = os.path.join(tmp, "bin")
+        os.makedirs(bin_)
+        for tool in ("ssh", "scp"):
+            stub(os.path.join(bin_, tool), "exit 0\n")
+        r = subprocess.run(["bash", os.path.join(d, "smoke.sh")], capture_output=True, text=True, timeout=60,
+                           env=dict(os.environ, HOME=tmp, PATH=bin_ + os.pathsep + os.environ["PATH"]))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr + read(smoke, "smoke.log"))
+        self.assertIn("warm-ups answered 2 of 2", read(smoke, "smoke.log"))
+        kept = [p for p in os.listdir(os.path.dirname(smoke)) if p != "H62r"]
+        self.assertEqual(len(kept), 1, kept)
+        self.assertEqual(read(os.path.dirname(smoke), kept[0], "eat-check.log"), "attempt 1\n")
+        self.assertEqual(read(os.path.dirname(smoke), kept[0], "pairs", "warmups.jsonl"), ok % "A1" + ok % "B5")
+        self.assertEqual(os.listdir(runs), [kept[0].replace("H62r", "H62r-smoke", 1)])
+        self.assertEqual(read(runs, os.listdir(runs)[0], "hold.log"), "attempt 1\n")
+
     def campaign_with_stubs(self, reads, holds_left=3):
         """campaign.sh copied beside stub setup, smoke, holds, teardown, h62r.py and upstream.sh.
         `reads` is upstream.sh's answer per call, in order ("ERR" exits 1). Returns the run, the
@@ -928,13 +1011,13 @@ class ScriptsTest(unittest.TestCase):
     def test_campaign_stops_when_the_trigger_fires_before_hold_1(self):
         # Fired before setup: nothing starts and no setup attempt is spent.
         r, res, order = self.campaign_with_stubs(["fired: eas v1.2.1"])
-        self.assertEqual(r.returncode, 11, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 12, r.stdout + r.stderr)
         self.assertEqual(order, ["upstream"])
         self.assertFalse(os.path.exists(os.path.join(res, "attempts.txt")))
         self.assertIn("setup fired: eas v1.2.1", read(res, "upstream.txt"))
         # Fired after setup, before hold 1: no hold runs; the guests are torn down.
         r, res, order = self.campaign_with_stubs(["fired: none", "fired: eat release-2.0.1"])
-        self.assertEqual(r.returncode, 11, r.stdout + r.stderr)
+        self.assertEqual(r.returncode, 12, r.stdout + r.stderr)
         self.assertEqual(order, ["upstream", "setup", "smoke", "upstream", "teardown"])
         self.assertIn("amendment", read(res, "campaign.log"))
 
@@ -951,7 +1034,7 @@ class ScriptsTest(unittest.TestCase):
         self.assertRegex(read(res, "upstream.txt"), r"(?m)^\S+ hold1 unreadable: ls-remote failed$")
         # Unreadable before setup: nothing starts.
         r, res, order = self.campaign_with_stubs(["ERR"] * 3)
-        self.assertEqual((r.returncode, order), (11, ["upstream"] * 3), r.stdout + r.stderr)
+        self.assertEqual((r.returncode, order), (12, ["upstream"] * 3), r.stdout + r.stderr)
 
     def test_campaign_reads_the_triggers_line_not_its_warnings(self):
         # git ls-remote may warn on stderr; only upstream.sh's own line decides whether it fired.
@@ -962,7 +1045,7 @@ class ScriptsTest(unittest.TestCase):
                          ["setup fired: none", "hold1 fired: none"])
         # A read that prints no trigger line is unreadable, not fired.
         r, res, order = self.campaign_with_stubs(["", "", ""])
-        self.assertEqual((r.returncode, order), (11, ["upstream"] * 3), r.stdout + r.stderr)
+        self.assertEqual((r.returncode, order), (12, ["upstream"] * 3), r.stdout + r.stderr)
         self.assertIn("setup unreadable", read(res, "upstream.txt"))
 
     def test_setup_caps_and_gates(self):
