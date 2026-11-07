@@ -9107,8 +9107,9 @@ Command, on wildct: RESUME.md step 6's `launch H25w 1500 8 h25w`, which runs `be
 1500 8 bash bench/wildct/row.sh h25w`, and so `IMAGE=<the node image> MODELS=<models> OUT=<out>
 LEVELS=typical CLUSTER=k3dgpu-w-h25 SEED_BASE=2560 HOLD=1440 LOAD_CPUS=20-23 $E K3D_GPU_AGENT_DRAFT=CPU
 bench/shared-prefix/run.sh`, the registered line with amendment R7's variable. Records (round files,
-load windows, the score, both manifests, `up` and cache-usage logs, the hold's samples; the kubeconfig
-was not copied): [bench/wildct/results/2026-11-07/runs/H25w/](bench/wildct/results/2026-11-07/runs/H25w/).
+load windows, the score, both manifests, the `up`, image import and cache-usage logs, `run.sh`'s output
+in `hold.log`, the hold's samples; the kubeconfig was not copied):
+[bench/wildct/results/2026-11-07/runs/H25w/](bench/wildct/results/2026-11-07/runs/H25w/).
 The host before and after the hold: [bench/wildct/results/2026-11-07/host/h25w.txt](bench/wildct/results/2026-11-07/host/h25w.txt).
 The score, from the copied records (identical to the `score.json` written on wildct):
 
@@ -9167,11 +9168,11 @@ since the level's load record holds every round that started; without them the r
 
 Against the prediction (written 2026-10-20, SUPPORTED 0.8): the verdict and both gates held (CI lower
 bound 13.38x >= 4x, c/OFF 1.00 >= 0.8). The point ranges did not: OFF 31.44 s against 10 s (7-15), ON
-2.20 s against 1.0 s (0.6-1.6), and the ratio 14.30x just above 10x (6-14). OFF ran 2.9x and ON 2.2x
-slower than H25 run 4 on the i9-13900T (OFF 10.87 s, ON 1.02 s). The package read 33.6-36.3 W in every
-load window of both arms, pre-windows with the pod idle included; wildct's PL1 is 35 W, and the i9 runs
-PL1 = PL2 = 117 W. The run does not test whether the power limit is the cause. Per added agent, the
-shared prefix saved 29.2 s of first-chunk time here, against 9.85 s on the i9.
+2.20 s against 1.0 s (0.6-1.6), and the ratio 14.30x against 10x (6-14), just above that range. OFF
+ran 2.9x and ON 2.2x slower than H25 run 4 on the i9-13900T (OFF 10.87 s, ON 1.02 s). The package read
+33.6-36.3 W in every load window of both arms, pre-windows with the pod idle included; wildct's PL1 is
+35 W, and the i9 runs PL1 = PL2 = 117 W. The run does not test whether the power limit is the cause.
+Per added agent, the shared prefix saved 29.2 s of first-chunk time here, against 9.85 s on the i9.
 
 Not scored:
 
