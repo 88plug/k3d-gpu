@@ -2,18 +2,24 @@
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
 pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5 and R6, and the "H52w
-run" section). This file changes no rule. Run it top to bottom, except that step 3b (ship
-`origin/main` to wildct) runs first when the `repo` on wildct predates `bench/wildct/nfprobe.sh`
-(H10 runs it). Nothing past step 1 runs until every step 1 check passes.
+run" and "H18w run" sections). This file changes no rule. Run it top to bottom, except that step
+3b (ship `origin/main` to wildct) runs first when the `repo` on wildct predates
+`bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check passes.
 
-## Where things stand (2026-11-07, after H52w)
+## Where things stand (2026-11-07, after H18w)
 
-- **Next: row 2, `H18w` (step 6).** Row 1, `H52w`, ran on 2026-11-07 (04:03:54Z to 04:05:00Z,
-  rc 0, every line of `out/rc.txt` a pass) and is scored SUPPORTED (EXPERIMENTS.md "H52w run";
-  records in `results/2026-11-07/runs/H52w/`, the host before and after in
-  `results/2026-11-07/host/h52w.txt`). The host's containers, start times, restart counts, port
-  codes and firewall rules read the same before and after it, and nothing of the hold was left.
-  Holds used: 1 of at most 12.
+- **Next: row 3, `H25w` (step 6).** Holds used: 2 of at most 12.
+- **Row 2, `H18w`,** ran on 2026-11-07 (04:22:23Z to 04:26:30Z, rc 0; `out/run-1..3.txt` each has
+  `sandbox_up_rc=0` and `pip_rc=0`) and is scored SUPPORTED (EXPERIMENTS.md "H18w run"; records in
+  `results/2026-11-07/runs/H18w/`, the host before and after in `results/2026-11-07/host/h18w.txt`).
+  The host's containers, start times, restart counts, port codes and firewall rules read the same
+  before and after it, fail2ban's sshd jail counters did not change, and nothing of the hold was
+  left.
+- **Row 1, `H52w`,** ran on 2026-11-07 (04:03:54Z to 04:05:00Z, rc 0, every line of `out/rc.txt` a
+  pass) and is scored SUPPORTED (EXPERIMENTS.md "H52w run"; records in
+  `results/2026-11-07/runs/H52w/`, the host before and after in `results/2026-11-07/host/h52w.txt`).
+  The host's containers, start times, restart counts, port codes and firewall rules read the same
+  before and after it, and nothing of the hold was left.
 - **Release frozen at 0.1.89 (rule W7).** `H52w`, the campaign's first hold, ran 0.1.89, so every
   later hold runs it too. Step 3 does not run again, and neither does step 5.
 - **Kernel modules** (each approved by the box owner on 2026-10-29; `kernel.modprobe` stays empty):
@@ -70,8 +76,8 @@ run" section). This file changes no rule. Run it top to bottom, except that step
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones renamed
-      `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
+      `H52w*`, `H18w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones
+      renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
       `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
