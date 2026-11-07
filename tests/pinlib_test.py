@@ -420,6 +420,41 @@ class GithubRelease(Fixtures):
         self.assertEqual((r.v, r.values["sha"]), ("1.35.0", "4" * 64))
 
 
+class VllmCpu(Fixtures):
+    """vllm-project/vllm published v0.33.0rc3 on 2026-11-02 with prerelease false, so
+    GitHub serves that rc as the repo's latest release. The vllm-cpu pin lists every
+    release and takes the newest tag of the zerover shape, which an rc is not."""
+
+    RELEASES = GH + "repos/vllm-project/vllm/releases?per_page=100&page=1"
+
+    def records(self, releases, newest):
+        return {
+            GH + "repos/vllm-project/vllm/releases/latest": ok(releases[0]),
+            self.RELEASES: ok(releases),
+            HUB + "vllm/vllm-openai-cpu/tags/list?n=1000": ok(
+                {"tags": [r["tag_name"] for r in releases] + ["latest"]}),
+            HUB + "vllm/vllm-openai-cpu/manifests/" + newest: manifest(D1),
+        }
+
+    def test_an_rc_marked_latest_resolves_to_the_newest_stable_tag(self):
+        self.serve(self.records([rel("v0.33.0rc3"), rel("v0.32.0"), rel("v0.31.0")], "v0.32.0"))
+        r = sources.resolve(PINS["vllm-cpu"], "v0.32.0")
+        self.assertEqual(r.v, "v0.32.0")
+        self.assertEqual(r.values["digest"], D1)
+        self.assertFalse(r.values.get("unconfirmed"), r.note)
+
+    def test_the_stable_release_after_the_rc_moves_the_pin(self):
+        self.serve(self.records([rel("v0.33.0"), rel("v0.33.0rc3"), rel("v0.32.0")], "v0.33.0"))
+        r = sources.resolve(PINS["vllm-cpu"], "v0.32.0")
+        self.assertEqual(r.v, "v0.33.0")
+        self.assertFalse(r.values.get("unconfirmed"), r.note)
+
+    def test_the_zerover_tag_regex_rejects_an_rc(self):
+        rx = sources.tag_regex(PINS["vllm-cpu"]["source"]["tag"], PINS["vllm-cpu"])
+        self.assertIsNone(rx.match("v0.33.0rc3"))
+        self.assertEqual(rx.match("v0.32.0").group("v"), "v0.32.0")
+
+
 class Holds(Fixtures):
     """A hold keeps a pin below its max whatever the source kind. github-release, oci
     and pypi take the newest release below it; a source that reads only upstream's
