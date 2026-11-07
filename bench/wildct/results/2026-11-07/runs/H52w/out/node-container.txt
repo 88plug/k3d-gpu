@@ -1,0 +1,1 @@
+sha256:5811390ea98da96ebe01a3338291d4f462bb8c16e0063c99939944190547b8c8 cryptoandcoffee/k3d-gpu:0.1.89 privileged=true devices=[] runtime=runc gpus=[] restarts=0

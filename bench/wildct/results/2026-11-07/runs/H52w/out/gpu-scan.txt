@@ -1,0 +1,34 @@
+kube-system/coredns-577d995dff-c5gdf hostPath 
+kube-system/coredns-577d995dff-c5gdf hostPath 
+kube-system/coredns-577d995dff-c5gdf hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/helm-install-gateway-api-crd-xmcqs hostPath 
+kube-system/local-path-provisioner-6858d854cf-6ncrq hostPath 
+kube-system/local-path-provisioner-6858d854cf-6ncrq hostPath 
+kube-system/metrics-server-778c4649b4-rx7ts hostPath 
+kube-system/metrics-server-778c4649b4-rx7ts hostPath 
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /var/lib/nri-resource-policy
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /sys
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /proc
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /var/run/nri-resource-policy
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /var/run/nri
+kube-system/nri-resource-policy-balloons-d4qkh hostPath /var/lib/kubelet/pod-resources
+kube-system/nri-resource-policy-balloons-d4qkh hostPath 
+node-feature-discovery/nfd-gc-8d4595cbc-p7vd8 hostPath 
+node-feature-discovery/nfd-master-74b44b767d-chpdk hostPath 
+node-feature-discovery/nfd-master-74b44b767d-chpdk hostPath 
+node-feature-discovery/nfd-worker-w2kjq hostPath /k3d-gpu/host/boot
+node-feature-discovery/nfd-worker-w2kjq hostPath /proc/swaps
+node-feature-discovery/nfd-worker-w2kjq hostPath /k3d-gpu/host/etc
+node-feature-discovery/nfd-worker-w2kjq hostPath /sys
+node-feature-discovery/nfd-worker-w2kjq hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-w2kjq hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-w2kjq hostPath /etc/kubernetes/node-feature-discovery/features.d/
+node-feature-discovery/nfd-worker-w2kjq hostPath 
+node-feature-discovery/nfd-worker-w2kjq hostPath 
+GPU-SCAN clean

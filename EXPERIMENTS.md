@@ -84,7 +84,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H57db | Inside EAT's banking flow (B24) with Gemma 4 26B-A4B QAT on the i9-13900T, k3d-gpu auto on the P-cores delivers far more tasks within budget than EAT stock CPU (vLLM CPU bf16 on the QAT bf16 weights, `xeon-values.yaml` entry `cpu-gemma4-26b-a4b`), interleaved pairs under rule L3. | Written 2026-10-20: not runnable here as registered (memory), so INCONCLUSIVE (not run) is expected (0.9). | [H57d pre-registration](#h57d-pre-registration-gemma-4-26b-a4b-qat-on-the-amx-less-client-cpu-i9-13900t-2026-10-20), H57db: runs only if the memory gate passes at a hold's start (MemAvailable >= 100 GiB: 51.6 GB of bf16 weights resident plus `VLLM_CPU_KVCACHE_SPACE` 40 GiB), with H50's procedure, rule L3 (PR #157) and at most 1 hold, where fewer than 16 complete pairs read INCONCLUSIVE by L3; otherwise INCONCLUSIVE (not run), with the reading recorded. Not run ([H57d run](#h57d-run-i9-13900t-2026-10-21)): memory gate failed, MemAvailable 42.9 GB at the campaign's start (< 100 GiB). | INCONCLUSIVE |
 | H57dp | On the i9-13900T P-cores under the shared host's own load, llama.cpp with Gemma 4 QAT Q4_0 and the QAT MTP drafter decodes faster unpinned (8 threads, no `-C`/`--cpu-strict`) than strictly pinned one thread per physical P-core: N=1 ratio >= 1.10. | Written 2026-10-21, after H57d, before any H57dp measurement. SUPPORTED (0.5); Ld-mtp-u/Ld-mtp in [1.0, 1.8] (0.6). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): 2 holds of at most 75 min, H57d's protocol. SUPPORTED: pooled median ratio >= 1.10, CI lower bound > 1.0, faster in both holds. REFUTED: CI upper bound < 1.10. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched, foreign P-core load spread 2.97 > 2.0 CPU-s/s (Od 0.45, Ld-mtp 3.42, Ld-mtp-u 3.11), so the scorer stops before the statistic. Not gated: Ld-mtp-u/Ld-mtp 1.108 (95% CI 1.072-1.142), faster in both holds (1.108, 1.100); Ld-mtp-u 13.39, Ld-mtp 12.09 tok/s pooled N=1; affinity as registered. | INCONCLUSIVE |
 | H57de | H57da with the unpinned llama.cpp arm: no arm decodes Gemma 4 QAT at N=1 5% or more faster than k3d-gpu's OVMS pick Od on the i9-13900T P-cores. | Written 2026-10-21, before any H57de measurement. REFUTED (0.5); Ld-mtp-u/Od in [1.0, 1.6] (0.5). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): same holds as H57dp. REFUTED: Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds. SUPPORTED: CI upper bound < 1.05. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched (the same gate, spread 2.97 > 2.0). Od also ran without the P-core balloon (cpuset 0-15,17-31: the runner's `agent manifest` call named no cluster, so after #183 it missed the hold's kube context), so it was not the registered Od. Not gated: Ld-mtp-u/Od 1.369 (1.345-1.396), Od 9.78 tok/s pooled N=1. | INCONCLUSIVE |
-| H52w | A plain `k3d-gpu up` on wildct, a client Raptor Lake host (i7-13700, 8 P-cores + 8 E-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, one NUMA node), with only the box owner's GPU opt-out (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), detects every CPU engine actually present and advertises each usable one, with nothing missing and nothing phantom; the two NVIDIA cards and the Intel iGPU are named as detected and opted out, and nothing in the cluster mounts or advertises a GPU. | Written 2026-10-20 from an inventory read from sysfs, /proc and PCI sysfs, not from k3d-gpu. Hybrid active, balloons policy running, the P-core test pod inside CPUs 0-15 and the E-core one inside 16-23 (0.8); launcher ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS, and no AVX512 or AMX label from any source (0.85); no NUMA, DSA, IAA, QAT, NPU or Gaudi object (0.9); `up` names nvidia and intel as opted out, no GPU resource, no GPU plugin pod, no pod mounting `/dev/dri` or `/dev/nvidia*` (0.85, given the opt-out fix). SUPPORTED (0.6), REFUTED (0.4). | The table in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): `bench/wildct/h52w.sh` under `bench/wildct/hold.sh` (inventory, `detect` as found, `doctor`, `up`, node object, pod GPU scan, `k3d-gpu test`, `down`, inventory again), the installed release. SUPPORTED: every row matches. REFUTED: any row does not. | PENDING |
+| H52w | A plain `k3d-gpu up` on wildct, a client Raptor Lake host (i7-13700, 8 P-cores + 8 E-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, one NUMA node), with only the box owner's GPU opt-out (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), detects every CPU engine actually present and advertises each usable one, with nothing missing and nothing phantom; the two NVIDIA cards and the Intel iGPU are named as detected and opted out, and nothing in the cluster mounts or advertises a GPU. | Written 2026-10-20 from an inventory read from sysfs, /proc and PCI sysfs, not from k3d-gpu. Hybrid active, balloons policy running, the P-core test pod inside CPUs 0-15 and the E-core one inside 16-23 (0.8); launcher ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS, and no AVX512 or AMX label from any source (0.85); no NUMA, DSA, IAA, QAT, NPU or Gaudi object (0.9); `up` names nvidia and intel as opted out, no GPU resource, no GPU plugin pod, no pod mounting `/dev/dri` or `/dev/nvidia*` (0.85, given the opt-out fix). SUPPORTED (0.6), REFUTED (0.4). | The table in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): `bench/wildct/h52w.sh` under `bench/wildct/hold.sh` (inventory, `detect` as found, `doctor`, `up`, node object, pod GPU scan, `k3d-gpu test`, `down`, inventory again), the installed release. SUPPORTED: every row matches. REFUTED: any row does not. Result ([H52w run](#h52w-run-wildct-i7-13700-2026-11-07)): one hold on release 0.1.89 (rule W7's release for the campaign). `up` took 32 s, named nvidia and intel as opted out and printed `Accelerators: hybrid`; the balloons policy pod Running, `k3d-gpu test`'s P-core pod on CPU 0 and its E-core pod on CPU 17; the launcher's ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT and CETSS, no AVX512 or AMX label from any source; no NUMA label; allocatable cpu, ephemeral-storage, hugepages, memory and pods only; no GPU plugin pod, no `/dev` hostPath and no GPU resource (`GPU-SCAN clean`); the node container `gpus=[]`; the inventory unchanged. Every row matches. | SUPPORTED |
 | H18w | H18's hypothesis on wildct: `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. A replication: H18's runner, image source (the release node image) and parts (a), (b), (c). | Written 2026-10-20, before any H18w measurement. Every run meets (a), (b) and (c) (0.8): sandbox `Cpus_allowed_list` inside 16-23; TCP to `100.66.38.121:22` (tailscale CGNAT) and `192.168.8.238:22` (host LAN) refused from the sandbox with the drop-log counter > 0, connected from the control pod; `pip install --user tomli_w==1.2.0` exits 0. | H18's `bench/sandbox_round.sh`, n = 3 runs in one hold, unchanged except as listed in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): cluster `k3dgpu-w-sbx`, the GPU opt-out, rule W3, the release node image, RAPL through rule W4. Outcome table: H18's. | PENDING |
 | H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). | PENDING |
 | H28w | H28's hypothesis on wildct: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28w measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part: T/C round-median ready 0.5 (0.4-0.65), against H28's 0.47 on the i9. SUPPORTED 0.45, REFUTED (time part) 0.4, INCONCLUSIVE or not run (disk) 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, `typical` only, scored by `bench/zero-copy-models/score.py`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h28`, node on the P-cores (`NODE_CPUS=0-15`), W2, W3 (passed to the plain `k3d cluster create`), and a disk gate (W6). | PENDING |
@@ -8818,6 +8818,96 @@ before `H52w` starts. Then step 3 runs again, and so does the wiring smoke, as `
 **Resume procedure.** `RESUME.md` records the outage, 0.1.89 and `smoke5`. Step 3c's removal of
 old node images names every release the campaign installed. Step 1 and the smoke pass, so the
 next step is step 6's first hold, `H52w`.
+
+### H52w run (wildct, i7-13700, 2026-11-07)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T04:03:54Z to 04:05:00Z (one hold; lock free, no load wait: load1 0.72)
+hypothesis:      H52w
+host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700 (family 6 model 183, microcode
+                 0x137; 0x133 at registration), 8 P-cores (CPUs 0-15) and 8 E-cores (CPUs 16-23), 1 NUMA
+                 node, 125 GiB RAM, Manjaro; Docker 29.7.2, live-restore off, cgroup systemd/2 (step 1, 03:32:22Z)
+host kernel:     6.6.156-2-MANJARO
+accelerators:    host inventory: UHD 770 8086:a780 (i915), RTX 4000 SFF Ada 10de:27b0 and RTX 2000 Ada
+                 10de:28b0 (nvidia); no DSA, IAA, QAT, NPU or Gaudi; no GPU used (rule W8)
+k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc),
+                 unpacked in ~/k3dgpu-bench-wildct/k3d-gpu; still the newest release when the hold started
+bench scripts:   main at 85a7bc86, shipped as the archive repo-85a7bc8668d1 (its launcher equals 0.1.89's apart
+                 from VERSION; its bench/ and scripts/ equal main's at 28b1e70b apart from
+                 bench/wildct/RESUME.md and the run records under bench/wildct/results/)
+node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4,
+                 k3s v1.37.1+k3s1, containerd 2.3.4-k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
+runtime:         k3d-gpu test pods busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+environment:     K3D_GPU_VENDORS=auto,-nvidia,-intel, K3D_GPU_K3S_ARGS=<rule W3>, K3D_GPU_CLUSTER=k3dgpu-w-h52,
+                 K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl" (rule W4; H52w reads no energy)
+host load:       load1 0.61-1.14, foreign CPU 0.47-1.77 CPU-s/s, MemAvailable 113.6-114.5 GiB, package 61-67 C,
+                 / 221.1-222.2 GB available (sample.py, 13 samples; df -h read 207G before and after)
+```
+
+Command, on wildct: RESUME.md step 6's `launch H52w 1800 3 h52w`, which runs `bench/wildct/hold.sh H52w
+1800 3 bash bench/wildct/row.sh h52w`, and so `bench/wildct/h52w.sh ~/k3dgpu-bench-wildct/runs/H52w/out`,
+the registered procedure. Records (inventory twice, `detect` as found and with the opt-out, `doctor`,
+`up`, the node object, pods, DaemonSets, k3s's addons, the pod GPU scan, `k3d-gpu test`, `down`, the
+hold's samples; the kubeconfigs were not copied):
+[bench/wildct/results/2026-11-07/runs/H52w/](bench/wildct/results/2026-11-07/runs/H52w/). The host
+before and after the hold: [bench/wildct/results/2026-11-07/host/h52w.txt](bench/wildct/results/2026-11-07/host/h52w.txt).
+
+`up` took 32 s. It printed "opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel);
+not deployed, not advertised", then `Accelerators: hybrid` and `Accelerators schedulable: hybrid=1`.
+The node was Ready with no taint. The pod wait (`ready.sh`) passed after 20 s: seven pods 1/1 Running
+with 0 restarts, and the gateway API CRD job Completed. Node allocatable: `cpu` 24,
+`ephemeral-storage`, `hugepages-1Gi` 0, `hugepages-2Mi` 0, `memory` and `pods` 110; nothing extended.
+
+| Engine | Expected (pre-registered) | Read | Row |
+|---|---|---|---|
+| Core types | hybrid active, `k3d-gpu.io/hybrid-cpu=true`, the balloons policy pod Running; `k3d-gpu test`'s P-core pod inside 0-15 and E-core pod inside 16-23 | `Accelerators: hybrid`; label `k3d-gpu.io/hybrid-cpu=true`; `nri-resource-policy-balloons` 1/1 Running; the P-core pod's `Cpus_allowed_list` 0, the E-core pod's 17 | yes |
+| CPU ISA | launcher labels `cpu-cpuid.` AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS (`=true`), exactly these; NFD's own `cpu-cpuid.*` labels recorded; no `AVX512*` label from any source | the launcher's `--node-label`s (the node's `k3s.io/node-args`) set exactly those six `cpu-cpuid.` labels; NFD's own 49 `cpu-cpuid.` labels (its `feature-labels` annotation) are in `node.json`, none of them one of the six; no `AVX512` label | yes |
+| AMX | amx not active; no `AMX*` label | not in `Accelerators`; no AMX label | yes |
+| NUMA | numa not active; no `k3d-gpu.io/numa-nodes` label | not active; no NUMA label | yes |
+| NVIDIA GPU | detected by `detect` as found; `up` names it as opted out; no `nvidia.com/gpu` allocatable, NVIDIA plugin not running, no `--gpus` on the node container | `detect` as found: `nvidia nvidia.com/gpu`; `up` names it as opted out; no `nvidia.com/` resource; `nvidia-device-plugin-daemonset` 0 desired, no pod; node container `gpus=[]`, `devices=[]`, runtime `runc`, `restarts=0` | yes |
+| Intel GPU | detected by `detect` as found; `up` names it as opted out; no `gpu.intel.com/*` allocatable; no `intel-gpu-plugin` or DRA pod | `detect` as found: `intel gpu.intel.com/i915`; `up` names it as opted out; no `gpu.intel.com/` resource; `up` passed `--disable intel-gpu-plugin --disable intel-gpu-dra`, and neither is in k3s's addon list; no Intel GPU pod (`intel-gpu-plugin-wsl` 0 desired) | yes |
+| DSA, IAA, QAT, NPU, Gaudi | none active, named or advertised | none in `Accelerators`, none named by `up`, no resource; the plugin DaemonSets the image ships (`intel-dsa-plugin`, `intel-iaa-plugin`, `intel-qat-plugin`, `intel-npu-plugin`, `habanalabs-device-plugin-daemonset`) 0 desired, no pod | yes |
+| Pods | no pod mounts a hostPath under `/dev/dri`, `/dev/nvidia*` or `/dev`, and no container asks for a GPU resource (`gpu-scan.txt` "clean") | 8 pods; no hostPath under `/dev` (the balloons pod's `/sys`, `/proc`, NRI directories and the kubelet's pod-resources directory; NFD's `/sys`, `/proc/swaps` and its host mounts under `/k3d-gpu/host`); no `nvidia.com/` or `gpu.intel.com/` request; `GPU-SCAN clean` | yes |
+| Host | the second inventory equals the first apart from its first line | `inventory unchanged` (`inventory.diff` empty) | yes |
+
+**Verdict: SUPPORTED.** Every row matches. On a client Raptor Lake host with two NVIDIA cards and an
+Intel iGPU, a plain `up` with the box owner's opt-out found the hybrid cores and the six ISA extensions
+the launcher labels, and nothing the host does not have. It named both GPU vendors as detected and
+opted out, and nothing in the cluster mounted or asked for a GPU. Each part of the prediction held:
+hybrid and the test pods' placement (0.8), the six launcher labels with no AVX512 or AMX label (0.85),
+no NUMA, DSA, IAA, QAT, NPU or Gaudi label, resource or pod (0.9; their plugin DaemonSet objects exist
+with 0 pods, as on every k3d-gpu cluster), and the GPU opt-out (0.85).
+
+Not scored:
+
+- NFD describes the GPUs from PCI sysfs in labels. Its own: `feature.node.kubernetes.io/pci-0300_10de.present`,
+  `pci-0380_8086.present` and `pci-0380_8086.sriov.capable`. From the node image's NodeFeatureRules
+  `intel-dp-devices` and `intel-gpu-platform-labeling` (`share/node-feature-discovery.yml`):
+  `intel.feature.node.kubernetes.io/gpu=true` and `gpu.intel.com/device-id.0380-a780.present=true`
+  with `.count=1`. They are labels, not resources: no plugin that selects them ran, and nothing was
+  allocatable. The launcher's `nvidia.com/gpu.present=false` keeps the NVIDIA plugin off the node. The
+  table does not rule labels out, so they are recorded here and not scored.
+- `up` annotated the node `k3d-gpu.io/favored-cpus=8-11`. `doctor` also reported the E-core clusters
+  16-19 and 20-23 and no `rdt_a`.
+- Host facts that moved since the registration, none of them in a row's expectation: microcode 0x137
+  (0x133), kernel 6.6.156-2 (6.6.144), and the i915 iGPU is now card0/renderD128 (the registration's
+  table says card1/renderD129), with the NVIDIA cards on card1 and card2.
+
+Production box. The snapshot before the hold (04:02Z) and after it (04:06Z) read the same: 18
+containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the same port codes. The
+line counts of `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 before and
+after, and their rules were identical with the counters stripped. After the hold, no `k3dgpu-w-*`
+cluster or container, no process of the hold and no network or volume of ours was left, and
+`live.lock` was free. Before the hold (04:03Z) all 18 modules of
+`/etc/modules-load.d/k3dgpu-wildct.conf` were loaded and `kernel.modprobe` was empty; the preflight
+(03:28Z) counted 224 loaded modules (`host/preflight.txt`). The records hold no module read after
+the hold.
+
+Rule W7: this was the campaign's first hold, so every later wildct row runs release 0.1.89. Holds
+used: 1 of at most 12. The next row in the registered order is H18w.
 
 ### Wildct amendment R7: H25w's CPU Fast Draft (2026-11-07)
 
