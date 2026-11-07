@@ -6961,10 +6961,14 @@ EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no
 EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json
            ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch
            patches/ei/0001-release-1.1-keycloak-config-kcadm-argv.patch)
-# Files eas-config.py writes; each `eas up` starts without them. env.json (the layer and
-# pins env/k3d-gpu was set up with) stays: eas_env_check compares each run with it.
+# Files eas-config.py writes (and pins.resolved.json, from its choices.txt). `eas up`
+# writes them into <state>/next and they replace the state's once eas_env_check passes,
+# so a refused run leaves the files the installed stack was set up with, which check,
+# status and down read. env.json (the layer and pins env/k3d-gpu was set up with) stays:
+# eas_env_check compares each run with it. <state>/layer, the installed layer, goes only
+# when an install starts.
 EAS_OUTPUTS=(choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml
-             repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json layer)
+             repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json)
 
 # eas_dir: K3D_GPU_EAS_DIR, then the checkout's integrations/eas, then the packaged copy.
 # The packages keep the repo's integrations/ layout, which overlay.py's patch lookup
@@ -7287,24 +7291,25 @@ eas_gateway() {
     echo "    curl -k --resolve litellm.${domain}:443:${ip} https://litellm.${domain}/v1/models -H \"Authorization: Bearer \${KEY}\""
 }
 
-# eas_env_check <state> <layer> <reset 0|1> <dry 0|1>: env/k3d-gpu keeps the layer and the
-# pins it was set up with. EAS keeps one layer per checkout (EAT release-2.0.0 release
-# notes, Known Limitations), and init never reseeds models.yaml or config.<layer>.yaml
-# (es_auto_installer.sh #L1093, #L1123 at v1.2.0), so another layer or other commits on an
-# existing env would install with the old catalog and config. env.json records what up
+# eas_env_check <state> <next> <layer> <reset 0|1> <dry 0|1>: env/k3d-gpu keeps the layer
+# and the pins it was set up with; <next>/pins.resolved.json holds this run's. EAS keeps
+# one layer per checkout (EAT release-2.0.0 release notes, Known Limitations), and init
+# never reseeds models.yaml or config.<layer>.yaml (es_auto_installer.sh #L1093, #L1123
+# at v1.2.0), so another layer or other commits on an existing env would install with the
+# old catalog and config. env.json records what up
 # set the env up with; an env with no env.json predates it. A mismatch stops here, before
 # any change; --reset-env, once 'eas down' has run, moves env/k3d-gpu aside and drops ext/
 # (the clones at the old revs), so init starts fresh.
 eas_env_check() {
-    local state=$1 layer=$2 reset=$3 dry=$4 env="$1/eas/env/${EAS_ENV}" have want aside
+    local state=$1 next=$2 layer=$3 reset=$4 dry=$5 env="$1/eas/env/${EAS_ENV}" have want aside
     [ -f "${env}/.solutions.yaml" ] || return 0
-    want=$(python3 - "${state}/pins.resolved.json" "${layer}" <<'PY'
+    want=$(python3 - "${next}/pins.resolved.json" "${layer}" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 pins = {r["name"]: r["sha"] for r in d["pins"]}
 print("%s at profile %s (%s)" % (sys.argv[2], d["profile"], ", ".join("%s %s" % (n, pins[n][:7]) for n in ("eas", "ei", "eat") if n in pins)))
 PY
-) || err "cannot read ${state}/pins.resolved.json"
+) || err "cannot read ${next}/pins.resolved.json"
     have=$(python3 - "${state}/env.json" <<'PY' 2>/dev/null
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -7352,7 +7357,7 @@ eas_require_files() {
 # eas up [--agent-toolkit | --layer L] [--model NAME] [--eas-ref R] [--ei-ref R]
 #        [--eat-ref R] [--reset-env] [--dry-run] [--explain] [-- <ansible-playbook args>]
 eas_up() {
-    local layer=inference model="" eas_ref="" ei_ref="" eat_ref="" dry=0 reset=0 explain=() extra=() dir state rc v image
+    local layer=inference model="" eas_ref="" ei_ref="" eat_ref="" dry=0 reset=0 explain=() extra=() dir state next rc v image
     while [ $# -gt 0 ]; do
         case "$1" in
             --agent-toolkit) layer="agent-toolkit" ;;
@@ -7395,18 +7400,24 @@ eas_up() {
     info "Facts (read-only)..."
     eas_facts "${state}" "${dir}"
     info "Choices (fact -> choice [source]):"
-    for v in "${EAS_OUTPUTS[@]}"; do rm -f "${state:?}/${v}"; done
+    # Into next/ first: the state's files stay the installed stack's until the env check passes.
+    next="${state}/next"
+    rm -rf "${next:?}"
+    mkdir -p "${next}"
     rc=0
-    python3 "${dir}/eas-config.py" --facts "${state}/facts.json" --out "${state}" --layer "${layer}" \
+    python3 "${dir}/eas-config.py" --facts "${state}/facts.json" --out "${next}" --layer "${layer}" \
         --pins "${dir}/pins.json" ${EAS_REF_ARGS[@]+"${EAS_REF_ARGS[@]}"} ${model:+--model "${model}"} \
         ${explain[@]+"${explain[@]}"} || rc=$?
     [ "${rc}" -ne 3 ] || err "refused (above); nothing was changed"
     [ "${rc}" -eq 0 ] || err "eas-config.py failed (exit ${rc}); nothing was changed"
     for v in choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml "repos.${layer}.yaml"; do
-        [ -s "${state}/${v}" ] || err "eas-config.py wrote no ${state}/${v}"
+        [ -s "${next}/${v}" ] || err "eas-config.py wrote no ${next}/${v}"
     done
-    eas_record_pins "${state}"
-    eas_env_check "${state}" "${layer}" "${reset}" "${dry}"
+    eas_record_pins "${next}"
+    eas_env_check "${state}" "${next}" "${layer}" "${reset}" "${dry}"
+    for v in "${EAS_OUTPUTS[@]}"; do rm -f "${state:?}/${v}"; done
+    for v in "${EAS_OUTPUTS[@]}"; do [ ! -e "${next}/${v}" ] || mv -f "${next}/${v}" "${state}/${v}"; done
+    rm -rf "${next:?}"
     EAS_CPU_POLICY=$(eas_choice_value "${state}" kubernetes_cpu_policy)
     EAS_NODES=$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["nodes"]))' "${state}/facts.json")
     cp "${dir}/images.yaml" "${state}/k3d-gpu-images.yaml"
@@ -7420,6 +7431,7 @@ eas_up() {
         return 0
     fi
     image=$(eas_bastion_image "${dir}")
+    rm -f "${state}/layer"
     eas_env_record "${state}" "${layer}" true
     eas_run "${dir}" "${state}" "${image}" up "${layer}" -- ${extra[@]+"${extra[@]}"} \
         || err "es_auto_installer.sh install ${layer} failed (log above, and ${state}/eas/env/${EAS_ENV}/logs); 'k3d-gpu eas status' names the cause of each pod not Ready"
@@ -7519,7 +7531,7 @@ eas_check() {
     eas_installed "${state}"
     # LiteLLM and the sandbox come with the agent toolkit (auth_provider litellm); the
     # inference layer alone serves models behind a Keycloak token.
-    layer=$(cat "${state}/layer" 2>/dev/null)
+    layer=$(cat "${state}/layer" 2>/dev/null || true)
     [ "${layer}" = agent-toolkit ] \
         || err "eas check exercises the agent toolkit (LiteLLM and the sandbox): run 'k3d-gpu eas up --agent-toolkit' first"
     chk="${dir}/../eat/eat-check.sh"

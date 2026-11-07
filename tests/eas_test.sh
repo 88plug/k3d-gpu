@@ -1573,6 +1573,35 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_refused "another profile on the env" "env/k3d-gpu was set up for agent-toolkit at profile release" up --agent-toolkit --eas-ref main --dry-run
     cli_refused "...says how to start over" "k3d-gpu eas up --reset-env" up --agent-toolkit --eas-ref main --dry-run
     cli_refused "another layer on the env" "this run asks for inference at profile release" up --dry-run
+    # The stack stays installed after a refusal or a dry run, so the files eas check, status
+    # and down read (the layer, the pins and the overrides it was installed with) stay too.
+    echo agent-toolkit > "${STATE}/layer"
+    out=$(cli cmd_eas up --agent-toolkit --dry-run); rc=$?
+    cli_eq    "cli: a dry run on the installed env exits 0" "${rc}" 0
+    cli_eq    "cli: a dry run leaves the installed layer recorded" "$(cat "${STATE}/layer" 2>/dev/null)" agent-toolkit
+    local kept
+    echo agent-toolkit > "${STATE}/layer"
+    kept=$(cat "${STATE}/layer" "${STATE}/pins.resolved.json" "${STATE}/k3d-gpu-overrides.yaml" | sha256sum)
+    cli_refused "another layer on the env, no dry run" "this run asks for inference at profile release" up
+    cli_eq    "cli: ...leaves the layer, the pins and the overrides it was installed with" \
+        "$(cat "${STATE}/layer" "${STATE}/pins.resolved.json" "${STATE}/k3d-gpu-overrides.yaml" 2>&1 | sha256sum)" "${kept}"
+    cli_refused "another profile on the env, no dry run" "env/k3d-gpu was set up for agent-toolkit at profile release" up --agent-toolkit --eas-ref main
+    cli_eq    "cli: ...leaves them too" \
+        "$(cat "${STATE}/layer" "${STATE}/pins.resolved.json" "${STATE}/k3d-gpu-overrides.yaml" 2>&1 | sha256sum)" "${kept}"
+    : > "${LOG}"
+    out=$(cli cmd_eas check); rc=$?
+    cli_eq    "cli: eas check still runs after the refusals" "${rc}" 0
+    cli_lacks "cli: ...and does not ask for an install" "${out}" "run 'k3d-gpu eas up --agent-toolkit' first"
+    # No layer recorded (an install that did not finish): check says why it stops.
+    rm -f "${STATE}/layer"
+    : > "${LOG}"
+    out=$(cli cmd_eas check); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -qF "run 'k3d-gpu eas up --agent-toolkit' first" <<< "${out}"; then
+        ok "cli: eas check with no layer recorded stops with its reason"
+    else
+        fail "cli: eas check with no layer recorded: rc=${rc} out='${out}'"
+    fi
+    echo agent-toolkit > "${STATE}/layer"
     setinst() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); d["installed"] = sys.argv[2] == "1"; json.dump(d, open(sys.argv[1], "w"))' "${STATE}/env.json" "$1"; }
     cli_has   "cli: eas down marked the env torn down" "$(cat "${STATE}/env.json")" '"installed": false'
     setinst 1
