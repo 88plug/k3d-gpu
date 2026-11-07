@@ -648,8 +648,9 @@ import sys, yaml
 steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["deb-rpm"]["steps"]
 print(next(s["run"] for s in steps if s.get("name") == "Publish to the GitHub release"))
 PY
-# $1/origin.git: aur-v0.1.9 and aur-v0.1.10 (sort -V, not sort), an annotated
-# aur-v0.1.8 (its peeled ^{} line must not count) and an image release tag.
+# $1/origin.git: aur-v0.1.9 and aur-v0.1.10 (sort -V, not sort), an image release
+# tag, and aur-v0.1.10 annotated: ls-remote also lists the highest tag as a peeled
+# refs/tags/aur-v0.1.10^{} line, which must not count as a version.
 release_origin() {
     (
         set -e
@@ -661,8 +662,7 @@ release_origin() {
         git commit -q --allow-empty -m one
         git tag aur-v0.1.9
         git commit -q --allow-empty -m two
-        git tag aur-v0.1.10
-        git tag -a -m note aur-v0.1.8 HEAD~1
+        git tag -a -m note aur-v0.1.10
         git tag v1.37.1-k3s1-ndpv0.20.1
         git push -q "$1/origin.git" main --tags
     )
