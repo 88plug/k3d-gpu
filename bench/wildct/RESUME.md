@@ -2,13 +2,21 @@
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
 pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6 and R7, and the
-"H52w run", "H18w run" and "H25w run" sections). This file changes no rule. Run it top to bottom,
-except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct predates
-`bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check passes.
+"H52w run", "H18w run", "H25w run" and "H34w run" sections). This file changes no rule. Run it top
+to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
+predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check
+passes.
 
-## Where things stand (2026-11-07, after H25w)
+## Where things stand (2026-11-07, after H34w)
 
-- **Next: row 4, `H34w` (step 6).** Holds used: 3 of at most 12.
+- **Next: row 5, `H28w-prep` (step 6), then row 6, `H28w`.** Holds used: 4 of at most 12.
+- **Row 4, `H34w`,** ran on 2026-11-07 (05:54:52Z to 06:10:05Z, rc 0; `out/verdict.json` written
+  by `h34.py`, 12 of 12 pairs) and is scored INCONCLUSIVE, effect size not resolved by the CIs
+  (EXPERIMENTS.md "H34w run"; records in `results/2026-11-07/runs/H34w/`, the host before and
+  after in `results/2026-11-07/host/h34w.txt`). It ran from the archive H25w used
+  (`repo-ce4ff16c47ee`); step 3b did not run again. The host's containers, start times, restart
+  counts, port codes and firewall rules read the same before and after it, and nothing of the
+  hold was left.
 - **Row 3, `H25w`,** ran on 2026-11-07 (05:18:20Z to 05:36:58Z, rc 0; `out/typical/score.json`
   written) and is scored SUPPORTED (EXPERIMENTS.md "H25w run"; records in
   `results/2026-11-07/runs/H25w/`, the host before and after in `results/2026-11-07/host/h25w.txt`).
@@ -86,8 +94,8 @@ except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `H18w*`, `H25w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones
-      renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
+      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
+      earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
       `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
