@@ -700,8 +700,14 @@ cfg="${WORK}/xpu-reason.cfg"
 cp "${EAT}/agentic-config.cfg" "${cfg}"
 echo 'compute_platform=xpu' >> "${cfg}"
 out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) || true
-if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm' <<< "${out}"; then ok "eat-up: the xpu refusal points at vLLM on an Intel GPU through k3d-gpu agent up"
+if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm' <<< "${out}"; then ok "eat-up: the xpu refusal names k3d-gpu's vLLM on an Intel GPU"
 else fail "eat-up: the xpu refusal names no alternative: ${out}"; fi
+# Releases through 0.1.93 never served that path (#339), and with the fix it has not yet
+# served end to end on an Arc B70: the refusal says so instead of sending users there.
+if grep -qF 'has not yet served end to end on Arc' <<< "${out}" \
+    && ! grep -qF 'for vLLM on an Intel GPU run' <<< "${out}"; then
+    ok "eat-up: the xpu refusal says k3d-gpu's vLLM has not yet served end to end on Arc"
+else fail "eat-up: the xpu refusal presents k3d-gpu's vLLM on an Intel GPU as working: ${out}"; fi
 
 # 5. The GenAI Gateway path installs pinned charts and images. EAT's
 #    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs
