@@ -104,6 +104,8 @@ tests = ["tests/detect_test.sh"]
 
 [groups.hf-console-fallback]
 tests = ["tests/model_opt_test.sh"]
+hooks = ["hf-meta"]
+outputs = ["tests/fixtures/hf/*.json"]
 
 [groups.convert-pins]
 tests = ["tests/console_test.sh", "tests/model_opt_test.sh"]
@@ -504,6 +506,8 @@ derived = [
   { file = "console/model_opt.py", regex = 'o\.get\("vllm_version"\) or "(?P<v>[0-9.]+)"', from = "{v_bare}" },
   { file = "console/model_opt.py", regex = '^VLLM_[A-Z_]+ = "https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/', from = "{v}", count = 3 },
   { file = "console/model_opt.py", regex = '"--language-model-only [^\n]*"https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/vllm/engine/arg_utils\.py', from = "{v}" },
+  # the vLLM version the launcher hands the optimizer (agent_optimize)
+  { file = "scripts/k3d-gpu", regex = 'device=\$\{AGENT_SEL%% \*\} vver=(?P<v>[0-9.]+) ', from = "{v_bare}" },
 ]
 
 [[pin]]
@@ -522,6 +526,9 @@ sites = [
   { file = "console/moe_predict.py", ref = "intel/llm-scaler-vllm" },
   { file = "console/plan.py", regex = '"(?P<vllm>[0-9.]+)" if backend == "llm-scaler"' },
 ]
+derived = [
+  { file = "scripts/k3d-gpu", regex = 'llm-scaler\) vver=(?P<v>[0-9.]+) ;;', from = "{vllm}" },
+]
 
 [[pin]]
 id = "gaudi-vllm"
@@ -539,6 +546,7 @@ sites = [
 ]
 derived = [
   { file = "console/plan.py", regex = '^AGENT_VLLM_VERSION = \{"HPU": "(?P<v>[0-9.]+)"', from = "{vllm}" },
+  { file = "scripts/k3d-gpu", regex = '\[ -z "\$\{AGENT_HPU:-\}" \] \|\| vver=(?P<v>[0-9.]+)', from = "{vllm}" },
 ]
 
 [[pin]]

@@ -29,7 +29,7 @@ Until `pins/classes` exists, `hack/pinlib/classes.py` gives every path its class
 | `hack/pins propose-amendment <row>` | a PENDING row's runner image pins under a dated amendment stub |
 | `hack/bump <group>` | resolve, rewrite the sites, run the hooks, substitute goldens, run the group's tests, write the PR body and verdict |
 | `hack/pin-only-diff <base> <head>` | is the diff only pin moves (else: changes-defaults) |
-| `hack/substitute-goldens OLD=NEW...` | exact-string substitution in `tests/**` only |
+| `hack/substitute-goldens OLD=NEW...` | exact-string substitution in `tests/**` only (see Goldens below) |
 
 `hack/bump` writes the working tree it runs in; try a group in a scratch clone:
 
@@ -84,9 +84,30 @@ git clone -q . /tmp/k && /tmp/k/hack/bump telemetry --root /tmp/k --dry-run
 A `[groups.<name>]` table: `tests` (suites `hack/bump` runs after the rewrite;
 CI runs everything again on the PR), `hooks` (built-in steps after the rewrite,
 in order: `lock`, `readme-history`, `render-latest`, `ppa-write`, `convert-pins`,
-`ledger-rules`, `constraints`, `docs-lock`, `flake-update`, `repin`) and `outputs`
-(files those hooks write; `hack/pin-only-diff` accepts any change there).
-Coupled components go in one group, so they land in one PR.
+`ledger-rules`, `constraints`, `docs-lock`, `flake-update`, `repin`, `hf-meta`) and
+`outputs` (files those hooks write; `hack/pin-only-diff` accepts any change there).
+Coupled components go in one group, so they land in one PR. `hf-meta` reads each
+moved Hugging Face repo's record again at its new revision, in every saved metadata
+bundle under `tests/fixtures/hf` that recorded it at the old one.
+
+## Goldens
+
+After the rewrite and the hooks, `hack/bump` replaces each exact old pin string
+(a whole site match, a digest, a revision, a version or tag) with its new one in
+`tests/**`; a digest or revision also moves cut to its first 12 hex digits, as
+plans and audits print it (`sha256:<12>`, `@<12>`: `hack/pin-only-diff` counts
+both as pin tokens). A test keeps the old string when
+
+- another pin's site outside `tests/` still holds it (two images at one digest);
+- the test names a kept record that still holds it (a file no bumper writes,
+  prose aside: a ledger arm's or a historical run's pin), so it reads that record;
+- the old string is a bare version or tag (`v1.37.1-k3s1`, `release-1.1.0`) and
+  the test is code (`.py`, `.sh` or a `#!` script), where it is as likely the
+  test's own input. In a recorded file (a golden transcript, a fixture) it moves.
+
+Prose and records that no test names hold nothing back. A test script that checks
+a pinned value reads it from the file that pins it (the launcher, the Dockerfile,
+`bench/competitors.lock`), so a bump never has to edit the script.
 
 ## Hold a pin
 

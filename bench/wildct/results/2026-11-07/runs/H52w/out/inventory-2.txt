@@ -1,0 +1,28 @@
+# date 2026-11-07T04:04:58Z host wildct kernel 6.6.156-2-MANJARO
+cpu:  13th Gen Intel(R) Core(TM) i7-13700 family 6 model 183 microcode 0x137
+online 0-23 nodes node0 smt=1
+cpu_core 0-15 cpu_atom 16-23 cpu_lowpower 
+cpu0:0-1:5100000 cpu1:0-1:5100000 cpu2:2-3:5100000 cpu3:2-3:5100000 cpu4:4-5:5100000 cpu5:4-5:5100000 cpu6:6-7:5100000 cpu7:6-7:5100000 cpu8:8-9:5200000 cpu9:8-9:5200000 cpu10:10-11:5200000 cpu11:10-11:5200000 cpu12:12-13:5100000 cpu13:12-13:5100000 cpu14:14-15:5100000 cpu15:14-15:5100000 cpu16:16:4100000 cpu17:17:4100000 cpu18:18:4100000 cpu19:19:4100000 cpu20:20:4100000 cpu21:21:4100000 cpu22:22:4100000 cpu23:23:4100000 
+flags: avx avx2 avx_vnni f16c fma gfni ibt sha_ni user_shstk vaes
+rapl package-0 pl1_uw 35000000 pl2_uw 40000000
+mem_total_kb 131524088 thp [always] madvise never
+## pci display, 3D and accelerator functions (class 03xx, 0b40, 1200)
+0000:00:02.0 0x8086:0xa780 class=0x038000 driver=i915
+0000:01:00.0 0x10de:0x27b0 class=0x030000 driver=nvidia
+0000:02:00.0 0x10de:0x28b0 class=0x030000 driver=nvidia
+## drm (sysfs names only)
+card0 0x8086:0xa780 i915
+card1 0x10de:0x27b0 nvidia
+card2 0x10de:0x28b0 nvidia
+renderD128 0x8086:0xa780 i915
+renderD129 0x10de:0x27b0 nvidia
+renderD130 0x10de:0x28b0 nvidia
+## device directories present (not opened)
+/dev/dsa: absent
+/dev/iax: absent
+/dev/accel: absent
+/dev/qat_adf_ctl: absent
+/dev/nvidiactl: present
+/dev/dri: present
+## modules
+i915 nvidia nvidia_uvm

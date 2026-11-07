@@ -4864,8 +4864,10 @@ if grep -A1 -- '^        - name: HOME$' "${SHARE}/agent-sandbox-k3d.yml" | grep 
 else
     FAILS=$((FAILS + 1)); echo "FAIL sandbox profile sets a writable HOME for pip (no 'name: HOME' followed by 'value: /tmp')"
 fi
-manifest_has "sandbox runtime image pinned by digest" 'image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.8@sha256:[0-9a-f]{64}$' agent-sandbox-k3d.yml
-manifest_has "agent-sandbox controller image pinned by digest" 'image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.8@sha256:[0-9a-f]{64}$' agent-sandbox.yml
+# Both images are the release the launcher installs (SANDBOX_VERSION; group opt-in-manifests moves them together).
+SANDBOX_TAG=$(sed -n 's/^SANDBOX_VERSION="\(v[0-9.]*\)"$/\1/p' "${K3D_GPU}")
+manifest_has "sandbox runtime image pinned by digest" "image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:${SANDBOX_TAG:-unset}@sha256:[0-9a-f]{64}\$" agent-sandbox-k3d.yml
+manifest_has "agent-sandbox controller image pinned by digest" "image: registry.k8s.io/agent-sandbox/agent-sandbox-controller:${SANDBOX_TAG:-unset}@sha256:[0-9a-f]{64}\$" agent-sandbox.yml
 if grep -E 'image: ' "${SHARE}/agent-sandbox.yml" "${SHARE}/agent-sandbox-k3d.yml" | grep -v '@sha256:' | grep -v ':[[:space:]]*$' >/dev/null; then
     FAILS=$((FAILS + 1)); echo "FAIL every agent-sandbox image is pinned by digest"
 else

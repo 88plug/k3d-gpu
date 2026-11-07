@@ -8,7 +8,8 @@
 #   h52w         H52w's procedure: bench/wildct/h52w.sh OUT (it sets its own cluster, opt-out
 #                and W3, and runs the installed release's default node image; no IMAGE)
 #   h18w         H18's bench/sandbox_round.sh, runs 1-3
-#   h25w         H25's bench/shared-prefix/run.sh
+#   h25w         H25's bench/shared-prefix/run.sh, with the CPU Fast Draft the H25w line registers
+#                in both arms (K3D_GPU_AGENT_DRAFT=CPU, wildct amendment R7)
 #   h34w         H34's bench/hetero-spec/h34.sh
 #   h28w-prep    bench/zero-copy-models/probe.sh prep (typical's model images only, r0-r6)
 #   h28w         bench/zero-copy-models/probe.sh run (its plain k3d cluster create gets W3 and the
@@ -60,8 +61,10 @@ case ${row} in
         ARGV=(bash "${REPO}/bench/sandbox_round.sh") RUNS=3 ;;
     h25w)
         need_image
+        # K3D_GPU_AGENT_DRAFT=CPU: the launcher drafts by default only on a CPU class an H34-family
+        # row measured, and none names the i7-13700 (wildct amendment R7).
         E=(IMAGE="${IMAGE}" MODELS="${W}/models" OUT="${OUT}" LEVELS=typical CLUSTER=k3dgpu-w-h25 SEED_BASE=2560 HOLD=1440
-           LOAD_CPUS=20-23 K3D_GPU_VENDORS="${OPTOUT}" K3D_GPU_K3S_ARGS="${W3}")
+           LOAD_CPUS=20-23 K3D_GPU_VENDORS="${OPTOUT}" K3D_GPU_K3S_ARGS="${W3}" K3D_GPU_AGENT_DRAFT=CPU)
         ARGV=(bash "${REPO}/bench/shared-prefix/run.sh") ;;
     h34w)
         need_image

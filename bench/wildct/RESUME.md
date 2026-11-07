@@ -1,16 +1,21 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, and wildct amendments R1, P1, R2, R3, R4, R5 and R6). This file
-changes no rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs
-first when the `repo` on wildct predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past
-step 1 runs until every step 1 check passes.
+pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5 and R6, and the "H52w
+run" section). This file changes no rule. Run it top to bottom, except that step 3b (ship
+`origin/main` to wildct) runs first when the `repo` on wildct predates `bench/wildct/nfprobe.sh`
+(H10 runs it). Nothing past step 1 runs until every step 1 check passes.
 
-## Where things stand (2026-11-07, after smoke5)
+## Where things stand (2026-11-07, after H52w)
 
-- **Ready for the first hold, `H52w` (step 6, row 1).** The kernel modules k3s needs are loaded
-  and persisted, step 1 passes on release 0.1.89, and the wiring smoke `smoke5` passed. No hold
-  has run; nothing has been measured.
+- **Next: row 2, `H18w` (step 6).** Row 1, `H52w`, ran on 2026-11-07 (04:03:54Z to 04:05:00Z,
+  rc 0, every line of `out/rc.txt` a pass) and is scored SUPPORTED (EXPERIMENTS.md "H52w run";
+  records in `results/2026-11-07/runs/H52w/`, the host before and after in
+  `results/2026-11-07/host/h52w.txt`). The host's containers, start times, restart counts, port
+  codes and firewall rules read the same before and after it, and nothing of the hold was left.
+  Holds used: 1 of at most 12.
+- **Release frozen at 0.1.89 (rule W7).** `H52w`, the campaign's first hold, ran 0.1.89, so every
+  later hold runs it too. Step 3 does not run again, and neither does step 5.
 - **Kernel modules** (each approved by the box owner on 2026-10-29; `kernel.modprobe` stays empty):
   - `vxlan` and `br_netfilter` (amendment R3; `results/2026-10-29/host/modules.txt`);
   - `xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT
@@ -65,7 +70,7 @@ step 1 runs until every step 1 check passes.
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones renamed
+      `H52w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones renamed
       `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
@@ -79,15 +84,14 @@ step 1 runs until every step 1 check passes.
   - Images: `cryptoandcoffee/k3d-gpu:0.1.89`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
     `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
     2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71`, `:0.1.79` and `:0.1.81` were removed in step 3c.
-- **Never existed.** No inference request. No measurement. `smoke1`, `smoke2`, `diag-smoke2`,
-  `smoke3`, `smoke4` and `smoke5` are discarded and disclosed (amendments R1, R2, R3, R5 and R6);
-  `smoke5` is the campaign's passing wiring smoke for 0.1.89.
+- **Never existed.** No inference request. No measurement before `H52w`. `smoke1`, `smoke2`,
+  `diag-smoke2`, `smoke3`, `smoke4` and `smoke5` are discarded and disclosed (amendments R1, R2,
+  R3, R5 and R6); `smoke5` is the campaign's passing wiring smoke for 0.1.89.
 - **Never touched.** No GPU, nor anything that was on the host before the campaign, apart from
   the 18 kernel modules (and their three dependencies) and their `modules-load.d` file, which the
   box owner approved.
-- **Newest release on 2026-11-07: k3d-gpu 0.1.89**, installed in step 3c. Rule W7: the first hold
-  runs the newest release. If a newer one is cut before `H52w` starts, step 3 runs again, and so
-  does step 5, as `smoke6`.
+- **The campaign's release: k3d-gpu 0.1.89**, installed in step 3c and still the newest when
+  `H52w` started (rule W7: the first hold runs the newest release; later holds keep it).
   - `.deb` sha256: `8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc`.
   - Node image: `cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4`.
   - Its launcher and `share/` equal main's at `85a7bc86`, apart from the version line.
@@ -175,7 +179,8 @@ timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load
 
 ## 3. Upgrade to the newest release
 
-Rule W7: the newest k3d-gpu release at the first hold. No hold has run yet, so upgrade now.
+Rule W7: the newest k3d-gpu release at the first hold. The first hold, `H52w`, ran 0.1.89 on
+2026-11-07, so this step does not run again; it is kept as the record of how 0.1.89 was installed.
 
 **3a [c]. Pick the release and check it matches main.**
 
