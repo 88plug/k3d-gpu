@@ -3280,6 +3280,12 @@ agent_says "vllm pod joins the host render group" "${r}" 0 \
     "supplementalGroups: \[${gid}\]" "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
 agent_says "vllm Deployment and Service are named vllm" "${r}" 0 \
     '^  name: vllm$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+# Service vllm would hand the pod VLLM_PORT=tcp://<ip>:8000, which vLLM's env cache
+# refuses at engine start ("VLLM_PORT ... appears to be a URI").
+agent_says "vllm pod gets no Service environment variables" "${r}" 0 \
+    '^      enableServiceLinks: false$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
+agent_says "llm-scaler pod gets no Service environment variables" "${r}" 0 \
+    '^      enableServiceLinks: false$' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=llm-scaler
 agent_says "vllm keeps its weights on its own PVC" "${r}" 0 \
     'claimName: vllm-models' "" STUB_ALLOC="${XE1}" K3D_GPU_AGENT_BACKEND=vllm
 agent_says "vllm readiness is vLLM's /health" "${r}" 0 \
@@ -3405,8 +3411,13 @@ agent_log_before() {
 agent_log_before "agent up with vllm stops the OVMS server before applying" \
     'delete deployment/ovms service/ovms' '^kubectl apply -f -$'
 agent_log_has "agent up with vllm waits for deployment/vllm" 'rollout status deployment/vllm'
-agent_log_has "agent up with vllm warms up through /v1/chat/completions" \
-    'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
+# Inside the pod with a JSON Content-Type: `kubectl create --raw` sends none, and vLLM's
+# chat route answers a request without application/json with 400 (validate_json_request).
+agent_log_has "agent up with vllm warms up inside its pod at /v1/chat/completions" \
+    "exec deployment/vllm -c vllm -- curl .*http://127\\.0\\.0\\.1:8000/v1/chat/completions -H Content-Type: application/json"
+if grep -q -- 'create --raw' "${log}"; then
+    FAILS=$((FAILS + 1)); echo "FAIL agent up with vllm sends no warm-up through the service proxy"
+else PASS=$((PASS + 1)); echo "ok   agent up with vllm sends no warm-up through the service proxy"; fi
 : > "${log}"
 env K3D_GPU_SYSROOT="${r}" PATH="${ASTUB}:${PATH}" STUB_LOG="${log}" bash "${K3D_GPU}" agent down >/dev/null 2>&1
 agent_log_has "agent down removes the vllm server" 'delete deployment/vllm service/vllm'
@@ -3429,6 +3440,8 @@ agent_says "agent Gaudi pod requests one habana.ai/gaudi" "${r}" 0 \
     '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC="${HPU_ALLOC}"
 agent_says "the Gaudi pod is annotated with device HPU" "${r}" 0 \
     'k3d-gpu\.io/agent-device: HPU$' "" STUB_ALLOC="${HPU_ALLOC}"
+agent_says "the Gaudi vllm pod gets no Service environment variables" "${r}" 0 \
+    '^      enableServiceLinks: false$' "" STUB_ALLOC="${HPU_ALLOC}"
 agent_says "Gaudi beats an allocatable XMX Intel GPU" "${r}" 0 \
     '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC=$'cpu 160\ngpu.intel.com/xe 1\nhabana.ai/gaudi 8' \
     STUB_NODE_LABELS=gpu.intel.com/xmx=true
@@ -3504,8 +3517,11 @@ agent_log_has "agent up on a Gaudi applies the vllm Deployment on HPU" 'k3d-gpu\
 agent_log_before "agent up on a Gaudi stops the OVMS server before applying" \
     'delete deployment/ovms service/ovms' '^kubectl apply -f -$'
 agent_log_has "agent up on a Gaudi waits for deployment/vllm" 'rollout status deployment/vllm'
-agent_log_has "agent up on a Gaudi warms up through /v1/chat/completions" \
-    'create --raw /api/v1/namespaces/k3d-gpu-agent/services/vllm:http/proxy/v1/chat/completions'
+agent_log_has "agent up on a Gaudi warms up inside its pod at /v1/chat/completions" \
+    "exec deployment/vllm -c vllm -- curl .*http://127\\.0\\.0\\.1:8000/v1/chat/completions -H Content-Type: application/json"
+if grep -q -- 'create --raw' "${log}"; then
+    FAILS=$((FAILS + 1)); echo "FAIL agent up on a Gaudi sends no warm-up through the service proxy"
+else PASS=$((PASS + 1)); echo "ok   agent up on a Gaudi sends no warm-up through the service proxy"; fi
 
 # ---- agent add-ons: device plan around the LLM and add-on manifests ----------
 # `agent manifest --with ...` keeps the LLM on agent_select's device and plans
