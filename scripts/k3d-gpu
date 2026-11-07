@@ -73,7 +73,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.90"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.92"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -361,6 +361,9 @@ Usage: k3d-gpu <command>
             (competitors.lock) with its defaults next to this cluster's 'agent up'
             server, drive both with one client, interleaved rounds and RAPL
             J/token, and write the result JSON plus an EXPERIMENTS.md run section.
+            --cpuset pins the competitor to LIST; ollama then gets the thread
+            count llama.cpp picks on LIST's CPUs alone (8 for 0-15 on an
+            i9-13900T), since its default counts the whole host's cores.
             The model cache volume is removed after unless --keep-cache;
             K3D_GPU_SIGNOFF="Name <email>" signs the run section
   bench agent plan|run|apb|control|bfcl|report|proxy|manifest|tasks ...
@@ -12535,6 +12538,37 @@ bench_dir() {
 
 free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
 
+# physical_cores_of <cpu>...: how many physical cores the CPUs sit on (distinct
+# thread_siblings_list values; a CPU without one counts as its own core).
+physical_cores_of() {
+    local c
+    for c in "$@"; do
+        head -n1 "${SYSROOT}${CPU_SYS}/cpu${c}/topology/thread_siblings_list" 2>/dev/null || echo "cpu${c}"
+    done | sort -u | grep -c . || true
+}
+
+# cpuset_math_threads <cpulist>: the thread count llama.cpp's default picks when it
+# can see every CPU (common/common.cpp common_cpu_get_num_math), counted inside the
+# list. On a hybrid CPU it walks the CPU numbers in order, skips the E-cores, and
+# counts a CPU and skips the next number as its hyperthread: one thread per physical
+# P-core where P-cores are pairs like 0-1, every other P-core where they have no
+# hyperthreads. With no count from that, or one core type, it is one per physical core.
+cpuset_math_threads() {
+    local cpus ecores c skip=-1 n=0
+    cpus=$(cpulist_expand "$1" | sort -nu) && [ -n "${cpus}" ] || return 1
+    if has_hybrid; then
+        ecores=$(cpulist_expand "$(ecore_kind_cpus)" || true)
+        for c in ${cpus}; do
+            [ "${c}" != "${skip}" ] || continue
+            if grep -qxF "${c}" <<< "${ecores}"; then continue; fi
+            n=$((n + 1)) skip=$((c + 1))
+        done
+    fi
+    # shellcheck disable=SC2086 # one CPU number per word
+    [ "${n}" -gt 0 ] || n=$(physical_cores_of ${cpus})
+    echo "${n}"
+}
+
 # Short CPU name for the ledger heading (i9-13900T, Ultra 7 155H, Core 5 120U,
 # N100, Xeon w5-2455X); empty when none matches, and vs.py then uses the full name.
 cpu_short() {
@@ -12666,7 +12700,7 @@ cmd_bench() {
         bench_vs_remote
         return
     fi
-    local dir lock fields image port api health served pull cache dri quant device user apath asha rev args=()
+    local dir lock fields image port api health served pull cache dri quant device user apath asha rev tenv threads="" args=()
     dir=$(bench_dir)
     lock="${dir}/competitors.lock"
     [ -f "${lock}" ] || err "bench: ${lock} missing (set K3D_GPU_BENCH to the bench/ directory)"
@@ -12677,17 +12711,24 @@ if s is None:
     sys.exit(3)
 print("\t".join(str(x) or "-" for x in (s["image"], s["port"], s["api"], s["health"], s["served_model"], s["pull"],
                                         s["cache"], "1" if s.get("dri") else "0", s["quant_tier"], s["device"],
-                                        s.get("user", ""), s["artifact_path"], s["artifact_sha256"], s["model_revision"])))
+                                        s.get("user", ""), s["artifact_path"], s["artifact_sha256"], s["model_revision"],
+                                        s.get("threads_env", ""))))
 for a in s["args"]:
     print(a)' "${lock}" "${stack}") \
         || err "bench: unknown stack '${stack}' (use ollama, llamacpp or ovms)"
-    IFS=$'\t' read -r image port api health served pull cache dri quant device user apath asha rev <<< "$(head -n1 <<< "${fields}")"
+    IFS=$'\t' read -r image port api health served pull cache dri quant device user apath asha rev tenv <<< "$(head -n1 <<< "${fields}")"
     mapfile -t args < <(tail -n +2 <<< "${fields}")
 
     local name="k3dgpu-g-vs-${stack}" hport docker_args gid v np devs="none (CPU only)"
     hport=$(free_port)
     docker_args=(run -d --name "${name}" -p "127.0.0.1:${hport}:${port}" -v "${name}-cache:${cache}")
     [ "${user}" = - ] || docker_args+=(--user "${user}")
+    # A stack whose default thread count ignores the cpuset (threads_env in the lock)
+    # gets the count it would pick on the cpuset's CPUs alone.
+    if [ -n "${cpuset}" ] && [ "${tenv}" != - ]; then
+        threads=$(cpuset_math_threads "${cpuset}") || err "bench: --cpuset ${cpuset} is not a CPU list like 0-15"
+        docker_args+=(-e "${tenv}=${threads}")
+    fi
     [ -z "${cpuset}" ] || docker_args+=(--cpuset-cpus "${cpuset}")
     # The container downloads the model itself, so the host's proxy settings go in,
     # with the loopback added to NO_PROXY.
@@ -12757,7 +12798,7 @@ for a in s["args"]:
     ctx=$(python3 -c 'import json, sys; print(json.dumps(dict(zip(sys.argv[1::2], sys.argv[2::2]))))' \
         host_cpu "${cpu}" host_cpu_short "$(cpu_short "${cpu}")" \
         host_kernel "$(uname -r)" commit "$(cd "${dir}" && git rev-parse HEAD 2>/dev/null || echo "k3d-gpu ${VERSION}")" \
-        image "${image}" quant_tier "${quant}" device "${device}${cpuset:+, cpuset ${cpuset}}" vs_devices "${devs}" \
+        image "${image}" quant_tier "${quant}" device "${device}${cpuset:+, cpuset ${cpuset}}${threads:+, ${tenv}=${threads}}" vs_devices "${devs}" \
         model_revision "${rev}" artifact "${apath} sha256 ${got}" \
         k3d_device "${kdevice:-unknown}" k3d_backend "${kbackend:-unknown}" \
         k3d_transport "${ktransport}" vs_transport "docker-proxy on 127.0.0.1")

@@ -31,8 +31,10 @@
   },
   {
    "id": "H34w",
-   "verdict": "PENDING",
-   "classes": []
+   "verdict": "INCONCLUSIVE",
+   "classes": [
+    "i7-13700"
+   ]
   },
   {
    "id": "H34x",
