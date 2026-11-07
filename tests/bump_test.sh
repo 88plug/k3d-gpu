@@ -368,6 +368,15 @@ source = { kind = "oci", image = "x/img", tag = "{v}" }
 sites = [{ file = "share/app.yml", ref = "x/img" }]
 
 [[pin]]
+id = "rev"
+class = "ours"
+group = "tools"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "o/m" }
+sites = [{ file = "share/model.env", regex = '^MODEL_REV=(?P<v>[0-9a-f]{40})$' }]
+
+[[pin]]
 id = "mirror"
 class = "ours"
 group = "other"
@@ -386,10 +395,18 @@ printf 'k3s v1.2.0-k3s1\nimage x/img:1.0.0@%s\ndigest %s\n' "${D_OLD}" "${D_OLD}
 printf '#!/usr/bin/env bash\ngrep -q "x/img:1.0.0@%s" share/app.yml\n' "${D_OLD}" > "${R6}/tests/app_test.sh"
 printf '#!/usr/bin/env bash\ngrep -q "IMAGE=x/img:1.0.0@%s" bench/h1/run.sh\n' "${D_OLD}" > "${R6}/tests/h1_test.sh"
 printf 'assert parse("v1.2.0-k3s1") == (1, 2, 0)\n' > "${R6}/tests/version_test.py"
-: > "${R6}/EXPERIMENTS.md"
+# a revision: the ledger and the README keep the old one as history; a plan prints it cut to 12
+REV_OLD=$(printf 'd%.0s' {1..40}) REV_NEW=$(printf 'e%.0s' {1..40})
+echo "MODEL_REV=${REV_OLD}" > "${R6}/share/model.env"
+printf 'serve o/m@%s\n' "${REV_OLD:0:12}" > "${R6}/tests/plan.golden"
+printf '#!/usr/bin/env bash\n# reads no ledger (EXPERIMENTS.md) and no README.md\ngrep -q -- "--revision=%s" out\n' \
+    "${REV_OLD}" > "${R6}/tests/model_test.sh"
+echo "H1 measured o/m at ${REV_OLD}" > "${R6}/EXPERIMENTS.md"
+echo "o/m at ${REV_OLD}" > "${R6}/README.md"
 : > "${R6}/images.unpinned"
 git -C "${R6}" init -q -b main && git -C "${R6}" add -A && git -C "${R6}" commit -qm base
-echo '{"k3s": {"v": "v1.2.1-k3s1"}, "img": {"v": "1.1.0", "tag": "1.1.0"}}' > "${WORK}/resolved6.json"
+echo "{\"k3s\": {\"v\": \"v1.2.1-k3s1\"}, \"img\": {\"v\": \"1.1.0\", \"tag\": \"1.1.0\"}, \"rev\": {\"v\": \"${REV_NEW}\"}}" \
+    > "${WORK}/resolved6.json"
 out=$(PINLIB_FIXTURES="${FIX}" python3 "${ROOT}/hack/bump" --root "${R6}" --resolved "${WORK}/resolved6.json" \
     --no-tests tools 2>&1); rc=$?
 check "goldens: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
@@ -403,7 +420,10 @@ check "goldens: a test's image moves when the test does not read the ledger run"
 check "goldens: a test that names the ledger run keeps the run's image" \
     git -C "${R6}" diff --quiet -- tests/h1_test.sh
 check "goldens: a bare version in test code stays (a test input)" git -C "${R6}" diff --quiet -- tests/version_test.py
-for f in share/CHANGES share/mirror.yml bench/h1/run.sh; do
+check "goldens: a revision cut to 12 digits moves with the revision" grep -qx "serve o/m@${REV_NEW:0:12}" "${R6}/tests/plan.golden"
+check "goldens: naming the ledger or the README in a comment holds nothing back" \
+    grep -q -- "--revision=${REV_NEW}" "${R6}/tests/model_test.sh"
+for f in share/CHANGES share/mirror.yml bench/h1/run.sh EXPERIMENTS.md README.md; do
     check "goldens: ${f} untouched" git -C "${R6}" diff --quiet -- "${f}"
 done
 

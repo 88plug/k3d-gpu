@@ -2,11 +2,13 @@
 
 A test that names a pinned value (a golden transcript, a recorded image list) moves
 with the pin. Only tests/** is written; never a ledger, historical, arm or
-eat-stock path, nor .github/. A pair leaves a test alone when
+eat-stock path, nor .github/. A digest or revision also moves cut to its first 12
+hex digits, as plans and audits print it. A pair leaves a test alone when
   - another pin's site outside tests/ still holds the old string (two images at
     one digest: the test may check the other one);
-  - the test names a file outside tests/ that still holds it (it reads that
-    record: a ledger arm's or a historical run's pin);
+  - the test names a kept record that still holds it (a ledger arm's or a
+    historical run's file: one no bumper writes, prose (.md) aside) and so
+    reads that record;
   - the old string is a bare version (a site's value alone, no image name, no
     key) and the test is code (.py, .sh or a #! script): there it is as likely
     the test's own input, as in a version-compare case. In a recorded file (a
@@ -25,6 +27,7 @@ from . import classes
 MASK = "\x00{%d}\x00"
 BARE = re.compile(r"[A-Za-z0-9._+~-]+")
 HEX = re.compile(r"(sha256:)?[0-9a-f]{40,64}")
+SHORT = 12  # hex digits of a cut digest or revision
 
 
 def substitute_text(text, pairs):
@@ -97,9 +100,25 @@ def site_texts(root):
 
 
 def live_pairs(root, pairs):
-    """The pairs whose old string no pin site outside tests/ holds any more."""
+    """The pairs whose old string no pin site outside tests/ holds any more, each
+    digest or revision also cut to its first 12 hex digits."""
     held = site_texts(root)
-    return [(o, n) for o, n in pairs if o and o != n and o not in held]
+    out = []
+    for o, n in pairs:
+        if not o or o == n or o in held:
+            continue
+        out.append((o, n))
+        if HEX.fullmatch(o) and HEX.fullmatch(n):
+            k = len("sha256:") + SHORT if o.startswith("sha256:") else SHORT
+            if o[:k] != n[:k]:
+                out.append((o[:k], n[:k]))
+    return out
+
+
+def kept_record(root, path):
+    """A file outside tests/ that no bumper writes (a ledger arm, a historical run),
+    prose (.md) aside."""
+    return not path.startswith("tests/") and not path.endswith(".md") and not classes.writable(root, path)
 
 
 def substitute(root, pairs, paths=None):
@@ -112,12 +131,12 @@ def substitute(root, pairs, paths=None):
             text = _read(root, p)
             if text is not None:
                 tests[p] = text
-    # the files outside tests/ that still hold each old string some test holds
+    # the kept records that still hold each old string some test holds
     wanted = {o for o, _ in pairs if any(o in t for t in tests.values())}
     holders = {o: [] for o in wanted}
     if wanted:
         for p in _tracked(root):
-            if p.startswith("tests/"):
+            if not kept_record(root, p):
                 continue
             text = _read(root, p)
             if text is None:
