@@ -301,6 +301,8 @@ jobs:
       # fixtures, arm.sh against a local stub server, its records scored by h59.py.
       - run: python3 bench/h59/test_run.py
       - run: python3 bench/h62/test_h62.py
+      # H62r's runner: H62's at the GA tags, with D1 as a check and D3's sibling read.
+      - run: python3 bench/h62r/test_h62r.py
       # H58's runner (amendment R1): h58.py's interlock, placement and clause scorers, and run.sh
       # end to end against stand-ins for k3d-gpu, kubectl, docker and the Hub API.
       - run: python3 bench/h58/test_h58.py
