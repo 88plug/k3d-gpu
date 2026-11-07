@@ -473,6 +473,15 @@ class ReserveTest(unittest.TestCase):
         out = h62r.reserve(GLOBAL + 'nri_reserved_cpu_list: ""\n', ODD)
         self.assertEqual(out, GLOBAL + f'nri_reserved_cpu_list: "{ODD}"\n')
 
+    def test_a_key_line_with_a_comment_is_the_same_key(self):
+        # A live key line may carry a trailing comment (as the role's defaults write it); it is
+        # filled or refused like any other, never followed by a second key of the same name.
+        out = h62r.reserve(GLOBAL + 'nri_reserved_cpu_list: ""   # empty: sized by the profile\n', ODD)
+        self.assertEqual(out.count("nri_reserved_cpu_list:"), 1, out)
+        self.assertIn(f'nri_reserved_cpu_list: "{ODD}"', out)
+        with self.assertRaises(ValueError):
+            h62r.reserve(GLOBAL + 'nri_reserved_cpu_list: "0-3"  # pinned\n', ODD)
+
     def test_refuses_another_value_or_a_bad_cpuset(self):
         with self.assertRaises(ValueError):
             h62r.reserve(GLOBAL + 'nri_reserved_cpu_list: "0-3"\n', ODD)

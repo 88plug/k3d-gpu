@@ -411,19 +411,25 @@ def reserve(text, cpus):
     if not re.fullmatch(r"[0-9]+([,-][0-9]+)*", cpus):          # EAS's own cpuset check
         raise ValueError(f"not a cpuset: {cpus!r}")
     line = f'nri_reserved_cpu_list: "{cpus}"'
-    pat = re.compile(r'^nri_reserved_cpu_list:[ \t]*"?([^"\n]*)"?[ \t]*$', re.M)
-    found = pat.findall(text)
+    key = re.compile(r"^nri_reserved_cpu_list:(.*)$", re.M)
+    found = key.findall(text)
     if len(found) > 1:
         raise ValueError("more than one live nri_reserved_cpu_list line")
     if found:
-        if found[0] == cpus:
+        # The value: double-quoted, single-quoted or bare, then an optional comment.
+        m = re.fullmatch(r"""\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^\s#"']*))\s*(?:#.*)?""", found[0])
+        if not m:
+            raise ValueError(f"nri_reserved_cpu_list line not read: {found[0].strip()!r}")
+        have = next((g for g in m.groups() if g is not None), "")
+        if have == cpus:
             return text
-        if found[0]:
-            raise ValueError(f"nri_reserved_cpu_list is already {found[0]!r}")
-        return pat.sub(line, text)
+        if have:
+            raise ValueError(f"nri_reserved_cpu_list is already {have!r}")
+        return key.sub(lambda _: line, text, count=1)
     sep = "" if text.endswith("\n") or not text else "\n"
-    return (text + sep + "\n# H62r D3's sibling read: the cpuset EAS's 'siblings' profile reserves when its probe\n"
-            "# reads this guest's SMT (EXPERIMENTS.md \"H62r pre-registration\")\n" + line + "\n")
+    return (text + sep + "\n# H62r D3's sibling read: the siblings EAS's probe defines (the higher thread of\n"
+            "# each core), as its 'siblings' profile reserves them on crescent's host\n"
+            "# (EXPERIMENTS.md \"H62r pre-registration\")\n" + line + "\n")
 
 
 def _ready(item):
