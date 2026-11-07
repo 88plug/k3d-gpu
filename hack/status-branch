@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""status-branch: files the automation keeps on one branch of their own (default
+ci-status), written through the GitHub REST API with the job's token.
+
+hack/ci_alarm keeps its alarms there when the repository has Issues disabled, and
+the Freshness workflow its dashboard. The branch has no parent in common with main
+(its first commit is a root commit) and holds only these files; a write made with
+GITHUB_TOKEN starts no workflow.
+
+  hack/status-branch get PATH OUT
+      Print the branch's head commit (`none` when there is no branch yet) and write
+      PATH's content at that commit to OUT (an empty OUT when the file is absent).
+  hack/status-branch put PARENT MESSAGE PATH=FILE...
+      One commit on top of PARENT (`none`: the branch's first commit) setting each
+      PATH to FILE's content, then move the branch to it only if it is still at
+      PARENT. Prints the new commit. Exit 4 when the branch moved (re-read, re-apply,
+      put again); a fast-forward is the only update, so no write is lost.
+  hack/status-branch publish PATH FILE MESSAGE
+      put FILE as PATH on top of whatever the branch holds (get, put, again on exit 4).
+  hack/status-branch url PATH
+      The browser URL of PATH on the branch.
+
+Every gh call is retried after 2, 4 and 8 s while GitHub answers 5xx (or the
+connection fails). Exit 1 on any other failure, 2 on bad usage.
+
+Env: GH_REPO or GITHUB_REPOSITORY (owner/repo; else gh's own repository),
+STATUS_BRANCH (default ci-status), GH_RETRY_DELAY (seconds before the first retry,
+default 2; tests set 0). gh on PATH.
+"""
+
+import base64
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+BRANCH = os.environ.get("STATUS_BRANCH") or "ci-status"
+TRANSIENT = re.compile(r"HTTP 5\d\d|Server Error|Bad Gateway|Service Unavailable|Gateway Timeout|"
+                       r"connection reset|connection refused|i/o timeout|TLS handshake timeout|unexpected EOF", re.I)
+CONFLICT = 4
+
+
+class Fail(Exception):
+    pass
+
+
+def repo():
+    r = os.environ.get("GH_REPO") or os.environ.get("GITHUB_REPOSITORY")
+    if r:
+        return r
+    return gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
+
+
+def gh(*args, body=None, ok_codes=()):
+    """gh ARGS (body: JSON on stdin through --input -). Returns stdout. An HTTP status in
+    ok_codes returns None instead of failing; 5xx and connection errors are retried."""
+    delay = float(os.environ.get("GH_RETRY_DELAY", "2"))
+    argv = ["gh", *args] + (["--input", "-"] if body is not None else [])
+    data = json.dumps(body) if body is not None else None
+    for attempt in range(4):
+        p = subprocess.run(argv, input=data, capture_output=True, text=True)
+        if p.returncode == 0:
+            return p.stdout
+        m = re.search(r"\(HTTP (\d{3})\)|HTTP (\d{3}):", p.stderr)
+        code = int(m.group(1) or m.group(2)) if m else None
+        if code in ok_codes:
+            return None
+        if attempt < 3 and TRANSIENT.search(p.stderr):
+            time.sleep(delay * 2 ** attempt)
+            continue
+        raise Fail("gh %s: exit %d: %s" % (" ".join(args), p.returncode, p.stderr.strip()[-500:]))
+    raise Fail("unreachable")
+
+
+def head(r):
+    out = gh("api", "repos/%s/git/ref/heads/%s" % (r, BRANCH), ok_codes=(404,))
+    if out is None:
+        return None
+    return json.loads(out)["object"]["sha"]
+
+
+def read(r, commit, path):
+    out = gh("api", "repos/%s/contents/%s?ref=%s" % (r, path, commit), ok_codes=(404,))
+    if out is None:
+        return b""
+    doc = json.loads(out)
+    if doc.get("encoding") != "base64":
+        raise Fail("%s at %s: the contents API returned no base64 content" % (path, commit))
+    return base64.b64decode(doc.get("content") or "")
+
+
+def cmd_get(path, out):
+    r = repo()
+    commit = head(r)
+    data = read(r, commit, path) if commit else b""
+    with open(out, "wb") as f:
+        f.write(data)
+    print(commit or "none")
+    return 0
+
+
+def cmd_put(parent, message, pairs):
+    r = repo()
+    files = []
+    for p in pairs:
+        path, sep, src = p.partition("=")
+        if not sep or not path or not src:
+            print("status-branch: want PATH=FILE, got %r" % p, file=sys.stderr)
+            return 2
+        with open(src, encoding="utf-8") as f:
+            files.append({"path": path, "mode": "100644", "type": "blob", "content": f.read()})
+    tree = {"tree": files}
+    if parent != "none":
+        base = json.loads(gh("api", "repos/%s/git/commits/%s" % (r, parent)))
+        tree["base_tree"] = base["tree"]["sha"]
+    t = json.loads(gh("api", "-X", "POST", "repos/%s/git/trees" % r, body=tree))["sha"]
+    c = json.loads(gh("api", "-X", "POST", "repos/%s/git/commits" % r,
+                      body={"message": message, "tree": t, "parents": [] if parent == "none" else [parent]}))["sha"]
+    if parent == "none":
+        done = gh("api", "-X", "POST", "repos/%s/git/refs" % r, body={"ref": "refs/heads/" + BRANCH, "sha": c},
+                  ok_codes=(422,))
+    else:
+        done = gh("api", "-X", "PATCH", "repos/%s/git/refs/heads/%s" % (r, BRANCH), body={"sha": c, "force": False},
+                  ok_codes=(409, 422))
+    if done is None:
+        print("status-branch: %s moved since %s; re-read it" % (BRANCH, parent), file=sys.stderr)
+        return CONFLICT
+    print(c)
+    return 0
+
+
+def cmd_publish(path, src, message):
+    r = repo()
+    for _ in range(5):
+        parent = head(r) or "none"
+        rc = cmd_put(parent, message, ["%s=%s" % (path, src)])
+        if rc != CONFLICT:
+            return rc
+    raise Fail("%s kept moving: 5 attempts to write %s" % (BRANCH, path))
+
+
+def main(argv):
+    try:
+        if len(argv) == 3 and argv[0] == "get":
+            return cmd_get(argv[1], argv[2])
+        if len(argv) >= 4 and argv[0] == "put":
+            return cmd_put(argv[1], argv[2], argv[3:])
+        if len(argv) == 4 and argv[0] == "publish":
+            return cmd_publish(argv[1], argv[2], argv[3])
+        if len(argv) == 2 and argv[0] == "url":
+            print("%s/%s/blob/%s/%s" % (os.environ.get("GITHUB_SERVER_URL") or "https://github.com", repo(), BRANCH,
+                                        argv[1]))
+            return 0
+    except Fail as e:
+        print("status-branch: %s" % e, file=sys.stderr)
+        return 1
+    except (OSError, ValueError, KeyError) as e:
+        print("status-branch: %s" % e, file=sys.stderr)
+        return 1
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

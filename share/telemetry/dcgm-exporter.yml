@@ -1,6 +1,6 @@
 # NVIDIA DCGM exporter: per-GPU utilisation, clocks, power, energy, memory, PCIe, XID
 # Source: https://github.com/NVIDIA/dcgm-exporter (helm chart deployment/ @ tag 4.8.4,
-# image nvcr.io/nvidia/k8s/dcgm-exporter:4.6.1-4.8.4-distroless, DCGM 4.6.1),
+# image nvcr.io/nvidia/k8s/dcgm-exporter:4.7.0-4.9.0-distroless, DCGM 4.6.1),
 # rendered with `helm template dcgm-exporter deployment --namespace k3d-gpu-telemetry
 # --skip-tests` and the values below. Re-render to bump.
 # Runs under the nvidia RuntimeClass (the image sets NVIDIA_VISIBLE_DEVICES=all, so it
@@ -34,11 +34,11 @@ metadata:
   name: dcgm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 automountServiceAccountToken: false
 ---
@@ -49,11 +49,11 @@ metadata:
   name: exporter-metrics-config-map
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 data:
   metrics: |
@@ -177,11 +177,11 @@ metadata:
   name: dcgm-exporter-read-cm
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups: [""]
@@ -196,11 +196,11 @@ metadata:
   name: dcgm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 subjects:
 - kind: ServiceAccount
@@ -232,11 +232,11 @@ metadata:
   name: dcgm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   type: ClusterIP
@@ -272,11 +272,11 @@ metadata:
   name: dcgm-exporter
   namespace: k3d-gpu-telemetry
   labels:
-    helm.sh/chart: dcgm-exporter-4.8.4
+    helm.sh/chart: dcgm-exporter-4.9.0
     app.kubernetes.io/name: dcgm-exporter
     app.kubernetes.io/instance: dcgm-exporter
     app.kubernetes.io/component: dcgm-exporter
-    app.kubernetes.io/version: "4.8.4"
+    app.kubernetes.io/version: "4.9.0"
     app.kubernetes.io/managed-by: Helm
 spec:
   updateStrategy:
@@ -338,7 +338,7 @@ spec:
             - ALL
           runAsNonRoot: false
           runAsUser: 0
-        image: "nvcr.io/nvidia/k8s/dcgm-exporter:4.6.1-4.8.4-distroless@sha256:148b0c025e5f2850256816fa33754fbf4733b7a086697a95613fc0ba3db5b003"
+        image: "nvcr.io/nvidia/k8s/dcgm-exporter:4.7.0-4.9.0-distroless@sha256:2490e1dfb5baaee6765ef2841813af7d978bb459a566c22c326a8fc27c64eea9"
         imagePullPolicy: "IfNotPresent"
         env:
         - name: "DCGM_EXPORTER_KUBERNETES"

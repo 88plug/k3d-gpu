@@ -14,6 +14,11 @@ State lives under $FIX/gh:
   issues.json           [{number, title, state, labels: [{name}]}]
   merge_rc              exit code sequence for `gh pr merge` (last one repeats)
   issue_list_rc         exit code sequence for `gh issue list` (last one repeats)
+  run_list_rc           exit code sequence for `gh run list` (last one repeats; a
+                        failure prints an HTTP 502)
+  has_issues            "false": `gh api repos/o/r` says Issues are disabled, and the
+                        alarms are store/alarms.json on branch ci-status (no file:
+                        no branch); store_rc is the exit code sequence of its reads
 Calls are logged to $FIX/gh/calls; dispatches to $FIX/gh/dispatches, merges to
 $FIX/gh/merges, label additions to $FIX/gh/labels.
 
@@ -21,6 +26,7 @@ A successful merge marks the pull merged and writes the squash commit onto the
 bare origin's main ($FIX/origin.git): main's tree merged with the head's, authored
 by github-actions[bot], committed at $BOT_MERGE_NOW.
 """
+import base64
 import json
 import os
 import shutil
@@ -135,6 +141,20 @@ def api(argv):
     parts = path.split("/")
     # repos/<owner>/<repo>/...
     rest = parts[3:]
+    if not rest and method == "GET":
+        has = not (G / "has_issues").exists() or (G / "has_issues").read_text().strip() != "false"
+        return emit({"full_name": "/".join(parts[1:3]), "has_issues": has, "default_branch": "main"}, jq_expr)
+    if rest[:2] in (["git", "ref"], ["contents"]) or rest[:1] == ["contents"]:
+        if int(pop("store_rc", "0")) != 0:
+            print("gh: Server Error (HTTP 502)", file=sys.stderr)
+            return 1
+        store = G / "store" / "alarms.json"
+        if rest[:4] == ["git", "ref", "heads", "ci-status"] and store.exists():
+            return emit({"ref": "refs/heads/ci-status", "object": {"sha": "5" * 40}}, jq_expr)
+        if rest[:1] == ["contents"] and store.exists() and query == "ref=" + "5" * 40 and rest[1:] == ["alarms.json"]:
+            return emit({"encoding": "base64", "content": base64.b64encode(store.read_bytes()).decode()}, jq_expr)
+        print("gh: Not Found (HTTP 404)", file=sys.stderr)
+        return 1
     if rest[:1] == ["pulls"] and len(rest) == 1:
         q = dict(kv.split("=", 1) for kv in query.split("&") if kv)
         pulls = [p for p in load(G / "pulls.json", [])
@@ -212,6 +232,9 @@ def run_list(argv):
     pos, opts = flags(argv, {"-w", "--workflow", "-c", "--commit", "-b", "--branch", "-e", "--event",
                              "-s", "--status", "-u", "--user", "--created", "-L", "--limit",
                              "--json", "-q", "--jq"})
+    if int(pop("run_list_rc", "0")) != 0:
+        print("HTTP 502: Server Error (https://api.github.com/repos/o/r/actions/runs)", file=sys.stderr)
+        return 1
     runs = load(G / "runs.json", [])
     wf = one(opts, "-w", "--workflow")
     sha = one(opts, "-c", "--commit")

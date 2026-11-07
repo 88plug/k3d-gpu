@@ -8,9 +8,11 @@
 # both `gh pr view --json statusCheckRollup` and `gh pr checks --json bucket`
 # from the same rollup (bucket mapping as in cli/cli pkg/cmd/pr/checks/aggregate.go).
 # `gh run list -e/-b` filter runs that carry event/headBranch (bare runs match
-# any). Alarms: `gh issue list` answers the next line of alarms_seq (default
-# none; issues_off makes it fail), and the PR's changed files are pr_paths
-# (pr_paths_fail makes that fail).
+# any). Alarms (read through hack/ci_alarm): `gh issue list` answers the next line
+# of alarms_seq (default none; alarms_fail makes it fail with an HTTP 502);
+# issues_off makes `gh api repos/o/r` say has_issues=false, and then store_alarms,
+# when present, is alarms.json on branch ci-status. The PR's changed files are
+# pr_paths (pr_paths_fail makes that fail).
 # Cases 18-19 and 24-25 run the gate with real git against a bare origin (gh and
 # sleep still stubbed): the head the stub gh reports is the origin's feat ref.
 # The ci_status and rules_stale cases source hack/gate_lib.sh directly.
@@ -18,6 +20,9 @@
 # Usage: tests/gate_merge_test.sh
 
 set -uo pipefail
+# The fake gh below is repository o/r (its `gh repo view`). hack/ci_alarm takes
+# GH_REPO, then GITHUB_REPOSITORY, which every Actions job sets to the real one.
+unset GH_REPO GITHUB_REPOSITORY
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 GATE=${GATE:-${ROOT}/hack/gate_merge.sh}
@@ -82,8 +87,19 @@ case "$1 $2" in
   "issue list")
     # open ci-alarm issues: the next line of alarms_seq (one JSON array per call), default none
     [ -f "$F/issues_off" ] && { echo "the 'o/r' repository has disabled issues" >&2; exit 1; }
+    [ -f "$F/alarms_fail" ] && { echo "HTTP 502: Bad Gateway (https://api.github.com/graphql)" >&2; exit 1; }
     if [ -f "$F/alarms_seq" ]; then pop alarms_seq; else echo '[]'; fi
     exit 0;;
+  "repo view") echo o/r; exit 0;;
+  "api repos/o/r")
+    if [ -f "$F/issues_off" ]; then echo '{"has_issues": false, "default_branch": "main"}'
+    else echo '{"has_issues": true, "default_branch": "main"}'; fi
+    exit 0;;
+  "api repos/o/r/git/ref/heads/ci-status")
+    [ -f "$F/store_alarms" ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+    echo '{"object": {"sha": "5555555555555555555555555555555555555555"}}'; exit 0;;
+  "api repos/o/r/contents/alarms.json?ref=5555555555555555555555555555555555555555")
+    printf '{"encoding": "base64", "content": "%s"}\n' "$(base64 -w0 "$F/store_alarms")"; exit 0;;
   "api --paginate")
     case $* in */pulls/*/files*)
       [ -f "$F/pr_paths_fail" ] && { echo "HTTP 502: Bad Gateway" >&2; exit 1; }
@@ -599,10 +615,29 @@ else fail "solo_gate missing lib: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"
 
 # 29. issues cannot be listed (the repository has them disabled): the gate says so,
 #     with gh's reason, and goes on.
+fixture alarm_list_fails "[$SUCCESS]" "$CI_OK" abc123; touch "$FIX/alarms_fail"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -q 'WARNING: could not list the open ci-alarm issues.*HTTP 502' <<<"$OUT"; then
+  ok "alarm_list_fails: warned with the reason, merged"
+else fail "alarm_list_fails: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+
+# 29. Issues disabled: the alarms are on branch ci-status. None there: merged, no warning.
+#     An un-acked one: refused (exit 4) with the page and `hack/ci_alarm ack KEY`; acked: merged.
 fixture alarm_issues_off "[$SUCCESS]" "$CI_OK" abc123; touch "$FIX/issues_off"; run_gate
-if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -q 'WARNING: could not list the open ci-alarm issues.*disabled issues' <<<"$OUT"; then
-  ok "alarm_issues_off: warned with the reason, merged"
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && ! grep -q 'WARNING' <<<"$OUT"; then
+  ok "alarm_issues_off: no alarm on ci-status, merged without a warning"
 else fail "alarm_issues_off: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+STORE_ALARM='{"ci-main": {"title": "ci.yml on main failure", "body": "red", "opened_at": "2026-10-29T13:00:00Z", "updated_at": "2026-10-29T13:00:00Z", "notified_at": "2026-10-29T13:00:00Z", "acked": false}}'
+fixture alarm_store_unacked "[$SUCCESS]" "$CI_OK" abc123; touch "$FIX/issues_off"; echo "$STORE_ALARM" > "$FIX/store_alarms"; run_gate
+if [ "$RC" -eq 4 ] && [ "$(merges)" -eq 0 ] \
+   && grep -qF 'open ci-alarm [ci-alarm] ci-main: ci.yml on main failure https://github.com/o/r/blob/ci-status/ALARMS.md (NOT acked)' <<<"$OUT" \
+   && grep -qF 'then ack it: hack/ci_alarm ack ci-main' <<<"$OUT"; then
+  ok "alarm_store_unacked: refused with exit 4, the page and the ack command printed"
+else fail "alarm_store_unacked: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
+fixture alarm_store_acked "[$SUCCESS]" "$CI_OK" abc123; touch "$FIX/issues_off"
+jq -c '."ci-main".acked = true' <<<"$STORE_ALARM" > "$FIX/store_alarms"; run_gate
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 1 ] && grep -q 'ci-main.*(acked)' <<<"$OUT"; then
+  ok "alarm_store_acked: merged"
+else fail "alarm_store_acked: rc=$RC merges=$(merges) out=$(tr '\n' ';' <<<"$OUT")"; fi
 
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

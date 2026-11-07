@@ -343,12 +343,12 @@
       "tag": "server-vulkan-b11960"
     },
     {
-      "digest": "sha256:9b5424634b74f0c6905109fc46f90a7f569ab7bde1211d3ac5f9c32a17895e60",
+      "digest": "sha256:d39c531a0032a7c021e8f0da03b24c6e1e469aab8cf2babc78be68a300d7ec5f",
       "name": "ghcr.io/home-operations/drm-exporter",
       "sources": [
         "share/telemetry/intel-gpu-exporter.yml"
       ],
-      "tag": "0.3.4"
+      "tag": "0.3.6"
     },
     {
       "digest": "sha256:1479956240397c7207c3d38c0d296bd591cd66f26d432452f9a2d75336843776",
@@ -383,12 +383,12 @@
       "tag": "v0.20.1"
     },
     {
-      "digest": "sha256:148b0c025e5f2850256816fa33754fbf4733b7a086697a95613fc0ba3db5b003",
+      "digest": "sha256:2490e1dfb5baaee6765ef2841813af7d978bb459a566c22c326a8fc27c64eea9",
       "name": "nvcr.io/nvidia/k8s/dcgm-exporter",
       "sources": [
         "share/telemetry/dcgm-exporter.yml"
       ],
-      "tag": "4.6.1-4.8.4-distroless"
+      "tag": "4.7.0-4.9.0-distroless"
     },
     {
       "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
@@ -399,12 +399,12 @@
       "tag": "v1.12.1"
     },
     {
-      "digest": "sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+      "digest": "sha256:9332054523223e2ddc18d8101799d54a4a8d823b030c53216f063a6c117773cd",
       "name": "quay.io/prometheus/prometheus",
       "sources": [
         "share/telemetry/prometheus.yml"
       ],
-      "tag": "v3.15.1"
+      "tag": "v3.16.0"
     },
     {
       "digest": "sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731",

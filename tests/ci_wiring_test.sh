@@ -81,11 +81,11 @@ else
     fail "freshness.yml has no 'git status --porcelain -- .github' check before the PR"
 fi
 # A freshness.yml job that applies a patch then runs hack/autobump-branch-reset and
-# hack/bot-ci-dispatch (and through it hack/pins) from that tree, with a write token:
+# hack/bot-ci-dispatch (and through it hack/gh_retry.sh and hack/pins) from that tree, with a write token:
 # every step that applies a patch refuses one that changes those scripts.
 if python3 - "${FR}" <<'PY'
 import sys, yaml
-guard = "git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)"
+guard = "git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/gh_retry.sh hack/pins hack/pinlib)"
 bad = []
 for jid, job in (yaml.safe_load(open(sys.argv[1])).get("jobs") or {}).items():
     for s in job.get("steps") or []:
@@ -284,28 +284,39 @@ PY
 then ok "bot-sweep.yml: 'Bot sweep', cron 13 * * * *, group bot-sweep, job ci-fill runs hack/bot-ci-dispatch"
 else fail "bot-sweep.yml is missing or its name, schedule, concurrency or ci-fill job is wrong"; fi
 
-# ci.yml's last job, alarms: never fails, reads issues and actions only, and warns
-# on every open ci-alarm issue and on a missing or stale Watchdog. Its script runs
-# against a fake gh.
+# ci.yml's last job, alarms: never fails, reads contents, issues and actions only,
+# checks out the tree (persist-credentials false) for hack/ci_alarm, and warns on
+# every open alarm (an issue, or on branch ci-status with Issues disabled) and on a
+# missing or stale Watchdog. Its script runs against a fake gh.
 if python3 - "${WF}/ci.yml" "${T}/alarms.sh" <<'PY'
 import sys, yaml
 jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
 job = jobs.get("alarms") or {}
+steps = job.get("steps") or []
+runs = [st["run"] for st in steps if "run" in st]
 ok = (list(jobs)[-1] == "alarms" and job.get("continue-on-error") is True
       and isinstance(job.get("timeout-minutes"), int)
-      and job.get("permissions") == {"issues": "read", "actions": "read"}
-      and len(job.get("steps") or []) == 1)
+      and job.get("permissions") == {"contents": "read", "issues": "read", "actions": "read"}
+      and len(steps) == 2 and str(steps[0].get("uses", "")).startswith("actions/checkout@")
+      and (steps[0].get("with") or {}).get("persist-credentials") is False
+      and len(runs) == 1 and "hack/ci_alarm list --json" in runs[0])
 if ok:
-    open(sys.argv[2], "w").write(job["steps"][0]["run"])
+    open(sys.argv[2], "w").write(runs[0])
 sys.exit(0 if ok else 1)
 PY
-then ok "ci.yml ends with job alarms: continue-on-error, timeout, issues+actions read"
-else fail "ci.yml's last job is not alarms with continue-on-error, timeout-minutes, issues/actions read and one step"; fi
+then ok "ci.yml ends with job alarms: continue-on-error, timeout, contents+issues+actions read, hack/ci_alarm"
+else fail "ci.yml's last job is not alarms with continue-on-error, timeout-minutes, read permissions, a checkout and hack/ci_alarm"; fi
 mkdir -p "${T}/abin"
 cat > "${T}/abin/gh" <<'STUB'
 #!/usr/bin/env bash
 A=$AFIX
 case "$1 $2" in
+  "api repos/o/r")
+    if [ -f "$A/store.json" ]; then echo '{"has_issues": false, "default_branch": "main"}'
+    else echo '{"has_issues": true, "default_branch": "main"}'; fi; exit 0;;
+  "api repos/o/r/git/ref/heads/ci-status") echo '{"object": {"sha": "5555"}}'; exit 0;;
+  "api repos/o/r/contents/alarms.json?ref=5555")
+    printf '{"encoding": "base64", "content": "%s"}\n' "$(base64 -w0 "$A/store.json")"; exit 0;;
   "issue list") f=issues;; "workflow list") f=workflows;; "run list") f=runs;; *) exit 0;;
 esac
 [ -f "$A/$f.fail" ] && { echo "HTTP 502" >&2; exit 1; }
@@ -322,7 +333,8 @@ alarm_case() {
     AFIX="${T}/alarm-$1"; export AFIX; mkdir -p "$AFIX"
     echo "$2" > "$AFIX/issues.json"; echo "$3" > "$AFIX/workflows.json"; echo "$4" > "$AFIX/runs.json"
     local f; for f in "${@:5}"; do touch "$AFIX/$f.fail"; done
-    AOUT=$(PATH="${T}/abin:$PATH" bash --noprofile --norc -eo pipefail "${T}/alarms.sh" 2>&1); ARC=$?
+    AOUT=$(cd "${ROOT}" && PATH="${T}/abin:$PATH" GH_REPO=o/r GH_RETRY_DELAY=0 \
+           bash --noprofile --norc -eo pipefail "${T}/alarms.sh" 2>&1); ARC=$?
 }
 alarm_case two "[$ALARM7,$ALARM8]" "$WATCHDOG" "[{\"updatedAt\":\"$(ago 1)\"}]"
 if [ "$ARC" -eq 0 ] && [ "$(grep -c '^::warning::' <<<"$AOUT")" -eq 2 ] \
@@ -347,6 +359,15 @@ else fail "alarms disabled: rc=$ARC out=$(tr '\n' ';' <<<"$AOUT")"; fi
 alarm_case gh_down '[]' '[]' '[]' issues workflows runs
 if [ "$ARC" -eq 0 ] && [ "$(grep -c '^::warning::' <<<"$AOUT")" -eq 2 ]; then ok "alarms: gh failing warns and still exits 0"
 else fail "alarms gh_down: rc=$ARC out=$(tr '\n' ';' <<<"$AOUT")"; fi
+mkdir -p "${T}/alarm-store"
+echo '{"red:freshness.yml": {"title": "scheduled run failure", "body": "b", "opened_at": "2026-11-06T19:51:24Z", "updated_at": "2026-11-06T19:51:24Z", "notified_at": "2026-11-06T19:51:24Z", "acked": false}}' \
+    > "${T}/alarm-store/store.json"
+alarm_case store '[]' "$WATCHDOG" "[{\"updatedAt\":\"$(ago 1)\"}]"
+if [ "$ARC" -eq 0 ] && [ "$(grep -c '^::warning::' <<<"$AOUT")" -eq 1 ] \
+   && grep '^::warning::open ci-alarm on ci-status: \[ci-alarm\] red:freshness.yml: scheduled run failure' <<<"$AOUT" \
+      | grep -F 'https://github.com/o/r/blob/ci-status/ALARMS.md' | grep -qF 'hack/ci_alarm ack red:freshness.yml'; then
+    ok "alarms: Issues disabled, the ci-status alarm warns with its page and ack command"
+else fail "alarms store: rc=$ARC out=$(tr '\n' ';' <<<"$AOUT")"; fi
 
 # bot-sweep.yml job merge runs hack/bot-merge after ci-fill. Its token can merge,
 # so it checks out main only (never a PR's code), and the script never checks out,

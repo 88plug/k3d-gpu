@@ -12,9 +12,11 @@ name: Freshness
 #           hack/autobump-branch-reset, create-pull-request, hack/bot-ci-dispatch
 #           (ci.yml, and canary.yml when it exists). A known-issue fix whose entry
 #           has workarounds also opens autobump/ki-<id> on top: the removal, for review
-#   report  the issue 'Freshness dashboard', edited in place, and the lag tripwire:
-#           an ours pin behind for over 72 h (auto-eligible) or 7 days, with no open
-#           PR, opens ci-alarm blind-spot:<pin>
+#   report  the dashboard in the job summary and in the issue 'Freshness dashboard',
+#           edited in place (with Issues disabled: freshness-dashboard.md on branch
+#           ci-status, hack/status-branch), and the lag tripwire: an ours pin behind
+#           for over 72 h (auto-eligible) or 7 days, with no open PR, opens ci-alarm
+#           blind-spot:<pin> (hack/ci_alarm: an issue, or an alarm on ci-status)
 #   propose-amendment (a human's dispatch only): a PENDING ledger row's runner image
 #           pins under a dated amendment stub, on autobump/amend-<row> (never bot-merged)
 # Bot-sweep's known-issues job dispatches `-f group=<g> -f reason=known-issue:<id>`
@@ -189,7 +191,7 @@ jobs:
             git apply --3way --index "$out/bump.patch"
             [ -z "$(git status --porcelain -- .github)" ] || { echo "::error::the bump patch touches .github/"; exit 1; }
             # the scripts the next steps run with this job's write token come from main
-            [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+            [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/gh_retry.sh hack/pins hack/pinlib)" ] \
               || { echo "::error::the bump patch changes a script this job runs next"; exit 1; }
           fi
           {
@@ -242,7 +244,7 @@ jobs:
           git fetch -q origin "autobump/${GROUP}"
           git checkout -q -B "autobump/${GROUP}" FETCH_HEAD
           git apply --index "$RUNNER_TEMP/out/followup.patch"
-          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/gh_retry.sh hack/pins hack/pinlib)" ] \
             || { echo "::error::the workaround removal patch changes a script this job runs next"; exit 1; }
 
       - name: Delete a removal branch whose workflows differ from main's
@@ -279,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
-      contents: read
+      contents: write # the ci-status branch and commit comments, when Issues are disabled
       issues: write
       pull-requests: read
     env:
@@ -313,6 +315,14 @@ jobs:
           hack/ci_alarm list > "$t/alarms.txt" || echo "(hack/ci_alarm list failed)" > "$t/alarms.txt"
           hack/pins report --outdated "$t/outdated-all.json" --prs "$t/prs.json" --alarms "$t/alarms.txt" \
             --lag-alarms "$t/lag.json" > "$t/dashboard.md"
+          cat "$t/dashboard.md" >> "$GITHUB_STEP_SUMMARY"
+          # shellcheck source=hack/gh_retry.sh
+          . hack/gh_retry.sh
+          if [ "$(gh_retry api "repos/$GH_REPO" --jq .has_issues)" = false ]; then
+            hack/status-branch publish freshness-dashboard.md "$t/dashboard.md" "Freshness dashboard, run $GITHUB_RUN_ID"
+            echo "::notice title=Freshness dashboard::$(hack/status-branch url freshness-dashboard.md) (Issues are disabled here)"
+            exit 0
+          fi
           # an issue body holds at most 65536 characters
           if [ "$(wc -c < "$t/dashboard.md")" -gt 60000 ]; then
             head -c 60000 "$t/dashboard.md" > "$t/cut.md"
@@ -409,7 +419,7 @@ jobs:
         working-directory: pr
         run: |
           git apply --index "$RUNNER_TEMP/amend.patch"
-          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/pins hack/pinlib)" ] \
+          [ -z "$(git status --porcelain -- 'hack/autobump-*' 'hack/bot-*' hack/gh_retry.sh hack/pins hack/pinlib)" ] \
             || { echo "::error::the amendment patch changes a script this job runs next"; exit 1; }
 
       - name: Delete an amendment branch whose workflows differ from main's
