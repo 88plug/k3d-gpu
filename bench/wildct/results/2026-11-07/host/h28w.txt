@@ -1,0 +1,434 @@
+# wildct around the H28w holds, 2026-11-07 (UTC): H28w-prep (hold 5), H28w (hold 6, failed: wildct amendment
+# R9), H28w-prep-r2 (hold 7) and H28w-r2 (hold 8). Read-only reads as andrew, except the firewall dumps
+# (iptables-save, ip6tables-save and nft list ruleset), as root. The production snapshot: running containers,
+# published-port HTTP codes from the host, and each running container's StartedAt and RestartCount.
+
+== state before the holds (06:32Z), with the archive of H25w and H34w still shipped
+## date 2026-11-07T06:32:37+00:00
+## boot 2026-10-29 05:11:09 kernel 6.6.156-2-MANJARO
+## loadavg 0.44 0.66 1.92 1/3683 13616
+/dev/nvme0n1p2             3667G 3274G      207G      95% /
+MemAvailable:   120072636 kB
+## repo ce4ff16c47ee447664abd6ddead869dd1bc80ce8 -> repo-ce4ff16c47ee
+## runs/IMAGE cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+## installed VERSION="0.1.89"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+
+clusters rc=0
+ours grep rc=1 (1 = none)
+lock-free
+inner-free
+hold procs rc=1 (1 = none)
+## h28-model images
+img rc=0
+## runs
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/runs/H28w*': No such file or directory
+/home/andrew/k3dgpu-bench-wildct/runs/H34w
+/home/andrew/k3dgpu-bench-wildct/runs/H34w.out
+== H34w waiting for the lock 2026-11-07T05:54:52Z
+== H34w lock taken 2026-11-07T05:54:52Z
+== H34w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h34w 2026-11-07T05:54:53Z
+== H34w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T06:10:05Z
+## modules
+loaded 18 of 18; 224 modules loaded in all
+modprobe=[]
+
+== the row's commands and images, read before H28w-prep (07:37Z) from the shipped archive of fd822b33 (amendment R8)
+## date 2026-11-07T07:37:26+00:00
+## repo fd822b337155f102b9076e2ee79fe133a67e3b7b -> repo-fd822b337155
+## row print h28w-prep
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+LEVELS=typical
+PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+bash /home/andrew/k3dgpu-bench-wildct/repo/bench/zero-copy-models/probe.sh prep
+## row check h28w-prep
+check rc=0
+## row print h28w
+WORK=/home/andrew/k3dgpu-bench-wildct/runs/H28w/out
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+CLUSTER=k3dgpu-w-h28
+LEVELS=typical
+HOLD=1440
+LOCK=/home/andrew/k3dgpu-bench-wildct/inner.lock
+NODE_CPUS=0-15
+LOAD_CPUS=20-23
+K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1% --disable=intel-gpu-plugin --disable=intel-gpu-dra --node-label=nvidia.com/gpu.present=false
+PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+bash /home/andrew/k3dgpu-bench-wildct/repo/bench/zero-copy-models/probe.sh run
+## row check h28w
+check rc=0
+## probe.sh create-args (H28w's environment)
+--k3s-arg --kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1%@server:* --k3s-arg --disable=intel-gpu-plugin@server:* --k3s-arg --disable=intel-gpu-dra@server:* --k3s-arg --node-label=nvidia.com/gpu.present=false@server:*
+## load.py cpus (H28w's environment)
+20-23
+## launcher vs release
+LAUNCHER-MATCH
+share diff done
+## node image
+cryptoandcoffee/k3d-gpu@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 sha256:5811390ea98da96ebe01a3338291d4f462bb8c16e0063c99939944190547b8c8
+## pod image (PYIMG)
+sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569 2026-10-06T02:05:24.190948597Z python@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+## RAPL reader image
+43:RAPL_IMAGE=python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb  # probe.sh's PYIMG; energy.sh's reader needs bash
+## stress-ng image
+sha256:eb124d5207cd1e12fc4a1d9c79e8f47172c5aa39ecfa79d9d9edd630d3aa5aa2
+stress-ng inspect rc=0
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+## cpu model
+model name	: 13th Gen Intel(R) Core(TM) i7-13700
+## free cpus
+16-23
+0-15
+## RAPL
+energy_uj as andrew rc=1 (expected non-zero: root-only)
+sudo -n rc=1 (expected non-zero: no password kept)
+## throttle files: 24
+## swap
+SwapTotal:      402653176 kB
+SwapFree:       402653176 kB
+## docker root
+/var/lib/docker overlay2 29.7.2
+## h28-model images
+img rc=0
+## docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          497       42        577.9GB   208.9GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1434      0         106.2GB   8.69GB
+df rc=0
+## k3dgpu-f clusters (probe.sh waits on them)
+[]
+## load/disk/mem
+1.81 0.79 0.57 5/3737 58705
+/dev/nvme0n1p2             3667G 3274G      207G      95% /
+MemAvailable:   119044884 kB
+
+== the same reads before H28w-prep-r2 (09:05Z): same archive, after amendment R9 merged (e1e932d8)
+## date 2026-11-07T09:05:21+00:00
+## repo fd822b337155f102b9076e2ee79fe133a67e3b7b -> repo-fd822b337155
+## row print h28w-prep
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+LEVELS=typical
+PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+bash /home/andrew/k3dgpu-bench-wildct/repo/bench/zero-copy-models/probe.sh prep
+## row check h28w-prep
+check rc=0
+## row print h28w
+WORK=/home/andrew/k3dgpu-bench-wildct/runs/H28w/out
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+CLUSTER=k3dgpu-w-h28
+LEVELS=typical
+HOLD=1440
+LOCK=/home/andrew/k3dgpu-bench-wildct/inner.lock
+NODE_CPUS=0-15
+LOAD_CPUS=20-23
+K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1% --disable=intel-gpu-plugin --disable=intel-gpu-dra --node-label=nvidia.com/gpu.present=false
+PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+bash /home/andrew/k3dgpu-bench-wildct/repo/bench/zero-copy-models/probe.sh run
+## row check h28w
+check rc=0
+## probe.sh create-args (H28w's environment)
+--k3s-arg --kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1%@server:* --k3s-arg --disable=intel-gpu-plugin@server:* --k3s-arg --disable=intel-gpu-dra@server:* --k3s-arg --node-label=nvidia.com/gpu.present=false@server:*
+## load.py cpus (H28w's environment)
+20-23
+## launcher vs release
+LAUNCHER-MATCH
+share diff done
+## node image
+cryptoandcoffee/k3d-gpu@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 sha256:5811390ea98da96ebe01a3338291d4f462bb8c16e0063c99939944190547b8c8
+## pod image (PYIMG)
+sha256:ce3ff9524414289fc922d9d5dc1de87abc77a39ff2ff5007435839f2af1d7569 2026-10-06T02:05:24.190948597Z python@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f
+## RAPL reader image
+43:RAPL_IMAGE=python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb  # probe.sh's PYIMG; energy.sh's reader needs bash
+## stress-ng image
+sha256:eb124d5207cd1e12fc4a1d9c79e8f47172c5aa39ecfa79d9d9edd630d3aa5aa2
+stress-ng inspect rc=0
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+## cpu model
+model name	: 13th Gen Intel(R) Core(TM) i7-13700
+## free cpus
+16-23
+0-15
+## RAPL
+energy_uj as andrew rc=1 (expected non-zero: root-only)
+sudo -n rc=1 (expected non-zero: no password kept)
+## throttle files: 24
+## swap
+SwapTotal:      402653176 kB
+SwapFree:       402653176 kB
+## docker root
+/var/lib/docker overlay2 29.7.2
+## h28-model images
+img rc=0
+## docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          498       42        577.9GB   209GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1444      0         114.8GB   17.28GB
+df rc=0
+## k3dgpu-f clusters (probe.sh waits on them)
+[]
+## load/disk/mem
+1.46 0.67 0.52 3/3707 12104
+/dev/nvme0n1p2             3667G 3282G      199G      95% /
+MemAvailable:   119141292 kB
+
+== production snapshot, first reading (06:46Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== production snapshot, before H28w-prep (07:37Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== production snapshot, before H28w (07:39Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== production snapshot, after H28w (07:46Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== production snapshot, before H28w-prep-r2 (09:05Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== production snapshot, before H28w-r2 (09:07Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== production snapshot, after H28w-r2 (09:12Z)
+identical to the first reading
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules, counters stripped: identical to the first
+ip6tables-save rules, counters stripped: identical to the first
+nft list ruleset, counters stripped: identical to the first
+
+== after-hold checks (RESUME.md step 6): after-prep
+0
+== H28w-prep lock taken 2026-11-07T07:37:52Z
+== H28w-prep start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T07:37:52Z
+== H28w-prep rc=0; clusters deleted: none; now: ; / 199 GB available 2026-11-07T07:38:49Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3282G      199G      95% /
+lock-free
+inner-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)
+-- h28-model images
+h28-model:r6 ada385620d16 1.07GB
+h28-model:r5 89edad0fde0f 1.07GB
+h28-model:r4 0b5dc4aaf382 1.07GB
+h28-model:r3 2cf4c41cb35a 1.07GB
+h28-model:r2 d4b3f7bece95 1.07GB
+h28-model:r1 bcee2cd41a6e 1.07GB
+h28-model:r0 a8e79d31a59b 1.07GB
+img rc=0
+-- docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          504       42        585.4GB   216.4GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1444      0         114.8GB   9.764GB
+df rc=0
+
+== after-hold checks (RESUME.md step 6): after-run1
+143
+== H28w lock taken 2026-11-07T07:39:38Z
+== H28w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T07:39:38Z
+== H28w rc=143; clusters deleted: k3dgpu-w-h28; now: ; / 199 GB available 2026-11-07T07:42:30Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3282G      199G      95% /
+lock-free
+inner-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)
+-- h28-model images
+img rc=0
+-- docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          498       42        577.9GB   209GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1444      0         114.8GB   17.28GB
+df rc=0
+
+== after-hold checks (RESUME.md step 6): after-prep2
+0
+== H28w-prep-r2 lock taken 2026-11-07T09:05:37Z
+== H28w-prep-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T09:05:37Z
+== H28w-prep-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:06:34Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)
+-- h28-model images
+h28-model:r6 2fd003d64be7 1.07GB
+h28-model:r5 a704525b6bce 1.07GB
+h28-model:r4 0572d4ade5d2 1.07GB
+h28-model:r3 643aac464b86 1.07GB
+h28-model:r2 4f2ccbcf87db 1.07GB
+h28-model:r1 79c32adcc2fe 1.07GB
+h28-model:r0 057feb2cb064 1.07GB
+img rc=0
+-- docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          505       42        585.5GB   216.5GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1454      0         123.4GB   18.35GB
+df rc=0
+
+== after-hold checks (RESUME.md step 6): after-run2
+0
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+== H28w-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:11:42Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)
+-- h28-model images
+img rc=0
+-- docker system df
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          498       42        577.9GB   209GB (36%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1454      0         123.4GB   25.87GB
+df rc=0
+
+== launch of H28w-prep-r2 and H28w-r2 (amendment R9: hold.sh in a user-manager scope, outside the ssh session)
+launched H28w-prep-r2
+pid 13075 cgroup 0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-rfd4dca6ad12b4a68b5d03b7a48b98db5.scope
+== H28w-prep-r2 waiting for the lock 2026-11-07T09:05:37Z
+== H28w-prep-r2 lock taken 2026-11-07T09:05:37Z
+== H28w-prep-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T09:05:37Z
+launched H28w-r2
+gpuread started
+pid 23787 cgroup 0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-r82e4abf95cd348ad8d5369374f6bdda2.scope
+== H28w-r2 waiting for the lock 2026-11-07T09:07:05Z
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+
+== host state after the holds (09:14Z)
+## date 2026-11-07T09:14:53+00:00
+## boot 2026-10-29 05:11:09 kernel 6.6.156-2-MANJARO
+## loadavg 0.65 2.10 1.59 1/3785 46465
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119001468 kB
+## repo fd822b337155f102b9076e2ee79fe133a67e3b7b -> repo-fd822b337155
+## runs/IMAGE cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+## installed VERSION="0.1.89"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+
+clusters rc=0
+ours grep rc=1 (1 = none)
+lock-free
+inner-free
+hold procs rc=1 (1 = none)
+## h28-model images
+img rc=0
+## runs
+/home/andrew/k3dgpu-bench-wildct/runs/H28w
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-gpuread
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-prep
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-prep-r2
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-prep-r2.out
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-prep.out
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-r2
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-r2-gpuread
+/home/andrew/k3dgpu-bench-wildct/runs/H28w-r2.out
+/home/andrew/k3dgpu-bench-wildct/runs/H28w.out
+/home/andrew/k3dgpu-bench-wildct/runs/H34w
+/home/andrew/k3dgpu-bench-wildct/runs/H34w.out
+== H28w-r2 waiting for the lock 2026-11-07T09:07:05Z
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+== H28w-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:11:42Z
+## modules
+loaded 18 of 18; 224 modules loaded in all
+modprobe=[]
