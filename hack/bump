@@ -12,9 +12,11 @@
    pin is moved by its group's hook and checked after it).
 3. Hooks, in the group's order: lock (images.lock), readme-history, render-latest,
    ppa-write, convert-pins, ledger-rules, constraints, docs-lock, flake-update,
-   repin (the digests group); ledger-rules also runs whenever console/ changed.
+   repin (the digests group), hf-meta (each moved Hugging Face repo's record in
+   the saved metadata bundles, tests/fixtures/hf, read again at its new revision);
+   ledger-rules also runs whenever console/ changed.
 4. hack/substitute-goldens: each exact old pin string becomes its new one in
-   tests/** only.
+   tests/** only (hack/pinlib/goldens.py says which strings a test keeps).
 5. The group's tests (skipped by --dry-run and --no-tests).
 6. The policy verdict (hack/pins policy) of the resulting diff, and a PR body.
 
@@ -47,10 +49,10 @@ import tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from pinlib import goldens, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
+from pinlib import goldens, http, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
 
 HOOKS = ("lock", "readme-history", "render-latest", "ppa-write", "convert-pins", "ledger-rules", "constraints",
-         "docs-lock", "flake-update", "repin")
+         "docs-lock", "flake-update", "repin", "hf-meta")
 
 
 class BumpError(Exception):
@@ -296,10 +298,61 @@ def hook_repin(root, ctx):
     ctx["touched"].update(path for path, *_ in changes)
 
 
+HF_FIXTURES = "tests/fixtures/hf"
+
+
+def _hf_get(url, rng=None):
+    """console/model_opt.py's get (bytes, None on 401 or 404) through pinlib.http, so
+    PINLIB_FIXTURES serves it in tests."""
+    try:
+        return http.request(url, {"Range": "bytes=%d-%d" % rng} if rng else None).body
+    except http.HTTPError as e:
+        if e.status in (401, 404):
+            return None
+        raise BumpError("hf-meta: %s" % e) from None
+
+
+def hook_hf_meta(root, ctx):
+    """Each saved metadata bundle (tests/fixtures/hf) that records a moved Hugging Face
+    repo at its old revision gets that repo's record as Hugging Face serves it at the
+    new one, read by console/model_opt.py's own repo_record; the other records stay."""
+    moved = {p["source"]["model"]: (old, new) for p, old, new in ctx["moves"]
+             if p.get("source", {}).get("kind") == "hf" and old and new and old != new}
+    d = os.path.join(root, HF_FIXTURES)
+    if not moved or not os.path.isdir(d):
+        return
+    keep, sys.dont_write_bytecode = sys.dont_write_bytecode, True  # no __pycache__ in the bumped tree
+    try:
+        mo = oci.load_path("model_opt_bump", os.path.join(root, "console", "model_opt.py"))
+    finally:
+        sys.dont_write_bytecode = keep
+    for name in sorted(os.listdir(d)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(d, name)
+        with open(path, encoding="utf-8") as f:
+            bundle = json.load(f)
+        repos = bundle.get("repos") or {}
+        hit = False
+        for rid, (old, new) in sorted(moved.items()):
+            if (repos.get(rid) or {}).get("sha") != old:
+                continue
+            rec = mo.repo_record(_hf_get, rid, new, target=rid in (bundle.get("requested"), bundle.get("target")))
+            if rec is None or rec.get("sha") != new:
+                raise BumpError("hf-meta: Hugging Face has no %s at %s" % (rid, new))
+            repos[rid], hit = rec, True
+            ctx["notes"].append("hf-meta: %s/%s %s %s -> %s" % (HF_FIXTURES, name, rid, old[:8], new[:8]))
+        if hit:
+            with open(path + ".tmp", "w", encoding="utf-8") as f:
+                f.write(json.dumps(bundle, indent=1, sort_keys=True) + "\n")
+            os.replace(path + ".tmp", path)
+            ctx["touched"].add("%s/%s" % (HF_FIXTURES, name))
+
+
 HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,
             "ppa-write": hook_ppa_write, "convert-pins": hook_convert_pins, "ledger-rules": hook_ledger_rules,
             "constraints": hook_constraints, "docs-lock": hook_docs_lock, "flake-update": hook_flake_update,
-            "repin": hook_repin}
+            "repin": hook_repin, "hf-meta": hook_hf_meta}
 
 
 # ---- known issues -------------------------------------------------------------------
@@ -509,7 +562,8 @@ def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True,
             continue
         edits += edits_for(p, spans, cur, r)
     pairs = apply_edits(root, tree, edits)
-    ctx = {"touched": {s.file for s, _ in edits}, "edits": edits, "pins": [m[0] for m in moves], "notes": notes}
+    ctx = {"touched": {s.file for s, _ in edits}, "edits": edits, "pins": [m[0] for m in moves], "notes": notes,
+           "moves": [(p, cur.get("v"), r.v) for p, _, cur, r in moves]}
     for h in hooks:
         if h not in HOOK_FNS:
             raise BumpError("group %s: unknown hook %r" % (group, h))
