@@ -1,0 +1,17 @@
+== arm H62r start 08:15:36 (+0s)
+== restart both servers 08:15:37 (+1s)
+== ready 08:18:14 (+158s)
+pod cgroups: A1 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh A1 cpustat /sys/fs/cgroup/system.slice/docker-ace15baef4b15528186b29499120d15815468a9d33d22c3ebaf5ecad10bb6bd1.scope/kubepods/burstable/podc74bd146-58aa-4b4a-b8fa-fc538f635a3a; B5 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh B5 cpustat /sys/fs/cgroup/kubepods.slice/kubepods-pod9660bc5d_4e76_4b85_87eb_ebc6d1757a4c.slice
+usage_usec 156105819 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh A1 cpustat /sys/fs/cgroup/system.slice/docker-ace15baef4b15528186b29499120d15815468a9d33d22c3ebaf5ecad10bb6bd1.scope/kubepods/burstable/podc74bd146-58aa-4b4a-b8fa-fc538f635a3a
+usage_usec 457522046 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh B5 cpustat /sys/fs/cgroup/kubepods.slice/kubepods-pod9660bc5d_4e76_4b85_87eb_ebc6d1757a4c.slice
+served: A1=gemma-4-26b-a4b-it B5=gemma-4-26b
+== load typical 08:18:45 (+189s)
+== baseline typical 08:18:45 (+189s)
+== pairs hold 0, deadline +2250s 08:19:06 (+210s)
+agentbench: A1: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh A1 cpustat /sys/fs/cgroup/system.slice/docker-ace15baef4b15528186b29499120d15815468a9d33d22c3ebaf5ecad10bb6bd1.scope/kubepods/burstable/podc74bd146-58aa-4b4a-b8fa-fc538f635a3a
+agentbench: B5: agent http://127.0.0.2:8090, proxy 127.0.0.1:18621 -> http://127.0.0.1:18641, pod cgroup exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh B5 cpustat /sys/fs/cgroup/kubepods.slice/kubepods-pod9660bc5d_4e76_4b85_87eb_ebc6d1757a4c.slice
+agentbench: pair 0: 1993 s left < 99999 s, hold ends
+agentbench: hold 0: 0 complete pair(s); next pair 0 of 24
+== finished 08:19:53 (+257s)
+== cleanup 08:19:53 (+257s)
+== done 08:19:53 (+257s)

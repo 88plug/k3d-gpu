@@ -1,0 +1,507 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "ambient.istio.io/redirection": "enabled",
+            "balloon.balloons.resource-policy.nri.io/container.main": "vllm-balloon-tp1",
+            "cni.projectcalico.org/containerID": "f4d6976420b9313e64b8affa96b000354e77df59875172ea7d7b37cbcf9c0539",
+            "cni.projectcalico.org/podIP": "10.233.86.215/32",
+            "cni.projectcalico.org/podIPs": "10.233.86.215/32",
+            "cpu-policy.model-manager.io/balloon": "vllm-balloon-tp1",
+            "cpu-policy.model-manager.io/type": "nri-balloons"
+        },
+        "creationTimestamp": "2026-11-07T08:15:37Z",
+        "generateName": "gemma-4-26b-kserve-84875557c7-",
+        "generation": 1,
+        "labels": {
+            "app.kubernetes.io/component": "llminferenceservice-workload",
+            "app.kubernetes.io/name": "gemma-4-26b",
+            "app.kubernetes.io/part-of": "llminferenceservice",
+            "kserve.io/component": "workload",
+            "llm-d.ai/role": "both",
+            "pod-template-hash": "84875557c7"
+        },
+        "name": "gemma-4-26b-kserve-84875557c7-fglms",
+        "namespace": "llm-inference",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "gemma-4-26b-kserve-84875557c7",
+                "uid": "0e6dde7d-c301-4e7b-af56-7f0a16ff00f9"
+            }
+        ],
+        "resourceVersion": "18382",
+        "uid": "9660bc5d-4e76-4b85-87eb-ebc6d1757a4c"
+    },
+    "spec": {
+        "affinity": {
+            "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "nodeSelectorTerms": [
+                        {
+                            "matchExpressions": [
+                                {
+                                    "key": "feature.node.kubernetes.io/cpu-cpuid.AMXBF16",
+                                    "operator": "In",
+                                    "values": [
+                                        "true"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "containers": [
+            {
+                "args": [
+                    "--max-num-seqs",
+                    "128",
+                    "--max-num-batched-tokens",
+                    "2048",
+                    "--enable-chunked-prefill",
+                    "--block-size",
+                    "128",
+                    "--dtype",
+                    "bfloat16",
+                    "--distributed_executor_backend",
+                    "mp",
+                    "--enable_chunked_prefill",
+                    "--enforce-eager",
+                    "--enable-prefix-caching",
+                    "--enable-auto-tool-choice",
+                    "--tool-call-parser",
+                    "gemma4",
+                    "--tensor-parallel-size",
+                    "1",
+                    "--served-model-name",
+                    "gemma-4-26b",
+                    "--chat-template",
+                    "/etc/chat-template/chat_template.jinja"
+                ],
+                "command": [
+                    "/bin/bash",
+                    "-c",
+                    "if [ \"$KSERVE_INFER_ROCE\" = \"true\" ]; then\n  echo \"Trying to infer RoCE configs ... \"\n  grep -H . /sys/class/infiniband/*/ports/*/gids/* 2\u003e/dev/null\n  grep -H . /sys/class/infiniband/*/ports/*/gid_attrs/types/* 2\u003e/dev/null\n\n  cat /proc/driver/nvidia/params\n\n  KSERVE_INFER_IB_GID_INDEX_GREP=${KSERVE_INFER_IB_GID_INDEX_GREP:-\"RoCE v2\"}\n\n  echo \"[Infer RoCE] Discovering active HCAs ...\"\n  active_hcas=()\n  # Loop through all mlx5 devices found in sysfs\n  for hca_dir in /sys/class/infiniband/mlx5_*; do\n      # Ensure it's a directory before proceeding\n      if [ -d \"$hca_dir\" ]; then\n          hca_name=$(basename \"$hca_dir\")\n          port_state_file=\"$hca_dir/ports/1/state\" # Assume port 1\n          type_file=\"$hca_dir/ports/1/gid_attrs/types/*\"\n\n          echo \"[Infer RoCE] Check if the port state file ${port_state_file} exists and contains 'ACTIVE'\"\n          if [ -f \"$port_state_file\" ] \u0026\u0026 grep -q \"ACTIVE\" \"$port_state_file\" \u0026\u0026 grep -q \"${KSERVE_INFER_IB_GID_INDEX_GREP}\" ${type_file} 2\u003e/dev/null; then\n              echo \"[Infer RoCE] Found active HCA: $hca_name\"\n              active_hcas+=(\"$hca_name\")\n          else\n              echo \"[Infer RoCE] Skipping inactive or down HCA: $hca_name\"\n          fi\n      fi\n  done\n\n  ucx_hcas=()\n  for hca in \"${active_hcas[@]}\"; do\n    ucx_hcas+=(\"${hca}:1\")\n  done\n\n  # Check if we found any active HCAs\n  if [ ${#active_hcas[@]} -gt 0 ]; then\n      # Join the array elements with a comma\n      hcas=$(IFS=,; echo \"${active_hcas[*]}\")\n      echo \"[Infer RoCE] Setting active HCAs: ${hcas}\"\n      export NCCL_IB_HCA=${NCCL_IB_HCA:-${hcas}}\n      export NVSHMEM_HCA_LIST=${NVSHMEM_HCA_LIST:-${ucx_hcas}}\n      export UCX_NET_DEVICES=${UCX_NET_DEVICES:-${ucx_hcas}}\n\n      echo \"[Infer RoCE] NCCL_IB_HCA=${NCCL_IB_HCA}\"\n      echo \"[Infer RoCE] NVSHMEM_HCA_LIST=${NVSHMEM_HCA_LIST}\"\n  else\n      echo \"[Infer RoCE] WARNING: No active RoCE HCAs found. NCCL_IB_HCA will not be set.\"\n  fi\n\n  if [ ${#active_hcas[@]} -gt 0 ]; then\n      echo \"[Infer RoCE] Finding GID_INDEX for each active HCA (SR-IOV compatible)...\"\n\n      # For SR-IOV environments, find the most common IPv4 RoCE v2 GID index across all HCAs\n      declare -A gid_index_count\n      declare -A hca_gid_index\n\n      for hca_name in \"${active_hcas[@]}\"; do\n          echo \"[Infer RoCE] Processing HCA: ${hca_name}\"\n\n          # Find all RoCE v2 IPv4 GIDs for this HCA and count by index\n          for tpath in /sys/class/infiniband/${hca_name}/ports/1/gid_attrs/types/*; do\n              if grep -q \"${KSERVE_INFER_IB_GID_INDEX_GREP}\" \"$tpath\" 2\u003e/dev/null; then\n                  idx=$(basename \"$tpath\")\n                  gid_file=\"/sys/class/infiniband/${hca_name}/ports/1/gids/${idx}\"\n                  # Check for IPv4 GID (contains ffff:)\n                  if [ -f \"$gid_file\" ] \u0026\u0026 grep -q \"ffff:\" \"$gid_file\"; then\n                      gid_value=$(cat \"$gid_file\" 2\u003e/dev/null || echo \"\")\n                      echo \"[Infer RoCE] Found IPv4 RoCE v2 GID for ${hca_name}: index=${idx}, gid=${gid_value}\"\n                      hca_gid_index[\"${hca_name}\"]=\"${idx}\"\n                      gid_index_count[\"${idx}\"]=$((${gid_index_count[\"${idx}\"]} + 1))\n                      break  # Use first found IPv4 GID per HCA\n                  fi\n              fi\n          done\n      done\n\n      # Find the most common GID index (most likely to be consistent across nodes)\n      best_gid_index=\"\"\n      max_count=0\n      for idx in \"${!gid_index_count[@]}\"; do\n          count=${gid_index_count[\"${idx}\"]}\n          echo \"[Infer RoCE] GID_INDEX ${idx} found on ${count} HCAs\"\n          if [ $count -gt $max_count ]; then\n              max_count=$count\n              best_gid_index=\"$idx\"\n          fi\n      done\n\n      # Use deterministic fallback if counts are equal - prefer lower index number\n      if [ ${#gid_index_count[@]} -gt 1 ]; then\n          echo \"[Infer RoCE] Multiple GID indices found, selecting most common: ${best_gid_index}\"\n          # If there's a tie, prefer index 3 as it's most common in SR-IOV setups\n          if [ -n \"${gid_index_count['3']}\" ] \u0026\u0026 [ \"${gid_index_count['3']}\" -eq \"$max_count\" ]; then\n              best_gid_index=\"3\"\n              echo \"[Infer RoCE] Using deterministic fallback: GID_INDEX=3 (SR-IOV standard)\"\n          fi\n      fi\n\n      # Check if GID_INDEX is already set via environment variables\n      if [ -n \"${NCCL_IB_GID_INDEX}\" ]; then\n          echo \"[Infer RoCE] Using pre-configured NCCL_IB_GID_INDEX=${NCCL_IB_GID_INDEX} from environment\"\n          export NVSHMEM_IB_GID_INDEX=${NVSHMEM_IB_GID_INDEX:-$NCCL_IB_GID_INDEX}\n          export UCX_IB_GID_INDEX=${UCX_IB_GID_INDEX:-$NCCL_IB_GID_INDEX}\n          echo \"[Infer RoCE] Using hardcoded GID_INDEX=${NCCL_IB_GID_INDEX} for NCCL, NVSHMEM, and UCX\"\n      elif [ -n \"$best_gid_index\" ]; then\n          echo \"[Infer RoCE] Selected GID_INDEX: ${best_gid_index} (found on ${max_count} HCAs)\"\n\n          export NCCL_IB_GID_INDEX=${NCCL_IB_GID_INDEX:-$best_gid_index}\n          export NVSHMEM_IB_GID_INDEX=${NVSHMEM_IB_GID_INDEX:-$best_gid_index}\n          export UCX_IB_GID_INDEX=${UCX_IB_GID_INDEX:-$best_gid_index}\n\n          echo \"[Infer RoCE] Exported GID_INDEX=${best_gid_index} for NCCL, NVSHMEM, and UCX\"\n      else\n          echo \"[Infer RoCE] ERROR: No valid IPv4 ${KSERVE_INFER_IB_GID_INDEX_GREP} GID_INDEX found on any HCA.\"\n      fi\n  else\n      echo \"[Infer RoCE] No active HCAs found, skipping GID_INDEX inference.\"\n  fi\nfi\n\neval \"vllm serve /mnt/models \\\n  --served-model-name \"gemma-4-26b\" \\\n  --port 8000 \\\n  --disable-uvicorn-access-log \\\n   \\\n   \\\n   \\\n  ${VLLM_ADDITIONAL_ARGS} \\\n  $@\"",
+                    "--"
+                ],
+                "env": [
+                    {
+                        "name": "HF_HOME",
+                        "value": "/data"
+                    },
+                    {
+                        "name": "KMP_BLOCKTIME",
+                        "value": "1"
+                    },
+                    {
+                        "name": "TRITON_CACHE_DIR",
+                        "value": "/tmp/.triton"
+                    },
+                    {
+                        "name": "USER",
+                        "value": "vllm"
+                    },
+                    {
+                        "name": "VLLM_ALLOW_LONG_MAX_MODEL_LEN",
+                        "value": "1"
+                    },
+                    {
+                        "name": "VLLM_CPU_KVCACHE_SPACE",
+                        "value": "40"
+                    },
+                    {
+                        "name": "VLLM_CPU_NUM_OF_RESERVED_CPU",
+                        "value": "1"
+                    },
+                    {
+                        "name": "VLLM_CPU_SGL_KERNEL",
+                        "value": "0"
+                    },
+                    {
+                        "name": "VLLM_ENGINE_ITERATION_TIMEOUT_S",
+                        "value": "120"
+                    },
+                    {
+                        "name": "VLLM_NO_USAGE_STATS",
+                        "value": "1"
+                    },
+                    {
+                        "name": "VLLM_RPC_TIMEOUT",
+                        "value": "100000"
+                    },
+                    {
+                        "name": "HOME",
+                        "value": "/home"
+                    },
+                    {
+                        "name": "VLLM_LOGGING_LEVEL",
+                        "value": "INFO"
+                    },
+                    {
+                        "name": "HF_HUB_CACHE",
+                        "value": "/models"
+                    }
+                ],
+                "image": "docker.io/vllm/vllm-openai-cpu:v0.28.0",
+                "imagePullPolicy": "IfNotPresent",
+                "livenessProbe": {
+                    "failureThreshold": 12,
+                    "httpGet": {
+                        "path": "/health",
+                        "port": 8000,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 10
+                },
+                "name": "main",
+                "ports": [
+                    {
+                        "containerPort": 8000,
+                        "protocol": "TCP"
+                    }
+                ],
+                "readinessProbe": {
+                    "failureThreshold": 5,
+                    "httpGet": {
+                        "path": "/health",
+                        "port": 8000,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 5
+                },
+                "resources": {
+                    "limits": {
+                        "cpu": "40",
+                        "memory": "128Gi"
+                    },
+                    "requests": {
+                        "cpu": "40",
+                        "memory": "128Gi"
+                    }
+                },
+                "securityContext": {
+                    "allowPrivilegeEscalation": false,
+                    "capabilities": {
+                        "drop": [
+                            "ALL"
+                        ]
+                    },
+                    "readOnlyRootFilesystem": true,
+                    "runAsGroup": 1000,
+                    "runAsNonRoot": true,
+                    "runAsUser": 1000,
+                    "seccompProfile": {
+                        "type": "RuntimeDefault"
+                    }
+                },
+                "startupProbe": {
+                    "failureThreshold": 120,
+                    "httpGet": {
+                        "path": "/health",
+                        "port": 8000,
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 10,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "FallbackToLogsOnError",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/chat-template",
+                        "name": "chat-template",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/home",
+                        "name": "home"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "tmp-dir"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "dshm"
+                    },
+                    {
+                        "mountPath": "/models",
+                        "name": "model-cache"
+                    },
+                    {
+                        "mountPath": "/var/run/kserve/tls",
+                        "name": "tls-certs",
+                        "readOnly": true
+                    },
+                    {
+                        "mountPath": "/mnt/models",
+                        "name": "kserve-pvc-source",
+                        "readOnly": true,
+                        "subPath": "gemma-4-26b"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hfmg7",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "nodeName": "localhost",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "seccompProfile": {
+                "type": "RuntimeDefault"
+            }
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "configMap": {
+                    "defaultMode": 420,
+                    "name": "gemma-4-26b-chat-template"
+                },
+                "name": "chat-template"
+            },
+            {
+                "emptyDir": {},
+                "name": "home"
+            },
+            {
+                "emptyDir": {
+                    "medium": "Memory",
+                    "sizeLimit": "1Gi"
+                },
+                "name": "dshm"
+            },
+            {
+                "emptyDir": {},
+                "name": "model-cache"
+            },
+            {
+                "emptyDir": {},
+                "name": "tmp-dir"
+            },
+            {
+                "name": "tls-certs",
+                "secret": {
+                    "defaultMode": 420,
+                    "secretName": "gemma-4-26b-kserve-self-signed-certs"
+                }
+            },
+            {
+                "name": "kserve-pvc-source",
+                "persistentVolumeClaim": {
+                    "claimName": "model-store"
+                }
+            },
+            {
+                "name": "kube-api-access-hfmg7",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-07T08:16:11Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-07T08:16:10Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-07T08:18:10Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-07T08:18:10Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-07T08:16:10Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "40",
+                    "memory": "128Gi"
+                },
+                "containerID": "containerd://cd333425a54f4f12d54ede016229dc1945cd913c3c4e7cbbcf265fac0e8fe40a",
+                "image": "docker.io/vllm/vllm-openai-cpu:v0.28.0",
+                "imageID": "docker.io/vllm/vllm-openai-cpu@sha256:197354e6475e638eb5ccca09beb078488046a82de0e204e7429bf1a804df9647",
+                "lastState": {},
+                "name": "main",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "cpu": "40",
+                        "memory": "128Gi"
+                    },
+                    "requests": {
+                        "cpu": "40",
+                        "memory": "128Gi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-11-07T08:16:10Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 1000,
+                        "supplementalGroups": [
+                            1000
+                        ],
+                        "uid": 1000
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/etc/chat-template",
+                        "name": "chat-template",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/home",
+                        "name": "home"
+                    },
+                    {
+                        "mountPath": "/tmp",
+                        "name": "tmp-dir"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "dshm"
+                    },
+                    {
+                        "mountPath": "/models",
+                        "name": "model-cache"
+                    },
+                    {
+                        "mountPath": "/var/run/kserve/tls",
+                        "name": "tls-certs",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/mnt/models",
+                        "name": "kserve-pvc-source",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-hfmg7",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "10.0.2.15",
+        "hostIPs": [
+            {
+                "ip": "10.0.2.15"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.233.86.215",
+        "podIPs": [
+            {
+                "ip": "10.233.86.215"
+            }
+        ],
+        "qosClass": "Guaranteed",
+        "startTime": "2026-11-07T08:16:10Z"
+    }
+}

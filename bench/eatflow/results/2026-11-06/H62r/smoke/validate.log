@@ -1,0 +1,1247 @@
+Validate: agent-toolkit  (env=local, installer 1.2.0)
+Using existing venv: /home/ubuntu/enterprise-ai-solutions/.venv
+Inventory: /home/ubuntu/enterprise-ai-solutions/env/local/inventory/hosts.yaml
+
+PLAY [AI-solutions] ************************************************************
+
+TASK [Gathering Facts] *********************************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight] ***************************************************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/preflight.yaml for localhost[0m
+
+TASK [Preflight - Load ai-solutions component registry] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Ensure log and tmp directories exist] ************************
+[0;32mok: [localhost] => (item=/home/ubuntu/enterprise-ai-solutions/env/local/logs)[0m
+[0;32mok: [localhost] => (item=/home/ubuntu/enterprise-ai-solutions/env/local/logs/tmp)[0m
+
+TASK [Preflight - Note which layers ai-solutions declares itself] **************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Check for ext directory] *************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Discover ext component manifests] ****************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Merge ext components + layers] *******************************
+[0;32mok: [localhost] => (item=components.yaml (enterprise.agent-toolkit))[0m
+[0;32mok: [localhost] => (item=components.yaml (enterprise.ai-inference))[0m
+
+TASK [Preflight - Proxy: fail fast if proxy set without no_proxy] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Check internet connectivity] *********************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Show proxy status] *******************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Abort on no connectivity] ************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Object store: reject legacy MinIO configuration for object store] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Object store: validate backend value] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: validate value] **********************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: warn that accelerator overrides pinning] *********
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: downgrade to best-effort] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for nri-balloons] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for kubelet-static] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for best-effort] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: announce] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'CPU policy: nri-balloons → kubelet_cpu_manager_policy=none, kubelet_topology_manager_policy=none,[0m
+[0;32m        nri_cpu_balloons_enabled=True'[0m
+
+TASK [Preflight - Define workload affinity (soft, label-based)] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Empty affinity when topology disabled] ***********************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Storage: resolve backend] ************************************
+[0;36mincluded: storage for localhost[0m
+
+TASK [storage : storage | resolve | normalize selector] ************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | detect multi-node] *************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | collect missing ONTAP values] **************
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the ONTAP configuration is complete] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the custom StorageClass is named] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject an RWO-only custom class on multi-node] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject local-path on multi-node] ***********
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | look up backend in registry] ***************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | reject unknown backend] ********************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [storage : storage | resolve | derive role] *******************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | announce] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Storage backend: local-path -> role=(none - local-path)'[0m
+
+TASK [Preflight - Verify required CLI tools] ***********************************
+[0;32mok: [localhost] => (item=kubectl)[0m
+[0;32mok: [localhost] => (item=helm)[0m
+
+TASK [Preflight - Warn about missing CLI tools] ********************************
+[0;36mskipping: [localhost] => (item=kubectl) [0m
+[0;36mskipping: [localhost] => (item=helm) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Resolve active components (see filter_plugins/resolve_components.py)] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Refuse layers this env was not provisioned for] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Show skipped components] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Skipped (disabled): kata_containers, keycloak, velero, keycloak_config, agentgateway,[0m
+[0;32m        vllm_sr, keycloak_agent_config, openshell, kuberay'[0m
+
+TASK [Preflight - Display execution plan] **************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ━━━ Validate Plan ━━━[0m
+[0;32m        Action: validate[0m
+[0;32m        Target: agent-toolkit[0m
+[0;32m        Components: kubernetes, storage, cert_manager, istio, metallb, envoy_gateway, postgresql, object_store, seaweedfs, observability, nri_cpu_balloons, nfd, envoy_ai_gateway, kserve, litellm, langfuse, llm_services, redis_stack, pgvector, agent_sandbox[0m
+
+TASK [Preflight - Agent Toolkit node readiness] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [Execute components] ******************************************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=kubernetes)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=storage)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=cert_manager)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=istio)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=metallb)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=envoy_gateway)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=postgresql)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=object_store)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=seaweedfs)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=observability)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=nri_cpu_balloons)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=nfd)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=envoy_ai_gateway)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=kserve)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=litellm)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=langfuse)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=llm_services)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=redis_stack)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=pgvector)[0m
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/playbooks/includes/run_component.yaml for localhost => (item=agent_sandbox)[0m
+
+TASK [VALIDATE: kubernetes] ****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: kubernetes                                                     ┃[0m
+[0;32m        ┃  Layer: infrastructure                                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute kubernetes] ******************************************************
+[0;36mincluded: kubernetes for localhost[0m
+
+TASK [kubernetes : kubernetes | Dispatch action: validate] *********************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/kubernetes/tasks/validate.yaml for localhost[0m
+
+TASK [kubernetes : kubernetes | validate | Check kubectl available] ************
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Verify kubeconfig exists] ***********
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Fail if kubeconfig missing] *********
+[0;36mskipping: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Verify cluster reachable] ***********
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Get node list] **********************
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Check for not-ready nodes] **********
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Warn about not-ready nodes] *********
+[0;36mskipping: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Get server version] *****************
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Parse server version] ***************
+[0;32mok: [localhost][0m
+
+TASK [kubernetes : kubernetes | validate | Check minimum version compatibility] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Kubernetes v1.34.3 meets minimum requirement (>= v1.29)[0m
+
+TASK [kubernetes : kubernetes | validate | Validation summary] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - Kubernetes validation PASSED[0m
+[0;32m    - 'Nodes: 1'[0m
+[0;32m    - 'Not-ready: 0'[0m
+[0;32m    - 'Version: v1.34.3'[0m
+
+TASK [kubernetes — validate complete] ******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ kubernetes — validate complete                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: storage] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: storage                                                        ┃[0m
+[0;32m        ┃  Layer: infrastructure                                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute storage] *********************************************************
+[0;36mincluded: storage for localhost[0m
+
+TASK [storage : storage | ensure backend is resolved] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | no backend role to run (local-path)] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Backend 'local-path' has no role to run — handled by Kubespray. Skipping.[0m
+
+TASK [storage | dispatch to backend role ''] ***********************************
+[0;36mskipping: [localhost][0m
+
+TASK [storage — validate complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ storage — validate complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: cert_manager] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: cert_manager                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute cert_manager] ****************************************************
+[0;36mincluded: cert_manager for localhost[0m
+
+TASK [cert_manager : cert_manager | Dispatch action: validate] *****************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/cert_manager/tasks/validate.yaml for localhost[0m
+
+TASK [cert_manager : cert_manager | Check Helm release] ************************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Assert cert-manager is installed] **********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: cert-manager Helm release found[0m
+
+TASK [cert_manager : cert_manager | Check webhook deployment] ******************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Assert webhook has ready replicas] *********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: cert-manager-webhook ready (1 replicas)[0m
+
+TASK [cert_manager : cert_manager | Validation passed] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: cert-manager validation passed.[0m
+
+TASK [cert_manager — validate complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ cert_manager — validate complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: istio] *********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: istio                                                          ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute istio] ***********************************************************
+[0;36mincluded: istio for localhost[0m
+
+TASK [istio : istio | Dispatch action: validate] *******************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/istio/tasks/validate.yaml for localhost[0m
+
+TASK [istio : istio | Check Helm release exists] *******************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Assert Helm release is deployed] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Istio Helm release 'istio' is deployed[0m
+
+TASK [istio : istio | Check istiod deployment] *********************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Assert istiod is available] ******************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: istiod is running and available[0m
+
+TASK [istio : istio | Check ztunnel DaemonSet (ambient mode data plane)] *******
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Assert ztunnel DaemonSet is fully scheduled] *************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: ztunnel DaemonSet is fully scheduled (1 / 1 ready)[0m
+
+TASK [istio : istio | Check mesh-wide PeerAuthentication] **********************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Assert mutual TLS is enforced (STRICT)] ******************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Mesh-wide mutual TLS is enforced (STRICT)[0m
+
+TASK [istio — validate complete] ***********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ istio — validate complete                                              ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: metallb] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: metallb                                                        ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute metallb] *********************************************************
+[0;36mincluded: metallb for localhost[0m
+
+TASK [metallb : metallb | Dispatch action: validate] ***************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/metallb/tasks/validate.yaml for localhost[0m
+
+TASK [metallb : metallb | Cloud environment — skipping MetalLB validation] *****
+[0;36mskipping: [localhost][0m
+
+TASK [metallb : metallb | Check Helm release] **********************************
+[0;32mok: [localhost][0m
+
+TASK [metallb : metallb | Assert MetalLB is installed] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: MetalLB Helm release found[0m
+
+TASK [metallb : metallb | Check controller deployment] *************************
+[0;32mok: [localhost][0m
+
+TASK [metallb : metallb | Assert controller has ready replicas] ****************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: metallb-controller ready (1 replicas)[0m
+
+TASK [metallb : metallb | Check IPAddressPool exists] **************************
+[0;32mok: [localhost][0m
+
+TASK [metallb : metallb | Assert IPAddressPool exists] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: IPAddressPool 'default-pool' exists[0m
+
+TASK [metallb : metallb | Validation passed] ***********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: MetalLB validation passed.[0m
+
+TASK [metallb — validate complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ metallb — validate complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: envoy_gateway] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: envoy_gateway                                                  ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_gateway] ***************************************************
+[0;36mincluded: envoy_gateway for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Dispatch action: validate] ***************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/envoy_gateway/tasks/validate.yaml for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Check deployment] ************************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Assert replicas ready] *******************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Envoy Gateway has 1 ready replica(s)[0m
+
+TASK [envoy_gateway : envoy_gateway | Check GatewayClass] **********************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Assert GatewayClass exists] **************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: GatewayClass 'eg' exists[0m
+
+TASK [envoy_gateway : envoy_gateway | Check Gateway is accepted] ***************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Assert Gateway accepted] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Gateway 'eg-gateway' is Accepted[0m
+
+TASK [envoy_gateway : envoy_gateway | Check TLS secret exists] *****************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Assert TLS secret exists] ****************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: TLS secret 'gateway-tls' exists[0m
+
+TASK [envoy_gateway : envoy_gateway | Check exported root CA certificate] ******
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Assert root CA was exported] *************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Root CA certificate exported to '/home/ubuntu/enterprise-ai-solutions/env/local/logs/ai-solutions-ca.crt'[0m
+
+TASK [envoy_gateway : envoy_gateway | Validation passed] ***********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Envoy Gateway validation passed. Gateway eg-gateway with TLS (selfsigned) on[0m
+[0;32m        solutions.ai[0m
+
+TASK [envoy_gateway — validate complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_gateway — validate complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: postgresql] ****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: postgresql                                                     ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute postgresql] ******************************************************
+[0;36mincluded: postgresql for localhost[0m
+
+TASK [postgresql : postgresql | Include validate] ******************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/postgresql/tasks/validate.yaml for localhost[0m
+
+TASK [postgresql : postgresql | Validate CNPG Cluster readiness] ***************
+[0;32mok: [localhost][0m
+
+TASK [postgresql : postgresql | PostgreSQL is ready] ***************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: PostgreSQL running in postgresql.[0m
+
+TASK [postgresql — validate complete] ******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ postgresql — validate complete                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: object_store] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: object_store                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute object_store] ****************************************************
+[0;36mincluded: object_store for localhost[0m
+
+TASK [object_store : object_store | Interface role — no tasks] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'object_store is an interface role. Active backend: seaweedfs'[0m
+
+TASK [object_store — validate complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ object_store — validate complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: seaweedfs] *****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: seaweedfs                                                      ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute seaweedfs] *******************************************************
+[0;36mincluded: seaweedfs for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Dispatch action: validate] ***********************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/seaweedfs/tasks/validate.yaml for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Check Helm release] ******************************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Assert SeaweedFS is installed] *******************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: SeaweedFS Helm release found[0m
+
+TASK [seaweedfs : seaweedfs | Check S3 gateway Deployment] *********************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Assert S3 gateway has ready replicas] ************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: SeaweedFS S3 gateway ready (1 replicas)[0m
+
+TASK [seaweedfs : seaweedfs | Validation passed] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'SeaweedFS validation passed. Endpoint: http://telemetry-seaweedfs-s3.monitoring.svc.cluster.local:8333'[0m
+
+TASK [seaweedfs — validate complete] *******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ seaweedfs — validate complete                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: observability] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: observability                                                  ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute observability] ***************************************************
+[0;36mincluded: observability for localhost[0m
+
+TASK [observability : observability | Dispatch action: validate] ***************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/observability/tasks/validate.yaml for localhost[0m
+
+TASK [observability : observability | Check kube-prometheus-stack release] *****
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert kube-prometheus-stack is installed] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: kube-prometheus-stack release found[0m
+
+TASK [observability : observability | Check Prometheus Operator deployment] ****
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Prometheus Operator is ready] *****
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Prometheus Operator ready[0m
+
+TASK [observability : observability | Check Grafana deployment] ****************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Grafana is ready] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Grafana ready (1 replicas)[0m
+
+TASK [observability : observability | Check Node Exporter DaemonSet] ***********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Node Exporter is fully scheduled] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Node Exporter ready on all 1 nodes[0m
+
+TASK [observability : observability | Check Loki release] **********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Loki is installed] ****************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Loki release found[0m
+
+TASK [observability : observability | Check Loki StatefulSet] ******************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Loki has ready replicas] **********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Loki ready (1 replicas)[0m
+
+TASK [observability : observability | Check Tempo release] *********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Tempo is installed] ***************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Tempo release found[0m
+
+TASK [observability : observability | Check Tempo StatefulSet] *****************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert Tempo is ready] *******************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: Tempo ready (1 replicas)[0m
+
+TASK [observability : observability | Check OTel Collector release] ************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert OTel Collector is installed] ******
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: OpenTelemetry Collector release found[0m
+
+TASK [observability : observability | Check OTel Collector DaemonSet] **********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Assert OTel Collector is running on all nodes] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: OTel Collector running on all 1 nodes[0m
+
+TASK [observability : observability | Validation passed] ***********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Observability stack validation passed. Grafana: https://grafana.solutions.ai[0m
+[0;32m        All components healthy in namespace ''monitoring''.'[0m
+
+TASK [observability — validate complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ observability — validate complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: nri_cpu_balloons] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: nri_cpu_balloons                                               ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute nri_cpu_balloons] ************************************************
+[0;36mincluded: nri_cpu_balloons for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Dispatch action: validate] *********
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/roles/nri_cpu_balloons/tasks/validate.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Not CPU — nothing to validate] *****
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | End host] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Check Helm release] ****************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Assert Helm release present] *******
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: NRI balloons Helm release found.[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Check policy ConfigMap] ************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Assert ConfigMap present] **********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Check DaemonSet readiness] *********
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Assert DaemonSet has ready pods] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: NRI balloons DaemonSet ready (1 pods).[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Gather node capability labels] *****
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Per-node NRI capability summary] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ============================================================[0m
+[0;32m        NRI balloons — per-node capability summary[0m
+[0;32m        ============================================================[0m
+[0;32m          - localhost                                 enabled=true  max-tp=1  numa=1  pcpus=96[0m
+[0;32m        ------------------------------------------------------------[0m
+[0;32m        labeled nodes : 1[0m
+[0;32m        unlabeled     : 0[0m
+[0;32m        best max-tp   : 1[0m
+[0;32m        ds ready pods : 1 / 1[0m
+[0;32m        ============================================================[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Count nodes with NRI max-tp label] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Warn when no nodes carry NRI labels] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Pre-flight CPU validator (optional)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Validation passed] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: nri_cpu_balloons validation passed.[0m
+
+TASK [nri_cpu_balloons — validate complete] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ nri_cpu_balloons — validate complete                                   ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: nfd] ***********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: nfd                                                            ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute nfd] *************************************************************
+[0;36mincluded: nfd for localhost[0m
+
+TASK [nfd : nfd | Dispatch action: validate] ***********************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/nfd/tasks/validate.yaml for localhost[0m
+
+TASK [nfd : nfd | validate | Check Helm release] *******************************
+[0;32mok: [localhost][0m
+
+TASK [nfd : nfd | validate | Check worker DaemonSet readiness] *****************
+[0;32mok: [localhost][0m
+
+TASK [nfd : nfd | validate | Check master deployment readiness] ****************
+[0;32mok: [localhost][0m
+
+TASK [nfd : nfd | validate | Check nodes carry CPU feature labels] *************
+[0;32mok: [localhost][0m
+
+TASK [nfd : nfd | validate | Summary] ******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'NFD OK: 1 worker(s) ready, 1 labelled node(s).'[0m
+
+TASK [nfd — validate complete] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ nfd — validate complete                                                ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: envoy_ai_gateway] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: envoy_ai_gateway                                               ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_ai_gateway] ************************************************
+[0;36mincluded: envoy_ai_gateway for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Dispatch action: validate] *********
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/envoy_ai_gateway/tasks/validate.yaml for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Check controller deployment] *******
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Assert controller running] *********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: AI Gateway controller has 1 ready replica(s)[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Validation passed] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Envoy AI Gateway validation passed.[0m
+
+TASK [envoy_ai_gateway — validate complete] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_ai_gateway — validate complete                                   ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: kserve] ********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: kserve                                                         ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute kserve] **********************************************************
+[0;36mincluded: kserve for localhost[0m
+
+TASK [kserve : kserve | Dispatch action: validate] *****************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/kserve/tasks/validate.yaml for localhost[0m
+
+TASK [kserve : kserve | Check InferenceService CRD] ****************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check controller deployment] ***************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check controller ready replicas] ***********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Assert controller ready] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: KServe controller has 1 ready replica(s)[0m
+
+TASK [kserve : kserve | Check cert-manager] ************************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check Istio (istiod)] **********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Check Knative Serving controller] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Check LLMInferenceService CRD] *************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check LLMIsvc controller] ******************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check LWS operator] ************************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check Helm releases] ***********************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Display Helm releases] *********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'KServe Helm releases: [''kserve-llmisvc-crd'', ''kserve-llmisvc-resources'',[0m
+[0;32m        ''kserve-resources'', ''kserve-runtime-configs'']'[0m
+
+TASK [kserve : kserve | Validation passed] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'KServe validation passed (mode: Standard) + LLMIsvc.'[0m
+
+TASK [kserve — validate complete] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ kserve — validate complete                                             ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: litellm] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: litellm                                                        ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute litellm] *********************************************************
+[0;36mincluded: litellm for localhost[0m
+
+TASK [litellm : litellm | Dispatch action: validate] ***************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/litellm/tasks/validate.yaml for localhost[0m
+
+TASK [litellm : litellm | validate | Check deployment] *************************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Resolve running pod] **********************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Running pod] ******************************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Check readiness endpoint] *****************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Check master key is set] ******************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Send a user message through LiteLLM] ******
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Guardrail reached its guard model] ********
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | validate | Summary] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'LiteLLM deployment: OK'[0m
+[0;32m    - 'LiteLLM readiness: OK'[0m
+[0;32m    - 'Master key secret: OK'[0m
+[0;32m    - 'Content-safety guardrail: OK (qwen3guard)'[0m
+
+TASK [litellm — validate complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ litellm — validate complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: langfuse] ******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: langfuse                                                       ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute langfuse] ********************************************************
+[0;36mincluded: langfuse for localhost[0m
+
+TASK [langfuse : langfuse | Dispatch action: validate] *************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/langfuse/tasks/validate.yaml for localhost[0m
+
+TASK [langfuse : langfuse | validate | Check web deployment] *******************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | validate | Check worker deployment] ****************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | validate | Summary] ********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Langfuse web: OK'[0m
+[0;32m    - 'Langfuse worker: OK'[0m
+
+TASK [langfuse — validate complete] ********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ langfuse — validate complete                                           ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: llm_services] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: llm_services                                                   ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute llm_services] ****************************************************
+[0;36mincluded: llm_services for localhost[0m
+
+TASK [llm_services : llm_services | Dispatch action: validate] *****************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference/roles/llm_services/tasks/validate.yaml for localhost[0m
+
+TASK [llm_services : llm_services | Check namespace] ***************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | List ServingRuntimes] **********************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Report runtimes] ***************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - vllm-runtime         vllm   kserve-container   16m[0m
+
+TASK [llm_services : llm_services | List InferenceServices] ********************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Report InferenceServices] ******************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: [][0m
+
+TASK [llm_services : llm_services | List LLMInferenceServices] *****************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Report LLMInferenceServices] ***************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - gemma-4-26b   http://10.233.38.223/llm-inference/gemma-4-26b   True         6m22s[0m
+[0;32m    - qwen3guard    http://10.233.38.223/llm-inference/qwen3guard    True         15m[0m
+
+TASK [llm_services : llm_services | Check NRI balloons DaemonSet] **************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Read kubelet cpuManagerPolicy from a node] ***
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Report CPU policy state] *******************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Configured kubernetes_cpu_policy: nri-balloons'[0m
+[0;32m    - 'NRI balloons DaemonSet: present'[0m
+[0;32m    - 'kubelet cpuManagerPolicy: none'[0m
+
+TASK [llm_services : llm_services | Warn when the CPU policy does not match the cluster] ***
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : llm_services | Validation passed] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'LLM services validation passed. CPU policy: nri-balloons. InferenceServices:[0m
+[0;32m        0, LLMInferenceServices: 2.'[0m
+
+TASK [llm_services — validate complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ llm_services — validate complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: redis_stack] ***************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: redis_stack                                                    ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute redis_stack] *****************************************************
+[0;36mincluded: redis_stack for localhost[0m
+
+TASK [redis_stack : redis_stack | Dispatch action: validate] *******************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.agent-toolkit/roles/redis_stack/tasks/validate.yaml for localhost[0m
+
+TASK [redis_stack : redis_stack | validate | Check pods are running] ***********
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Get Redis password from secret] ***
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Check Redis PING] *****************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Assert Redis answered PING] *******
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Check RediSearch module loaded] ***
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Assert RediSearch module is loaded] ***
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | validate | Summary] **************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Redis pods: OK (1 running)'[0m
+[0;32m    - 'Redis PING: OK'[0m
+[0;32m    - 'RediSearch module: OK'[0m
+
+TASK [redis_stack — validate complete] *****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ redis_stack — validate complete                                        ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: pgvector] ******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: pgvector                                                       ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute pgvector] ********************************************************
+[0;36mincluded: pgvector for localhost[0m
+
+TASK [pgvector : pgvector | Dispatch action: validate] *************************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.agent-toolkit/roles/pgvector/tasks/validate.yaml for localhost[0m
+
+TASK [pgvector : pgvector | validate | Check pods are running] *****************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | validate | Check pgvector extension] ***************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | validate | Check credentials secret exists] ********
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | validate | Summary] ********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'pgvector pods: OK (1 running)'[0m
+[0;32m    - 'pgvector extension: OK'[0m
+[0;32m    - 'Credentials secret: OK'[0m
+
+TASK [pgvector — validate complete] ********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ pgvector — validate complete                                           ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [VALIDATE: agent_sandbox] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  VALIDATE: agent_sandbox                                                  ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute agent_sandbox] ***************************************************
+[0;36mincluded: agent_sandbox for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | Dispatch action: validate] ***************
+[0;36mincluded: /home/ubuntu/enterprise-ai-solutions/ext/enterprise.agent-toolkit/roles/agent_sandbox/tasks/validate.yaml for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check controller deployment] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check sandbox-router deployment] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check CRDs exist] *************
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check SandboxTemplate exists] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check SandboxWarmPool readiness] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Warn on WarmPool with no ready sandboxes] ***
+[0;36mskipping: [localhost] => (item=python-pool) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Get Kata RuntimeClasses] ******
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Check kata SandboxTemplate exists] ***
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | validate | Summary] **********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Controller: OK'[0m
+[0;32m    - 'Router: OK'[0m
+[0;32m    - 'CRDs: OK'[0m
+[0;32m    - 'SandboxTemplate python-sandbox-template: OK'[0m
+[0;32m    - 'WarmPools: python-pool'[0m
+
+TASK [agent_sandbox — validate complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ agent_sandbox — validate complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+PLAY RECAP *********************************************************************
+[0;32mlocalhost[0m                  : [0;32mok=261 [0m changed=0    unreachable=0    failed=0    [0;36mskipped=51  [0m rescued=0    ignored=0   
+
+
+[0;32m╭─────────────────────────────────────────────────────────────────────────────────────────────────────────╮[0m
+[0;32m│[0m VALIDATE COMPLETE                                                                                       [0;32m│[0m
+[0;32m│[0m                                                                                                         [0;32m│[0m
+[0;32m│[0m Target:  agent-toolkit                                                                                  [0;32m│[0m
+[0;32m│[0m Env:     local                                                                                          [0;32m│[0m
+[0;32m│[0m Log:     /home/ubuntu/enterprise-ai-solutions/env/local/logs/validate-agent-toolkit-20261107-081436.log [0;32m│[0m
+[0;32m╰─────────────────────────────────────────────────────────────────────────────────────────────────────────╯[0m
+
