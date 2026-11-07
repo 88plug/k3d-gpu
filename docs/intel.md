@@ -235,7 +235,7 @@ and installs through EAS.
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
 | EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eat up` (`eas up --agent-toolkit`): the existing-cluster mode at the GA tags (EAS `v1.2.0`, EAT `release-2.0.0`), with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F5 checks it on the Xeon 6741P. F3 (EAS `main`) is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
-| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's int4 GGUF (for Gemma 4 26B-A4B, the one model measured, Google's QAT Q4_0 GGUF and QAT MTP drafter) [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
+| Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's int4 GGUF (for Gemma 4 26B-A4B, the one model measured, Google's QAT Q4_0 GGUF and QAT MTP drafter) [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. No release up to 0.1.93 serves with vLLM, on a Gaudi or on Arc ([status](../README.md#vllm-backends-for-discrete-arc-battlemage)). Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
 
@@ -510,12 +510,14 @@ has not run on that host yet.
 
 Shipped since this roadmap was first written:
 
-- **Agent endpoint.** `k3d-gpu agent up`: an OpenAI-compatible server that picks vLLM on
-  a Gaudi, OVMS on an XMX Intel GPU, else OVMS on the P-cores, from what the node
-  advertises; vLLM XPU or llm-scaler on Arc by flag ([README](../README.md)). On a CPU
-  class where an engine-choice row is SUPPORTED, llama.cpp with the model's int4 GGUF takes
-  the CPU instead: the Xeon 6741P class since 2026-11-01, measured on Gemma 4 26B-A4B with
-  the QAT GGUF and MTP drafter only [ledger:H59].
+- **Agent endpoint.** `k3d-gpu agent up`: an OpenAI-compatible server that picks OVMS on
+  an XMX Intel GPU, else OVMS on the P-cores, from what the node advertises
+  ([README](../README.md)). On a CPU class where an engine-choice row is SUPPORTED,
+  llama.cpp with the model's int4 GGUF takes the CPU instead: the Xeon 6741P class since
+  2026-11-01, measured on Gemma 4 26B-A4B with the QAT GGUF and MTP drafter only
+  [ledger:H59]. Its vLLM paths (vLLM on a Gaudi by default, vLLM XPU or llm-scaler on Arc
+  by flag) are in the launcher but do not serve in any release up to 0.1.93; see the
+  vLLM agent item under Planned below.
 - **EAS and EAT 2.0.** `k3d-gpu eas up`, `status`, `check` and `down` (and `k3d-gpu eat`,
   the agent-toolkit layer) drive Intel's EAS installer in its bring-your-own-cluster mode,
   at the GA tags of 2026-11-06, with every k3d setting and patch chosen from the cluster
@@ -561,6 +563,15 @@ Shipped since this roadmap was first written:
 Planned, not shipped. Each item lands with its own test and, where it touches
 hardware, a recorded run.
 
+- **vLLM agent.** In releases 0.1.21 through 0.1.93, `agent up` with vLLM does not serve,
+  on Arc or on a Gaudi. The hardware canary for the `v0.33.0` bump found why on an Arc Pro
+  B70 on 2026-11-07. The agent's Service is named `vllm`, so Kubernetes gives the pod
+  `VLLM_PORT=tcp://...`; vLLM reads that as its own port and exits. The warm-up request
+  carries no `Content-Type`, and vLLM answers it with 400
+  ([README](../README.md#vllm-backends-for-discrete-arc-battlemage)).
+  [#339](https://github.com/88plug/k3d-gpu/pull/339) fixes both; no release up to 0.1.93
+  includes it. The end-state proof on an Arc B70 is pending. llm-scaler and the Gaudi
+  path have not run on hardware.
 - **Hardware coverage.** Move the `xe`, NPU, Gaudi, DSA, IAA, QAT and AMX rows to
   verified on real Core Ultra, Arc, Gaudi 3 and Xeon hosts. The campaign on a Xeon 6741P
   with 4x Arc Pro B70 closed on 2026-11-01 ([above](#eat-by-default-vs-with-k3d-gpu)). Its

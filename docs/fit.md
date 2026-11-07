@@ -199,8 +199,10 @@ and `K3D_GPU_AGENT_GPUS` are inputs the fit checks, not values that replace it.
 or, with it unset, an OpenVINO IR): an OVMS pod holds one GPU, and `fit --gpus 2` with OVMS
 is refused as "OVMS serves one GPU". With
 `K3D_GPU_AGENT_BACKEND` unset, the engine the fit picks serves the model: OVMS, vLLM or
-llama-server. With `--model`, the model optimizer first picks the variant for the default
-engine (OVMS: Gemma 4's OpenVINO IR, for example). When that engine has nothing to serve,
+llama-server (vLLM does not serve in any release up to 0.1.93:
+[status](../README.md#vllm-backends-for-discrete-arc-battlemage)). With `--model`, the
+model optimizer first picks the variant for the default engine (OVMS: Gemma 4's OpenVINO
+IR, for example). When that engine has nothing to serve,
 as with Qwen3.8-Flash-Next, the id is served as given, by the engine its fit picks. When
 the fit then picks another engine, the optimizer's choices are made again for that engine,
 pinned to the model the fit sized. A backend that is set and cannot serve the fit is
