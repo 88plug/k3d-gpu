@@ -10,7 +10,8 @@ file and the flags, and writes, under --out:
                            is read from that file only)
   models.edit.yaml         edits to env/k3d-gpu/models.yaml, which model-manager reads:
                            defaults merge; each models entry matches a catalog entry by
-                           name, its env merges and its args_append goes after its args
+                           name, its env merges, its args_append goes after its args and
+                           its cpu replaces the catalog's
   repos.<layer>.yaml       the layer manifest's revs, as commit SHAs
   choices.txt              one line per choice: <fact> -> <choice> [<source>]
 
@@ -24,6 +25,11 @@ ansible-core 2.19 rejects a quoted "false" in a conditional.
                 [--eas-ref PROFILE|SHA] [--ei-ref SHA] [--eat-ref SHA]
                 [--model NAME] [--pins FILE] [--explain]
   eas-config.py --list-sources
+  eas-config.py --manifest-revs FILE   a layer manifest's repos (configs/repos/repos.<layer>.yaml
+                                       at an EAS commit) as <layer> TAB <url> TAB <rev> rows
+  eas-config.py --manifest-globals FILE
+                                       its top-level global_config: map as `key: <JSON value>`
+                                       lines (what eas.sh sets in env/k3d-gpu/global_config.yaml)
 
 Facts (schema k3d-gpu.eas-facts/v1), each gathered read-only:
   cluster                  the k3d-gpu cluster name
@@ -31,7 +37,9 @@ Facts (schema k3d-gpu.eas-facts/v1), each gathered read-only:
   docker_rootless          docker info lists the rootless security option
   nri_socket               /var/run/nri/nri.sock exists in the server node container
   containerd_cni_bin_dirs  crictl info .config.cni.binDirs in the server node container
-  host                     {mem_available_kib, inotify_max_user_instances, inotify_max_user_watches}
+  host                     {mem_available_kib, inotify_max_user_instances, inotify_max_user_watches,
+                           cpu: {logical, threads_per_core, numa_nodes}, read from /sys as EAS's
+                           roles/nri_cpu_balloons/files/probe-node-topology.sh reads them}
   nodes                    [{name, labels, annotations, allocatable}] (kubectl get nodes)
   namespaces               [name] (kubectl get namespaces)
   daemonsets               [{namespace, name, labels, annotations}] (kubectl get daemonsets -A)
@@ -52,7 +60,7 @@ FACTS_SCHEMA = "k3d-gpu.eas-facts/v1"
 PINS_SCHEMA = "k3d-gpu.eas-pins/v1"
 ENV_NAME = "k3d-gpu"                # es_auto_installer.sh init <layer> --env k3d-gpu
 KUBE_MOUNT = "/kube/config"         # where the bastion mounts the cluster's kubeconfig
-EAT_SANDBOX_VERSION = "v0.5.0"      # EAT config.yaml:56 at 036b662
+EAT_SANDBOX_VERSION = "v0.5.0"      # EAT config.yaml:56 at release-2.0.0 (7b827e2, and 036b662)
 K3D_GPU_SANDBOX_NS = "agent-sandbox"  # share/agent-sandbox-k3d.yml: only k3d-gpu's profile makes it
 AMX_LABEL = "feature.node.kubernetes.io/cpu-cpuid.AMXBF16"
 K3S_ADDON = "k3s.cattle.io/v1, Kind=Addon"
@@ -62,9 +70,20 @@ REPO_LAYER = {"ei": "inference", "eat": "agent-toolkit"}
 # EAT's single-node sizing: a node needs the model's memory request plus about 17 GiB
 # for the rest of the stack, 16 GiB for Qwen3Guard and 2 GiB for the router.
 STACK_GIB, GUARD_GIB, ROUTER_GIB = 17, 16, 2
+# CPU under nri-balloons. enterprise-inference sizes a `cpu: auto` model to the free
+# balloon CPUs of one NUMA node: the node's logical CPUs per NUMA node, less the CPUs
+# EAS's balloons policy reserves there and the balloon pods already placed (Qwen3Guard's
+# 8, deployed first). EAS's default reservation profile, siblings, reserves every SMT
+# sibling, and the 12 CPUs of profile standard when a core has one thread. The pods
+# outside the balloons (the rest of the stack, then EAT's sandbox router) are not
+# subtracted: H62 recorded about 11.2 CPUs of them, and the router's 0.5 found no room.
+GUARD_CPU = 8           # EI models.yaml qwen3guard cpu
+EAS_STANDARD_RESERVED = 12
+OTHER_CPU = 14          # H62's 11.2 outside the balloons, the router's 0.75 with its token patch, about 2 spare
+MIN_MODEL_CPU = 8       # EI's llm category cpu, below which auto refuses
 # EAT's default model, then its documented 64 GiB fallbacks, in its order: (catalog name,
 # Hugging Face id, memory GiB, VLLM_CPU_KVCACHE_SPACE GiB, source of both in the catalog).
-# The same at EI 3e8a244 and 170eb3a. The catalog's memory is the pod's request and its
+# The same at EI 3e8a244, 170eb3a and v1.1.0 d035b1e. The catalog's memory is the pod's request and its
 # limit (model_manager/templates/llm-inference-service.yaml), while k3d-gpu fit sizes the
 # KV cache against the host, so fit may lower the catalog's KV cache but never raise it.
 # fit sizes it for its own --max-model-len, and the catalog sets none (vLLM then serves
@@ -76,16 +95,18 @@ CANDIDATES = [
     ("llama-3-1-8b", "meta-llama/Llama-3.1-8B-Instruct", 64, 40, "kv_llama8"),
 ]
 
-_EAS = "https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/"
-_EI = "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/"
-_EAT = "https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/"
+# EAS v1.2.0, enterprise-inference v1.1.0 and EAT release-2.0.0: the release profile.
+_EAS = "https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/"
+_EI = "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/"
+_EAT = "https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/"
 # k3s v1.37.1+k3s1, the Dockerfile's K3S_TAG.
 _K3S = "https://github.com/k3s-io/k3s/blob/356c025475bbefaa09cf0d7e48e8e2adbbde57db/"
 _K3D_GPU = "https://github.com/88plug/k3d-gpu/blob/d997ea891cd7288eead48d428886607590299a9b/"
+_K3D_GPU_H62 = "https://github.com/88plug/k3d-gpu/blob/85a7bc8668d18a3233496f0a3a23b09bb63ee20f/"
 
-# Every source a choice can cite: a permalink at the tree it was read from (2026-10-29).
+# Every source a choice can cite: a permalink at the tree it was read from (2026-11-06).
 SOURCES = {
-    "byo_kubeconfig": _EAS + "es_auto_installer.sh#L1342-L1358",
+    "byo_kubeconfig": _EAS + "es_auto_installer.sh#L1378-L1394",
     "istio_k3d": _K3D_GPU + "docs/intel/upstream-eat.md#L222",
     "istio_k3s": _K3D_GPU + "docs/intel/upstream-eat.md#L221",
     "istio_default": _K3D_GPU + "integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch#L8-L9",
@@ -94,8 +115,8 @@ SOURCES = {
     "gateway_lb": _EAS + "roles/metallb/tasks/install.yaml#L94",
     "cpu_baked": _K3D_GPU + "docs/intel/upstream-eat.md#L231",
     "cpu_rootless": _K3S + "pkg/agent/templates/templates.go#L322-L325",
-    "cpu_best_effort": _EAS + "playbooks/includes/preflight.yaml#L264-L270",
-    "cpu_nri": _EAS + "configs/defaults/global_config.yaml#L99-L104",
+    "cpu_best_effort": _EAS + "playbooks/includes/preflight.yaml#L227-L233",
+    "cpu_nri": _EAS + "configs/defaults/global_config.yaml#L91-L96",
     "overlay_0003": _EAS + "roles/nri_cpu_balloons/tasks/install_advanced.yaml#L197-L205",
     "nfd": _EI + "roles/nfd/tasks/install.yaml#L15-L25",
     "amx_yes": _EI + "model_manager/models.yaml#L20",
@@ -107,8 +128,8 @@ SOURCES = {
     "cluster_cidr": _K3S + "pkg/cli/cmds/server.go#L137-L141",
     "service_cidr": _K3S + "pkg/cli/cmds/server.go#L142-L146",
     "kata": _EAS + "roles/kata_containers/tasks/install.yaml#L9-L22",
-    "argv_master_key": _EI + "roles/llm_services/tasks/deploy_models.yaml#L240",
-    "accel_cpu": _EAS + "configs/defaults/global_config.yaml#L106",
+    "argv_master_key": _EI + "roles/llm_services/tasks/deploy_models.yaml#L231",
+    "accel_cpu": _EAS + "configs/defaults/global_config.yaml#L98",
     "accel_xpu": _EAT + "README.md#L36",
     "sandbox": _EAT + "config.yaml#L56",
     "sizing": _EAT + "docs/single-node-deployment.md#L84",
@@ -118,12 +139,16 @@ SOURCES = {
     "kv_qwen7": _EI + "model_manager/models.yaml#L262-L271",
     "kv_llama8": _EI + "model_manager/models.yaml#L148-L156",
     "guardrails": _EAT + "config.yaml#L25-L26",
+    "cpu_auto": _EI + "model_manager/core/nri_policy.py#L569-L591",
+    "cpu_reserve": _EAS + "roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh#L252-L270",
+    "cpu_explicit": _EAT + "docs/single-node-deployment.md#L191",
+    "cpu_starve": _K3D_GPU_H62 + "EXPERIMENTS.md#L5077-L5088",
     "hybrid_router": _EAT + "config.yaml#L27-L28",
     "cores": _EAT + "docs/prerequisites.md#L7",
     "inotify": _EAT + "docs/prerequisites.md#L22-L32",
     "erag_gpu": "https://github.com/intel/enterprise-rag/blob/319eb4652565fed42de9d601c61f9862b3759dfb/"
                 "deployment/pipelines/chatqna_intel_gpu/config.yaml#L8-L15",
-    "ei_runtimes": "https://github.com/intel/enterprise-inference/tree/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/"
+    "ei_runtimes": "https://github.com/intel/enterprise-inference/tree/d035b1ef1981fbf5084ff05c9a337e620478bb87/"
                    "model_manager/runtimes",
     "eat1_gateway": _K3D_GPU + "integrations/eat/eat-remote.sh#L42",
     "eat1_ingress": _K3D_GPU + "integrations/eat/eat-check.sh#L39-L43",
@@ -220,6 +245,58 @@ def load_json(path, what):
         raise InputError(f"cannot read {what} {path}: {e}") from e
 
 
+def manifest_rows(text):
+    """[(layer, url, rev)] of a layer manifest's repos list, in order. The manifests are
+    flat (`- layer:` then `url:` and `rev:` at the item's indent, values quoted or not,
+    a trailing # comment allowed), so no YAML library is needed."""
+    rows, cur = [], None
+    for line in text.splitlines():
+        m = re.match(r"""^(\s*)(-\s+)?(layer|url|rev):\s*(?:"([^"]*)"|'([^']*)'|([^\s#]*))\s*(?:#.*)?$""", line)
+        if not m:
+            continue
+        key, val = m.group(3), next(v for v in m.group(4, 5, 6) if v is not None)
+        if m.group(2) and key == "layer":
+            cur = {"layer": val}
+            rows.append(cur)
+        elif cur is not None and not m.group(2):
+            cur.setdefault(key, val)
+    out = []
+    for r in rows:
+        if not r.get("url") or not r.get("rev"):
+            raise InputError(f"manifest entry for layer {r['layer']} has no url or rev")
+        out.append((r["layer"], r["url"], r["rev"]))
+    if not out:
+        raise InputError("the manifest lists no repos")
+    return out
+
+
+def manifest_globals(text):
+    """[(key, JSON value)] of a layer manifest's top-level global_config: map, in order.
+    EAS's init accepts plain values only (_init_layer_globals), so a nested value is an
+    input error."""
+    rows, inside = [], False
+    for line in text.splitlines():
+        if re.match(r"^global_config:\s*(?:#.*)?$", line):
+            inside = True
+            continue
+        if not inside or not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            break
+        m = re.match(r"""^\s+([A-Za-z0-9_]+):\s*(?:"([^"]*)"|'([^']*)'|([^\s#][^#]*?))?\s*(?:#.*)?$""", line)
+        if not m or all(g is None for g in m.group(2, 3, 4)):
+            raise InputError(f"global_config: not a plain value: {line.strip()!r}")
+        key, dq, sq, bare = m.groups()
+        if dq is not None or sq is not None:
+            val = json.dumps(dq if dq is not None else sq)
+        elif re.fullmatch(r"true|false|null|-?\d+(\.\d+)?", bare):
+            val = bare
+        else:
+            val = json.dumps(bare)
+        rows.append((key, val))
+    return rows
+
+
 def resolve_pins(pins, eas_ref, ei_ref, eat_ref):
     """(profile name, {name: row}) for the eas, ei and eat checkouts."""
     if pins.get("schema") != PINS_SCHEMA:
@@ -257,6 +334,7 @@ class Plan:
         self.require_amx = None
         self.model_env = []  # (model, env key, value)
         self.model_args = []  # (model, [args appended to its catalog args])
+        self.model_cpu = {}  # model: cpu replacing the catalog's
 
     def choose(self, fact, choice, src):
         self.lines.append((fact, choice, src))
@@ -505,6 +583,7 @@ def plan(facts, layer, pins, model_flag):
         p.set("agent_sandbox_enabled", True)
 
     overhead = STACK_GIB + GUARD_GIB + ROUTER_GIB
+    picked = None
     if model_flag:
         p.choose(f"--model {model_flag}", f"llm_services_autodeploy_models: [{model_flag}]",
                  "autodeploy" if layer == "agent-toolkit" else "autodeploy_ei")
@@ -545,6 +624,47 @@ def plan(facts, layer, pins, model_flag):
                      "./model-manager deploy <name>)", "autodeploy")
             p.set("llm_services_autodeploy_models", [])
 
+    def cpu_choice(name):
+        """Under nri-balloons: EI's `cpu: auto` estimate for the toolkit's model, and an
+        explicit cpu (EAT's documented remedy) when the pods outside the balloons would
+        not fit beside it. Only a catalog model of CANDIDATES (all `cpu: auto`)."""
+        topo = (facts.get("host") or {}).get("cpu") or {}
+        logical, tpc, numa = (topo.get(k) for k in ("logical", "threads_per_core", "numa_nodes"))
+        if not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in (logical, tpc, numa)):
+            p.choose("no host CPU topology in the facts", f"{name} cpu: auto as shipped (not sized)", "cpu_auto")
+            return
+        if tpc >= 2:
+            reserved, why = logical - logical // tpc, f"its {logical - logical // tpc} SMT siblings (profile siblings)"
+        else:
+            reserved, why = EAS_STANDARD_RESERVED, f"{EAS_STANDARD_RESERVED} CPUs (profile standard: one thread per core)"
+        est = max(0, logical // numa - reserved // numa - GUARD_CPU // numa)
+        p.choose(f"host CPUs: {logical} logical, {tpc} thread(s) per core, {numa} NUMA node(s)",
+                 f"EAS's balloons policy reserves {why}; EI's cpu: auto gives {name} about {est} (one NUMA node, "
+                 f"less the reserve and Qwen3Guard's {GUARD_CPU})", "cpu_reserve")
+        alloc = min(cpus((n.get("allocatable") or {}).get("cpu", "0")) for n in nodes)
+        room = int(alloc) - GUARD_CPU - OTHER_CPU
+        fact = (f"node allocatable {num(alloc)} CPUs: {name} {est}, Qwen3Guard {GUARD_CPU}, "
+                f"about {OTHER_CPU} for the pods outside the balloons (EAT's sandbox router among them)")
+        if est < MIN_MODEL_CPU:
+            p.warn(f"EI's cpu: auto would give {name} {est} CPUs, under its {MIN_MODEL_CPU}",
+                   "continuing as asked; model-manager stops that deploy (pass a smaller model or more CPUs)",
+                   "cpu_auto")
+        elif est <= room:
+            p.choose(f"{fact} fit", f"{name} cpu: auto as shipped", "cpu_auto")
+        elif room < MIN_MODEL_CPU:
+            p.warn(f"{fact} do not fit, and {room} CPUs is under the model's {MIN_MODEL_CPU}",
+                   "continuing; EAT's sandbox router may stay Pending on Insufficient cpu", "cpu_starve")
+        else:
+            cpu = room - room % 2
+            p.choose(f"{fact} do not fit (H62: the router stayed Pending on Insufficient cpu)",
+                     f"{name} cpu: {cpu} (an explicit cpu, as EAT's single-node guide says for a node "
+                     "cpu: auto leaves no room on)", "cpu_explicit")
+            p.model_cpu[name] = str(cpu)
+
+    model = model_flag or (picked[0] if layer == "agent-toolkit" and picked else None)
+    if layer == "agent-toolkit" and policy == "nri-balloons" and model in [c[0] for c in CANDIDATES]:
+        cpu_choice(model)
+
     if layer == "agent-toolkit":
         p.choose("EAT default", f"guardrails_enabled: on (Qwen3Guard, {GUARD_GIB} GiB of the budget)", "guardrails")
         p.choose("EAT default", f"hybrid_router_enabled: on ({ROUTER_GIB} GiB of the budget)", "hybrid_router")
@@ -583,12 +703,17 @@ def outputs(p, layer, profile, pins):
     models = (f"# k3d-gpu eas-config: edits to env/{ENV_NAME}/models.yaml, the file model-manager reads\n"
               "# (extra vars do not reach it); defaults merge, models match an entry by name\n"
               f"defaults:\n  require_amx: {yaml_scalar(p.require_amx)}\n")
-    if p.model_env:
+    names = list(dict.fromkeys([m for m, _, _ in p.model_env] + [m for m, _ in p.model_args] + list(p.model_cpu)))
+    if names:
         models += "models:\n"
-        for name in dict.fromkeys(m for m, _, _ in p.model_env):
-            models += f"  - name: {yaml_scalar(name)}\n    env:\n"
-            models += "".join(f"      {k}: {yaml_scalar(v)}\n" for m, k, v in p.model_env if m == name)
+        for name in names:
+            models += f"  - name: {yaml_scalar(name)}\n"
+            env = [(k, v) for m, k, v in p.model_env if m == name]
+            if env:
+                models += "    env:\n" + "".join(f"      {k}: {yaml_scalar(v)}\n" for k, v in env)
             models += "".join(f"    args_append: {yaml_scalar(a)}\n" for m, a in p.model_args if m == name)
+            if name in p.model_cpu:
+                models += f"    cpu: {yaml_scalar(p.model_cpu[name])}\n"
     else:
         models += "models: []\n"
     files["models.edit.yaml"] = models
@@ -624,7 +749,29 @@ def main(argv):
     ap.add_argument("--model")
     ap.add_argument("--explain", action="store_true")
     ap.add_argument("--list-sources", action="store_true")
+    ap.add_argument("--manifest-revs", metavar="FILE")
+    ap.add_argument("--manifest-globals", metavar="FILE")
     a = ap.parse_args(argv)
+    if a.manifest_globals:
+        try:
+            with open(a.manifest_globals) as fh:
+                rows = manifest_globals(fh.read())
+        except (OSError, InputError) as e:
+            print(f"eas-config: {a.manifest_globals}: {e}", file=sys.stderr)
+            return 2
+        for key, val in rows:
+            print(f"{key}: {val}")
+        return 0
+    if a.manifest_revs:
+        try:
+            with open(a.manifest_revs) as fh:
+                rows = manifest_rows(fh.read())
+        except (OSError, InputError) as e:
+            print(f"eas-config: {a.manifest_revs}: {e}", file=sys.stderr)
+            return 2
+        for row in rows:
+            print("\t".join(row))
+        return 0
     if a.list_sources:
         for k, url in SOURCES.items():
             print(f"{k} {url}")
