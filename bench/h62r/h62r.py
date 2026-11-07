@@ -363,8 +363,10 @@ def sibling_read(lists, probe_text):
     list is "0,48" (2). In the guest QEMU numbers siblings next to each other and Linux writes the
     pair as a range, "0-1", which the probe reads as 1, so EAS's default 'siblings' profile falls
     back to 'standard' (12 reserved CPUs) and gemma-4-26b's `cpu: auto` took 76 of 96 (H62).
-    When the probe reads 1 and the kernel lists 2 threads on every core, the result is the cpuset
-    EAS's siblings profile reserves when its probe reads SMT: the higher thread of each core.
+    When the probe reads 1 and the kernel lists 2 threads on every core, the result is the set the
+    probe defines as siblings, the non-lowest thread of each core, read with the ranges expanded:
+    what EAS's siblings profile reserves on crescent's host. (The probe's own NRI_SIBLINGS line
+    names every CPU in this guest, because it takes "0-1" as the lowest thread.)
     When the probe agrees with the kernel, nothing ("") is reserved by the runner. Anything else
     stops the setup (ValueError)."""
     if not lists:

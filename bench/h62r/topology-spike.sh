@@ -3,8 +3,9 @@
 # (EXPERIMENTS.md "H62r pre-registration", D3's sibling read). It boots a guest with
 # -smp 96,sockets=1,cores=48,threads=2 from an initramfs (alpine's busybox userland and EAS's
 # roles/nri_cpu_balloons/files/probe-node-topology.sh at the pinned EAS commit), prints cpu1's
-# thread_siblings_list and the probe's NRI_NUMA, NRI_LOGICAL, NRI_TPC and NRI_PHYSICAL lines, and
-# powers off. Not a hold and not a measurement of either arm.
+# thread_siblings_list, the probe's NRI_NUMA, NRI_LOGICAL, NRI_TPC and NRI_PHYSICAL lines and its
+# NRI_SIBLINGS line (the cpuset the 'siblings' profile reserves when NRI_TPC reads 2), and powers
+# off. Not a hold and not a measurement of either arm.
 # Needs docker, qemu-system-x86_64 and /dev/kvm; TOPO_KERNEL is the guest kernel (default: the
 # first /boot/vmlinuz*); TOPO_SMP overrides the shape. The guest has no network and no disk.
 set -euo pipefail
@@ -30,7 +31,7 @@ exec > /dev/ttyS0 2>&1
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 echo "SPIKE cpu1 thread_siblings_list=$(cat /sys/devices/system/cpu/cpu1/topology/thread_siblings_list)"
-sh /probe.sh | grep -E '^NRI_(NUMA|LOGICAL|TPC|PHYSICAL)=' | sed 's/^/SPIKE /'
+sh /probe.sh | grep -E '^NRI_(NUMA|LOGICAL|TPC|PHYSICAL)=|^NRI_SIBLINGS=' | sed 's/^/SPIKE /'
 poweroff -f
 EOF
 chmod +x "${d}/root/init"

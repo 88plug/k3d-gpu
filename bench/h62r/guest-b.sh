@@ -12,8 +12,9 @@
 #     model_id is the QAT checkpoint)
 #   - D3's sibling read: EAS's own topology probe (from this clone) and the kernel's
 #     thread_siblings_list; when the probe reads one thread per core where the kernel lists two,
-#     nri_reserved_cpu_list (EAS's global config, env/local) names the cpuset EAS's default
-#     'siblings' profile reserves when it reads SMT (the higher thread of each core)
+#     nri_reserved_cpu_list (EAS's global config, env/local) names the siblings as the probe
+#     defines them (the higher thread of each core), what EAS's default 'siblings' profile
+#     reserves on crescent's host
 #   - install agent-toolkit, wait for the gemma-4-26b workload pod, then the records; the sizing
 #     records (balloon policies, every pod's CPU request, the nodes, the sandbox router) pass or
 #     fail; on a failure also H62 amendment V4's records

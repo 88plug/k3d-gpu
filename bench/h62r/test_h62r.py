@@ -968,6 +968,10 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn("print(h62r.SMP)", sh)
         self.assertIn("-machine q35,accel=kvm -cpu host", sh)
         self.assertRegex(sh, r"ALPINE=alpine:[0-9.]+@sha256:[0-9a-f]{64}\n")
+        # Both of the probe's reads of thread_siblings_list: its threads per core (line 31) and its
+        # sibling list (line 74, which the 'siblings' profile reserves when it reads SMT).
+        self.assertIn("NRI_(NUMA|LOGICAL|TPC|PHYSICAL)=", sh)
+        self.assertIn("NRI_SIBLINGS=", sh)
 
     def test_upstream_reads_both_repositories(self):
         sh = read(HERE, "upstream.sh")
