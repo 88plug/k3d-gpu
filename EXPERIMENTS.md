@@ -86,7 +86,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H57de | H57da with the unpinned llama.cpp arm: no arm decodes Gemma 4 QAT at N=1 5% or more faster than k3d-gpu's OVMS pick Od on the i9-13900T P-cores. | Written 2026-10-21, before any H57de measurement. REFUTED (0.5); Ld-mtp-u/Od in [1.0, 1.6] (0.5). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): same holds as H57dp. REFUTED: Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds. SUPPORTED: CI upper bound < 1.05. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched (the same gate, spread 2.97 > 2.0). Od also ran without the P-core balloon (cpuset 0-15,17-31: the runner's `agent manifest` call named no cluster, so after #183 it missed the hold's kube context), so it was not the registered Od. Not gated: Ld-mtp-u/Od 1.369 (1.345-1.396), Od 9.78 tok/s pooled N=1. | INCONCLUSIVE |
 | H52w | A plain `k3d-gpu up` on wildct, a client Raptor Lake host (i7-13700, 8 P-cores + 8 E-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, one NUMA node), with only the box owner's GPU opt-out (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), detects every CPU engine actually present and advertises each usable one, with nothing missing and nothing phantom; the two NVIDIA cards and the Intel iGPU are named as detected and opted out, and nothing in the cluster mounts or advertises a GPU. | Written 2026-10-20 from an inventory read from sysfs, /proc and PCI sysfs, not from k3d-gpu. Hybrid active, balloons policy running, the P-core test pod inside CPUs 0-15 and the E-core one inside 16-23 (0.8); launcher ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS, and no AVX512 or AMX label from any source (0.85); no NUMA, DSA, IAA, QAT, NPU or Gaudi object (0.9); `up` names nvidia and intel as opted out, no GPU resource, no GPU plugin pod, no pod mounting `/dev/dri` or `/dev/nvidia*` (0.85, given the opt-out fix). SUPPORTED (0.6), REFUTED (0.4). | The table in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): `bench/wildct/h52w.sh` under `bench/wildct/hold.sh` (inventory, `detect` as found, `doctor`, `up`, node object, pod GPU scan, `k3d-gpu test`, `down`, inventory again), the installed release. SUPPORTED: every row matches. REFUTED: any row does not. Result ([H52w run](#h52w-run-wildct-i7-13700-2026-11-07)): one hold on release 0.1.89 (rule W7's release for the campaign). `up` took 32 s, named nvidia and intel as opted out and printed `Accelerators: hybrid`; the balloons policy pod Running, `k3d-gpu test`'s P-core pod on CPU 0 and its E-core pod on CPU 17; the launcher's ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT and CETSS, no AVX512 or AMX label from any source; no NUMA label; allocatable cpu, ephemeral-storage, hugepages, memory and pods only; no GPU plugin pod, no `/dev` hostPath and no GPU resource (`GPU-SCAN clean`); the node container `gpus=[]`; the inventory unchanged. Every row matches. | SUPPORTED |
 | H18w | H18's hypothesis on wildct: `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. A replication: H18's runner, image source (the release node image) and parts (a), (b), (c). | Written 2026-10-20, before any H18w measurement. Every run meets (a), (b) and (c) (0.8): sandbox `Cpus_allowed_list` inside 16-23; TCP to `100.66.38.121:22` (tailscale CGNAT) and `192.168.8.238:22` (host LAN) refused from the sandbox with the drop-log counter > 0, connected from the control pod; `pip install --user tomli_w==1.2.0` exits 0. | H18's `bench/sandbox_round.sh`, n = 3 runs in one hold, unchanged except as listed in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): cluster `k3dgpu-w-sbx`, the GPU opt-out, rule W3, the release node image, RAPL through rule W4. Outcome table: H18's. Result ([H18w run](#h18w-run-wildct-i7-13700-2026-11-07)): one hold of 3 runs on release 0.1.89 (rule W7's release for the campaign), a fresh cluster each. In every run `sandbox up` exited 0 with the warm pool's `readyReplicas` 1 and the sandbox pod on CPU 17, inside the E-cores 16-23; from the sandbox, TCP to `100.66.38.121:22` and to `192.168.8.238:22` was refused in 0.11-0.12 s with 2 packets on the policy's drop-log rule, and from the control pod both connected; `pypi.org` resolved, `pypi.org:443` connected and `pip install --user tomli_w==1.2.0` gave `pip_rc=0`, with the import reading `/tmp/.local`. Every run meets (a), (b) and (c). | SUPPORTED |
-| H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). | PENDING |
+| H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). Both arms keep the CPU Fast Draft the line registers through `K3D_GPU_AGENT_DRAFT=CPU`, since the launcher's default no longer drafts on a CPU class no H34-family row measured: [wildct amendment R7](#wildct-amendment-r7-h25ws-cpu-fast-draft-2026-11-07) (2026-11-07, before any H25w hold). Result ([H25w run](#h25w-run-wildct-i7-13700-2026-11-07)): one hold on release 0.1.89 (rule W7's release for the campaign), load MATCHED (amendment 27), no round void; round 6 (OFF) was cut by the level's 18:30 cap, so OFF has 2 rounds (n = 10) and ON 3 (n = 15). Added agent's first chunk 2.198 s ON vs 31.437 s OFF (14.30x, CI 13.38-14.89), c/OFF 1.00, a1 ON/OFF 0.97, every round pair >= 4x: T SUPPORTED. Outside the point ranges: OFF and ON took 2.9x and 2.2x H25 run 4's times on the i9, the package at 33.6-36.3 W (PL1 35 W). | SUPPORTED |
 | H28w | H28's hypothesis on wildct: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28w measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part: T/C round-median ready 0.5 (0.4-0.65), against H28's 0.47 on the i9. SUPPORTED 0.45, REFUTED (time part) 0.4, INCONCLUSIVE or not run (disk) 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, `typical` only, scored by `bench/zero-copy-models/score.py`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h28`, node on the P-cores (`NODE_CPUS=0-15`), W2, W3 (passed to the plain `k3d cluster create`), and a disk gate (W6). | PENDING |
 | H34w | H34's hypothesis on wildct: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, both on the 16-CPU P-core balloon, under matched background load. A replication: original models, runner, scorer and rule. | Written 2026-10-20, before any H34w measurement. At `typical`: median paired B/A decode tok/s 1.35 (1.15-1.6) and median paired B/A package J/token 0.76 (0.6-0.92). SUPPORTED by H34's rule at 0.6, REFUTED 0.25, INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, `typical` only, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h34`, the GPU opt-out in place of H34's `intel,hybrid`, W2, W3, W4. | PENDING |
 | H57wa | H57da's hypothesis on wildct (i7-13700, the 16 P-core CPUs, AVX2 and AVX-VNNI, no AVX-512, no AMX): with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other gate-passing arm (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A cross-host replication of H57da on a second AMX-less client. | Written 2026-10-20, before any H57d or H57w measurement. N=1 median decode tok/s: Od in [7, 18] (0.5); Ld in [10, 26] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token. | H57da's protocol, runner, statistic and outcome rules (the H57d pre-registration and its runner amendment), unchanged except as listed in the wildct pre-registration: H57d's runner (amendment R1) with the host knobs listed there: clusters `k3dgpu-w-h57d-<hold>`, the GPU opt-out in place of `K3D_GPU_VENDORS=hybrid`, W2-W6, hold-start `load1` <= 12, models downloaded on wildct at H57d's revisions, at most 5 holds of at most 75 min. Od's render names the hold's cluster: [H57d amendment R2](#h57d-amendment-r2-ods-render-names-the-holds-cluster-2026-10-29) (2026-10-29, before any H57w hold). | PENDING |
@@ -9059,6 +9059,139 @@ draft). Test: `tests/wildct_hold_test.sh` (row.sh's H25w environment), in CI.
 **Resume procedure.** Before H25w, step 3b ships main at this amendment's merge commit. Its
 `scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
 hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
+
+### H25w run (wildct, i7-13700, 2026-11-07)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T05:18:20Z to 05:36:58Z (one hold; lock free, no load wait: load1 0.99);
+                 rounds' pre-windows began 05:19:51Z, 05:21:43Z, 05:26:04Z, 05:28:00Z, 05:32:24Z and 05:34:18Z
+hypothesis:      H25w (H25's T part, A3 first-chunk TTFT, A4 amendment-27 load rule, as the wildct
+                 pre-registration's H25w line lists them; wildct amendment R7)
+host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700 (family 6 model 183), 8 P-cores
+                 (cpu_core 0-15) and 8 E-cores (cpu_atom 16-23), 1 NUMA node, 125 GiB RAM, PL1 35 W, Manjaro;
+                 Docker 29.7.2, live-restore off, cgroup systemd/2 (step 1, 03:32:22Z)
+host kernel:     6.6.156-2-MANJARO
+accelerators:    hybrid=1; UHD 770 (i915), RTX 4000 SFF Ada and RTX 2000 Ada (nvidia), opted out and not
+                 used (rule W8)
+k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc),
+                 rule W7's release since the first hold (H52w); 0.1.90 was cut at 05:25:00Z, during the hold,
+                 from packaging changes (its launcher equals 0.1.89's apart from VERSION)
+bench scripts:   main at ce4ff16c (amendment R7's merge), shipped as the archive repo-ce4ff16c47ee; run.sh
+                 runs its scripts/k3d-gpu (equal to 0.1.89's apart from VERSION) and share/ (equal to 0.1.89's)
+node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4,
+                 k3s v1.37.1+k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
+runtime:         openvino/model_server@sha256:a928903f…6fc58 (2026.4.1), pulled by the pod (k3d image import
+                 found no local copy of the tag@digest ref, as in H25 run 4); `agent manifest` CPU as shipped
+                 (P-cores, 16 CPUs, memory 6Gi) with the CPU Fast Draft OpenVINO/Qwen3-0.6B-int4-ov
+                 (K3D_GPU_AGENT_DRAFT=CPU, amendment R7) in both arms; pod Cpus_allowed_list 0-15 in all rounds
+models:          OpenVINO/Qwen3-4B-int4-ov b467368d (openvino_model.bin 074214fa…df2f9); draft f864c610
+                 (28613e99…) staged at <target>/OpenVINO-Qwen3-0.6B-int4-ov; hostPath from a copy in the node
+load:            bench/load/load.py `typical`, stress-ng 0.22.01 @sha256:2ea9a7c3…1cbe on E-cores 20-23
+                 (LOAD_CPUS, rule W2; 3 containers, 3 of 3 running in every window)
+energy source:   intel-rapl:0 energy_uj (package-0) through k3dgpu-w-rapl (rule W4), per round and per window
+environment:     IMAGE=<the node image>, MODELS=~/k3dgpu-bench-wildct/models, LEVELS=typical,
+                 CLUSTER=k3dgpu-w-h25, SEED_BASE=2560, HOLD=1440, LOAD_CPUS=20-23,
+                 K3D_GPU_VENDORS=auto,-nvidia,-intel, K3D_GPU_K3S_ARGS=<rule W3>, K3D_GPU_AGENT_DRAFT=CPU,
+                 K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl"
+runs per arm:    order ON OFF ON OFF ON OFF, seeds 2561-2566; ON 3 rounds (n = 15 added agents), OFF 2 rounds
+                 (n = 10): round 6 (OFF) was stopped by run.sh's 18:30 level cap and wrote no round file
+host load:       load1 1.15-11.55, foreign CPU 0.63-8.14 CPU-s/s (p90 1.62), MemAvailable 109.6-114.4 GiB,
+                 package 61-72 C, / 213.1-222.0 GB available (sample.py, 223 samples; df -BG read 207G
+                 before and after)
+```
+
+Command, on wildct: RESUME.md step 6's `launch H25w 1500 8 h25w`, which runs `bench/wildct/hold.sh H25w
+1500 8 bash bench/wildct/row.sh h25w`, and so `IMAGE=<the node image> MODELS=<models> OUT=<out>
+LEVELS=typical CLUSTER=k3dgpu-w-h25 SEED_BASE=2560 HOLD=1440 LOAD_CPUS=20-23 $E K3D_GPU_AGENT_DRAFT=CPU
+bench/shared-prefix/run.sh`, the registered line with amendment R7's variable. Records (round files,
+load windows, the score, both manifests, `up` and cache-usage logs, the hold's samples; the kubeconfig
+was not copied): [bench/wildct/results/2026-11-07/runs/H25w/](bench/wildct/results/2026-11-07/runs/H25w/).
+The host before and after the hold: [bench/wildct/results/2026-11-07/host/h25w.txt](bench/wildct/results/2026-11-07/host/h25w.txt).
+The score, from the copied records (identical to the `score.json` written on wildct):
+
+```bash
+python3 bench/shared-prefix/probe.py score \
+    --load bench/wildct/results/2026-11-07/runs/H25w/out/typical/load.jsonl \
+    bench/wildct/results/2026-11-07/runs/H25w/out/typical/round-*.json
+```
+
+`up` named nvidia and intel as opted out, printed `Accelerators: hybrid` and ended with
+`Accelerators schedulable: hybrid=1`. The agent manifest read "agent:
+OpenVINO/Qwen3-4B-int4-ov as 'Qwen3-4B-int4-ov' on CPU, P-cores, 16 CPU(s)" and "agent: Fast Draft
+OpenVINO/Qwen3-0.6B-int4-ov on CPU"; `off.yaml` differs from `on.yaml` by the one
+`--enable_prefix_caching=false` line. All 35 scored requests returned with no error, `prompt_tokens`
+1634 and `completion_tokens` 8, TTFT present in every one; graph.pbtxt read back as intended in all 5
+rounds. No round is void.
+
+**Load, amendment 27: MATCHED.** Covariates (gating, `TOLERANCE`):
+
+| Phase | Metric | ON | OFF | spread / limit |
+|-------|--------|----|-----|----------------|
+| pre (n = 3 per arm) | E-core busy % (CPUs 20-23) | 50.05 | 49.85 | 0.20 / 5.0 ok |
+| pre | throttle/min | 0 | 0 | 0 / 10 ok |
+| pre | swap used / growth MiB | 0 / 0 | 0 / 0 | ok |
+| during (ON 54, OFF 119 windows) | E-core busy % (load CPUs minus pod CPUs 0-15 = 20-23) | 54.24 | 54.92 | 0.68 / 5.0 ok |
+| during | swap used / growth MiB | 0 / 0 | 0 / 0 | ok |
+
+Outcomes during the rounds (reported, never gating): package W 34.87 ON vs 34.87 OFF; throttle/min
+0 vs 0; 1-min load 8.43 vs 10.12. OFF's windows include round 6's pre-window and its 28 during windows,
+since the level's load record holds every round that started; without them the rule also reads MATCHED
+(pre busy spread 0.07, during 0.70; not gated).
+
+**Pre-registered verdict: T SUPPORTED at `typical`** (`probe.py score`). M is not measured (A3).
+
+| | ON (shipping default) | OFF (`--enable_prefix_caching=false`) |
+|---|---|---|
+| added agents a2..a6, median TTFT | 2.198 s (n = 15) | 31.437 s (n = 10) |
+| per-round medians | 2.154, 2.204, 2.281 s (spread 0.127 s, 6%) | 31.408, 32.584 s (spread 1.176 s, 4%) |
+| cold agent a1, per round | 32.43, 30.87, 30.88 s | 32.47, 31.41 s |
+| control c (one token changed near position 16), per round | 32.25, 31.50, 30.09 s | 30.62, 30.61 s |
+| package energy per round | 3439, 3406, 3354 J | 8439, 8500 J |
+
+- Ratio OFF/ON of the added-agent median TTFT: **14.30x**, bootstrap 95% CI 13.38-14.89x (10000
+  resamples, seed 25). The lower bound clears the pre-registered 4x.
+- Controls: c/OFF median 1.00 (>= 0.8x: one changed token near the start makes a cold request); a1
+  ON/OFF 0.97 (inside ±15%). Per-arm spread gate passes. No round is void.
+- Cross-round pairs >= 4x: 6 of 6. Derived confidence by the A2 rule: (6+1)/(6+2) = 0.88.
+- Round 6 (OFF, seed 2566) started at 05:34:18Z and `run.sh`'s level cap (no new round after 18:30,
+  the probe under `timeout` of what is left) stopped its probe 1111 s into the run, before it wrote its
+  round file.
+  The H25 pre-registration ends a level with a hard abort at 18:30, and rounds not run count as missing
+  under the arm rule, which turns an arm INCONCLUSIVE only when more than 1 of its 3 rounds is lost; OFF
+  lost 1. Each of an OFF round's seven scored requests is a cold prefill: about 31 s here (240 s per
+  round with the warm-up), against 10.9 s on the i9 in H25 run 4. So six rounds did not fit the
+  level's 18:30.
+
+Against the prediction (written 2026-10-20, SUPPORTED 0.8): the verdict and both gates held (CI lower
+bound 13.38x >= 4x, c/OFF 1.00 >= 0.8). The point ranges did not: OFF 31.44 s against 10 s (7-15), ON
+2.20 s against 1.0 s (0.6-1.6), and the ratio 14.30x just above 10x (6-14). OFF ran 2.9x and ON 2.2x
+slower than H25 run 4 on the i9-13900T (OFF 10.87 s, ON 1.02 s). The package read 33.6-36.3 W in every
+load window of both arms, pre-windows with the pod idle included; wildct's PL1 is 35 W, and the i9 runs
+PL1 = PL2 = 117 W. The run does not test whether the power limit is the cause. Per added agent, the
+shared prefix saved 29.2 s of first-chunk time here, against 9.85 s on the i9.
+
+Not scored:
+
+- The ON rounds used 0.40x the OFF rounds' package energy (median 3406 J vs 8469 J for a round's 8
+  requests; whole package, the production containers' draw included).
+- CPUs 0-15, the pod's 16-CPU balloon, read about 8 CPU-s/s busy through the rounds (sample.py
+  `busy_p`, median 8.01, max 8.16); the records do not say which threads ran.
+- Foreign CPU (everything but this campaign's containers) was above 3 CPU-s/s in four samples: three
+  during cluster setup (05:18:25-05:18:50Z) and one at cleanup (05:36:52Z); none during a round.
+
+Production box. The snapshot before the hold (05:18Z) and after it (05:37Z) read the same: 18
+containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the same port codes. The
+line counts of `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 before and
+after, and their rules were identical with the counters stripped. After the hold, no `k3dgpu-w-*`
+cluster or container, no process of the hold and no network or volume of ours was left, and
+`live.lock` was free. Before the hold (05:18Z) all 18 modules of
+`/etc/modules-load.d/k3dgpu-wildct.conf` were loaded and `kernel.modprobe` was empty; after it
+(05:37Z) the host had 224 modules loaded and `kernel.modprobe` was still empty.
+
+Holds used: 3 of at most 12. The next row in the registered order is H34w.
 
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
