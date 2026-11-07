@@ -44,6 +44,8 @@ BASE = {
     "share/tool.sh": 'TOOL_URL="https://example.com/v1.2.0/tool-amd64.tar"\nARGS="--a"\n',
     "share/notes.txt": "tool v1.2.0 (2026-10-01), digest %s, rev %s\n" % (D1, "a" * 40),
     "share/lock.json": '{"x": 1}\n',
+    "share/plan.txt": "ok image x/y@%s: %s in images.lock\nserve o/m@%s\nbytes 123456789012\n"
+                      % (D1, D1[:19], "a" * 12),
     "README.md": "# x\n\n## Release History\n\n| Date | K3s | NV | Intel | Gaudi |\n"
                  "|------------|-----|----|-------|-------|\n| 2026-10-01 | a | b | v1 | c |\n",
 }
@@ -96,6 +98,18 @@ class PinOnlyDiff(unittest.TestCase):
     def test_version_digest_revision_and_date_tokens_pass(self):
         rc, out = self.run_case({"share/notes.txt": "tool v1.3.1 (2026-10-29), digest %s, rev %s\n" % (D2, "b" * 40)})
         self.assertEqual(rc, 0, out)
+
+    def test_digests_and_revisions_cut_to_12_pass(self):
+        # hack/pinlib/goldens.py moves the cut form audits (sha256:<12>) and plans (@<12>) print
+        rc, out = self.run_case({"share/plan.txt": "ok image x/y@%s: %s in images.lock\nserve o/m@%s\n"
+                                                   "bytes 123456789012\n" % (D2, D2[:19], "b" * 12)})
+        self.assertEqual(rc, 0, out)
+
+    def test_a_twelve_digit_number_is_not_a_cut_revision(self):
+        rc, out = self.run_case({"share/plan.txt": "ok image x/y@%s: %s in images.lock\nserve o/m@%s\n"
+                                                   "bytes 123456789013\n" % (D1, D1[:19], "a" * 12)})
+        self.assertEqual(rc, 1, out)
+        self.assertIn("share/plan.txt:3: +bytes 123456789013", out)
 
     def test_a_site_may_change_beyond_its_tokens(self):
         # the site regex covers the whole URL, so a reshaped asset name is the pin's own move

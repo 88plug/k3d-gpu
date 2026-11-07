@@ -87,10 +87,13 @@ lock_drift "a moved backend digest in the launcher" "vllm/vllm-openai-xpu:${XPU_
     "sed -i 's|\(vllm/vllm-openai-xpu:[^@]*\)@sha256:[0-9a-f]*|\1@sha256:$(printf 'e%.0s' {1..64})|' scripts/k3d-gpu"
 lock_drift "a changed pinned digest" "the repo pins sha256:$(printf 'f%.0s' {1..64})" \
     "sed -i 's/node-feature-discovery:v0.20.1@sha256:[0-9a-f]*/node-feature-discovery:v0.20.1@sha256:$(printf 'f%.0s' {1..64})/' share/node-feature-discovery.yml"
-lock_drift "a k3s bump" "images.lock is for k3s v1.37.1-k3s1, the Dockerfile pins v1.38.0-k3s1" \
-    "sed -i 's/^ARG K3S_TAG=.*/ARG K3S_TAG=\"v1.38.0-k3s1\"/' Dockerfile"
-lock_drift "a bumped test image" "not in images.lock: docker.io/nvidia/cuda:13.5.0-base-ubuntu26.04" \
-    "sed -i 's|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:13.5.0-base-ubuntu26.04|' scripts/k3d-gpu"
+# The pinned k3s tag is read from the Dockerfile and the edits move to releases no
+# upstream will publish (v9.9.9, 99.9.9), so a bump of either pin leaves these cases as they are.
+K3S_TAG=$(sed -n 's/^ARG K3S_TAG="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "${REPO}/Dockerfile")
+lock_drift "a k3s bump" "images.lock is for k3s ${K3S_TAG}, the Dockerfile pins v9.9.9-k3s1" \
+    "sed -i 's/^ARG K3S_TAG=.*/ARG K3S_TAG=\"v9.9.9-k3s1\"/' Dockerfile"
+lock_drift "a bumped test image" "not in images.lock: docker.io/nvidia/cuda:99.9.9-base-ubuntu26.04" \
+    "sed -i 's|K3D_GPU_TEST_IMAGE:-nvidia/cuda:[^}]*|K3D_GPU_TEST_IMAGE:-nvidia/cuda:99.9.9-base-ubuntu26.04|' scripts/k3d-gpu"
 lock_drift "a dropped entry" "not in images.lock: docker.io/library/ubuntu:26.04 (from Dockerfile)" \
     "python3 -c \"import json; d=json.load(open('images.lock')); d['images']=[e for e in d['images'] if e['name']!='docker.io/library/ubuntu']; open('images.lock','w').write(json.dumps(d))\""
 lock_drift "a lock entry with no digest" "schema violations" \

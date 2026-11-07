@@ -9017,6 +9017,49 @@ cluster or container, no process of the hold and no network or volume of ours wa
 
 Holds used: 2 of at most 12. The next row in the registered order is H25w.
 
+### Wildct amendment R7: H25w's CPU Fast Draft (2026-11-07)
+
+Recorded 2026-11-07, after the H52w and H18w holds and before any H25w hold. Mechanics only. No
+row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk need, hold count or
+order changes. No kernel module was loaded, and nothing on wildct changed.
+
+**What was found.** The pre-registration's H25w line says that the agent manifest "keeps its
+default CPU Fast Draft in both arms, as H25 run 4 did", and it stages the draft
+(`OpenVINO/Qwen3-0.6B-int4-ov` @ `f864c610`) for that. Its command sets no draft variable. When
+the line was written, the launcher drafted by default for every CPU target that serves an
+OpenVINO Qwen3 model (#116, merged 2026-10-18). The model optimizer (#163) merged at
+2026-10-21T05:59Z, three minutes before the pre-registration (#181). It narrowed that default:
+the launcher now drafts on the CPU by default only where an H34-family row is SUPPORTED for the
+host's CPU class (`agent_draft_measured` and `agent_ledger_rule H34` in `scripts/k3d-gpu`). No
+H34-family row names the i7-13700 (H34w is PENDING). So on wildct, release 0.1.89's
+`agent manifest` writes no draft, and the registered command would serve both arms without one.
+
+This was read on 2026-11-07 from main's launcher at `28b1e70b`, which equals 0.1.89's apart from
+the version line. The read used `K3D_GPU_SYSROOT`, with a `/proc/cpuinfo` that names the
+i7-13700, `K3D_GPU_AGENT_BACKEND=ovms` and `K3D_GPU_AGENT_DEVICE=CPU`, as `run.sh` sets them:
+
+- With no draft variable, the manifest has no `--draft_source_model` or `--draft_device` line,
+  and the launcher prints "agent: no CPU Fast Draft: no EXPERIMENTS.md H34-family row measured
+  13th Gen Intel(R) Core(TM) i7-13700 (K3D_GPU_AGENT_DRAFT=CPU forces it)".
+- With `K3D_GPU_AGENT_DRAFT=CPU`, it writes `--draft_source_model=OpenVINO/Qwen3-0.6B-int4-ov`
+  and `--draft_device=CPU`. The manifest is then byte-identical to the default one rendered for
+  the i9-13900T, the host of H25 run 4.
+
+H25 run 4 ran at `bcca7be`, which carries #116, and H25x served both arms with the same draft
+(`bench/xhost/results/2026-10-20/H25x/hold/out/on.yaml`).
+
+**Runner change.** `row.sh h25w` adds `K3D_GPU_AGENT_DRAFT=CPU` to H25w's environment, so the
+command serves what the H25w line registers. It reaches both arms alike: `run.sh` renders one
+manifest and derives OFF from it by the one `--enable_prefix_caching=false` line, which it still
+checks. The draft is read from `<target>/OpenVINO-Qwen3-0.6B-int4-ov`, where the setup staged it
+(`fetch_models.py --draft`), so nothing is downloaded in the pod. This adds no arm and gates
+nothing. H34w is not affected: `h34.sh` writes its own graphs (A, the target alone; B, with the
+draft). Test: `tests/wildct_hold_test.sh` (row.sh's H25w environment), in CI.
+
+**Resume procedure.** Before H25w, step 3b ships main at this amendment's merge commit. Its
+`scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
+hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

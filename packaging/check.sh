@@ -74,8 +74,10 @@ nfpm_verify() {
         rpm -qpi /dist/${rpm}
         rpm -qpR /dist/${rpm}
         rpm -qplv /dist/${rpm}
-        rpm -K /dist/${rpm}
-        rpm -i /dist/${rpm}
+        # The package is unsigned: check its digests only. RPM 6 enforces signatures by
+        # default (Fedora 45's 6.1 fails a plain -K or -i on an unsigned package).
+        rpm -K --nosignature /dist/${rpm}
+        rpm -i --nosignature /dist/${rpm}
         rpm -V k3d-gpu
         ${installed_checks}
         rpm -e k3d-gpu

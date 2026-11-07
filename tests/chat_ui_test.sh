@@ -40,10 +40,13 @@ expect_env() {
 # Image pinned by digest under its version tag, never by a moving tag alone.
 has   "image pinned by digest" '^ +image: ghcr\.io/open-webui/open-webui:v[0-9.]+@sha256:[0-9a-f]{64}$'
 lacks "no tag-only image"      '^ +image: [^@]+:[^@]+$'
-# The exact index digest of ghcr.io/open-webui/open-webui:v0.12.2, and the
-# version the header comment names. A bump changes all three together.
-OWUI_VERSION=v0.12.2
-OWUI_DIGEST=sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+# The version the comment above the image names, the image's tag and digest, and
+# the version the header names agree, and the digest is images.lock's for that tag.
+# A bump changes all of them together (hack/bump opt-in-manifests).
+OWUI_VERSION=$(sed -n 's|^ *# ghcr\.io/open-webui/open-webui:\(v[0-9.]*\)$|\1|p' "${MANIFEST}")
+OWUI_DIGEST=$(python3 -c 'import json, sys
+print("".join(e["digest"] for e in json.load(open(sys.argv[1]))["images"]
+              if e["name"] == "ghcr.io/open-webui/open-webui" and e["tag"] == sys.argv[2]))' "${ROOT}/images.lock" "${OWUI_VERSION}")
 has "image is ${OWUI_VERSION} digest" "^ +image: ghcr\.io/open-webui/open-webui:${OWUI_VERSION//./\\.}@${OWUI_DIGEST}$"
 has "header names ${OWUI_VERSION}"    "^# Source: https://github\.com/open-webui/open-webui ${OWUI_VERSION//./\\.}\."
 

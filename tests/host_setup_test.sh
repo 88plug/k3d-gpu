@@ -112,6 +112,19 @@ says "the nvctk pin derives HS_NVCTK from it" 'derived scripts/k3d-gpu ^HS_NVCTK
 # name for that release's build (26.3.5-1~ppa1 -> 26.3.5-1~24.04~ppa1).
 pin() { sed -n "s/^$1=//p" "${K3D_GPU}"; }
 ppa() { local v; v=$(pin "$1"); echo "${v%%~*}~$2~${v#*~}"; }
+# The GitHub .debs and the NPU archive move with group host-intel (hack/bump): the
+# plans below are checked against what the launcher pins, read from it here.
+CR=$(pin HS_CR)
+NPU_REL=$(pin HS_NPU_REL)
+NPU_BUILD=$(pin HS_NPU_BUILD)
+ZE_DEB=$(sed -n 's/^HS_ZE_DEB="\([^ ]*\) .*/\1/p' "${K3D_GPU}")
+IGC_OCL_DEB=$(sed -n 's/^\(intel-igc-opencl-2_[^ ]*\.deb\) .*/\1/p' "${K3D_GPU}")
+OCL_ICD_SHA=$(sed -n 's/^intel-opencl-icd_[$]{HS_CR}-0_amd64\.deb \([0-9a-f]\{64\}\) .*/\1/p' "${K3D_GPU}")
+NPU_2604_SHA=$(sed -n 's/.*-ubuntu2604\.tar\.gz \([0-9a-f]\{64\}\)".*/\1/p' "${K3D_GPU}")
+for v in CR NPU_REL NPU_BUILD ZE_DEB IGC_OCL_DEB OCL_ICD_SHA NPU_2604_SHA; do
+    OUT="${v}=${!v}"; ok=1; [ -n "${!v}" ] && ok=0
+    check "the launcher's ${v} pin is read" "${ok}" "${v} is empty"
+done
 for id_v in ppa-media:HS_PPA_MEDIA ppa-gmm:HS_PPA_GMM ppa-libva:HS_PPA_LIBVA; do
     v=${id_v#*:}
     OUT="${v}=$(pin "${v}")"
@@ -260,10 +273,10 @@ says "ubuntu pins libva-x11-2/libva-wayland2 with libva (vainfo needs both)" "li
 says "ubuntu keeps apt from swapping the GitHub compute .debs for PPA builds" "Pin: release o=LP-PPA-kobuk-team-intel-graphics"
 says "the apt pin covers the runtime packages" "Package: intel-opencl-icd libze-intel-gpu1 libze1"
 says "downloads go to a private dir that must be the user's own" "mkdir -p '${WORK}/dl' && [ ! -L '${WORK}/dl' ] && [ -O '${WORK}/dl' ] && chmod 0700 '${WORK}/dl'"
-says "ubuntu downloads compute-runtime 26.35 .debs" "releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb"
-says "ubuntu verifies the opencl-icd sha256" "61712caaddeba3d38e4f79e2a0fb23fea25596ca2d72c3144c6eea2331ec4301  ${WORK}/dl/intel-opencl-icd_26.35.39758.10-0_amd64.deb' | sha256sum -c -"
-says "ubuntu installs IGC 2.41.5 with the runtime" "intel-igc-opencl-2_2.41.5+22716_amd64.deb"
-says "ubuntu installs the level-zero loader .deb" "libze1_1.34.0+u24.04_amd64.deb"
+says "ubuntu downloads the pinned compute-runtime .debs" "releases/download/${CR}/libze-intel-gpu1_${CR}-0_amd64.deb"
+says "ubuntu verifies the opencl-icd sha256" "${OCL_ICD_SHA}  ${WORK}/dl/intel-opencl-icd_${CR}-0_amd64.deb' | sha256sum -c -"
+says "ubuntu installs the pinned IGC with the runtime" "${IGC_OCL_DEB}"
+says "ubuntu installs the level-zero loader .deb" "${ZE_DEB}"
 not_says "no NVIDIA plan without an NVIDIA GPU" "nvidia-container-toolkit"
 not_says "no NPU plan without an NPU" "linux-npu-driver"
 says "dry run says nothing changed" "Dry run: nothing was changed"
@@ -276,13 +289,13 @@ osrel "${r}" ubuntu 26.04
 kernel "${r}" 6.17.0-5-generic
 pci "${r}" 0000:00:0b.0 0x8086 0xb03e 0x120000 intel_vpu
 run "${r}" ""
-says "ubuntu 26.04 NPU uses the 26.04 driver archive" "linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz"
-says "NPU archive sha256 is checked" "83685e6d92f4db1ca65e442846d487c7feb1335634b33994292ceb38f933bcc7"
-says "NPU install pulls libtbb12 and the archive .debs by name" "libtbb12 '${WORK}/dl/npu-v1.38.0/intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-driver-compiler-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-v1.38.0/intel-fw-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
+says "ubuntu 26.04 NPU uses the 26.04 driver archive" "linux-npu-driver-v${NPU_BUILD}-ubuntu2604.tar.gz"
+says "NPU archive sha256 is checked" "${NPU_2604_SHA}"
+says "NPU install pulls libtbb12 and the archive .debs by name" "libtbb12 '${WORK}/dl/npu-${NPU_REL}/intel-level-zero-npu_${NPU_BUILD}~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-${NPU_REL}/intel-driver-compiler-npu_${NPU_BUILD}~ubuntu26.04_amd64.deb' '${WORK}/dl/npu-${NPU_REL}/intel-fw-npu_${NPU_BUILD}~ubuntu26.04_amd64.deb'"
 not_says "NPU install never globs the download dir" "*.deb"
-says "only the named .debs are unpacked from the checked archive" "-C '${WORK}/dl/npu-v1.38.0' './intel-level-zero-npu_1.38.0.20260910-34487311128~ubuntu26.04_amd64.deb'"
+says "only the named .debs are unpacked from the checked archive" "-C '${WORK}/dl/npu-${NPU_REL}' './intel-level-zero-npu_${NPU_BUILD}~ubuntu26.04_amd64.deb'"
 says "NPU needs the loader, and 26.04 has no pinned one: said, not guessed" "no pinned Level Zero loader for ubuntu-26.04"
-not_says "26.04 NPU never gets the 24.04 loader .deb" "libze1_1.34.0+u24.04_amd64.deb"
+not_says "26.04 NPU never gets the 24.04 loader .deb" "${ZE_DEB}"
 not_says "NPU-only host skips the media PPA" "add-apt-repository"
 says "missing NPU firmware is reported" "intel/vpu/vpu_50xx_* firmware missing"
 
@@ -514,9 +527,9 @@ osrel "${r}" ubuntu 26.04
 pci "${r}" 0000:00:0b.0 0x8086 0x7d1d 0x120000 intel_vpu
 run "${r}" "y" --apply
 rc_is "ubuntu --apply succeeds" 0
-logged "ubuntu --apply downloads the NPU archive" "curl -fL --retry 3 -o ${WORK}/dl/linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz"
+logged "ubuntu --apply downloads the NPU archive" "curl -fL --retry 3 -o ${WORK}/dl/linux-npu-driver-v${NPU_BUILD}-ubuntu2604.tar.gz"
 logged "ubuntu --apply checks the sha256" "sha256sum -c -"
-logged "ubuntu --apply unpacks the archive" "tar -xzf ${WORK}/dl/linux-npu-driver-v1.38.0.20260910-34487311128-ubuntu2604.tar.gz -C ${WORK}/dl/npu-v1.38.0"
+logged "ubuntu --apply unpacks the archive" "tar -xzf ${WORK}/dl/linux-npu-driver-v${NPU_BUILD}-ubuntu2604.tar.gz -C ${WORK}/dl/npu-${NPU_REL}"
 
 r=$(newroot apply-arch-units)
 osrel "${r}" manjaro
@@ -761,8 +774,8 @@ says "crescent without --plan: nothing to install" "Every check passed: nothing 
 # One failing check: only its own package set.
 rm "${r}/usr/lib/x86_64-linux-gnu/libze_intel_gpu.so.1"
 run "${r}" "" "${CR_OK[@]}"
-says "missing Level Zero GPU driver plans the 26.35 compute runtime" "releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb"
-# The 26.35 .debs depend on libigdgmm12 (>= 22.10.0); the 24.04 and 26.04
+says "missing Level Zero GPU driver plans the pinned compute runtime" "releases/download/${CR}/libze-intel-gpu1_${CR}-0_amd64.deb"
+# The compute-runtime .debs depend on libigdgmm12 (>= 22.10.0); the 24.04 and 26.04
 # archives carry 22.3.17 and 22.9.0, so the PPA's gmmlib comes first.
 says "missing Level Zero GPU driver adds the PPA for its gmmlib" "    sudo add-apt-repository -y ppa:kobuk-team/intel-graphics"
 says "missing Level Zero GPU driver: the PPA's tool is a prerequisite" "software-properties-common"
@@ -790,7 +803,7 @@ not_says "media failure plans no 24.04 package" "24.04"
 rm "${r}/usr/lib/x86_64-linux-gnu/libze_loader.so.1"
 run "${r}" "" "${CR_OK[@]}"
 says "26.04 has no pinned loader .deb and says so" "no pinned Level Zero loader for ubuntu-26.04"
-not_says "26.04 never gets the u24.04 loader" "libze1_1.34.0+u24.04"
+not_says "26.04 never gets the u24.04 loader" "${ZE_DEB%_amd64.deb}"
 
 # accel-config: planned only when a planned DSA/IAA step needs it and it is missing.
 r=$(crescent crescent-dsa)
