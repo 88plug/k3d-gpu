@@ -5,7 +5,7 @@
 #   bench/joule-pack/joulepack.py verdict "$OUT"
 #
 # Run it inside the shared live lock, never two live probes at once:
-#   OUT=$(mktemp -d) flock -w 10800 <lockfile> bench/joule-pack/probe.sh
+#   OUT=$(mktemp -d) flock -w 10800 ~/k3dgpu-bench.lock bench/joule-pack/probe.sh
 #
 # Env: OUT (results dir, required); LOAD_LEVEL (none|typical|heavy, default none:
 # bench/load/load.py background load on its CPU set for the whole run, and one

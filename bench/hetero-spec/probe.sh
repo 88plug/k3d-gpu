@@ -8,7 +8,7 @@
 # into the k3d node containers, so a slow download cannot eat the lock window.
 #
 # Run it under the box-wide live lock, with no k3dgpu-f-* cluster present:
-#   flock -w 10800 <scratchpad>/live.lock bench/hetero-spec/probe.sh [outdir]
+#   flock -w 10800 ~/k3dgpu-bench.lock bench/hetero-spec/probe.sh [outdir]
 # It self-limits to 20 min (HARD_S): it stops scoring at 18:00 and always deletes
 # its cluster (k3dgpu-i-hetero-spec) on exit. It uses a scratch KUBECONFIG, never
 # ~/.kube/config. Sysfs and /proc/<pid>/fdinfo are only read (sudo, SUDO_PASS env).

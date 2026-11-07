@@ -15,7 +15,7 @@
 #   probe.sh --dry-run   print the plan, touch nothing
 #
 # Run the live part only as:
-#   flock -o -w 10800 <scratchpad>/live.lock bench/amx-autoquant/probe.sh
+#   flock -o -w 10800 ~/k3dgpu-bench.lock bench/amx-autoquant/probe.sh
 # (-o: the lock fd is not inherited, so only flock itself holds the lock).
 # after `k3d cluster list` shows no k3dgpu-f-* cluster. No k3d cluster is made.
 # Only containers named k3dgpu-i-amx-autoquant-<arm>-<run id> are created, and a run

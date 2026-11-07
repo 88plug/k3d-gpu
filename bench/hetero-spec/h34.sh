@@ -7,7 +7,7 @@
 # about to run; a level is INCONCLUSIVE only when those windows are unmatched.
 #
 # Run it under the box-wide live lock:
-#   SUDO_ASKPASS=<askpass> flock -w 14400 <scratchpad>/live.lock bench/hetero-spec/h34.sh [outdir]
+#   SUDO_ASKPASS=<askpass> flock -w 14400 ~/k3dgpu-bench.lock bench/hetero-spec/h34.sh [outdir]
 # Budget: H34_LEVEL_S (1200 s) of wall time per level, the first level's budget
 # includes cluster setup; a level stops scoring 120 s before its budget ends.
 # Always deletes its cluster (k3dgpu-i-spec-decode-cpu) and the load containers on
