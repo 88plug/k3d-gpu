@@ -6,7 +6,7 @@
       "upstream": "https://github.com/intel/enterprise-ai-solutions/issues/71",
       "symptom": "teardown platform hangs at 'envoy_ai_gateway | Uninstall CRDs Helm release' while a model's AIGatewayRoute still carries aigateway.envoyproxy.io/finalizer: the role strips finalizers only after the controller and the CRDs are gone",
       "workaround": "k3d-gpu eas down sets the finalizers of every AIGatewayRoute to [] before it runs teardown platform --force (the issue's own workaround)",
-      "source": "https://github.com/intel/enterprise-ai-solutions/issues/71 (open); https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/envoy_ai_gateway/tasks/teardown.yaml",
+      "source": "https://github.com/intel/enterprise-ai-solutions/issues/71 (open); https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/envoy_ai_gateway/tasks/teardown.yaml",
       "checked": "2026-10-29"
     },
     {
@@ -14,7 +14,7 @@
       "upstream": "https://github.com/intel/enterprise-inference",
       "symptom": "model pods stay Pending on a node without feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true: models.yaml defaults.require_amx is true and the renderer turns it into a required node affinity on that label",
       "workaround": "eas-config.py writes defaults.require_amx to env/k3d-gpu/models.yaml from the nodes' AMXBF16 label (false without it)",
-      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/model_manager/models.yaml#L20; https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/model_manager/core/renderer.py#L90-L104",
+      "source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L20; https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/renderer.py#L90-L104",
       "checked": "2026-10-29"
     },
     {
@@ -22,7 +22,7 @@
       "upstream": "https://github.com/intel/enterprise-ai-solutions",
       "symptom": "es_auto_installer.sh configure installs kubectl v1.34.3, three minors behind a k3d-gpu cluster's v1.37 API server, outside kubectl's supported skew of one minor",
       "workaround": "the bastion bakes kubectl v1.37.2, the minor of the node image's K3S_TAG, and configure is never run",
-      "source": "https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L52; https://kubernetes.io/releases/version-skew-policy/#kubectl",
+      "source": "https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L52; https://kubernetes.io/releases/version-skew-policy/#kubectl",
       "checked": "2026-10-29"
     },
     {
@@ -30,7 +30,7 @@
       "upstream": "https://github.com/intel/enterprise-agent-toolkit",
       "symptom": "with fs.inotify.max_user_instances at the kernel default of 128, file watchers in the stack's pods fail with 'too many open files'",
       "workaround": "eas up warns below 8192 instances or 1048576 watches and prints the sysctl lines; the host is never changed",
-      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L20-L33",
+      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/prerequisites.md#L20-L33",
       "checked": "2026-10-29"
     },
     {
@@ -38,7 +38,7 @@
       "upstream": "https://github.com/intel/enterprise-agent-toolkit",
       "symptom": "the agent toolkit's documented minimum is 48 cores (96+ recommended); smaller nodes run it with less CPU for the model than the defaults assume",
       "workaround": "eas up warns when the node has fewer than 48 allocatable CPUs",
-      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/036b66234801e9bd950afd90830821859780d668/docs/prerequisites.md#L7",
+      "source": "https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/prerequisites.md#L7",
       "checked": "2026-10-29"
     },
     {
@@ -46,16 +46,40 @@
       "upstream": "https://github.com/intel/enterprise-inference",
       "symptom": "the inference docs say './es_auto_installer.sh install inference --skip-models', but es_auto_installer.sh rejects any option it does not know ('Unknown option: --skip-models')",
       "workaround": "none needed on the inference layer: EI's seeded config.yaml already sets llm_services_deploy_models: false. On the agent toolkit, EAT's chat model deploys whatever that key says; 'k3d-gpu eas up --agent-toolkit -- -e '{\"llm_services_autodeploy_models\": []}'' skips it (the guard model stays while the guardrail is on)",
-      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/config.yaml#L94-L98; https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/install.yaml#L143-L161; https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1312",
+      "source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/config.yaml#L89-L93; https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/llm_services/tasks/install.yaml#L143-L162; https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L1348",
       "checked": "2026-10-29"
     },
     {
       "id": "ei-keycloak-kcadm-argv",
       "upstream": "https://github.com/intel/enterprise-inference",
       "symptom": "keycloak_config runs kcadm.sh config credentials --password <admin password> and kcadm.sh update clients/<id> -s secret=<client secret> in the Keycloak pod through k8s_exec, so each value is in a process argv that ps lists on the node (on k3d, on the host) while the kcadm JVM runs; no_log hides it from Ansible's output only",
-      "workaround": "eas up applies patches/ei/0001-keycloak-config-kcadm-argv.patch after init (ei-kcadm.sh): kcadm reads the password from KC_CLI_PASSWORD, copied in the pod from the operator's KC_BOOTSTRAP_ADMIN_PASSWORD, and Keycloak generates the client secret, which kcadm prints; the install stops when the task changed shape. EI issue drafted, unsent (docs/intel/upstream-eat.md)",
-      "source": "https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L205; https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110",
-      "checked": "2026-11-01"
+      "workaround": "eas up applies patches/ei/0001-keycloak-config-kcadm-argv.patch (EI main) or its release-1.1 variant (EI v1.1.0) after init (ei-kcadm.sh): kcadm reads the password from KC_CLI_PASSWORD, copied in the pod from the operator's KC_BOOTSTRAP_ADMIN_PASSWORD, and Keycloak generates the client secret, which kcadm prints; the install stops when the task matches no variant. With auth_provider litellm (the agent toolkit at EAS v1.2.0) the role does not run. EI issue drafted, unsent (docs/intel/upstream-eat.md)",
+      "source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/keycloak_config/tasks/install.yaml#L167-L196; https://github.com/keycloak/keycloak/blob/0526b94f0ddf166a210e39fd69d897ab4bb14431/integration/client-cli/admin-cli/src/main/java/org/keycloak/client/cli/common/BaseConfigCredentialsCmd.java#L104-L110",
+      "checked": "2026-11-06"
+    },
+    {
+      "id": "eas-release-1.2-gateway-api-downgrade-on-k3s",
+      "upstream": "https://github.com/intel/enterprise-ai-solutions",
+      "symptom": "on k3s v1.37 (its gateway-api-crd addon installs Gateway API CRDs at v1.5.0 or later, with the safe-upgrades.gateway.networking.k8s.io ValidatingAdmissionPolicy), EAS v1.2.0's install stops at 'istio | Install Gateway API CRDs' (v1.2.1) and then at the gateway-helm install (its crds/ carry v1.4.1): 'Installing CRDs with version before v1.5.0 is prohibited by default'",
+      "workaround": "overlay rows 0007 and 0008 (integrations/eas/patches): the istio role applies its CRDs only when they are absent or older, and the envoy_gateway role keeps a Gateway API install at v1.5.0 or later, applying Envoy Gateway's own CRDs from gateway-crds-helm and installing the chart with skip_crds, as EAS main's gateway role does since EAS #42",
+      "source": "https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/roles/istio/tasks/install.yaml#L70-L73; https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/roles/envoy_gateway/tasks/install.yaml#L23-L47; https://github.com/k3s-io/k3s/blob/v1.37.1%2Bk3s1/manifests/gateway-api-crd.yaml; https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/roles/envoy_gateway/tasks/crds.yaml#L10-L28",
+      "checked": "2026-11-07"
+    },
+    {
+      "id": "eas-init-keeps-global-config",
+      "upstream": "https://github.com/intel/enterprise-ai-solutions",
+      "symptom": "init <layer> writes the layer manifest's global_config: keys (auth_provider litellm for agent-toolkit) only into a global_config.yaml it creates; an env inited before (another layer, or EAS main, which had no such key) keeps its own with an info line, so install agent-toolkit runs without LiteLLM, its guardrail and the models' LiteLLM registration",
+      "workaround": "eas.sh sets the manifest's global_config: keys in env/k3d-gpu/global_config.yaml after init, and eas up refuses an env set up for another layer or other pins until eas down and --reset-env",
+      "source": "https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.agent-toolkit.yaml#L8-L10; https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L930-L991",
+      "checked": "2026-11-06"
+    },
+    {
+      "id": "ei-cpu-auto-ignores-pods-outside-balloons",
+      "upstream": "https://github.com/intel/enterprise-inference",
+      "symptom": "under the NRI balloons policy, a cpu: auto model takes one NUMA node's logical CPUs less EAS's reserve there and the balloon pods already placed; pods outside the balloons are not subtracted, so on a one-NUMA node whose reserve is small (one thread per core: 12 CPUs) the model leaves no room for EAT's sandbox router, which the toolkit installs after the models (H62: 'Insufficient cpu')",
+      "workaround": "eas-config.py estimates the auto value from the host's /sys topology and EAS's reserve and, when the pods outside the balloons would not fit beside it, writes an explicit cpu for the model in models.yaml (EAT's documented remedy)",
+      "source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/nri_policy.py#L569-L591; https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/single-node-deployment.md#L191",
+      "checked": "2026-11-06"
     }
   ]
 }

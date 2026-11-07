@@ -165,16 +165,19 @@ machine. There are two paths, one per EAT generation:
   as F4 and has not run yet.
 - **EAT 2.0.** EAT [PR #19](https://github.com/intel/enterprise-agent-toolkit/pull/19)
   moved the toolkit into Intel's EAS installer (`es_auto_installer.sh install
-  agent-toolkit`). `k3d-gpu eas up --agent-toolkit` runs that installer against the
-  cluster, with every k3d choice made from what it reads there:
-  [intel/eas.md](intel/eas.md). F3 ran it once end to end on the i9-13900T and is
-  REFUTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install,
-  `eas check` and the teardown passed, but enterprise-inference's Keycloak step put the
-  Keycloak admin password on a process command line, where the run's secret scan found it.
-  The four commands are `k3d-gpu eas up` (`--agent-toolkit` adds EAT 2.0; `--dry-run`
-  and `--explain` print every choice and patch decision first), `eas status`, `eas check`
-  (chat, tool call, guardrail block and sandbox through the EAS gateway with a minted,
-  then deleted, LiteLLM key) and `eas down`.
+  agent-toolkit`); Intel released it on 2026-11-06 as EAT `release-2.0.0` with EAS
+  `v1.2.0` and enterprise-inference `v1.1.0`, the default pins here. `k3d-gpu eat up`
+  (`k3d-gpu eas up --agent-toolkit`) runs that installer against the cluster, with every
+  k3d choice made from what it reads there: [intel/eas.md](intel/eas.md). F3 ran it once
+  end to end on EAS `main` on the i9-13900T and is REFUTED
+  ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas
+  check` and the teardown passed, but enterprise-inference's Keycloak step put the Keycloak
+  admin password on a process command line, where the run's secret scan found it. F5 runs
+  `k3d-gpu eat` at the GA tags on the Xeon 6741P. The commands are `k3d-gpu eat up`
+  (`--dry-run` and `--explain` print every choice and patch decision first), `eat status`,
+  `eat check` (Intel's `validate agent-toolkit`, then chat, tool call, guardrail block and
+  sandbox through the EAS gateway with a minted, then deleted, LiteLLM key) and `eat down`;
+  `k3d-gpu eas` is the same with the layer named, and `eat up --legacy` runs EAT 1.x.
 
 What the EAS, enterprise-inference and EAT 1.1.x runs found upstream, and the drafts we
 can hand over, are listed under [Upstream findings](#upstream-findings).
@@ -226,7 +229,7 @@ and installs through EAS.
 | Hosts | Xeon. Minimum 48 cores and 32 GB RAM, recommended 96+ cores and 64 GB; Docker mode asks for 96+ cores and 128 GB | Any Intel host it detects: client Core and Core Ultra, Xeon, Arc, Gaudi (detection and config fixture-tested per family, [platforms.md](platforms.md)). EAT ran end to end on one i9-13900T with no AMX and no AVX-512, n=1 [ledger:H1b] |
 | OS | Ubuntu 22.04 / 24.04, x86_64 | Any Linux with Docker that runs k3d; `host-setup` prints pinned driver steps for Ubuntu 24.04/26.04, Fedora, Arch and Manjaro |
 | Cluster setup | Kubespray onto the host, or brownfield on an existing cluster; the `ei-*-eligible` labels come only from the Kubespray path | One `k3d-gpu up`; `K3D_GPU_NODE_LABELS` sets EAT's labels, `K3D_GPU_BALLOONS=external` hands the NRI policy to EAT [ledger:H14] |
-| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eas up --agent-toolkit`: the existing-cluster mode, with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F3 is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
+| EAT 2.0 install | EAS `es_auto_installer.sh install agent-toolkit`, onto Kubespray or an existing cluster (`existing_kubernetes`) | `k3d-gpu eat up` (`eas up --agent-toolkit`): the existing-cluster mode at the GA tags (EAS `v1.2.0`, EAT `release-2.0.0`), with the k3d settings and patches chosen from the cluster ([intel/eas.md](intel/eas.md)). F5 checks it on the Xeon 6741P. F3 (EAS `main`) is REFUTED ([run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): it installed, checked and tore down, and the secret scan found the Keycloak admin password on a command line |
 | Engines | vLLM CPU (`vllm/vllm-openai-cpu:v0.24.0`, bf16), 9 model profiles in the single-node table (7 chat, 1 embedding, 1 reranker). An OVMS Helm chart ships but no default path deploys it: `openvino/model_server:2025.4`, plus an unpinned `latest-py` tag for its model-export containers | `agent up` picks per host: vLLM on a Gaudi, OVMS 2026.4.1 on an XMX GPU, else OVMS on the P-cores, or, on a CPU class where an engine-choice row is SUPPORTED (the Xeon 6741P today), llama.cpp with the model's int4 GGUF (for Gemma 4 26B-A4B, the one model measured, Google's QAT Q4_0 GGUF and QAT MTP drafter) [ledger:H59]; vLLM XPU (`v0.32.0`) or llm-scaler on Arc by flag. Its images are pinned by digest in `images.lock` |
 | Accelerators | None requested: no `gpu.intel.com`, `habana.ai` or `/dev/dri` on the default path | Intel GPU, NPU, Gaudi, DSA, IAA and QAT plugins started per detected device, and `up` checks that each is schedulable (on the Xeon 6741P it warned when QAT advertised none [ledger:H52b]) |
 | CPU placement | NRI balloons sized for Xeon NUMA; on a hybrid CPU EAT's reservation needs the patch in [`contrib/eat/`](../contrib/eat) | Balloons baked for hybrid P/E and multi-NUMA hosts; vLLM on P-cores and agent services on E-cores through `contrib/eat/` values |
@@ -323,9 +326,9 @@ drafts are unsent, ready to hand over, and live in
 | Upstream | Finding | What k3d-gpu does |
 |---|---|---|
 | EI docs | A content-safety guardrail block comes back as HTTP 200 with `finish_reason: "content_filter"` on LiteLLM v1.105.1, EI's pin; EI's guardrail docs still describe the HTTP 500 of the pin before | `eas check` accepts either shape (#261) |
-| EI model deploy | The LiteLLM master key reaches model-manager through ansible `environment:`, which puts it in the deploy's `/bin/sh -c` command line for the whole deploy ([deploy_models.yaml#L240](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/llm_services/tasks/deploy_models.yaml#L240)) | Fixed by override: `eas up` writes `_deploy_litellm_secret: ""`, so model-manager reads the Secret itself, and stops the install if EI hands the key over any other way |
-| EI Keycloak | `keycloak_config` runs `kcadm.sh config credentials ... --password <value>` in the Keycloak pod ([install.yaml#L166-L175](https://github.com/intel/enterprise-inference/blob/3e8a24486b6ee812adf2bf452f8ba5751c16c8bd/roles/keycloak_config/tasks/install.yaml#L166-L175); still there on EI `main` `40bd169`, read 2026-11-01). `no_log` keeps it out of logs, not out of `ps` | It is why F3 is REFUTED with every functional step passing ([F3 run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)). `eas up` now patches the role: kcadm reads the password from `KC_CLI_PASSWORD`, and Keycloak generates the client secret, the role's other `kcadm.sh` argument ([State and secrets](intel/eas.md#state-and-secrets)). No live run has checked the patch yet |
-| EI `cpu: auto` | A TP 1 `cpu: auto` model is sized to one NUMA node's free balloon CPUs, and pods outside the balloons are not subtracted ([nri_policy.py#L569](https://github.com/intel/enterprise-inference/blob/170eb3a/model_manager/core/nri_policy.py#L569), `release-1.1`). In H62's one-NUMA guest the Gemma 4 pod got 76 of 95.4 allocatable CPUs, and EAT 2.0's sandbox router, installed after the models, could not be scheduled ([H62 run](../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)) | `k3d-gpu eas` does not override it. In F3 the router was scheduled and the sandbox step passed |
+| EI model deploy | The LiteLLM master key reaches model-manager through ansible `environment:`, which puts it in the deploy's `/bin/sh -c` command line for the whole deploy ([deploy_models.yaml#L231](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/llm_services/tasks/deploy_models.yaml#L231) at v1.1.0) | Fixed by override: `eas up` writes `_deploy_litellm_secret: ""`, so model-manager reads the Secret itself, and stops the install if EI hands the key over any other way |
+| EI Keycloak | `keycloak_config` runs `kcadm.sh config credentials ... --password <value>` in the Keycloak pod ([install.yaml#L167-L176](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/keycloak_config/tasks/install.yaml#L167-L176) at v1.1.0; the same at `main` `3e8a244`). `no_log` keeps it out of logs, not out of `ps` | It is why F3 is REFUTED with every functional step passing ([F3 run](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)). `eas up` now patches the role (a variant for EI `main` and one for `release-1.1`): kcadm reads the password from `KC_CLI_PASSWORD`, and Keycloak generates the client secret, the role's other `kcadm.sh` argument ([State and secrets](intel/eas.md#state-and-secrets)). With the agent toolkit at the GA tags (`auth_provider: litellm`) EAS installs no Keycloak and the role does not run. No live run has checked the patch yet |
+| EI `cpu: auto` | A TP 1 `cpu: auto` model is sized to one NUMA node's free balloon CPUs, and pods outside the balloons are not subtracted ([nri_policy.py#L569-L591](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/nri_policy.py#L569-L591), v1.1.0). In H62's one-NUMA guest the Gemma 4 pod got 76 of 95.4 allocatable CPUs, and EAT 2.0's sandbox router, installed after the models, could not be scheduled ([H62 run](../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)) | Under `nri-balloons` `eas up` estimates the auto value from the host's CPU topology and EAS's reserve, and writes an explicit `cpu` for the model (EAT's documented remedy) when the pods outside the balloons would not fit beside it. On H62's guest shape that is 72; on the Xeon 6741P host (48 SMT siblings reserved) the estimate is about 40, which fits, so `cpu: auto` stays (F5 records the value EI picks). In F3 (`best-effort`) the router was scheduled and the sandbox step passed |
 | EAT 1.1.0 vLLM CPU | `release-1.1.0` moves the vLLM CPU image from `v0.24.0` to `v0.28.0`, past the CPU attention hang fixed in v0.25.0 ([vllm#45844](https://github.com/vllm-project/vllm/pull/45844)) that stalled EAT 1.0.3's stock arm in H54a. Inside EAT's banking flow the 1.1.0 stock arm then did at least as well as k3d-gpu's CPU stack (H50 REFUTED) | `eat-up.sh` pins `v0.28.0` by digest |
 | EAT 1.1.0 OVMS chart | The chart ships `openvino/model_server` `2025.4` ([values.yaml#L18-L20](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/ovms/values.yaml#L18-L20)), which exits 139 (SIGSEGV) loading Gemma 4 26B-A4B, inside k3d and outside it (H50o INCONCLUSIVE). OVMS 2026.4.1 serves that model | `agent up` uses OVMS 2026.4.1 |
 | EAT 1.1.0 XPU path | `xpu-values.yaml` sources `/opt/intel/oneapi/setvars.sh` before vLLM ([#L26](https://github.com/intel/enterprise-agent-toolkit/blob/0c726f576595971c53cc45b94e08ba969beb4a4a/core/helm-charts/vllm/xpu-values.yaml#L26)), and `vllm/vllm-openai-xpu:v0.28.0` has no such file, so the container exits at once on any host (H53, rung a) | Not deployed by `eat-up.sh`, which runs the CPU path. The next failure, oneCCL's `/dev/dri/by-path`, is a k3d-gpu gap |
@@ -489,11 +492,12 @@ Shipped since this roadmap was first written:
   class where an engine-choice row is SUPPORTED, llama.cpp with the model's int4 GGUF takes
   the CPU instead: the Xeon 6741P class since 2026-11-01, measured on Gemma 4 26B-A4B with
   the QAT GGUF and MTP drafter only [ledger:H59].
-- **EAS and EAT 2.0.** `k3d-gpu eas up`, `status`, `check` and `down` drive Intel's EAS
-  installer in its bring-your-own-cluster mode, with every k3d setting and patch chosen
-  from the cluster ([intel/eas.md](intel/eas.md)). F3 ran it end to end once; it is
-  REFUTED on the Keycloak admin password in a command line, with every functional step
-  passing.
+- **EAS and EAT 2.0.** `k3d-gpu eas up`, `status`, `check` and `down` (and `k3d-gpu eat`,
+  the agent-toolkit layer) drive Intel's EAS installer in its bring-your-own-cluster mode,
+  at the GA tags of 2026-11-06, with every k3d setting and patch chosen from the cluster
+  ([intel/eas.md](intel/eas.md)). F3 ran it end to end once on EAS `main`; it is REFUTED on
+  the Keycloak admin password in a command line, with every functional step passing. F5
+  checks the GA tags on the Xeon 6741P.
 - **EAT on one node.** `K3D_GPU_NODE_LABELS` sets the `ei-*-eligible` labels and
   `K3D_GPU_BALLOONS=external` leaves the balloons policy to EAT [ledger:H14];
   [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path
