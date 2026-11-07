@@ -1,0 +1,169 @@
+# wildct around the H52w hold, 2026-11-07 (UTC). Read-only reads as andrew, except the firewall
+# dumps (iptables-save, ip6tables-save and nft list ruleset, as root).
+# The production snapshot: running containers, published-port HTTP codes from the host, and each
+# running container's StartedAt and RestartCount.
+
+== state before the hold (2026-11-07T04:03Z)
+## date 2026-11-07T04:03:05+00:00
+## boot: 2026-10-29 05:11:09
+## kernel: 6.6.156-2-MANJARO
+## disk
+/dev/nvme0n1p2             3667G 3273G      207G      95% /
+## mem
+MemTotal:       131524088 kB
+MemAvailable:   120102312 kB
+## loadavg: 0.32 0.43 0.51 2/3671 34072
+VERSION="0.1.89"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+## repo -> repo-85a7bc8668d1 COMMIT=85a7bc8668d18a3233496f0a3a23b09bb63ee20f
+## runs/IMAGE: cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+v4.3.1+gc0d08d0
+## clusters (k3d cluster list; names only)
+wtm (the box owner's; exited; not this campaign's). No k3dgpu-w-* cluster.
+## our containers
+ps rc=0
+## live.lock
+-rw-r--r-- 1 andrew andrew 0 Nov  6 22:34 /home/andrew/k3dgpu-bench-wildct/live.lock
+lock-free
+hold procs rc=1
+convert pid=24108 alive=no rc=0
+diag-smoke2 pid=17199 alive=no rc=1
+smoke2 pid=32217 alive=no rc=1
+smoke3 pid=62226 alive=no rc=0
+smoke4 pid=48184 alive=no rc=0
+smoke5 pid=31149 alive=no rc=0
+## modules of /etc/modules-load.d/k3dgpu-wildct.conf
+loaded: 18 of 18; missing: 0
+modprobe=[]
+## newest k3d-gpu release at 04:03Z (gh release list): aur-v0.1.89 (2026-11-07T00:23:41Z), as installed
+
+== production snapshot before the hold (2026-11-07T04:02Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== production snapshot after the hold (2026-11-07T04:06Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== comparison
+production snapshot: identical
+iptables-save rules, packet counters stripped: identical
+ip6tables-save rules, packet counters stripped: identical
+nft list ruleset, counters stripped: identical
+
+== after-hold checks (RESUME.md step 6)
+== after H52w 2026-11-07T04:05:26Z
+0
+== H52w lock taken 2026-11-07T04:03:54Z
+== H52w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h52w 2026-11-07T04:03:54Z
+== H52w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T04:05:00Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3273G      207G      95% /
+lock-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)

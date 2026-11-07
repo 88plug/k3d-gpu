@@ -1,16 +1,21 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, and wildct amendments R1, P1, R2, R3, R4 and R5). This file
-changes no rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs
-first when the `repo` on wildct predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past
-step 1 runs until every step 1 check passes.
+pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5 and R6, and the "H52w
+run" section). This file changes no rule. Run it top to bottom, except that step 3b (ship
+`origin/main` to wildct) runs first when the `repo` on wildct predates `bench/wildct/nfprobe.sh`
+(H10 runs it). Nothing past step 1 runs until every step 1 check passes.
 
-## Where things stand (2026-10-30, after smoke4)
+## Where things stand (2026-11-07, after H52w)
 
-- **Ready for the first hold, `H52w` (step 6, row 1).** The kernel modules k3s needs are loaded
-  and persisted, step 1 passes on release 0.1.81, and the wiring smoke `smoke4` passed. No hold
-  has run; nothing has been measured.
+- **Next: row 2, `H18w` (step 6).** Row 1, `H52w`, ran on 2026-11-07 (04:03:54Z to 04:05:00Z,
+  rc 0, every line of `out/rc.txt` a pass) and is scored SUPPORTED (EXPERIMENTS.md "H52w run";
+  records in `results/2026-11-07/runs/H52w/`, the host before and after in
+  `results/2026-11-07/host/h52w.txt`). The host's containers, start times, restart counts, port
+  codes and firewall rules read the same before and after it, and nothing of the hold was left.
+  Holds used: 1 of at most 12.
+- **Release frozen at 0.1.89 (rule W7).** `H52w`, the campaign's first hold, ran 0.1.89, so every
+  later hold runs it too. Step 3 does not run again, and neither does step 5.
 - **Kernel modules** (each approved by the box owner on 2026-10-29; `kernel.modprobe` stays empty):
   - `vxlan` and `br_netfilter` (amendment R3; `results/2026-10-29/host/modules.txt`);
   - `xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT
@@ -24,38 +29,50 @@ step 1 runs until every step 1 check passes.
     with the same snapshot, check and rollback procedure (amendment R5;
     `results/2026-10-30/host/modules-nft.txt`).
 
-  All 18 are listed in `/etc/modules-load.d/k3dgpu-wildct.conf` and loaded. Each load left the
-  host's containers, published endpoints and firewall rule counts as they were. If a later probe
-  names another missing module of that class, load it the same way: snapshot, `modprobe -a`,
-  the same checks at once and 3 minutes later, `modprobe -r` if anything changed, then append it
-  to the file.
+  All 18 are listed in `/etc/modules-load.d/k3dgpu-wildct.conf` and loaded (read again on
+  2026-11-07; the host has not rebooted since 2026-10-29T09:11Z). Each load left the host's
+  containers, published endpoints and firewall rule counts as they were. If a later probe names
+  another missing module of that class, load it the same way: snapshot, `modprobe -a`, the same
+  checks at once and 3 minutes later, `modprobe -r` if anything changed, then append it to the
+  file.
 - **2026-10-30 (amendment R5; `results/2026-10-30/`).** Main at `cf49f0e6` was shipped (step 3b)
-  and 0.1.81 installed (step 3c). Step 1 passed at 05:09:52Z (`runs/resume-health-r5.txt`: H9
-  `br_netfilter vxlan`, H10 `NFPROBE clean` with the 0.1.81 node image). `smoke4` (05:10:53Z,
-  rc 0): `up rc=0 in 30 s`, `pods ready: yes after 16 s`, `GPU-SCAN clean`, `down rc=0`, nvidia
-  and intel opted out, the node container `devices=[] gpus=[] restarts=0`, every pod 1/1
-  Running with 0 restarts or Completed, no GPU plugin pod, no `/dev` hostPath, no GPU resource in
-  the node's allocatable. No cluster, container or process of the campaign was left after it.
+  and 0.1.81 installed (step 3c). Step 1 passed at 05:09:52Z (`runs/resume-health-r5.txt`). The
+  wiring smoke `smoke4` passed (05:10:53Z, rc 0).
+- **2026-10-31 to 2026-11-06: wildct unreachable** (its Tailscale key had expired; renewed).
+  Nothing of the campaign ran on it.
+- **2026-11-07 (amendment R6; `results/2026-11-07/`).** The host read as R5 left it
+  (`host/preflight.txt`): 18 production containers Up since 2026-10-29T09:11:27Z with 0
+  restarts, no `k3dgpu-w-*` cluster or container, `live.lock` free with no holder, the 18
+  modules loaded. Step 1 passed on the 0.1.81 image (03:30:03Z,
+  `runs/resume-health.txt.20261107T033004Z`). Main at `85a7bc86` was shipped (step 3b) and 0.1.89
+  installed (step 3c; `runs/install-0.1.89.log`). Step 1 passed again at 03:32:22Z
+  (`runs/resume-health.txt`: H9 `br_netfilter vxlan`, H10 `NFPROBE clean` with the 0.1.89 node
+  image). `smoke5` (03:34:15Z, rc 0): `up rc=0 in 33 s`, `pods ready: yes after 15 s`,
+  `GPU-SCAN clean`, `down rc=0`, nvidia and intel opted out, the node container
+  `devices=[] gpus=[] restarts=0`, every pod 1/1 Running with 0 restarts or Completed, no GPU
+  plugin pod, no `/dev` hostPath, no GPU resource in the node's allocatable. No cluster, container
+  or process of the campaign was left after it, and the host's containers, port codes and
+  firewall line counts read as before.
 - **Left on wildct by this campaign** (no container, cluster, network or volume):
   - `~/k3dgpu-bench-wildct/`, which holds:
     - `bin/`: k3d v5.9.0, helm v4.3.1, kubectl v1.37.2;
-    - `k3d-gpu/`: the 0.1.81 `.deb`, unpacked;
+    - `k3d-gpu/`: the 0.1.89 `.deb`, unpacked;
     - `hfvenv/`;
     - `models/` and `h57/models/`: every file sha256-checked against the Hub, `VERIFY ok`
       (`setup/dl.log` also holds the first H57 verify's `VERIFY 1 bad`: the mmproj file,
       not downloaded on purpose; `setup/verify-h57.log` skips it and reads `VERIFY ok`);
     - `h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/` (step 4c, 2026-10-29: Q4_0
       `8eb21d5b...`, 321,145,696 bytes, the i9's bytes) and Od's `graph.pbtxt` (`c57ecf35...`,
-      the i9's);
+      the i9's); both hashed again on 2026-11-07;
     - `h57/bin/k3d` (the shim) and `h57/weights.sha256`;
-    - `repo` -> `repo-cf49f0e6555e` (and the older archives);
+    - `repo` -> `repo-85a7bc8668d1` (and the older archives);
     - `setup/`: `images-before.txt`, `containers-before.txt`, `volumes-before.txt`,
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
-      node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `convert/`,
-      `resume-health.txt` (2026-10-30T05:09:52Z; the earlier ones renamed
+      node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
+      `H52w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones renamed
       `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
-      `setup-images-*.log`, `IMAGE` and `campaign.log`;
+      `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
       `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
       root), `prodcheck.sh` (the host's services), `health.sh` (step 1, as written below) and
@@ -64,23 +81,26 @@ step 1 runs until every step 1 check passes.
       `modstate.sh` (the loaded modules and firewall line counts, as root).
   - `/etc/modules-load.d/k3dgpu-wildct.conf` (root, 0644; 18 modules), written with the box
     owner's approval. It is the owner's: step 9 does not remove it.
-  - Images: `cryptoandcoffee/k3d-gpu:0.1.81`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
+  - Images: `cryptoandcoffee/k3d-gpu:0.1.89`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
     `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
-    2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71` and `:0.1.79` were removed in step 3c.
-- **Never existed.** No inference request. No measurement. `smoke1`, `smoke2`, `diag-smoke2`,
-  `smoke3` and `smoke4` are discarded and disclosed (amendments R1, R2, R3 and R5); `smoke4` is
-  the campaign's passing wiring smoke.
+    2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71`, `:0.1.79` and `:0.1.81` were removed in step 3c.
+- **Never existed.** No inference request. No measurement before `H52w`. `smoke1`, `smoke2`,
+  `diag-smoke2`, `smoke3`, `smoke4` and `smoke5` are discarded and disclosed (amendments R1, R2,
+  R3, R5 and R6); `smoke5` is the campaign's passing wiring smoke for 0.1.89.
 - **Never touched.** No GPU, nor anything that was on the host before the campaign, apart from
   the 18 kernel modules (and their three dependencies) and their `modules-load.d` file, which the
   box owner approved.
-- **Newest release on 2026-10-30: k3d-gpu 0.1.81**, installed in step 3c. Step 3a picks the newest
-  one again.
-  - `.deb` sha256: `beac5c26ef33bbe784c4cd42ff4c18b9588534df9189c284c93bfd57ed85fca3`.
-  - Node image: `cryptoandcoffee/k3d-gpu:0.1.81@sha256:b68387c9c73ff57ab19facfa18196519a14df31576cdfb0d225f6f9401d2380e`.
-  - Its launcher and `share/` equal main's at `cf49f0e6`, apart from the version line.
-- **H57wb's start gates were met on 2026-10-30** (`/` 208 GB available, MemAvailable 118 GiB, at
-  step 1), not a reading of the row. If they still are at step 6's row 7, the pack stops there:
+- **The campaign's release: k3d-gpu 0.1.89**, installed in step 3c and still the newest when
+  `H52w` started (rule W7: the first hold runs the newest release; later holds keep it).
+  - `.deb` sha256: `8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc`.
+  - Node image: `cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4`.
+  - Its launcher and `share/` equal main's at `85a7bc86`, apart from the version line.
+- **H57wb's start gates were met on 2026-11-07** (`/` 207 GB available, MemAvailable 114.5 GiB,
+  at step 1), not a reading of the row. If they still are at step 6's row 7, the pack stops there:
   H57wb has no runner on this host.
+- **Not in this pack: H59w** (H59 amendment R1; `row.sh h59w` and `row.sh h59w-prep`).
+  `h59w-prep` has not run on wildct, and `row.sh h59w` has no path for the wiring smoke that
+  amendment R1 runs before a row's first hold (amendment R6).
 
 ## Ground rules (W1-W8; this pack adds none)
 
@@ -159,7 +179,8 @@ timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load
 
 ## 3. Upgrade to the newest release
 
-Rule W7: the newest k3d-gpu release at the first hold. No hold has run yet, so upgrade now.
+Rule W7: the newest k3d-gpu release at the first hold. The first hold, `H52w`, ran 0.1.89 on
+2026-11-07, so this step does not run again; it is kept as the record of how 0.1.89 was installed.
 
 **3a [c]. Pick the release and check it matches main.**
 
@@ -241,13 +262,15 @@ diff -r $R/share $W/k3d-gpu/usr/share/k3d-gpu | grep -v "^Only in $W/k3d-gpu/usr
   `LAUNCHER-DIFF`. Stop.
   `hold.sh` would refuse every hold anyway (exit 7).
 
-Remove the old node images this campaign pulled. Only remove an image whose ID is not in
-`setup/images-before.txt`. The file's format was not recorded, so an ID counts as listed when its
-first 12 hex digits appear anywhere in it, and nothing is removed when the file holds no ID at all:
+Remove the old node images this campaign pulled (every release it installed, but `V`). Only
+remove an image whose ID is not in `setup/images-before.txt`. The file's format was not recorded,
+so an ID counts as listed when its first 12 hex digits appear anywhere in it, and nothing is
+removed when the file holds no ID at all:
 
 ```bash
 if grep -qE '[0-9a-f]{12}' $W/setup/images-before.txt; then
-    for t in 0.1.71 0.1.65; do
+    for t in 0.1.89 0.1.81 0.1.79 0.1.71 0.1.65; do
+        [ "$t" != "$V" ] || continue
         id=$(timeout 30 docker image inspect -f '{{.Id}}' cryptoandcoffee/k3d-gpu:$t 2>/dev/null) || continue
         s=${id#sha256:}
         grep -qF "${s:0:12}" $W/setup/images-before.txt && { echo "keep $t (pre-existing)"; continue; }
@@ -303,7 +326,7 @@ setsid nohup bash -c 'echo $$ > '"$W"'/runs/convert/pid; bash '"$R"'/bench/wildc
   docker did not answer, not that none is running. Stop only those containers.
   Then stop the pack.
 
-## 5. Wiring smoke (`smoke4`: passed 2026-10-30)
+## 5. Wiring smoke (`smoke5`: passed 2026-11-07)
 
 This is W1's smoke: an `up` with the opt-out and W3, the pod wait, the GPU scan, then `down`.
 It sends no inference request. It is discarded and disclosed, and is not a hold of any row.
@@ -313,9 +336,10 @@ It sends no inference request. It is discarded and disclosed, and is not a hold 
 (`bench/wildct/ready.sh`, amendment R3). A `GPU-SCAN` line is a verdict only on a non-empty pod
 list: `gpu_scan.py` exits 1 with no `GPU-SCAN` line on an empty one (amendment R2).
 
-**`smoke4` passed on 2026-10-30 with 0.1.81 (amendment R5), so this step is done.** Run it again,
-as `smoke5` in place of `smoke4` below, only when step 3c has installed a release other than
-0.1.81 since; `launch` refuses a NAME whose `runs/` entry exists.
+**`smoke5` passed on 2026-11-07 with 0.1.89 (amendment R6), so this step is done** (`smoke4`
+passed on 2026-10-30 with 0.1.81, amendment R5). Run it again, as `smoke6` in place of `smoke5`
+below, only when step 3c has installed a release other than 0.1.89 since; `launch` refuses a NAME
+whose `runs/` entry exists.
 
 **[w] launch** (the same function serves every hold below):
 
@@ -331,12 +355,12 @@ launch() {
         bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
     echo "launched $1"
 }
-launch smoke4 900 3 smoke
+launch smoke5 900 3 smoke
 ```
 
-**[c] wait:** `hold_wait smoke4 900` (step 6).
+**[c] wait:** `hold_wait smoke5 900` (step 6).
 
-- **Pass, in `runs/smoke4/out/rc.txt`, all of:**
+- **Pass, in `runs/smoke5/out/rc.txt`, all of:**
   - `up rc=0`;
   - `pods ready: yes ...`;
   - `GPU-SCAN clean`;
@@ -479,8 +503,8 @@ same 16 P-core CPUs as the i9, 8 E-cores rather than 16, and a 35 W PL1.
 
 | Hold | CAP (s) | Inner limit | Recorded on the original host | hold_wait ceiling (s) |
 |---|---|---|---|---|
-| smoke4 | 900 | `up` 600 s, pod wait 60 polls every 5 s (each poll at most 70 s: two reads of 30 s, each with a 5 s SIGKILL grace), `down` 600 s | H52 (Xeon) `up`: 38 s | 8100 |
-| H52w | 1800 | `up` 600 s, pod wait as smoke4, `test` 900 s, `down` 600 s | H52 (Xeon) `up`: 38 s | 9000 |
+| smoke4, smoke5 | 900 | `up` 600 s, pod wait 60 polls every 5 s (each poll at most 70 s: two reads of 30 s, each with a 5 s SIGKILL grace), `down` 600 s | H52 (Xeon) `up`: 38 s | 8100 |
+| H52w | 1800 | `up` 600 s, pod wait as the smoke's, `test` 900 s, `down` 600 s | H52 (Xeon) `up`: 38 s | 9000 |
 | H18w | 2100 | 3 runs | H18 (i9) runs 1-3: 230 s | 9300 |
 | H25w | 1500 | `HOLD=1440`, one level | H25 run 4 (i9): 608 s; H25x (Xeon): 329 s | 8700 |
 | H34w | 1500 | `H34_LEVEL_S` 1200, one level | H34x (Xeon): 549 s | 8700 |

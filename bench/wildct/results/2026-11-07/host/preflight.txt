@@ -1,0 +1,228 @@
+# wildct preflight, 2026-11-07 (UTC), after the 2026-10-31 to 2026-11-06 outage (Tailscale key expired).
+# Read-only reads as andrew, except the firewall line counts (iptables-save, ip6tables-save and nft list ruleset, as root).
+# The production snapshot: running containers, published-port HTTP codes from the host, and each
+# running container's StartedAt and RestartCount.
+
+== state before any change
+## date 2026-11-07T03:28:59+00:00
+## uptime:  22:28:59 up 8 days, 18:17,  2 users,  load average: 0.56, 0.71, 0.58
+## boot: 2026-10-29 05:11:09
+## kernel: 6.6.156-2-MANJARO
+## disk
+/dev/nvme0n1p2             3667G 3273G      208G      95% /
+## mem
+MemTotal:       131524088 kB
+MemAvailable:   120149672 kB
+## loadavg: 0.56 0.71 0.58 2/3669 56851
+## k3d-gpu installed (campaign tree)
+VERSION="0.1.81"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+usr
+bin
+diag
+h57
+hfvenv
+k3d-gpu
+live.lock
+models
+repo
+repo-12e765f0725c
+repo-4a322ccca4b3
+repo-5904610f659c
+repo-597a433775c1
+repo-be477be3a87c
+repo-c247f3fbef79
+repo-c4407a2c2ba8
+repo-cf49f0e6555e
+repo-e5748cd112f2
+runs
+setup
+## k3d-gpu on PATH: /home/andrew/k3dgpu-bench-wildct/bin/k3d-gpu
+## repo -> repo-cf49f0e6555e COMMIT=cf49f0e6555edc3836faa12f4a05bb4cbd07d17d
+## runs/IMAGE: cryptoandcoffee/k3d-gpu:0.1.81@sha256:b68387c9c73ff57ab19facfa18196519a14df31576cdfb0d225f6f9401d2380e
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+v4.3.1+gc0d08d0
+## clusters (k3d cluster list --no-headers; names only)
+wtm   0/1   0/0   true    (the box owner's; exited; not this campaign's)
+## our containers
+ps rc=0
+## networks
+bmd-telemetry_default bridge country-road-radar-camera_default feed-my-algorithm_default fresh-clone-test_default host k3d-wtm know-my-neighbor_default none read-to-me_default searxng_default state-of-my-town_default tos-rate-calculator-battery_default webapp_default
+## live.lock
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/inner.lock': No such file or directory
+-rw-r--r-- 1 andrew andrew 0 Oct 30 01:10 /home/andrew/k3dgpu-bench-wildct/live.lock
+lock-free
+hold procs rc=1
+convert pid=24108 alive=no rc=0
+diag-smoke2 pid=17199 alive=no rc=1
+smoke2 pid=32217 alive=no rc=1
+smoke3 pid=62226 alive=no rc=0
+smoke4 pid=48184 alive=no rc=0
+## lock holders (fuser-like)
+## modules
+224
+loaded vxlan
+loaded br_netfilter
+loaded xt_comment
+loaded xt_statistic
+loaded xt_multiport
+loaded xt_limit
+loaded xt_NFLOG
+loaded xt_physdev
+loaded xt_pkttype
+loaded ipt_REJECT
+loaded ip6t_REJECT
+loaded ip_set_hash_ip
+loaded ip_set_hash_net
+loaded ip_set_hash_ipport
+loaded ip_set_hash_ipportip
+loaded ip_set_hash_ipportnet
+loaded nft_limit
+loaded nft_log
+modprobe=[]
+
+== production snapshot before (2026-11-07T03:27Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== production snapshot after smoke5 (2026-11-07T03:36Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+iptables-save rules with packet counters stripped: identical before and after
+
+== step 4 checks (read-only)
+== step 4 checks 2026-11-07T03:32:54Z repo=85a7bc8668d18a3233496f0a3a23b09bb63ee20f
+-- 4a newer than verify-h57.log (pass: empty)
+/home/andrew/k3dgpu-bench-wildct/h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/manifest.json
+/home/andrew/k3dgpu-bench-wildct/h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/convert-pip-freeze.txt
+/home/andrew/k3dgpu-bench-wildct/h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf
+-- 4a VERIFY lines
+/home/andrew/k3dgpu-bench-wildct/setup/dl.log:VERIFY ok
+/home/andrew/k3dgpu-bench-wildct/setup/dl.log:VERIFY 1 bad
+/home/andrew/k3dgpu-bench-wildct/setup/verify-h57.log:VERIFY ok
+-- 4b shim and weights list
+h57 shim equal to repo
+10
+-- 4c drafter GGUF and graph.pbtxt
+0
+total 1148848
+drwxr-xr-x 2 andrew andrew      4096 Oct 29 14:35 .
+drwxr-xr-x 3 andrew andrew      4096 Oct 29 14:35 ..
+-rw-r--r-- 1 andrew andrew       449 Oct 29 14:35 convert-pip-freeze.txt
+-rw-r--r-- 1 andrew andrew 855247712 Oct 29 14:35 gemma-4-26B-A4B-it-qat-assistant-bf16.gguf
+-rw-r--r-- 1 andrew andrew 321145696 Oct 29 14:35 gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf
+-rw-r--r-- 1 andrew andrew       799 Oct 29 14:35 manifest.json
+/home/andrew/k3dgpu-bench-wildct/h57/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov/graph.pbtxt
+-- h59 tree
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/h59': No such file or directory
+-- every file under models/ and h57/models/ newer than setup/verify-h57.log (no head)
+h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/{manifest.json,convert-pip-freeze.txt,gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf,gemma-4-26B-A4B-it-qat-assistant-bf16.gguf}
+h57/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov/graph.pbtxt
+(all five are step 4c's convert.sh outputs of 2026-10-29; no Hub-verified file is newer)
+8eb21d5b7efad6e9761b81066e0b094b73623c60e46ba4c0925cdbbf49c93ca9  gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf (the i9's, as amendment R2 records)
+c57ecf359d9e252a7dddff510154992292d45a477603f68f8b32679b23dbacd3  graph.pbtxt (the i9's, as amendment R2 records)
+
+== old node image removed (step 3c; its ID is not in setup/images-before.txt)
+rmi 0.1.81 2a97ffeba5be rc=0

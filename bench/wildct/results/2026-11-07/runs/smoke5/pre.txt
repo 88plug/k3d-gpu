@@ -1,0 +1,17 @@
+2026-11-07T03:34:15Z
+ 22:34:15 up 8 days, 18:23,  2 users,  load average: 0.96, 0.80, 0.65
+%CPU   PID USER     COMMAND
+ 7.5  8054 andrew   firefox
+ 3.5  9806 andrew   WebExtensions
+ 2.6  1157 root     tailscaled
+ 2.4 29612 andrew   rustdesk
+ 1.4     1 root     systemd
+ 1.0  9906 911      python3
+ 0.9 12980 andrew   1password
+ 0.8  1184 root     gdm
+ 0.6  7035 andrew   rustdesk
+ 0.6  9860 andrew   Privileged Cont
+               total        used        free      shared  buff/cache   available
+Mem:             125          10          96           2          21         114
+/dev/nvme0n1p2             3667G 3273G      207G      95% /
+bmd-telemetry-jaeger-1 bmd-telemetry-prometheus-1 feed-my-algorithm-app-1 feed-my-algorithm-controller-1 feed-my-algorithm-db-1 feed-my-algorithm-redroid-1 feed-my-algorithm-worker-1 know-my-neighbor-db-1 proxmox-dc-manager searxng-core searxng-valkey state-of-my-town-app state-of-my-town-archivebox state-of-my-town-postgres tos-rate-calculator webapp-adminer-1 webapp-db-1 webapp-web-1 

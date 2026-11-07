@@ -1,0 +1,7 @@
+up rc=0 in 33 s
+[32m==>[0m opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel); not deployed, not advertised
+[32m==>[0m Accelerators: hybrid
+[32m==>[0m Accelerators schedulable: hybrid=1. Try: k3d-gpu test
+pods ready: yes after 15 s
+GPU-SCAN clean
+down rc=0

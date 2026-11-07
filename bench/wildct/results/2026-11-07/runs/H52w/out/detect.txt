@@ -1,0 +1,2 @@
+[32m==>[0m opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel); not deployed, not advertised
+hybrid k3d-gpu.io/hybrid-cpu=true
