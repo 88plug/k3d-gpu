@@ -141,7 +141,6 @@ SOURCES = {
     "guardrails": _EAT + "config.yaml#L25-L26",
     "cpu_auto": _EI + "model_manager/core/nri_policy.py#L569-L591",
     "cpu_reserve": _EAS + "roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh#L252-L270",
-    "cpu_topology": _EAS + "roles/nri_cpu_balloons/files/probe-node-topology.sh#L27-L32",
     "cpu_explicit": _EAT + "docs/single-node-deployment.md#L191",
     "cpu_starve": _K3D_GPU_H62 + "EXPERIMENTS.md#L5077-L5088",
     "hybrid_router": _EAT + "config.yaml#L27-L28",
