@@ -95,7 +95,8 @@ bundle under `tests/fixtures/hf` that recorded it at the old one.
 After the rewrite and the hooks, `hack/bump` replaces each exact old pin string
 (a whole site match, a digest, a revision, a version or tag) with its new one in
 `tests/**`; a digest or revision also moves cut to its first 12 hex digits, as
-plans and audits print it. A test keeps the old string when
+plans and audits print it (`sha256:<12>`, `@<12>`: `hack/pin-only-diff` counts
+both as pin tokens). A test keeps the old string when
 
 - another pin's site outside `tests/` still holds it (two images at one digest);
 - the test names a kept record that still holds it (a file no bumper writes,

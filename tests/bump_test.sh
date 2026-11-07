@@ -426,6 +426,9 @@ check "goldens: naming the ledger or the README in a comment holds nothing back"
 for f in share/CHANGES share/mirror.yml bench/h1/run.sh EXPERIMENTS.md README.md; do
     check "goldens: ${f} untouched" git -C "${R6}" diff --quiet -- "${f}"
 done
+git -C "${R6}" add -A && git -C "${R6}" commit -qm bump
+check "hack/pin-only-diff passes on the goldens bump (the cut revision too)" \
+    python3 "${ROOT}/hack/pin-only-diff" --root "${R6}" --group tools HEAD~1 HEAD
 
 # the hf-meta hook: a moved Hugging Face pin's record in each saved metadata bundle
 # (tests/fixtures/hf) is read again at the new revision; other repos' records and
