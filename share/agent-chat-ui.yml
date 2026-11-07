@@ -1,5 +1,5 @@
 # Open WebUI chat front end for the k3d-gpu agent (OpenVINO Model Server).
-# Source: https://github.com/open-webui/open-webui v0.12.2. The image is pinned by
+# Source: https://github.com/open-webui/open-webui v0.13.0. The image is pinned by
 # its multi-arch index digest; bump both the comment and the digest together.
 #
 #   kubectl apply -f /usr/share/k3d-gpu/agent-chat-ui.yml
@@ -61,8 +61,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: open-webui
-          # ghcr.io/open-webui/open-webui:v0.12.2
-          image: ghcr.io/open-webui/open-webui:v0.12.2@sha256:10e6a78ba2d172493460a9e8a92c496aaa7a64dc4d26d622a2e95e0c736081c9
+          # ghcr.io/open-webui/open-webui:v0.13.0
+          image: ghcr.io/open-webui/open-webui:v0.13.0@sha256:2272b0fb7c8783a016bcc179abb467cfa34590c99c5e6560fe0e9155b4820a09
           imagePullPolicy: IfNotPresent
           # The image runs as root and writes under /app/backend at runtime.
           securityContext:
