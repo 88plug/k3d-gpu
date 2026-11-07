@@ -22,8 +22,10 @@
 # `hack/pins policy MB SHA` (MB: the merge-base of origin/main and SHA, so the PR's
 # own diff) maps canary engines (a non-empty canary list); the head is fetched
 # from origin for that, never checked out. A head that moved on origin since the
-# PR list was read waits for the next call; a policy that fails is an error for
-# that PR.
+# PR list was read waits for the next call. A policy that fails is an error for
+# that PR, unless main moved under code since its merge-base (not base_ok,
+# hack/gate_lib.sh): the head's tree can then predate a site main's registry reads,
+# so the head is stale and gets no canary; the merge job regenerates it.
 #
 # A dispatch is confirmed by reading: the workflow_dispatch run of the workflow on
 # the branch at the head SHA, the run hack/bot-merge (ci_status, and its canary
@@ -41,6 +43,8 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=hack/gh_retry.sh
 . "$HERE/gh_retry.sh"
+# shellcheck source=hack/gate_lib.sh
+. "$HERE/gate_lib.sh"
 
 usage() { echo "usage: hack/bot-ci-dispatch [--branch autobump/<name>] [--workflow ci.yml|canary.yml]" >&2; exit 2; }
 wf=ci.yml only=
@@ -142,6 +146,10 @@ while read -r num br sha; do
     why="no $wf run at the head"; [ "$held" -gt 0 ] && why="only held $wf runs at the head"
     if [ "$wf" = canary.yml ]; then
       if ! eng=$(canary_engines "$br" "$sha" 2>"$err"); then
+        if ! base_ok "$sha"; then
+          echo "$tag: stale, main moved under code since its merge-base and hack/pins policy cannot read it ($(tr '\n' ' ' < "$err")); the merge job regenerates it"
+          continue
+        fi
         echo "$tag: error: hack/pins policy failed: $(tr '\n' ' ' < "$err")"; rc=1; continue
       fi
       case $eng in
