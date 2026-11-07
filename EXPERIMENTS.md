@@ -9201,8 +9201,8 @@ Holds used: 3 of at most 12. The next row in the registered order is H34w.
 ```text
 # provenance
 date:            2026-11-07T05:54:52Z to 06:10:05Z (one hold; lock free, no load wait: load1 0.61);
-                 server warm and the level's load started 05:56:49Z, the pairs' load windows began
-                 05:58:40Z, pair 12 ended 06:10:01Z
+                 server warm and the level's load started 05:56:49Z, the first pair's 5 s load window
+                 ended 05:58:40Z, the twelfth pair ended 06:10:01Z
 hypothesis:      H34w (H34's protocol and outcome table, as the wildct pre-registration's H34w line lists them)
 host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700 (family 6 model 183), 8 P-cores
                  (cpu_core 0-15) and 8 E-cores (cpu_atom 16-23), 1 NUMA node, 125 GiB RAM, PL1 35 W, Manjaro;
@@ -9221,7 +9221,7 @@ node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd
                  k3s v1.37.1+k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
 runtime:         openvino/model_server@sha256:a928903f…6fc58 (2026.4.1), one pod `ovms`, cpu request 16, label
                  k3d-gpu.io/cores: performance (the P-core balloon; the server's Cpus_allowed_list read 0-15 from
-                 the host at 06:04:03Z, pair 6), graphs a-4b-cpu (A) and b-spec-cpu (B, draft_device CPU,
+                 the host at 06:04Z, in the sixth pair), graphs a-4b-cpu (A) and b-spec-cpu (B, draft_device CPU,
                  num_assistant_tokens at its default, as H34), cache_size 2, prefix caching off, all from h34.sh
 models:          OpenVINO/Qwen3-4B-int4-ov b467368d (openvino_model.bin 074214fa…df2f9), OpenVINO/Qwen3-0.6B-int4-ov
                  f864c610 (28613e99…e152), ~/k3dgpu-bench-wildct/models (sha256 against the Hub, VERIFY ok),
@@ -9235,7 +9235,8 @@ environment:     K3D_GPU_IMAGE=<the node image>, H34_CLUSTER=k3dgpu-w-h34, H34_V
                  K3D_GPU_VENDORS=auto,-nvidia,-intel, K3D_GPU_K3S_ARGS=<rule W3>,
                  K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl"; H34_LEVEL_S 1200 and 12 pairs (h34.sh's defaults)
 runs per arm:    12 pairs, A B on even pairs and B A on odd ones, pair i on prompt i mod 8, a 5 s load window
-                 before every request, n = 12 per arm
+                 before every request, n = 12 per arm (pair numbers here are run.jsonl's, from 0; hold.log
+                 counts from 1)
 host load:       load1 0.72-10.37, foreign CPU 0.52-3.33 CPU-s/s (p90 1.48), MemAvailable 106.1-114.4 GiB,
                  package 61-68 C, / 213.1-222.0 GB available (sample.py, 182 samples; df -BG read 207G
                  before and after)
