@@ -1,0 +1,68 @@
+facts: sha256:fb331ec4470e1d09e74ab86aa24b2c180b64b1dc81e86d016e0af7218e8cd9b8
+targets:
+  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: device=cpu, model=google/gemma-4-26B-A4B-it
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: google/gemma-4-26B-A4B-it on llama.cpp (CPU), metadata from huggingface
+  EXPERIMENTS.md H59 is SUPPORTED for the 6741P CPU class -> llama.cpp is the CPU engine (K3D_GPU_AGENT_BACKEND=ovms keeps OVMS) [EXPERIMENTS.md H59]
+  MoE: 128 experts, 8 per token, 25805936206 params, ~4.0B active -> recorded for the bandwidth model (decode moves the active experts' bytes) [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  google/gemma-4-26B-A4B-it-qat-q4_0-gguf re-quantizes the QAT weights with llama.cpp's absmax/-8 scales -> candidate: self-built Q4_0 with the QAT grid step as the block scale (no stock tool writes it) [llama.cpp ggml-quants.c quantize_row_q4_0_ref; research/model-cards/REFERENCE.md 3.2 (weight-space probe)]
+  2 gguf candidate(s); top: google/gemma-4-26B-A4B-it-qat-q4_0-gguf [official] (Q4_0, sym, group 32) -> serve google/gemma-4-26B-A4B-it-qat-q4_0-gguf@d1c082be9cf3 [https://github.com/ggml-org/llama.cpp/blob/master/ggml/src/ggml-common.h (QK4_0 32), ggml-quants.c quantize_row_q4_0_ref]
+  qat-gguf-exact ranks 2 (self-built) -> not picked until a local measurement says it is faster at equal-or-better quality (K3D_GPU_AGENT_VARIANT=qat-gguf-exact forces it) [no measurement yet]
+  generation_config.json: do_sample=True, temperature=1.0, top_k=64, top_p=0.95 -> the engine applies it as the request default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/generation_config.json]
+  google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant, the QAT MTP assistant (safetensors) -> MTP on: converted once to a Q4_0 GGUF, --spec-type draft-mtp, default draft length (K3D_GPU_AGENT_DRAFT=off turns it off) [EXPERIMENTS.md H59 SUPPORTED for the 6741P CPU class: its llama.cpp arm drafts with the QAT MTP assistant; https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. google/gemma-4-26B-A4B-it-qat-q4_0-gguf [official], QAT
+    2. qat-gguf-exact [community/self-built], QAT
+    excluded: Intel/gemma-4-26B-A4B-it-int4-AutoRound (safetensors, llama.cpp serves gguf)
+    excluded: Intel/gemma-4-26B-A4B-it-int4-mixed-AutoRound (safetensors, llama.cpp serves gguf)
+    excluded: OpenVINO/gemma-4-26b-a4b-it-int4-ov (openvino-ir, llama.cpp serves gguf)
+    excluded: RedHatAI/gemma-4-26B-A4B-it (safetensors, llama.cpp serves gguf)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic (safetensors, llama.cpp serves gguf)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: google/gemma-4-26B-A4B-it (safetensors, llama.cpp serves gguf)
+    excluded: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized (safetensors, llama.cpp serves gguf)
+  note: thinking is off by default for this model; clients send chat_template_kwargs {"enable_thinking": false}
+  note: drafter RedHatAI/gemma-4-26B-A4B-it-speculator.eagle3 skipped: a QAT target needs a QAT drafter of the same precision (model card)
+  note: drafter google/gemma-4-26B-A4B-it-assistant skipped: a QAT target needs a QAT drafter of the same precision (model card)
+  engine args: --spec-type draft-mtp
+summary: Detected Intel(R) Xeon(R) 6741P (AMX); picked google/gemma-4-26B-A4B-it-qat-q4_0-gguf on llama.cpp (CPU) with the google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain
+fit:
+  GGUF models in the repo, tried in order: Q4_0
+  GGUF Q4_0 (13.4 GiB, auto): fits
+  model google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0: gguf (gemma4) weights, 13.4 GiB to serve
+    experts  12.0 GiB
+    embed    0.6 GiB (lookup table)
+    other    0.9 GiB
+    MoE: 128 experts, 8 active per token: 0.7 GiB of expert weights read per token
+  context cap: 262144 (max_position_embeddings)
+  host RAM: MemTotal 94.3 GiB, MemAvailable 71.6 GiB (others already hold 22.6 GiB)
+  host reserve = max(10% x MemTotal, 4.0 GiB) = 9.4 GiB
+  host budget = 71.6 GiB - 9.4 GiB = 62.2 GiB
+  GPUs: none with device-local memory
+  CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)
+  engine llama.cpp: llama.cpp src/llama-arch.cpp: gemma4
+    KV cache (2 B per element):
+      full attention: 5 layers x 2 (K, V) x 2 kv heads x 512 head dim x 2 B = 20480 B/token
+        attention_k_eq_v: global layers share K and V; counted as two tensors (upper bound)
+      sliding window: 25 layers x 2 x 8 kv heads x 256 head dim x 2 B = 204800 B/token, for GGML_PAD(1024 window + 512 ubatch, 256) = 1536 tokens per sequence at most (src/llama-kv-cache-iswa.cpp)
+      host prompt cache off (--cache-ram 0: tools/server/server-context.cpp:1594-1605); context checkpoints (-ctxcp 4, at most that many per slot: :2746-2753) in host RAM: 4 x the slot's SWA cache and recurrent state = 1200.0 MiB per slot at 262144 tokens
+  placements, target: 4 seqs at >= 32768 tokens:
+    llama.cpp/cpu: FITS
+      host budget / 1.10 slack = 55.6 GiB
+      weights: the GGUF mapped and locked (--load-mode mmap+mlock; the lock reaches the last mapped tensor, src/llama-model-loader.cpp:1735-1737) 13.4 GiB + the CPU backend's copies (Q4_0 weights into AMX and CPU_REPACK buffers) 13.4 GiB
+      compute buffer at 262144 tokens per slot (the ladder's top; the masks shrink with the context): f16 KQ masks 0.3 GiB (n_kv x 512 ubatch x 2 B, src/llama-graph.cpp:30-46) + activations 0.2 GiB (estimate: 512 tokens x 4 B x (4 x hidden + 2 x heads x head_dim + 3 x ff + k x (3 x ff_exp + 2 x hidden)))
+      runtime 1.0 GiB; per slot beside its KV and checkpoints: logits 2.0 MiB (1 target row(s) of 262144 x 4 B, each in the output buffer and the graph, src/llama-context.cpp:2253-2276)
+      KV: 4 seqs x 5420.0 MiB at 262144 tokens = 21.2 GiB
+      context checkpoints: 4 seqs x 1200.0 MiB = 4.7 GiB
+      host: weights 13.4 GiB + copies 13.4 GiB + compute 0.4 GiB + runtime 1.0 GiB + KV 21.2 GiB + checkpoints 4.7 GiB + logits 0.0 GiB = 54.1 GiB
+  k8s: memory request = limit = ceil(54.1 GiB x 1.10) = 60Gi
+  guard rungs (seqs x context): 4x262144, 2x262144, 1x262144, 1x131072, 1x65536, 1x32768, 1x16384, 1x8192, 1x4096
+  engine flags: -hf google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 -c 1048576 -np 4 -ngl 0 --cache-ram 0 -ctxcp 4
+  fit: google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 on CPU (AMX) via llama.cpp, context 262144 x 4 seqs, host 54.1 GiB (pod limit 60Gi), host reserve 9.4 GiB
+rc=0

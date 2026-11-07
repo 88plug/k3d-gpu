@@ -1,0 +1,2 @@
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                                                                   SELECTOR
+sandbox-router-deployment   2/2     2            2           46s   router       us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main   app=sandbox-router

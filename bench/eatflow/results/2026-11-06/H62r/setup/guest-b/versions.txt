@@ -1,0 +1,7 @@
+Python 3.12.3
+yq (https://github.com/mikefarah/yq/) version v4.53.2
+Client Version: v1.34.3
+Kustomize Version: v5.7.1
+Server Version: v1.34.3
+version.BuildInfo{Version:"v3.20.2", GitCommit:"8fb76d6ab555577e98e23b7500009537a471feee", GitTreeState:"clean", GoVersion:"go1.25.9"}
+6.8.0-147-generic

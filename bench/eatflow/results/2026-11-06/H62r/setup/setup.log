@@ -1,0 +1,6 @@
+== setup lock taken 2026-11-07T07:32:58Z
+== setup host gate passed 2026-11-07T07:32:58Z
+== setup guests 2026-11-07T07:33:10Z
+== setup guest-a (cap 2700 s) and guest-b (cap 7200 s) 2026-11-07T07:33:55Z
+== setup guest-a exit 0, guest-b exit 0 2026-11-07T08:13:54Z
+== setup setup done: both arms serve 2026-11-07T08:14:36Z

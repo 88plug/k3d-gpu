@@ -69,7 +69,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H50o | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). Analysis rule L3 from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B3 is unchanged under [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29) (EAT release-1.1.0's OVMS chart renders the same objects); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50o's deploy commit, B3's records and its wiring smoke per [H50o amendment O1](#h50o-amendment-o1-deploy-commit-b3s-records-and-a-b3-wiring-smoke-2026-10-29). Result ([H50o run](#h50o-run-xeon-6741p-2026-10-29)): B3 was not ready in hold 1, so under M1's rule H50o runs no further hold and no pair ran (1 of the 6 permitted holds). On k3d, B3's PVC bound, its pod was scheduled and its init container pulled `OpenVINO/gemma-4-26b-a4b-it-int4-ov` at `4e5885c3` (every file equal to the Hub's), but OVMS 2025.4's server failed on each of its 7 starts, going into CrashLoopBackOff; the last start's recorded exit is 139 (SIGSEGV), a second into loading the model. The same server in a plain container, outside k3d, on the same revision, exited 139 the same way with and without the chart's limits. Not deliverable: EAT's OVMS chart as shipped does not serve this model. | INCONCLUSIVE |
 | H51 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). B1 as H50, from [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); deploy commit, M1's ranges in the scorer, one hold per arm and the wiring smokes per [H51 amendment S1](#h51-amendment-s1-deploy-commit-scorer-ranges-ramp-per-hold-and-wiring-smokes-2026-10-29). Result ([H51 run](#h51-run-xeon-6741p-2026-10-29)): one hold per arm, 2 of the 4 permitted, none VOID. Both arms failed N=1. A1: 65 window requests, turn p95 10.41 s against the 10 s SLO, success 30/32. B1: 58 window requests (under 60), p95 11.52 s, success 27/29. Agents per box A1 0, outside its predicted [1, 4], so REFUTED. B1's 0 lies inside [0, 4], and B1 <= A1 holds on matched load (0 <= 0). | REFUTED |
 | H62 | Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0-rc.1 (`5c27fb3`) installing EAT 2.0 (`release-2.0.0` `036b662`) and enterprise-inference `release-1.1` (`170eb3a`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-10-29, before any H62 step and after H50 (A1 19/24, B1 21/24) and H51 were known. A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62 pre-registration](#h62-pre-registration-k3d-gpu-against-intels-new-default-eas-with-eat-20-on-the-xeon-6741p-2026-10-29): H50's design, statistic, gates and verdict rule (rule L3, amendment A3, seed `H62-crescent-2026-10-29`), two KVM guests on crescent (VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5), the harness's LiteLLM per arm on the host, holds of at most 40 min until 24 pairs or 8 holds, each hold restarting both serving pods. Setup and wiring-smoke gates (memory, disk, AMX in each guest, NFD label, B5's weights equal to the QAT checkpoint, EAS's own `validate` and gateway check) come before hold 1. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62/campaign.sh`; `agentbench pairs-report --hyp H62 --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release at v1.2.0 or later or an EAT release at 2.0.0 or later is tagged (`bench/h62/upstream.sh`). Mechanics per [H62 amendment V1](#h62-amendment-v1-the-wiring-smokes-eas-check-without-the-rest-of-260-2026-11-01) (the smoke's EAS check), [V2](#h62-amendment-v2-eass-configure-answered-on-a-terminal-2026-11-01) (configure on a terminal), [V3](#h62-amendment-v3-d2-reads-the-catalogs-commented-name-lines-2026-11-01) (D2's catalog parse) and [V4](#h62-amendment-v4-the-clusters-state-is-recorded-when-b5s-install-fails-2026-11-01) (records on an install failure; the last setup attempt). Result ([H62 run](#h62-run-xeon-6741p-2026-11-01)): no hold ran, 0 of the 8 permitted, and no smoke ran. A1 served in its guest within its 45 min ceiling (`guest-a.sh` done at 35.7 and 34.7 min). Intel's install of B5 failed twice at the same step, inside its 120 min ceiling: EAT's sandbox-router could not be scheduled ("Insufficient cpu") because enterprise-inference's `cpu: auto` had sized gemma-4-26b to 76 of the node's 95.4 allocatable CPUs, beside Qwen3Guard's 8 and the platform's requests, which left 0.25 CPU for the router's 0.5. B5 is not deliverable in its guest, so H62 is INCONCLUSIVE by amendment V4's rule. | INCONCLUSIVE |
-| H62r | H62's hypothesis, verbatim but for B5's release identifiers (the GA tags): Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0 (`a051f00`) installing EAT 2.0 (`release-2.0.0` `7b827e2`) and enterprise-inference `v1.1.0` (`d035b1e`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-11-06, before any H62r step, after H62 (INCONCLUSIVE: no hold ran, B5's install not deliverable in its guest) was known. H62's predictions, copied verbatim and not tuned: A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62r pre-registration](#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06): H62's design, statistic, gates, caps, budget and verdict rule, unchanged (rule L3, amendment A3, its own seed `H62r-crescent-2026-11-06`; VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5; the harness's LiteLLM per arm on the host; holds of at most 40 min until 24 pairs or 8 holds, each restarting both serving pods; VM a's setup 45 min and VM b's install 120 min). B5 at the GA tags: EAS `v1.2.0`, whose layer manifest names enterprise-inference `v1.1.0` and EAT `release-2.0.0` by commit itself, so D1 is a check. From H62's commits to these, only docs, `VERSION`, the layer manifests and enterprise-inference's LiteLLM (v1.84.0) changed. Mechanics for H62's failure, registered before any measurement: EAS's topology probe counts the comma fields of cpu0's `thread_siblings_list`, reads the guest's adjacent pair (`0-1`) as one thread per core and falls back to its `standard` reservation (12 CPUs), so `cpu: auto` gave gemma-4-26b 96 - 12 - 8 = 76 CPUs and starved EAT's sandbox router; on crescent's host (`0,48`) the probe reads two and reserves the 48 siblings. D3's sibling read: when EAS's probe reads one thread per core where the guest kernel lists two, `nri_reserved_cpu_list` (EAS's documented setting in `global_config.yaml`) names the guest's 48 sibling vCPUs, the reservation EAS's default `siblings` profile makes on crescent's host; expected, not gated, gemma-4-26b at 40 CPUs. A1's render must carry H50's OVMS image. At most 3 setup attempts. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62r/campaign.sh`; `agentbench pairs-report --hyp H62r --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release after v1.2.0 or an EAT release after `release-2.0.0` is tagged (`bench/h62r/upstream.sh`). | PENDING |
+| H62r | H62's hypothesis, verbatim but for B5's release identifiers (the GA tags): Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0 (`a051f00`) installing EAT 2.0 (`release-2.0.0` `7b827e2`) and enterprise-inference `v1.1.0` (`d035b1e`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-11-06, before any H62r step, after H62 (INCONCLUSIVE: no hold ran, B5's install not deliverable in its guest) was known. H62's predictions, copied verbatim and not tuned: A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62r pre-registration](#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06): H62's design, statistic, gates, caps, budget and verdict rule, unchanged (rule L3, amendment A3, its own seed `H62r-crescent-2026-11-06`; VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5; the harness's LiteLLM per arm on the host; holds of at most 40 min until 24 pairs or 8 holds, each restarting both serving pods; VM a's setup 45 min and VM b's install 120 min). B5 at the GA tags: EAS `v1.2.0`, whose layer manifest names enterprise-inference `v1.1.0` and EAT `release-2.0.0` by commit itself, so D1 is a check. From H62's commits to these, only docs, `VERSION`, the layer manifests and enterprise-inference's LiteLLM (v1.84.0) changed. Mechanics for H62's failure, registered before any measurement: EAS's topology probe counts the comma fields of cpu0's `thread_siblings_list`, reads the guest's adjacent pair (`0-1`) as one thread per core and falls back to its `standard` reservation (12 CPUs), so `cpu: auto` gave gemma-4-26b 96 - 12 - 8 = 76 CPUs and starved EAT's sandbox router; on crescent's host (`0,48`) the probe reads two and reserves the 48 siblings. D3's sibling read: when EAS's probe reads one thread per core where the guest kernel lists two, `nri_reserved_cpu_list` (EAS's documented setting in `global_config.yaml`) names the guest's 48 sibling vCPUs, the reservation EAS's default `siblings` profile makes on crescent's host; expected, not gated, gemma-4-26b at 40 CPUs. A1's render must carry H50's OVMS image. At most 3 setup attempts. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62r/campaign.sh`; `agentbench pairs-report --hyp H62r --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release after v1.2.0 or an EAT release after `release-2.0.0` is tagged (`bench/h62r/upstream.sh`). Result ([H62r run](#h62r-run-xeon-6741p-2026-11-07)): one setup attempt of 3, deploy commit `1ed9f91c`. A1 served in its guest in 36.5 of its 45 min. With D3's sibling read (`nri_reserved_cpu_list` the 48 odd vCPUs), Intel's install of B5 finished in 38.6 min with `failed=0`: `cpu: auto` sized gemma-4-26b to 40 CPUs, 60.9 of 95.4 allocatable CPUs were requested and the sandbox router was placed. The wiring smoke passed (`validate`, the EAS gateway check, `H62r-smoke`). 24 complete pairs in 1 of the 8 permitted holds, no void pair, idle check 0.0039 CPU, balance gate passed (smallest p 0.087). Within-budget success A1 21/24 (0.875), B5 21/24 (0.875); paired difference A1 - B5 0.000 (95% CI -0.125 to +0.125), under +30 points, so REFUTED. Not gated: median attempt A1 11.1 s, B5 11.7 s (0.947); A1's median attempt in its guest over H50's on the host 1.383; paired J per attempt A1/B5 0.99. | REFUTED |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29); the runner and deploy commit per [amendment D3](#h52-amendment-d3-h52bs-runner-and-deploy-commit-2026-10-29). Result ([H52b run](#h52b-run-xeon-6741p-2026-10-29)): one hold at k3d-gpu 0.1.79; the plan passed D2's gate (8 commands) and applied. DSA advertised 3 of the 3 configured work queues and its pod saw `/dev/dsa`; IAA got no work queue and no resource (as D2 item 4 disclosed); QAT got 48 VFs, but its plugin crash-looped and advertised none; `gpu.intel.com/xe` read 2, not 4: the serving pairs hold about half the VRAM of all four cards, and `up`'s busy-card filter (half the VRAM) left out the two just over half (16.1, 16.2 GiB) and kept the two just under it (15.4, 15.5 GiB), which the pairs also hold, so two enumeration pods ran, not four. Media labels (`vcs` 2, `vecs` 2), AMX, the 14 AVX-512/VNNI labels, CPU 96 and no other vendor read as expected. The third inventory equals the first. Three clauses fail, so REFUTED. | REFUTED |
 | H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). Node image, deploy commit, order and the restore check per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); the solo runner fix, setup, the wiring smokes, the window and its futility stop per [H53 amendment R1](#h53-amendment-r1-the-solo-runner-fix-setup-wiring-smokes-and-the-gpu-window-2026-10-30); tools per [amendment E4](#crescent-amendment-e4-kubectl-v1372-helm-v431-and-uv-0136-in-the-crescent-workspace-2026-10-29). Result ([H53 run](#h53-run-arc-pro-b70-2026-10-30)): no hold ran, 0 of the 8 permitted. AG's wiring smoke passed (OVMS on one card, warm-up answered). B2 needed rung (b) (`setvars.sh` is not in the v0.28.0 image), then failed in its first cross-card collective: oneCCL opens `/dev/dri/by-path`, which the k3d node and pod lack. No further rung applies, so B2 is not deliverable and H53 is INCONCLUSIVE by its pre-registered rule. | INCONCLUSIVE |
@@ -5417,6 +5417,195 @@ the `siblings` profile would reserve all 96 vCPUs here, because it reserves `NRI
 read. With the ranges expanded in both reads, the probe gives two threads per core and the 48
 higher threads. It is an upstreamable finding for Intel's EAS team; nothing is filed from this
 row.
+
+### H62r run (Xeon 6741P, 2026-11-07)
+
+**Verdict: REFUTED.** One setup attempt (of 3), the wiring smoke and one hold (of 8) ran, and
+that hold recorded all 24 pairs. Every gate passed. Within-budget success was A1 21/24 (0.875)
+and B5 21/24 (0.875). The paired difference A1 - B5 is 0.000, with a 95% CI of -0.125 to
++0.125. Its upper bound is under +30 points, so H62r is REFUTED. With D3's sibling read,
+Intel's documented install of EAS v1.2.0 with EAT 2.0 finished in its guest in 38.6 min.
+`cpu: auto` sized gemma-4-26b to 40 CPUs, and EAT's sandbox router was placed.
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T07:32:58Z to 08:50:04Z: one setup attempt (07:32:58Z-08:14:36Z), the wiring smoke
+                 (08:14:36Z-08:19:58Z), hold 1 (08:19:58Z-08:48:15Z), the score and the teardown
+hypothesis:      H62r
+host cpu:        Intel(R) Xeon(R) 6741P (Granite Rapids), 48 cores / 96 threads, 503 GiB RAM; at setup MemAvailable
+                 483 GiB (gate 336 GiB), / 33% used (gate 90%), Hugging Face, Docker Hub and registry.k8s.io reachable
+host kernel:     7.0.0-31-generic; Docker 29.8.0
+accelerators:    none used; the four Arc Pro B70s were idle (their serving pairs were stopped before the run, below)
+k3d-gpu commit:  1ed9f91c (origin/main at #330's merge), clean and detached at ~/k3dgpu-bench/k3d-gpu-h62r
+guests:          QEMU 1:10.2.1+ds-1ubuntu3.3 and genisoimage 9:1.1.11-5 in image h62r-qemu (sha256:75847b27...),
+                 KVM, -cpu host, 96 vCPUs as 1 socket x 48 cores x 2 threads, unpinned; VM a 96 GiB, VM b
+                 192 GiB; Ubuntu 24.04 cloud image release-20261017 (sha256 04e8f246... OK), guest kernel
+                 6.8.0-147-generic; amx_tile on 96 of 96 vCPUs and nproc 96 in both guests
+A1 (VM a):       Docker CE 29.9.3 and containerd 2.4.2 (Docker's apt key 9DC85822...0EBFCD88 checked); k3d v5.9.0,
+                 kubectl v1.37.2; node image cryptoandcoffee/k3d-gpu:0.1.61@sha256:8cd264aa... (k3s v1.37.1+k3s1);
+                 `agent manifest` on CPU: openvino/model_server@sha256:a928903f... (2026.4.1), the snapped QAT IR
+                 k3dgpu_gemma-4-26B-A4B-it-qat-int4-sym-g32-ov (26 files equal to its manifest, on the host and over
+                 virtfs), tool parser gemma4, no reasoning parser, no draft, CPU limit 48
+B5 (VM b):       EAS v1.2.0 at a051f00f; D1 checked: enterprise-inference d035b1ef (v1.1.0) and EAT 7b827e2d
+                 (release-2.0.0); configure answered y on a terminal (H62 amendment V2); the documented edit and D2
+                 (gemma-4-26b at google/gemma-4-26B-A4B-it-qat-q4_0-unquantized); D3's sibling read:
+                 nri_reserved_cpu_list "1,3,...,95" (48 vCPUs); install agent-toolkit with HF_TOKEN unset;
+                 Kubernetes v1.34.3 (Kubespray), containerd 2.2.1; gemma-4-26b on vLLM CPU v0.28.0
+                 (sha256:197354e6...) at 40 CPUs, request = limit; weights at f1e06dc5 (3 LFS files equal to the Hub's)
+harness:         LiteLLM v1.83.14-stable.patch.2@sha256:73cbb215... per arm on the host, sampling profile agent_gemma4,
+                 blueprint 758d484, B24 at N=1, rule L3 with seed H62r-crescent-2026-11-06
+load:            typical on the host's CPUs 24-47 and 72-95 (bench/load/load.py, 3 containers)
+runs per arm:    24 (1 of the 8 permitted holds); 0 void pairs
+```
+
+Commands, on crescent, from `~/k3dgpu-bench/k3d-gpu-h62r` at `1ed9f91c`:
+`bench/h62r/upstream.sh` (07:32:52Z, `fired: none`), then `bench/h62r/campaign.sh` under
+`setsid nohup`. Records:
+[bench/eatflow/results/2026-11-06/H62r/](bench/eatflow/results/2026-11-06/H62r/), with a README
+of the layout. The runner was used as merged; no amendment was needed.
+
+**Setup, attempt 1 of 3.** Setup is not a hold.
+
+- The host gate passed at its first read. The re-run trigger read `fired: none` before setup and
+  again before hold 1.
+- The guest gate passed: AMX on all 96 vCPUs and `nproc` 96 in both guests.
+- VM a (`guest-a.sh`, 36.5 of its 45 min). The IR read over virtfs took 16.0 min and its copy
+  into the node 16.6 min, as in H62. `agent manifest` rendered H50's OVMS image, the new check.
+  It served the local IR unsized ("fit: no metadata", HTTP 401) with 48 CPUs, and
+  `deploy/ovms` rolled out in 2.0 min.
+- Amendment A4's record (`setup/guest-a/plan.txt`). `k3d-gpu plan --device cpu --model
+  google/gemma-4-26B-A4B-it --explain` in VM a now names llama.cpp with
+  `google/gemma-4-26B-A4B-it-qat-q4_0-gguf` and the QAT MTP drafter, the CPU engine H59 made the
+  default on this CPU class. That is not A1's configuration, so it is recorded and does not change
+  A1.
+- VM b (`guest-b.sh`, 40.0 of its 120 min). The clone was at `a051f00`, and D1 found both layer
+  commits as pinned. Then configure, `init agent-toolkit` (the layers at `d035b1e` and
+  `7b827e2`), the documented edit and D2.
+- D3's sibling read. EAS's probe read `NRI_TPC=1` and `NRI_PHYSICAL=96`, while the kernel listed
+  two threads on every core (`cpu0 0-1`). `sibling-read` gave the 48 odd vCPUs, and `reserve`
+  added `nri_reserved_cpu_list` to `env/local/global_config.yaml`. The probe's own
+  `NRI_SIBLINGS` named all 96 vCPUs, as registered (item 3 of the mechanism).
+- `install agent-toolkit` ran from 07:35:08Z to 08:13:43Z (38.6 min), and all three of its PLAY
+  RECAPs read `failed=0`. The NRI role logged "Operator cpuset override: yes", "Reserved form:
+  cpuset" and "Reserved count: 48", with the profile still `siblings`
+  (`setup/guest-b/install-excerpt.txt`).
+- The sizing records (`ok-*`). gemma-4-26b requested 40 CPUs (request = limit) and Qwen3Guard 8.
+  The node had 60.9 of its 95.4 allocatable CPUs requested (63%) and 86% of its memory. The
+  sandbox router's Deployment was 2/2, both 250m pods Running. That is the arithmetic registered
+  in item 6 (96 - 48 - 8 = 40, about 59.2 requested).
+- The NFD gate (`cpu-cpuid.AMXBF16=true`) and the weight gate passed. All 3 LFS files equal the
+  Hub's at `f1e06dc5`, and the download recorded that revision.
+
+**Wiring smoke** (08:14:36Z-08:19:58Z). It is discarded and is not one of the 8 holds.
+
+- `./es_auto_installer.sh validate agent-toolkit` exited 0, its PLAY RECAP at `failed=0`.
+- `eat-check.sh` in EAS mode passed through EAS's gateway on gemma-4-26b. Both files' sha256
+  equal the deploy commit's. It checked the stack's readiness (20 pods Ready), a chat and a
+  `get_weather` tool call. Qwen3Guard labelled the first guardrail probe Unsafe, and LiteLLM
+  blocked it with HTTP 500 and the guardrail's unsafe-content reason (the v1.83.14 shape). A
+  sandbox run printed 385.
+- `H62r-smoke`: both serving pods restarted and were Ready in 158 s. Both warm-ups answered, and
+  no pair started.
+
+**Hold 1** (08:19:58Z-08:48:15Z).
+
+- Hold-start rule: load1 was 25.47 when the lock was taken, right after the smoke. The hold waited
+  120 s and then started unflagged (load1 4.18 at 08:21:59Z), with no aiperf process.
+- Both serving pods restarted and were Ready in 157 s. The pairs ran from 08:25:28Z to 08:48:12Z:
+  24 complete pairs, 12 with A1 first by L3's seeded coin, and no void pair.
+
+| | A1 (k3d-gpu, VM a) | B5 (EAS v1.2.0 with EAT 2.0, VM b) |
+|---|---|---|
+| Within budget (`pass_budget`) | 21/24 (0.875, Wilson 95% 0.69-0.96) | 21/24 (0.875, Wilson 95% 0.69-0.96) |
+| `fail_graded` | 3 | 3 |
+| Over the turn or the task budget | 0 | 0 |
+| Median attempt | 11.1 s | 11.7 s |
+| Turn p95 | 11.3 s | 11.4 s |
+| J per completed task | 3460 | 3356 |
+
+- Paired difference A1 - B5: 0.000, 95% CI -0.125 to +0.125 (one-sided bounds -0.083 and
+  +0.083). Two pairs were discordant, one each way: in B-T7-U1002 A1 failed and B5 passed, and
+  in B-T6-U1003 the reverse. Both arms failed B-T4-U1003 and B-T7-U1003. No bootstrap resample
+  reached +30 points (share 0.000).
+- Gates. The balance gate passed: the smallest p was 0.087 (busy_pct), against alpha 0.01, and
+  throttle and swap were 0 throughout. There were 24 complete pairs (at least 16) and 0 void
+  pairs (at most 2). The idle-arm median was 0.0039 CPU (at most 0.5). The scorer listed no
+  failed gate.
+
+**Predictions, as written.**
+
+- A1 within-budget success >= 0.70 (0.65): 0.875, held.
+- B5 >= 0.70 (0.6): 0.875, held.
+- Paired A1 - B5 in [-0.20, +0.15] (0.6): 0.000, held.
+- Balance gate passes (0.9): held.
+- Verdict: REFUTED (0.6), INCONCLUSIVE (0.35), SUPPORTED (0.05). It is REFUTED.
+- Not gated. Median attempt A1/B5 <= 0.85 (0.5): 0.947, not held. A1's median attempt in its
+  guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6): 1.383, above the range.
+
+**Reported, never gated.**
+
+- The period-balanced estimate is 0.000 (A1 first: mean difference -0.083 over 12 pairs; B5
+  first: +0.083 over 12). L2's matched subset is all 24 pairs, at the same 0.000 (CI -0.125 to
+  +0.125).
+- Paired J per attempt, A1/B5: 0.99 (95% CI 0.89-1.13). RAPL package energy includes both
+  guests.
+- The serving covariate (`serving.py`) averaged 0.12 CPU-s/s, from the host's observability
+  containers, and no aiperf process ran. Each guest's CPU (`vm_cpu`): during A1's attempts VM a
+  used 29.2 CPU-s/s and VM b 2.2; during B5's, VM b used 22.4 and VM a 0.3. So VM b's own
+  background (Kubernetes, Istio, observability and Qwen3Guard) is about 2 CPU-s/s.
+- B5's pod in the hold (`hold1/remote-b/`): CPU request and limit 40, cpuset the 40 even vCPUs
+  16-94, `nproc` 40, `amx_tile` on 96 lines of its /proc/cpuinfo, image
+  `vllm/vllm-openai-cpu@sha256:197354e6...`, and `max_model_len` 262144.
+- A1's pod: cpuset 0-95 with a CPU limit of 48, `amx_tile` on 96 lines, OVMS
+  `sha256:a928903f...`.
+- EAT's sandbox router ran `sandbox-router@sha256:beadc42d...`, its floating `latest-main` tag.
+- The VM tax (`vmtax.json`). A1 in its guest was 21/24 with a median attempt of 11.1 s, against
+  H50's A1 on the host at 19/24 and 8.0 s (1.38x). B5 in its guest was 21/24 at 11.7 s, against
+  H50's B1 on the host at 21/24 and 12.0 s (0.98x). B1 is EAT release-1.1.0's chart with the same
+  vLLM image and weights, so that side reads the guest and the deployment together. The two
+  descriptions differ. The pre-registration named one possible reason: OVMS's pool and vLLM's
+  per-core OpenMP threads can respond differently to unpinned vCPUs. Here B5 also ran in a
+  balloon of 40 fixed vCPUs while A1 floated over 96 with a CPU limit of 48. Neither reason was
+  measured.
+
+**Environment, disclosed.**
+
+- The qwen38 serving pairs and `aiperf010` on crescent were stopped by another task at
+  05:27-05:30Z, about two hours before this run, to free the B70s. They stayed stopped through
+  H62r. `campaign.sh` neither stopped nor started them: the host gate passed, so its fallback never
+  ran, and its teardown had nothing to restore. So H62r's host carried no GPU serving load, where
+  H50's hold ran beside the pairs (a serving covariate of 3.8 CPU-s/s). Both of H62r's arms ran
+  under the same conditions, in one hold.
+- The cloud image was already in `~/k3dgpu-bench/h62r`. Another task had downloaded the pinned
+  image there at 05:05:44Z, before #330 merged (07:08:42Z), as a download check. `vm.sh fetch`
+  found it, did not download it again, and checked it: sha256 OK, 621284352 bytes. No guest
+  existed before setup.
+- No other hold ran on crescent in the window (`runs/holds.log`).
+
+**Teardown** (08:48:15Z-08:50:04Z). Both guests were powered off and removed, and their disks,
+the cloud image and the QEMU image were deleted. `~/k3dgpu-bench/h62r` keeps only the ssh key,
+`ssh_config` and the QEMU image's ID and package list. The bench lock was free afterwards.
+
+**Records and secrets.** `setup/guest-b/install.log` stays on crescent (rule 8); its NRI role
+and its PLAY RECAPs are committed as `install-excerpt.txt`. The guests were gone before the
+LiteLLM master key or the router token could be read for a fixed-string scan, as in H62. Every
+committed record was scanned instead for key, token, password, `hf_` and private-key patterns
+and for long base64 strings. The only matches were container IDs, URLs and the harness's
+`api_key: not-needed`.
+
+**What it means.** At the GA tags, Intel's documented single-node default for its agent
+toolkit installs in this guest shape once EAS's documented `nri_reserved_cpu_list` names the
+guest's sibling vCPUs. Inside EAT's banking flow it then delivered as many tasks within the turn
+budget as k3d-gpu's CPU stack, 21 of 24 each, at a similar median attempt. k3d-gpu's CPU stack
+did not deliver far more, so H62r is REFUTED. The scope is one hold of B24 at N=1 under
+`typical` load, Gemma 4 26B-A4B on its QAT weights, and both stacks in KVM guests of one shape on
+one Xeon 6741P. B5 was reached past EAS's gateway and guardrail (D4), and it ran with D3's
+reservation, not with EAS's stock sizing in this guest. H62 keeps its verdict. The probe finding
+above stays an upstreamable report for Intel's EAS team; nothing is filed from this row. The
+re-run trigger stands: an EAS release after v1.2.0 or an EAT release after `release-2.0.0` gets
+a new row.
 
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
