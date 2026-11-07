@@ -1,0 +1,69 @@
+{
+  "headline_level": "typical",
+  "levels": {
+    "typical": {
+      "arm_A": {
+        "j_per_token_median": 3.219,
+        "tps_max": 11.909,
+        "tps_median": 11.568,
+        "tps_min": 10.596
+      },
+      "arm_B": {
+        "j_per_token_median": 3.124,
+        "tps_max": 13.783,
+        "tps_median": 12.075,
+        "tps_min": 11.101
+      },
+      "b_cheaper_pairs": 7,
+      "b_faster_pairs": 8,
+      "confidence": null,
+      "dropped_requests": 0,
+      "greedy_identical_pairs": 11,
+      "j_ratio_ci95": [
+        0.848,
+        1.0253
+      ],
+      "j_ratio_median": 0.951,
+      "load_matched": true,
+      "load_per_arm": {
+        "busy_pct": {
+          "A": 50.168,
+          "B": 50.423
+        },
+        "load1": {
+          "A": 8.789,
+          "B": 8.918
+        },
+        "pkg_w": {
+          "A": 35.241,
+          "B": 35.174
+        },
+        "swap_delta_mib": {
+          "A": 0.0,
+          "B": 0.0
+        },
+        "swap_used_mib": {
+          "A": 0.0,
+          "B": 0.0
+        },
+        "throttle_per_min": {
+          "A": 0.0,
+          "B": 0.0
+        }
+      },
+      "load_verdict": "MATCHED",
+      "n_pairs": 12,
+      "outcome": "effect size not resolved by the CIs",
+      "sign_p_j": 0.774414,
+      "sign_p_tps": 0.387695,
+      "tps_ratio_ci95": [
+        0.9842,
+        1.2077
+      ],
+      "tps_ratio_median": 1.0637,
+      "verdict": "INCONCLUSIVE"
+    }
+  },
+  "outcome": "effect size not resolved by the CIs",
+  "verdict": "INCONCLUSIVE"
+}
