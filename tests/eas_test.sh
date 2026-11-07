@@ -245,14 +245,14 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     # 4. EAS main on the desktop (one node, k3d-gpu's balloons policy kept): the expected set.
     got=$(brief "${WORK}/main" best-effort 1)
     check "main best-effort 1 node: 0002 apply, 0003/0004/0005 skip, 0006 apply a" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "${got}"
     check "main: exit 0" 0 "$(cat "${WORK}/rc")"
     check "main kubelet-static 1 node: 0003 still skips (EAS installs balloons only for nri-balloons)" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" kubelet-static 1)"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "$(brief "${WORK}/main" kubelet-static 1)"
     check "main nri-balloons 1 node: 0003 applies" \
-        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" nri-balloons 1)"
+        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "$(brief "${WORK}/main" nri-balloons 1)"
     check "main best-effort 2 nodes: 0004 applies" \
-        "0002=apply:a 0003=skip 0004=apply:a 0005=skip 0006=apply:a 0007=drop-fixed" "$(brief "${WORK}/main" best-effort 2)"
+        "0002=apply:a 0003=skip 0004=apply:a 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "$(brief "${WORK}/main" best-effort 2)"
     check "main: 0002 resolves to the upstream draft" "${ROOT}/integrations/eat/upstream/patches/0002-eas-istio-global-platform.patch" \
         "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][0]["files"][0]')")"
     check "main: 0002 names the generator knob it needs" istio_platform "$(jq_ 'd["decisions"][0]["knob"]')"
@@ -267,7 +267,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     if [ -n "${xdev}" ]; then
         got=$(TMPDIR="${xdev}" brief "${WORK}/main" best-effort 1)
         check "main with the scratch index on another filesystem (TMPDIR ${d}): the same decisions" \
-            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
+            "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "${got}"
         check "main with the scratch index on another filesystem: exit 0" 0 "$(cat "${WORK}/rc")"
         rm -rf "${xdev}"
     else
@@ -278,7 +278,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     local sha sha7
     sha=$(git -C "${WORK}/main" rev-parse HEAD); sha7=${sha:0:7}
     out=$(python3 "${OVERLAY}" --eas "${WORK}/main" --policy best-effort --nodes 1)
-    check "text: six decision lines" 6 "$(grep -c -- ' -> ' <<< "${out}")"
+    check "text: seven decision lines" 7 "$(grep -c -- ' -> ' <<< "${out}")"
     check "text: every decision line is fact -> choice [source]" 0 \
         "$(grep -v '^#' <<< "${out}" | grep -cvE '^.+ -> (apply|skip|drop-merged|drop-fixed|STOP)([: ].*)? \[[^]]+\]$')"
     has "text: 0006 apply cites the line it changes" \
@@ -296,12 +296,12 @@ for v in json.load(open(sys.argv[1]))["verified"]:
 
     # 4b. v1.2.0 (the release profile): the decisions measured at rc.1, on one node and three.
     check "v1.2.0 best-effort 1 node: 0002 apply, 0006 apply b, the rest skip" \
-        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" best-effort 1)"
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a 0008=apply:a" "$(brief "${WORK}/ga" best-effort 1)"
     check "v1.2.0: exit 0" 0 "$(cat "${WORK}/rc")"
     check "v1.2.0 nri-balloons 1 node: 0003 applies too" \
-        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" nri-balloons 1)"
+        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:b 0007=apply:a 0008=apply:a" "$(brief "${WORK}/ga" nri-balloons 1)"
     check "v1.2.0 nri-balloons 3 nodes: 0004 applies too" \
-        "0002=apply:a 0003=apply:a 0004=apply:a 0005=skip 0006=apply:b 0007=apply:a" "$(brief "${WORK}/ga" nri-balloons 3)"
+        "0002=apply:a 0003=apply:a 0004=apply:a 0005=skip 0006=apply:b 0007=apply:a 0008=apply:a" "$(brief "${WORK}/ga" nri-balloons 3)"
 
     # 4c. 0007 (Gateway API): main's gateway role already keeps newer foreign CRDs (EAS #42)
     #     and its istio role installs none; release-1.2's istio role applies v1.2.1 over them.
@@ -309,12 +309,19 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         "$(brief "${WORK}/main" best-effort 1 | tr ' ' '\n' | grep '^0007=')"
     check "0007 on v1.2.0: the release-1.2 patch applies" "0007=apply:a" \
         "$(brief "${WORK}/ga" best-effort 1 | tr ' ' '\n' | grep '^0007=')"
+    check "0008 on main: drop-fixed (EAS #42's crds.yaml)" "0008=drop-fixed" \
+        "$(brief "${WORK}/main" best-effort 1 | tr ' ' '\n' | grep '^0008=')"
+    check "0008 on v1.2.0: the release-1.2 patch applies" "0008=apply:a" \
+        "$(brief "${WORK}/ga" best-effort 1 | tr ' ' '\n' | grep '^0008=')"
+    check "0008 resolves to the overlay-only patch" "${ROOT}/integrations/eas/patches/0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch" \
+        "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][6]["files"][0]')")"
+    brief "${WORK}/ga" best-effort 1 > /dev/null
     check "0007 resolves to the overlay-only patch" "${ROOT}/integrations/eas/patches/0007-release-1.2-istio-keep-newer-gateway-api.patch" \
         "$(cd "${ROOT}" && realpath "$(jq_ 'd["decisions"][5]["files"][0]')")"
 
     # 5. release-1.2: 0006 variant b; 0006a and 0005 do not apply there.
     got=$(brief "${WORK}/r12" best-effort 1)
-    check "release-1.2: 0006 variant b applies" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a" "${got}"
+    check "release-1.2: 0006 variant b applies" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b 0007=apply:a 0008=apply:a" "${got}"
     check "release-1.2: 0006 variant a does not apply" False "$(jq_ 'd["decisions"][4]["variants"][0]["applies"]')"
     check "release-1.2: 0006 variant b applies" True "$(jq_ 'd["decisions"][4]["variants"][1]["applies"]')"
     check "release-1.2: 0005 does not apply" False "$(jq_ 'd["decisions"][3]["variants"][0]["applies"]')"
@@ -340,7 +347,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         fail "pre-apply the patches"
     fi
     check "patches already in the tree: drop-merged" \
-        "0002=drop-merged:a 0003=drop-merged:a 0004=drop-merged:a 0005=skip 0006=drop-merged:a 0007=drop-fixed" \
+        "0002=drop-merged:a 0003=drop-merged:a 0004=drop-merged:a 0005=skip 0006=drop-merged:a 0007=drop-fixed 0008=drop-fixed" \
         "$(brief "${WORK}/merged" nri-balloons 3)"
     check "drop-merged: exit 0" 0 "$(cat "${WORK}/rc")"
     sha=$(git -C "${WORK}/merged" rev-parse HEAD)
@@ -365,7 +372,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'    release_namespace: "{{ nri_cpu_balloons.namespace }}"\n    chart_version: "{{ nri_cpu_balloons.helm.chart_version }}"\n    create_namespace: true\n    values_files:\n      - "{{ nri_tmp_dir }}/nri-values.yaml"'
     commit "${WORK}/fixed" "istio, envoy and balloons fixed another way"
     check "fixed another way, knob present: drop-fixed" \
-        "0002=drop-fixed 0003=drop-fixed 0004=skip 0005=skip 0006=drop-fixed 0007=drop-fixed" "$(brief "${WORK}/fixed" nri-balloons 1)"
+        "0002=drop-fixed 0003=drop-fixed 0004=skip 0005=skip 0006=drop-fixed 0007=drop-fixed 0008=drop-fixed" "$(brief "${WORK}/fixed" nri-balloons 1)"
     check "drop-fixed: exit 0" 0 "$(cat "${WORK}/rc")"
     sha=$(git -C "${WORK}/fixed" rev-parse HEAD)
     has "drop-fixed: 0002 cites where upstream wires global.platform" \
@@ -406,7 +413,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'        dependency_update: true\n        set_values:\n          - value: "global.platform={{ istio_cni_platform }}"\n        wait: "{{ helm_wait }}"'
     commit "${WORK}/renamed" "istio: istio_cni_platform"
     got=$(brief "${WORK}/renamed" best-effort 1)
-    check "knob renamed: 0002 STOP" "0002=STOP 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" "${got}"
+    check "knob renamed: 0002 STOP" "0002=STOP 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" "${got}"
     check "knob renamed: exit 3" 3 "$(cat "${WORK}/rc")"
     out=$(cat "${WORK}/d.txt")
     has "knob renamed: names the missing knob" "istio_platform" "${out}"
@@ -429,7 +436,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
         $'          kubernetes: "{{ _eg_k8s_provider[_envoy_gateway_proxy_shape] }}"\n'
     commit "${WORK}/pr50" "platform layer"
     got=$(brief "${WORK}/pr50" best-effort 1)
-    check "#50 layout: 0006 STOP" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=STOP 0007=drop-fixed" "${got}"
+    check "#50 layout: 0006 STOP" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=STOP 0007=drop-fixed 0008=drop-fixed" "${got}"
     check "#50 layout: exit 3" 3 "$(cat "${WORK}/rc")"
     out=$(cat "${WORK}/d.txt")
     has "#50 layout: names the upstream PR" "${GH}/pull/50" "${out}"
@@ -498,7 +505,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply again: exit 0" 0 "$?"
     has "--apply again: a no-op" "already applied" "$(cat "${WORK}/a.txt")"
     check "--apply again: the tree is unchanged" "${before}" "$(git -C "${WORK}/app" diff)"
-    check "decisions read HEAD, not the patched working tree" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" \
+    check "decisions read HEAD, not the patched working tree" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" \
         "$(brief "${WORK}/app" best-effort 1)"
     # A re-run whose facts now pick one more patch: that one is applied, the rest kept.
     python3 "${OVERLAY}" --eas "${WORK}/app" --policy nri-balloons --nodes 1 --apply > "${WORK}/a.txt" 2>&1
@@ -518,7 +525,7 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     check "--apply with --rev other than HEAD: exit 2" 2 "$?"
     rm -f "${WORK}/d.json"
     python3 "${OVERLAY}" --eas "${WORK}/merged" --rev HEAD~1 --policy best-effort --nodes 1 --json "${WORK}/d.json" > /dev/null 2>&1
-    check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed" \
+    check "--rev reads that commit without a checkout" "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:a 0007=drop-fixed 0008=drop-fixed" \
         "$(python3 -c 'import json,sys; print(" ".join("%s=%s" % (d["id"], d["brief"]) for d in json.load(open(sys.argv[1]))["decisions"]))' "${WORK}/d.json")"
 
     # 12. Inputs it refuses.
@@ -555,7 +562,7 @@ import json, sys
 s = json.load(open(sys.argv[1]))
 s["verified"] = [{"profile": "fixture", "rev": sys.argv[3], "fixture": "-", "cases": [
     {"policy": "best-effort", "nodes": 1, "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a",
-                                                 "0007": "drop-fixed"}}]}]
+                                                 "0007": "drop-fixed", "0008": "drop-fixed"}}]}]
 s["watch"] = [{"ref": "HEAD", "what": "the fixture"}, {"ref": "pull/999/head", "what": "absent"}]
 json.dump(s, open(sys.argv[2], "w"))
 EOF
@@ -2174,6 +2181,31 @@ PY
             > "${A}/out" 2>&1
         if grep -q '"msg": "INSTALL"' "${A}/out"; then got=INSTALL; elif grep -q 'skipping: \[localhost\]' "${A}/out"; then got=KEEP; else got="error: $(tail -3 "${A}/out")"; fi
         check "gwapi: CRDs ${name} -> ${want}" "${want}" "${got}"
+    done
+    # 0008: release-1.2's envoy_gateway keeps a Gateway API install at v1.5.0 or later (the
+    # safe-upgrades policy's line): Envoy Gateway's own CRDs from gateway-crds-helm, skip_crds.
+    P="${ROOT}/integrations/eas/patches/0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch"
+    cond=$(python3 - "${P}" <<'PY'
+import re, sys
+text = "".join(l[1:] for l in open(sys.argv[1]) if l.startswith("+") and not l.startswith("+++"))
+m = re.search(r"        _eg_keep_gateway_api: >-\n((?:          .*\n)+)", text)
+print(m.group(1) if m else "")
+PY
+)
+    [ -n "${cond}" ] || { fail "gwapi: no _eg_keep_gateway_api in the 0008 patch"; return; }
+    { printf '%s\n' '- hosts: localhost' '  connection: local' '  gather_facts: false' '  tasks:' \
+          '    - ansible.builtin.set_fact:' '        keep: >-'
+      printf '%s\n' "${cond}"
+      printf '%s\n' '    - ansible.builtin.debug:' '        msg: "KEEP={{ keep | bool }}"'; } > "${A}/play8.yml"
+    for c in "absent|[]|False" "v1.4.1|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.4.1\"}}}]|False" \
+             "v1.5.0|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.5.0\"}}}]|True" \
+             "k3s v1.6.1|[{\"metadata\": {\"annotations\": {\"gateway.networking.k8s.io/bundle-version\": \"v1.6.1\"}}}]|True" \
+             "no annotation|[{\"metadata\": {}}]|False"; do
+        IFS='|' read -r name res want <<< "${c}"
+        ANSIBLE_LOCAL_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ansible-playbook -i localhost, "${A}/play8.yml" \
+            -e "{\"_eg_gateway_api_crd\": {\"resources\": ${res}}}" > "${A}/out8" 2>&1
+        got=$(sed -n 's/.*"msg": "KEEP=\(True\|False\)".*/\1/p' "${A}/out8" | head -1)
+        check "gwapi: 0008 keeps the chart's CRDs out with Gateway API ${name}: ${want}" "${want}" "${got:-error: $(tail -3 "${A}/out8")}"
     done
 }
 
