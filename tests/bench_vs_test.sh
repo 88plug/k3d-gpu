@@ -90,9 +90,55 @@ dry_no_proxy_env() {
     ! grep -q -- 'PROXY=' <<< "${o}"
 }
 
+# Fake sysfs trees for --cpuset. HYB is an i9-13900T: P-cores 0-15 as eight
+# hyperthread pairs (cpu_core), E-cores 16-31 one thread each (cpu_atom).
+# FLAT has one core type: CPUs 0-7 as four hyperthread pairs, no hybrid PMUs.
+HYB=$(mktemp -d) FLAT=$(mktemp -d)
+mkdir -p "${HYB}/sys/devices/cpu_core" "${HYB}/sys/devices/cpu_atom"
+echo 0-15 > "${HYB}/sys/devices/cpu_core/cpus"
+echo 16-31 > "${HYB}/sys/devices/cpu_atom/cpus"
+for c in $(seq 0 31); do
+    mkdir -p "${HYB}/sys/devices/system/cpu/cpu${c}/topology"
+    if [ "${c}" -lt 16 ]; then s="$((c - c % 2))-$((c - c % 2 + 1))"; else s=${c}; fi
+    echo "${s}" > "${HYB}/sys/devices/system/cpu/cpu${c}/topology/thread_siblings_list"
+done
+for c in $(seq 0 7); do
+    mkdir -p "${FLAT}/sys/devices/system/cpu/cpu${c}/topology"
+    echo "$((c - c % 2))-$((c - c % 2 + 1))" > "${FLAT}/sys/devices/system/cpu/cpu${c}/topology/thread_siblings_list"
+done
+# threads_env <sysroot> <stack> [bench args...]: the LLAMA_ARG_THREADS value the
+# plan's docker run sets, or "none".
+threads_env() {
+    local root=$1 stack=$2 o
+    shift 2
+    o=$(K3D_GPU_SYSROOT="${root}" "${K}" bench --dry-run --vs "${stack}" "$@") || return 1
+    o=$(grep '^docker run ' <<< "${o}" | grep -o -- '-e LLAMA_ARG_THREADS=[0-9]*' | cut -d= -f2)
+    echo "${o:-none}"
+}
+# Ollama's llama-server takes llama.cpp's default thread count, which pins itself
+# to every online CPU to find the P-cores (common_cpu_get_num_math); inside a
+# cpuset the first pin outside it fails and the count falls back to the host's
+# physical cores, 24 on the 13900T, so 24 spinning threads share 16 CPUs.
+# --cpuset gives the ollama stack the count llama.cpp picks when it can see every
+# CPU, restricted to the cpuset: one thread per physical P-core in it (one per
+# physical core when the cpuset has no P-core or the CPU has one core type).
+# llama.cpp's own image (OpenMP) and OVMS keep their defaults.
+cpuset_threads() {
+    [ "$(threads_env "${HYB}" ollama --cpuset 0-15)" = 8 ] \
+        && [ "$(threads_env "${HYB}" ollama --cpuset 0-3,16-19)" = 2 ] \
+        && [ "$(threads_env "${HYB}" ollama --cpuset 16-23)" = 8 ] \
+        && [ "$(threads_env "${FLAT}" ollama --cpuset 0-7)" = 4 ] \
+        && [ "$(threads_env "${FLAT}" ollama --cpuset 0,2,4)" = 3 ] \
+        && [ "$(threads_env "${HYB}" ollama)" = none ] \
+        && [ "$(threads_env "${HYB}" llamacpp --cpuset 0-15)" = none ] \
+        && [ "$(threads_env "${HYB}" ovms --cpuset 0-15)" = none ] \
+        && K3D_GPU_SYSROOT="${HYB}" dry --vs ollama --cpuset 0-15 \
+            | grep -qF -- "-e LLAMA_ARG_THREADS=8 --cpuset-cpus 0-15 $(lock_image ollama)"
+}
+
 # Fake docker and curl on PATH: the competitor container exits at once (OOM).
 FAKE=$(mktemp -d)
-trap 'rm -f "${OUT}"; rm -rf "${FAKE}"' EXIT
+trap 'rm -f "${OUT}"; rm -rf "${FAKE}" "${HYB}" "${FLAT}"' EXIT
 cat > "${FAKE}/docker" <<'EOF'
 #!/bin/bash
 echo "docker $*" >> "${FAKE_LOG}"
@@ -136,6 +182,7 @@ check "dry-run ovms: defaults, no --target_device, /v3 arm" dry_ovms
 check "dry-run --k3d-url replaces the port-forward" dry_k3d_url
 check "dry-run forwards host proxy settings, loopback in NO_PROXY" dry_proxy
 check "dry-run adds no proxy settings when the host has none" dry_no_proxy_env
+check "dry-run --cpuset gives ollama one thread per physical P-core in the cpuset" cpuset_threads
 check "exited competitor fails fast with its logs; logs kept in competitor.log; cache volume removed" exited_container_fails_fast
 check "--keep-cache keeps the cache volume" keep_cache_keeps_volume
 check "help lists --keep-cache and K3D_GPU_SIGNOFF" grep -q 'K3D_GPU_SIGNOFF' <("${K}" help)
