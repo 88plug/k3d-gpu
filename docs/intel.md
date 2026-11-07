@@ -101,7 +101,7 @@ the plugins, and asserts the result, with no manual step.
 - **Scheduled**: `k3d-gpu up` starts its plugin (or sets its labels) and counts
   the units the cluster advertises (the schedulability assertion above).
 - **Verified on hardware**: `up` and `test` passed on a real host, or, where a cell
-  says so, what they did there. Two hosts so far. The first is an i9-13900T
+  says so, what they did there. Three hosts so far. The first is an i9-13900T
   (P-cores 0-15, E-cores 16-31) with a UHD 770 iGPU
   (`8086:a780`, `i915`) and 2 NVIDIA GPUs, recorded in the
   [PR #9 test plan](https://github.com/88plug/k3d-gpu/pull/9): `up` reported
@@ -111,7 +111,10 @@ the plugins, and asserts the result, with no manual step.
   after it (`fb5c17d`) and has not yet run on hardware. The second is a Xeon 6741P
   (Granite Rapids, 48 cores, AMX, AVX-512, 3 DSA, 3 IAA, 3 QAT 4xxx) with 4x Arc Pro
   B70 on `xe`. A plain `up` ran there on 2026-10-20 [ledger:H52], and `up` after
-  `k3d-gpu host-setup --apply` on 2026-10-29 [ledger:H52b].
+  `k3d-gpu host-setup --apply` on 2026-10-29 [ledger:H52b]. The third is wildct, an
+  i7-13700 (P-cores 0-15, E-cores 16-23) with a UHD 770 iGPU and 2 NVIDIA GPUs, all three
+  opted out by the box owner (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), so only its CPU rows
+  have run. A plain `up` of release 0.1.89 ran there on 2026-11-07 [ledger:H52w].
 - **Verified by sim**: `tests/detect_test.sh` builds a fake sysfs/devfs tree,
   sets `K3D_GPU_SYSROOT`, and runs `detect`, `doctor` or `test` against it, with
   `docker`, `k3d` and `kubectl` stubbed. 1028 cases pass (2026-10-20). Sim covers detection,
@@ -129,8 +132,8 @@ the plugins, and asserts the result, with no manual step.
 | IAA | `iaa.intel.com/wq-user-*` | yes | yes | no. On the Xeon 6741P `iaa_crypto` held all 256 entries of each device, so `host-setup` configured no IAA work queue and no `iaa.intel.com` resource appeared [ledger:H52b] | user work queues, no-work-queue case with per-device `accel-config` apply/revert, iaa_crypto kernel-WQ opt-in with a snapshot revert, no room left, live zswap `deflate-iaa` left alone |
 | QAT (C62x, 4xxx, 420xx, 6xxx) | `qat.intel.com/*` | yes | yes | no. On the Xeon 6741P (4xxx) `host-setup --apply` created 48 VFs, but the QAT plugin crash-looped and advertised none; `up` warned and `test` failed [ledger:H52b] | 4xxx and C62x PF with VFs, no VFs (apply = `sriov_totalvfs`, plugin VF driver named), no SR-IOV, unbound PF, `vfio-pci` check |
 | AMX | `feature.node.kubernetes.io/cpu-cpuid.AMX*=true` (labels, no plugin) | yes | yes (labels) | labels **yes** on the Xeon 6741P: AMXTILE, AMXBF16, AMXINT8, AMXFP16, and `test`'s AMX pod read the `amx_tile` flag [ledger:H52]. That `test` predates the oneDNN matmul probe, which no recorded hardware run has reached: the second run's `test` stopped at QAT before it [ledger:H52b] | AMX flags detected and reported; CPU without AMX; `test` AMX probe passes on an AMX oneDNN matmul, fails on a non-AMX matmul and when no matmul ran |
-| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; on the Xeon 6741P a live node carried all 14 pre-registered AVX-512 and VNNI labels [ledger:H52] [ledger:H52b] | NFD name mapping, `pku` unlabelled, no-flag CPU |
-| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
+| CPU ISA (AVX-VNNI, AVX-512, VAES, GFNI, SHA, CET) | `feature.node.kubernetes.io/cpu-cpuid.<NAME>=true` (NFD names, labels only) | yes | yes (labels) | labels read on the UHD 770 host by `doctor`; on the Xeon 6741P a live node carried all 14 pre-registered AVX-512 and VNNI labels [ledger:H52] [ledger:H52b]; on wildct's i7-13700 the launcher's labels were exactly AVXVNNI, VAES, GFNI, SHA, CETIBT and CETSS, with no AVX-512 or AMX label from any source [ledger:H52w] | NFD name mapping, `pku` unlabelled, no-flag CPU |
+| Hybrid P/E cores | `k3d-gpu.io/hybrid-cpu=true`; pod label `k3d-gpu.io/cores` | yes | yes | **yes** at `109154d`: performance pod on CPU 0, efficient pod on CPU 20. The strict P/E placement check in `test` passed live on the merged tree (performance `0`, efficient `24`). The `ecluster`, `pcore-physical`, `latency` (on favored CPUs 8 and 10) and `lowpower` balloons verified live on the i9-13900T ([results](#how-hybrid-pe-pinning-works)); the Arrow Lake-H `cpu_lowpower` override is sim-only (UNVERIFIED live). On wildct's i7-13700, `test`'s performance pod ran on CPU 0 and its efficient pod on CPU 17 [ledger:H52w], and `sandbox up` kept the sandbox on CPU 17 in 3 of 3 runs [ledger:H18w]. | detection, no online E-cores, non-hybrid, forced, `doctor` lists, `test` placement pass and both failure modes; `cpu_lowpower` and no-L3 LP E-cores, E-core clusters, physical P-cores, favored CPUs from CPPC and MSR `0x771`, `latency` patched to the favored L2 dirs |
 
 The NPU and Gaudi rows have not run on hardware: their scheduling is tested only
 against a simulated sysfs. The `xe`, DSA, IAA, QAT and AMX rows have run on one
@@ -259,7 +262,10 @@ stated as the ledger graded it; only the SUPPORTED rows back a claim.
 | H51 | Graded agents per box: neither CPU stack served one graded agent within the 10 s SLO ([run](../EXPERIMENTS.md#h51-run-xeon-6741p-2026-10-29)) | REFUTED |
 
 Detection (H52 REFUTED, H52b REFUTED) is in the [capability matrix](#capability-matrix).
-H54d and H54q are in the table below.
+H54d and H54q are in the table below. After the campaign, H62r repeats H62 at Intel's GA
+tags of 2026-11-06 (EAS v1.2.0 installing EAT `release-2.0.0` with enterprise-inference
+v1.1.0); it is pre-registered and not yet run
+([pre-registration](../EXPERIMENTS.md#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06)).
 
 H54 rows on that host: Gemma 4 26B-A4B (QAT weights) on the Xeon CPU, and split with a B70
 in H54c; Qwen3.8-27B on the B70s in H54b. None is SUPPORTED (H59 later settled the CPU engine
@@ -274,6 +280,20 @@ one B70.
 | [ledger:H54q] | Whether the QAT-matched int4 IR keeps the bf16 QAT quality and OpenVINO's base-model IR does not. On GSM8K items 0-199 the QAT-matched IR stayed inside the pre-registered margin of the bf16 reference, but the base-model IR scored no lower than it, and every build sat near the item set's ceiling | INCONCLUSIVE |
 | [ledger:H54b] | Qwen3.8-27B on Arc Pro B70, the best one-card arm against EAT #21's two-card XPU path. No one-card arm was delivered: the arms on Qwen bf16 or RedHat int4 weights did not fit the shared disk, two OVMS arms hit runner bugs, and llama.cpp SYCL's "one card" pod saw and used all four cards | INCONCLUSIVE |
 | [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model. The experts ran on the Xeon, but every GPU arm spread over all four cards (the same placement failure), so the one-card model was not tested | INCONCLUSIVE |
+
+**The wildct campaign (in progress).** wildct is a second Raptor Lake client host, an
+i7-13700 with its GPUs opted out, so its rows are CPU rows. They run on release 0.1.89 under the
+[wildct pre-registration](../EXPERIMENTS.md#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20),
+in its registered order. Each row is stated as the ledger graded it.
+
+| Row | What it asked, and what happened | Verdict |
+|----|-------------|--------|
+| [ledger:H52w] | Detection with no flag but the box owner's GPU opt-out: `up` found the hybrid P/E cores and the launcher's six ISA labels, nothing the host lacks, and named both GPU vendors as detected and opted out ([run](../EXPERIMENTS.md#h52w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
+| [ledger:H18w] | H18 replicated: `sandbox up` kept the sandbox on an E-core behind default-deny egress in 3 of 3 runs, with PyPI reachable ([run](../EXPERIMENTS.md#h18w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
+| [ledger:H25w] | H25 replicated: with OVMS's shipped prefix caching on, an added agent's first chunk arrived 14.3x sooner than with it off (CI 13.38-14.89), under matched `typical` load ([run](../EXPERIMENTS.md#h25w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
+
+H28w, H34w, H57wa, H57wm, H57wb and the engine-choice row H59w are pre-registered there and
+not yet run.
 
 Facts from `0ecf67a` that shape a k3d run:
 

@@ -1,7 +1,7 @@
 # k3d-gpu partner update, November 2026
 
-Status: 2026-11-01. k3d-gpu release 0.1.85. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
-82 rows. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
+Status: 2026-11-07. k3d-gpu release 0.1.90. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
+83 rows. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
 as the ledger graded them. Every number here is in the ledger with its protocol and
 reproduce block. Nothing in this page has been sent to an `intel/*` repository.
 
@@ -10,7 +10,49 @@ Intel hardware and configures it. The aim of this work is to make Intel's own st
 enterprise-inference and the Enterprise Agent Toolkit) easy to install and evaluate on one
 machine, and to report back what we find while doing it.
 
-## What is new since 2026-10-29
+## What is new since 2026-11-01
+
+**A second Raptor Lake client host is measured.** wildct is an i7-13700 (8 P-cores and
+8 E-cores, AVX-VNNI, no AVX-512 or AMX) with a UHD 770 iGPU and two NVIDIA cards. The box
+owner opts all three GPUs out, so its rows are CPU rows. Each ran on release 0.1.89 under the
+[wildct pre-registration](../../EXPERIMENTS.md#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20).
+Three rows have run there so far, and each of them is SUPPORTED:
+
+- Detection: a plain `k3d-gpu up` found the hybrid P/E cores and the six ISA extensions the launcher labels, and nothing the host lacks. `k3d-gpu test` put its P-core pod on CPU 0 and its E-core pod on CPU 17, and `up` named both GPU vendors as detected and opted out [ledger:H52w].
+- Agent sandboxes, H18 replicated: in 3 of 3 runs `k3d-gpu sandbox up` kept the sandbox on an E-core behind default-deny egress. The host's tailscale and LAN addresses were refused from the sandbox, and PyPI was reachable [ledger:H18w].
+- Shared-prefix agents, H25 replicated: with OVMS's shipped prefix caching on, an added agent's first chunk arrived 14.3x sooner than with it off (CI 13.38-14.89), under matched `typical` load [ledger:H25w]. This measures an OVMS feature; k3d-gpu enables nothing.
+
+The rest of the host's rows (H28w, H34w, H57wa, H57wm, H57wb and the engine-choice row H59w)
+are pre-registered and not yet run. Until a row for the i7-13700 class says otherwise, that
+class keeps OVMS as its CPU engine and gets no CPU draft by default.
+
+**H62 at Intel's GA tags is pre-registered.** Intel published EAS
+[v1.2.0](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0), EAT
+[release-2.0.0](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-2.0.0)
+and enterprise-inference [v1.1.0](https://github.com/intel/enterprise-inference/releases/tag/v1.1.0)
+on 2026-11-06. H62r repeats H62 on those tags: k3d-gpu's CPU stack against Intel's
+documented single-node default (EAS v1.2.0 installing EAT 2.0 with Kubespray), each in its own
+KVM guest of one shape on the Xeon 6741P, inside EAT's banking flow on Gemma 4 26B-A4B's QAT
+weights. Its predictions are H62's, copied verbatim
+([H62r pre-registration](../../EXPERIMENTS.md#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06)).
+
+**Pins move on their own, and each move is checked before it merges.** One registry,
+`pins/registry.toml`, now owns every version, digest and model revision that k3d-gpu's own
+files and its EAT stock path pin. The Freshness workflow proposes each move to upstream's
+newest stable release, every 6 hours, as one pull request per group ([pins/README.md](../../pins/README.md)).
+
+- The merge policy is computed from the diff. A patch or minor move of a plugin or a CPU engine merges on its own once CI and the canary pass. A minor move of a component that a SUPPORTED ledger row measured (OVMS and llama.cpp today) waits for a person, as do a major, a host driver and an EAT stock pin.
+- The Canary workflow runs nightly and on every pin change ([canary/README.md](../../canary/README.md)). It serves a pinned Qwen3-0.6B on vLLM CPU, OVMS and llama.cpp the way the launcher runs them. It checks every flag and environment variable the launcher emits against the vLLM XPU, llm-scaler, Gaudi vLLM, llama.cpp SYCL and Vulkan, DLStreamer, sglang Xeon, NPU UMD and OVMS images, and it starts the node image the way `up` does. It runs on GitHub-hosted runners, so it needs no device.
+- The hourly bot sweep merges one such pull request at a time, only while main's CI is green, and then dispatches one batched release.
+- A pre-registered row's arms stay put. A PENDING row's runner pins move only by a dated ledger amendment, so H59w's registered llama.cpp build and drafter-conversion packages are held. EAT 1.x's pin holds below `release-2.0.0`, which removed the installer `eat-up.sh` drives; EAT 2.0 goes through `k3d-gpu eas`.
+
+**llama.cpp's CPU memory fit counts what the server holds.** In H59d on the i9-13900T, the
+llama.cpp arm was OOMKilled at the 45Gi pod limit the fit gave it. The fit now counts the
+locked GGUF, the copies of the repacked weights (AMX buffers at their packed size), both
+contexts' compute buffers, the drafter and the per-slot logits
+([#294](https://github.com/88plug/k3d-gpu/pull/294)).
+
+## What was new on 2026-11-01
 
 **The Xeon 6741P campaign is closed.** Every pre-registered row on the Xeon 6741P with four
 Arc Pro B70s has a verdict. Read with its scope in [intel.md](../intel.md#eat-by-default-vs-with-k3d-gpu)
@@ -71,11 +113,11 @@ v0.28.0 is past the v0.24.0 CPU attention hang that stalled EAT 1.0.3's stock ar
 ## What is still open
 
 - **The Keycloak argv secret.** F3 stays REFUTED. `k3d-gpu eas up` now patches enterprise-inference's `keycloak_config` role so that neither the admin password nor the client secret is a `kcadm.sh` argument ([State and secrets](eas.md#state-and-secrets)). The patch is checked with a `ps` sampler against a stand-in for kcadm; no live run has checked it yet. A fresh `eas up --agent-toolkit` with F3's secret scan would.
-- **Intel's default install in a guest (H62).** A re-run needs the `cpu: auto` sizing to leave room for EAT's sandbox router, or a guest shape where it does.
+- **Intel's default install in a guest (H62, H62r).** H62's install stopped where `cpu: auto` left too little CPU for EAT's sandbox router. H62r's pre-registration traces that, from source at the GA tags, to EAS's topology probe reading a KVM guest's threads as one per core, and re-runs the row at those tags.
 - **k3d-gpu gaps found on the Xeon.** `/dev/dri/by-path` for oneCCL across B70s (H53); the fit refusing rather than falling back to the CPU, and no DRAM bandwidth cached on a new host (H58); placing one-card arms on one card (H54b, H54c).
 - **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct client-host rows after H25w. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
 - **EAT 1.1.0 through `eat-up.sh`.** Pinned since 2026-10-29 and pre-registered as F4; not run yet.
-- **EAS upstream moves.** EAS #61 merged on 2026-10-30 (EAS `main` `0f7bc2b`). The pin stays at `97f6157`; moving past #61 needs patch 0002 regenerated. EAS #50 and #52 (OpenShift) are open and would move 0006. EAS #71 (teardown hang) is open; `eas down` uses its workaround.
+- **EAS upstream moves.** Intel tagged EAS `v1.2.0` on 2026-11-06; `k3d-gpu eas` still defaults to EAS `main` at `97f6157`, with `v1.2.0-rc.1` as an opt-in profile. EAS #61 merged on 2026-10-30 (EAS `main` `0f7bc2b`). The pin stays at `97f6157`; moving past #61 needs patch 0002 regenerated. EAS #50 and #52 (OpenShift) are open and would move 0006. EAS #71 (teardown hang) is open; `eas down` uses its workaround.
 - **ERAG and Arc under EAS.** EAS's Enterprise RAG layer is not wired into `k3d-gpu eas` yet, and EAS has no Intel GPU path on this branch; Arc and Gaudi stay with `k3d-gpu agent up`.
 
 ## Related
