@@ -1,21 +1,22 @@
 # Freshness dashboard
 
-Updated 2026-11-07 12:31 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-07 13:33 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 red:bot-sweep.yml
 stale:bot-sweep.yml
 
-## Pins behind (18)
+## Pins behind (19)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 1d |
-| examples | `examples-crewai` | `1.15.36` | `1.15.37` | patch | 2026-11-07 | 10h |
+| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 0h |
+| examples | `examples-crewai` | `1.15.36` | `1.15.37` | patch | 2026-11-07 | 11h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.1` | `v1.108.1` | `v1.108.2` | patch | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 2d |
-| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 7h |
+| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 8h |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 7d |
 | host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 4d |
 | host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 11d |
@@ -24,7 +25,7 @@ stale:bot-sweep.yml
 | images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 1d |
 | k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 3d |
 | nri | `nri-balloons` | `v0.15.0` | `v0.15.1` | patch | ? | ? |
-| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 14h |
+| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 15h |
 | opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.0` | minor | 2026-11-03 | 4d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.12` | patch | ? | ? |
 | packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 4d |
@@ -34,10 +35,11 @@ stale:bot-sweep.yml
 
 - `vllm-cpu` (vllm-cpu): vllm-cpu: vllm-project/vllm's latest release 'v0.33.0rc3' does not match {v}
 
-## Open bot PRs (11)
+## Open bot PRs (12)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #366 | docs-build | auto | - |
 | #365 | nri | auto | - |
 | #357 | vllm-xpu | review | a human approval at the head |
 | #355 | packaging-images | review | a human approval at the head |
@@ -80,7 +82,6 @@ A PENDING row's arm pins move only by a dated amendment pushed before it runs. P
 - H57wb (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wb`
 - H57wm (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wm`
 - H59w (`bench/xhost/fetch_models.py`, `bench/h54/h54.py`, `bench/h54/test_h54.py`, `bench/h54/gsm8k-test-0-199.jsonl`, `bench/h57d/h57d.py`, `bench/h59/**`, `bench/wildct/**`, `bench/load/**`, `bench/shared-prefix/**`): `gh workflow run freshness.yml -f propose_amendment=H59w`
-- H62r (`bench/eatflow/live.sh`, `bench/eatflow/crescent/**`, `bench/eatflow/**`, `bench/h62r/**`): `gh workflow run freshness.yml -f propose_amendment=H62r`
 
 ## Known issues and stale workarounds
 
