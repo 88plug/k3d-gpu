@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-07T00:21:19Z. 5 open.
+Updated 2026-11-07T00:21:26Z. 6 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -155,6 +155,65 @@ Dashboard UNKNOWN STEP 2026-11-06T19:51:11.8287775Z ##[error]Process completed w
 
 Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=42280586432 -->
+
+## `red:watchdog.yml`: scheduled run failure
+
+Opened 2026-11-07T00:21:26Z, updated 2026-11-07T00:21:26Z.
+
+The latest scheduled run of `watchdog.yml` failed.
+
+Run: https://github.com/88plug/k3d-gpu/actions/runs/42312444833
+Conclusion: **failure**, created 2026-11-06T23:31:16Z, commit 8e10b0943d8f4c841de688ecfe977151f3c7ab2c
+Failed jobs: Watchdog
+Hint: no known signature matched
+
+<details><summary>Last 39 lines of the failed log</summary>
+
+```text
+Watchdog Check and alarm ﻿2026-11-06T23:31:46.6960283Z ##[group]Run hack/watchdog
+Watchdog Check and alarm 2026-11-06T23:31:46.6960549Z ^[[36;1mhack/watchdog^[[0m
+Watchdog Check and alarm 2026-11-06T23:31:46.7008190Z shell: /usr/bin/bash -e {0}
+Watchdog Check and alarm 2026-11-06T23:31:46.7008407Z env:
+Watchdog Check and alarm 2026-11-06T23:31:46.7010369Z   GH_TOKEN: ***
+Watchdog Check and alarm 2026-11-06T23:31:46.7010558Z   GH_REPO: 88plug/k3d-gpu
+Watchdog Check and alarm 2026-11-06T23:31:46.7010746Z   SIMULATE_RED: 
+Watchdog Check and alarm 2026-11-06T23:31:46.7010913Z ##[endgroup]
+Watchdog Check and alarm 2026-11-06T23:31:49.1135317Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:31:51.5988431Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:31:53.5404306Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:00.3183937Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:01.8831127Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:04.1689043Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:17.5202474Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:17.5221882Z ##[error]listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:18.0671158Z the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:18.0674219Z ##[error]8 alarm(s) not filed (stale:bot-sweep.yml, red:bot-sweep.yml, stale:freshness.yml, red:freshness.yml, stale:watchdog.yml, red:watchdog.yml, bot-pr-stuck, watchdog-error): this repository has issues disabled; enable Issues in Settings > G
+Watchdog Check and alarm 2026-11-06T23:32:18.0677039Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0685021Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0686671Z ##[error]no successful scheduled run within 12 h (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0688927Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0690773Z ##[error]no successful scheduled run within 7 h (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0692668Z ##[error]scheduled run failure (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0694679Z ##[error]bot PRs open over 72 h without green CI (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0699102Z ##[error]the watchdog could not complete its checks (not filed: this repository has issues disabled)
+Watchdog Check and alarm 2026-11-06T23:32:18.0700218Z ## Watchdog 2026-11-06T23:31:46Z
+Watchdog Check and alarm 2026-11-06T23:32:18.0700430Z 
+Watchdog Check and alarm 2026-11-06T23:32:18.0700574Z - not filed: `stale:bot-sweep.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0700903Z - not filed: `red:bot-sweep.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0701241Z - not filed: `stale:freshness.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0701550Z - not filed: `red:freshness.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0701871Z - not filed: `stale:watchdog.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0702180Z - not filed: `red:watchdog.yml`
+Watchdog Check and alarm 2026-11-06T23:32:18.0702494Z - not filed: `bot-pr-stuck`
+Watchdog Check and alarm 2026-11-06T23:32:18.0702779Z - not filed: `watchdog-error`
+Watchdog Check and alarm 2026-11-06T23:32:18.0703601Z - error: listing open alarms: gh issue list --label ci-alarm --state open --limit 200 --json number,title,body: exit 1: the '88plug/k3d-gpu' repository has disabled issues
+Watchdog Check and alarm 2026-11-06T23:32:18.0704362Z 
+Watchdog Check and alarm 2026-11-06T23:32:18.0788409Z ##[error]Process completed with exit code 1.
+```
+</details>
+
+Re-dispatched `watchdog.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
+<!-- watchdog:dispatched=42312444833 -->
 
 ## `stale:bot-sweep.yml`: no successful scheduled run within 7 h
 
