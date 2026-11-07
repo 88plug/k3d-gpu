@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-07T00:22:33Z. 7 open.
+Updated 2026-11-07T00:38:46Z. 7 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -24,7 +24,7 @@ A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_requ
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
-Opened 2026-11-07T00:20:52Z, updated 2026-11-07T00:20:52Z.
+Opened 2026-11-07T00:20:52Z, updated 2026-11-07T00:38:46Z.
 
 The latest scheduled run of `bot-sweep.yml` failed.
 
@@ -33,58 +33,69 @@ Conclusion: **failure**, created 2026-11-06T23:06:34Z, commit 8e10b0943d8f4c841d
 Failed jobs: Merge one auto-eligible bot PR, batch the release
 Hint: no known signature matched
 
-<details><summary>Last 49 lines of the failed log</summary>
+<details><summary>Last 60 lines of the failed log</summary>
 
 ```text
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release ﻿2026-11-06T23:27:01.3280314Z ##[group]Run hack/bot-merge
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:01.3280664Z ^[[36;1mhack/bot-merge^[[0m
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:01.3333801Z shell: /usr/bin/bash -e {0}
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:01.3334083Z env:
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:01.3336648Z   GH_TOKEN: ***
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:01.3336864Z ##[endgroup]
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:03.6701183Z the '88plug/k3d-gpu' repository has disabled issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:03.6741990Z circuit breaker open: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:27:03.6862631Z bot merges today (2026-11-06 UTC): 0 of 6
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:26.2376876Z PR#311 blocked: CI is pending at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:26.2378240Z PR#311 blocked: needs review: policy: eat-stock: eat release-1.1.0 -> release-2.0.0 (major) (always review); an approval of 4b7c8eb84e7a9d6d1b8fba6b677fa6e267f1584f by a maintainer merges it
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:26.2379810Z PR#311 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.2201460Z PR#310 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.2203378Z PR#310 blocked: needs review: policy: minor: cuda-test-image 13.4.3 -> 13.5.0 (minor) is review for family base-image; an approval of a6f51937fac609debfa6ee281f7786f8b6b005d2 by a maintainer 
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.2205304Z PR#310 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.4602286Z PR#309 blocked: CI is pending at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.4603773Z PR#309 blocked: needs review: policy: ledger-defaults: llama-cpp v0.8.0 -> v0.9.0 (minor) moves llama.cpp, which H57dm, H59 measured; an approval of a38920cd82a9596ba31e040836d58aaae49b121a b
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:27.4605546Z PR#309 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:28.4456080Z PR#308 blocked: CI is pending at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:28.4456826Z PR#308 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:29.4708360Z PR#307 blocked: CI is pending at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:29.4710606Z PR#307 blocked: needs review: policy: auto: image:packaging-images:debian:trixie-slim trixie-slim -> trixie-slim (digest), family base-image; auto: image:packaging-images:ghcr.io/homebrew/bre
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:29.4713676Z PR#307 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.5482169Z PR#306 blocked: canary run concluded failure (https://github.com/88plug/k3d-gpu/actions/runs/41401470053)
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.5482858Z PR#306 blocked: canary vllm-xpu: fail
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.5483155Z PR#306 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.5483870Z PR#306 blocked: needs review: policy: major: vllm-xpu v0.32.0 -> v0.33.0 (major); an approval of 7f9ea5e7e52f88db39496ec8a269be13da62474c by a maintainer merges it
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.5484665Z PR#306 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.8500809Z PR#305 blocked: needs review: policy: major: ci-chrome 156.0.8078.73 -> 157.0.8103.38 (major); an approval of 865ae4d15feb9c11a25b42147a9230ec650f2099 by a maintainer merges it
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:30.8501722Z PR#305 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:31.8894600Z PR#304 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:32.7787162Z PR#303 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.0097159Z PR#302 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.0098623Z PR#302 blocked: needs review: policy: auto: agent-sandbox v1.0.8 -> v1.0.9 (patch), family opt-in; major: open-webui v0.12.2 -> v0.13.0 (major); an approval of e0b3e74aea2d508b9b19d0b8e2304a0
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.0100789Z PR#302 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.3681803Z PR#301 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.3683778Z PR#301 blocked: needs review: policy: tag line: image:images:busybox:1.37 1.37 -> 1.38 (line) is review for family base-image; auto: image:images:ollama/ollama:0.40.13 0.40.13 -> 0.40.15 (pat
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:33.3685997Z PR#301 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:34.4914848Z PR#300 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:34.8127535Z PR#299 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:34.8128174Z PR#299 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:35.0124661Z PR#298 blocked: CI failed at this head
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:35.0125365Z PR#298 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:36.2072495Z PR#297 blocked: needs review: policy: revision: nixpkgs 08d3a97586f6b6343b3b5e799980773629432610 -> c56a87d8e41ce69bd2af57eb35dcc117a9dfca33 (revision) is review for family tools; an approval
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:36.2074994Z PR#297 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:37.3344266Z PR#296 blocked: needs review: policy: auto: examples-crewai 1.15.33 -> 1.15.36 (patch), family pypi; auto: examples-langchain-core 1.7.3 -> 1.7.6 (patch), family pypi; auto: examples-langchai
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:37.3347815Z PR#296 blocked: circuit breaker: cannot read ci-alarm issues
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:38.4239596Z release: no bot merge above the last aur-v* tag
-Merge one auto-eligible bot PR, batch the release Merge, then batch the release 2026-11-06T23:30:38.4352099Z ##[error]Process completed with exit code 1.
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2490855Z /home/runner/work/_temp/git-credentials-f95c6043-eb13-4b45-ad1b-5438d1432ab3.config
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2500149Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-f95c6043\-eb13\-4b45\-ad1b\-5438d1432ab3\.c
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2538437Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2569316Z /github/runner_temp/git-credentials-f95c6043-eb13-4b45-ad1b-5438d1432ab3.config
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2577734Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-f95c6043\-eb13\-4b45\-ad1b\-5438d1432ab3\.config
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2615288Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2642288Z /github/runner_temp/git-credentials-f95c6043-eb13-4b45-ad1b-5438d1432ab3.config
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2650843Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-f95c6043\-eb13\-4b45\-ad1b\-5438d1432ab3\.config
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2690377Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.2985942Z Removing credentials config '/home/runner/work/_temp/git-credentials-f95c6043-eb13-4b45-ad1b-5438d1432ab3.config'
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3053017Z ##[endgroup]
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3280325Z ##[group]Run hack/bot-merge
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3280667Z ^[[36;1mhack/bot-merge^[[0m
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3333812Z shell: /usr/bin/bash -e {0}
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3334087Z env:
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3336651Z   GH_TOKEN: ***
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:01.3336867Z ##[endgroup]
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:03.6701220Z the '88plug/k3d-gpu' repository has disabled issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:03.6742018Z circuit breaker open: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:27:03.6862651Z bot merges today (2026-11-06 UTC): 0 of 6
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:26.2376908Z PR#311 blocked: CI is pending at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:26.2378250Z PR#311 blocked: needs review: policy: eat-stock: eat release-1.1.0 -> release-2.0.0 (major) (always review); an approval of 4b7c8eb84e7a9d6d1b8fba6b677fa6e267f1584f by a maintainer merges it
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:26.2379815Z PR#311 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.2201492Z PR#310 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.2203473Z PR#310 blocked: needs review: policy: minor: cuda-test-image 13.4.3 -> 13.5.0 (minor) is review for family base-image; an approval of a6f51937fac609debfa6ee281f7786f8b6b005d2 by a maintainer merges it
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.2205315Z PR#310 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.4602329Z PR#309 blocked: CI is pending at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.4603784Z PR#309 blocked: needs review: policy: ledger-defaults: llama-cpp v0.8.0 -> v0.9.0 (minor) moves llama.cpp, which H57dm, H59 measured; an approval of a38920cd82a9596ba31e040836d58aaae49b121a by a maintainer me
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:27.4605555Z PR#309 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:28.4456119Z PR#308 blocked: CI is pending at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:28.4456830Z PR#308 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:29.4708398Z PR#307 blocked: CI is pending at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:29.4710645Z PR#307 blocked: needs review: policy: auto: image:packaging-images:debian:trixie-slim trixie-slim -> trixie-slim (digest), family base-image; auto: image:packaging-images:ghcr.io/homebrew/brew:7.0.11 7.0.11 -
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:29.4713686Z PR#307 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.5482214Z PR#306 blocked: canary run concluded failure (https://github.com/88plug/k3d-gpu/actions/runs/41401470053)
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.5482861Z PR#306 blocked: canary vllm-xpu: fail
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.5483158Z PR#306 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.5483881Z PR#306 blocked: needs review: policy: major: vllm-xpu v0.32.0 -> v0.33.0 (major); an approval of 7f9ea5e7e52f88db39496ec8a269be13da62474c by a maintainer merges it
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.5484668Z PR#306 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.8500868Z PR#305 blocked: needs review: policy: major: ci-chrome 156.0.8078.73 -> 157.0.8103.38 (major); an approval of 865ae4d15feb9c11a25b42147a9230ec650f2099 by a maintainer merges it
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:30.8501726Z PR#305 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:31.8894633Z PR#304 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:32.7787196Z PR#303 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.0097192Z PR#302 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.0098634Z PR#302 blocked: needs review: policy: auto: agent-sandbox v1.0.8 -> v1.0.9 (patch), family opt-in; major: open-webui v0.12.2 -> v0.13.0 (major); an approval of e0b3e74aea2d508b9b19d0b8e2304a0a5970470e by a ma
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.0100803Z PR#302 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.3681841Z PR#301 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.3684147Z PR#301 blocked: needs review: policy: tag line: image:images:busybox:1.37 1.37 -> 1.38 (line) is review for family base-image; auto: image:images:ollama/ollama:0.40.13 0.40.13 -> 0.40.15 (patch), family base-
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:33.3686001Z PR#301 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:34.4914881Z PR#300 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:34.8127578Z PR#299 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:34.8128178Z PR#299 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:35.0124703Z PR#298 blocked: CI failed at this head
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:35.0125369Z PR#298 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:36.2072539Z PR#297 blocked: needs review: policy: revision: nixpkgs 08d3a97586f6b6343b3b5e799980773629432610 -> c56a87d8e41ce69bd2af57eb35dcc117a9dfca33 (revision) is review for family tools; an approval of c7fb21466f719
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:36.2075045Z PR#297 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:37.3344309Z PR#296 blocked: needs review: policy: auto: examples-crewai 1.15.33 -> 1.15.36 (patch), family pypi; auto: examples-langchain-core 1.7.3 -> 1.7.6 (patch), family pypi; auto: examples-langchain-openai 1.7.3 ->
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:37.3347818Z PR#296 blocked: circuit breaker: cannot read ci-alarm issues
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:38.4239667Z release: no bot merge above the last aur-v* tag
+Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-06T23:30:38.4352118Z ##[error]Process completed with exit code 1.
 ```
 </details>
 
