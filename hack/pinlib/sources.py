@@ -25,6 +25,11 @@ Kinds (the `source` table of a pins/registry.toml entry)
                   (hack/ppa-pins, hack/bump-convert-pins --dry-run)
   helm            repo (chart repo URL), chart: the chart's newest version
   github-branch   repo, branch: the branch head commit (flake inputs)
+
+A pin's hold (`hold = {max, reason, review_by}`) keeps it below max. github-release,
+oci and pypi list every release and take the newest below the hold; any other kind
+reads one newest version, and when that reaches the hold resolve() keeps the pin at
+its current value (values {"v", "held"}, the note names the hold).
 """
 
 import datetime
@@ -257,9 +262,13 @@ def pypi(pin, current):
     for v, files in doc["releases"].items():
         if files and not all(f.get("yanked") for f in files):
             found[v] = files
+    hold = (pin.get("hold") or {}).get("max")
+    if hold:
+        found = {v: f for v, f in found.items() if _below("pep440", v, hold)}
     best = _newest("pep440", found)
     if best is None:
-        raise SourceError("%s: PyPI %s has no stable, unyanked release" % (pin["id"], pkg))
+        raise SourceError("%s: PyPI %s has no stable, unyanked release%s" % (
+            pin["id"], pkg, " below the hold %s" % hold if hold else ""))
     _not_backwards(pin, current, best)
     up = min((f.get("upload_time_iso_8601") or "") for f in found[best]) or None
     return Resolved({"v": best}, up, "https://pypi.org/project/%s/%s/" % (pkg, best))
@@ -541,6 +550,16 @@ KINDS = {
 }
 
 
+def held(pin, current, r):
+    """r, or the pin kept at current when r's version reaches the pin's hold max (one
+    that does not order against max counts as reaching it)."""
+    hold = pin.get("hold") or {}
+    if not hold.get("max") or current is None or r.v == current or _below(pin["scheme"], r.v, hold["max"]):
+        return r
+    return Resolved({"v": current, "held": True}, None, r.url, "held at %s: upstream %s reaches the hold %s (%s)" % (
+        current, r.v, hold["max"], hold.get("reason", "")))
+
+
 def resolve(pin, current=None):
     if pin.get("frozen"):
         return Resolved({"v": current}, note=pin["frozen"])
@@ -550,7 +569,9 @@ def resolve(pin, current=None):
     except KeyError:
         raise SourceError("%s: unknown source kind %r" % (pin["id"], kind)) from None
     try:
-        r = fn(pin, current)
+        r = held(pin, current, fn(pin, current))
+        if r.values.get("held"):
+            return r
         for key, spec in (pin["source"].get("derive") or {}).items():
             m = re.search(spec["regex"], str(r.values.get(spec.get("from", "v"), "")))
             if not m:

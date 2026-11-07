@@ -7,8 +7,8 @@ entries (pins/registry.toml) wherever one exists, so a registry edit that breaks
 how a pin resolves fails here. Rules under test: a source returns the newest
 stable version, skips prereleases and yanked releases, never moves a pin
 backwards, errors when it cannot find the tag shape it expects (never falling
-back to the current value), and marks a pin unconfirmed when its second source
-disagrees.
+back to the current value), marks a pin unconfirmed when its second source
+disagrees, and keeps a held pin below its hold (the registry's holds included).
 
 Usage: python3 tests/pinlib_test.py
 """
@@ -211,7 +211,8 @@ class PyPI(Fixtures):
         self.serve({"https://pypi.org/pypi/transformers/json": ok({"releases": {
             "5.21.0": files, "5.22.0": files, "5.23.0rc1": files, "5.23.0": [{"yanked": True}],
             "5.24.0.dev0": files, "5.20.0": []}})})
-        r = sources.resolve(PINS["gguf-transformers"], "5.21.0")
+        pin = {k: v for k, v in PINS["gguf-transformers"].items() if k != "hold"}  # the Holds cases keep its hold
+        r = sources.resolve(pin, "5.21.0")
         self.assertEqual(r.v, "5.22.0")
         self.assertEqual(r.published_at, "2026-10-01T00:00:00Z")
 
@@ -336,6 +337,66 @@ class GithubRelease(Fixtures):
         self.serve({GH + "repos/oneapi-src/level-zero/releases/latest": ok(rel("v1.35.0", assets=assets))})
         r = sources.resolve(PINS["level-zero"], "1.34.0")
         self.assertEqual((r.v, r.values["sha"]), ("1.35.0", "4" * 64))
+
+
+class Holds(Fixtures):
+    """A hold keeps a pin below its max whatever the source kind. github-release, oci
+    and pypi take the newest release below it; a source that reads only upstream's
+    latest release (eat, llama) keeps the pin where it is, with a held note."""
+
+    FILES = [{"yanked": False, "upload_time_iso_8601": "2026-11-01T00:00:00Z"}]
+
+    def pypi(self, pkg, versions):
+        return {"https://pypi.org/pypi/%s/json" % pkg: ok({"releases": {v: self.FILES for v in versions}})}
+
+    def test_pypi_takes_the_newest_release_below_the_hold(self):
+        self.assertEqual(PINS["docs-mkdocs"]["hold"]["max"], "2.0.0")
+        self.serve(self.pypi("mkdocs", ["1.6.1", "1.6.2", "2.0.0", "2.1.0"]))
+        self.assertEqual(sources.resolve(PINS["docs-mkdocs"], "1.6.1").v, "1.6.2")
+
+    def test_gguf_convert_pins_stay_where_h59w_registered_them(self):
+        # H59 amendment R1: the drafter conversion Job runs with these four pins
+        registered = {"gguf-transformers": ("transformers", "5.21.0", ["5.21.0.post1", "5.21.1", "5.22.2"]),
+                      "gguf-huggingface-hub": ("huggingface-hub", "2.3.0", ["2.3.0.post1", "2.3.1", "2.4.0"]),
+                      "gguf-tokenizers": ("tokenizers", "0.23.3", ["0.23.4", "0.24.0"]),
+                      "gguf-safetensors": ("safetensors", "0.8.0", ["0.8.1", "0.9.0"])}
+        recs = {}
+        for pkg, cur, newer in registered.values():
+            recs.update(self.pypi(pkg, [cur] + newer))
+        self.serve(recs)
+        for pid, (_, cur, _) in registered.items():
+            self.assertIn("H59w is PENDING", PINS[pid]["hold"]["reason"], pid)
+            self.assertEqual(sources.resolve(PINS[pid], cur).v, cur, pid)
+
+    def test_llama_cpp_stays_at_the_build_h59w_registered(self):
+        # server-b11960 and full-b11960 are release v0.8.0; upstream's latest is v0.9.0
+        self.serve({
+            GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.9.0", commit=SHA_B)),
+            GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([
+                rel("b12100", prerelease=True, commit=SHA_B),
+                rel("b11960", prerelease=True, commit="8642541b255bfb5dc39cd351a178be09013a55d6")]),
+        })
+        self.assertIn("H59w is PENDING", PINS["llama-cpp"]["hold"]["reason"])
+        r = sources.resolve(PINS["llama-cpp"], "v0.8.0")
+        self.assertEqual(r.v, "v0.8.0")
+        self.assertTrue(r.values.get("held"))
+        self.assertIn("upstream v0.9.0 reaches the hold v0.8.1", r.note)
+
+    def test_eat_stays_below_release_2_0_0(self):
+        self.assertIn("integrations/eas", PINS["eat"]["hold"]["reason"])
+        self.serve({GH + "repos/intel/enterprise-agent-toolkit/releases/latest": ok(rel("release-2.0.0")),
+                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-2.0.0": ok({"sha": SHA_A})})
+        r = sources.resolve(PINS["eat"], "release-1.1.0")
+        self.assertEqual(r.v, "release-1.1.0")
+        self.assertTrue(r.values.get("held"))
+        self.assertIn("upstream release-2.0.0 reaches the hold release-2.0.0", r.note)
+
+    def test_eat_below_the_hold_still_moves(self):
+        self.serve({GH + "repos/intel/enterprise-agent-toolkit/releases/latest": ok(rel("release-1.2.0")),
+                    GH + "repos/intel/enterprise-agent-toolkit/commits/release-1.2.0": ok({"sha": SHA_A})})
+        r = sources.resolve(PINS["eat"], "release-1.1.0")
+        self.assertEqual((r.v, r.values["commit"]), ("release-1.2.0", SHA_A))
+        self.assertFalse(r.values.get("held"))
 
 
 class Versions(unittest.TestCase):

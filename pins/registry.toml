@@ -441,6 +441,13 @@ component = "llama.cpp"
 scheme = "llama"
 # releases/latest vX.Y.Z; its images are tagged with the bNNNNN build of the same commit.
 source = { kind = "llama", repo = "ggml-org/llama.cpp" }
+# H59w (EXPERIMENTS.md) is PENDING. Its runner, H59 amendment R1, checks L's render for
+# server-b11960 and takes the drafter conversion from full-b11960 (release v0.8.0), and
+# says "A later bump of either image pin in the launcher stops the holds until an
+# amendment names it." (the pre-registration: "A protocol change is a dated amendment
+# merged before the data it governs."). v0.8.1 is the first release after v0.8.0, so
+# nothing moves until H59w runs or a dated amendment names new pins.
+hold = { max = "v0.8.1", reason = "H59w is PENDING: H59 amendment R1 registered llama.cpp server-b11960 and full-b11960 (v0.8.0), and a later bump of either image pin in the launcher stops the holds until an amendment names it", review_by = "2026-12-31" }
 patterns = { build = 'b[0-9]+' }
 canary = ["llama-cpu", "llama-sycl", "llama-vulkan", "llama-full"]
 sites = [
@@ -741,6 +748,14 @@ sites = [
 # =============================================================================
 # PyPI sets
 # =============================================================================
+# gguf-convert-pip: H59w (EXPERIMENTS.md) is PENDING. Its runner, H59 amendment R1,
+# takes the drafter conversion Job from L's render with GGUF_CONVERT_PIP's pins
+# transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0,
+# and "A hold whose render carries another conversion Job does not start the arm." (the
+# pre-registration: "A protocol change is a dated amendment merged before the data it
+# governs."). Each max is the first stable PEP 440 release after the pin (5.21.0 <
+# 5.21.0.post0 < 5.21.1), so nothing moves until H59w runs or a dated amendment names
+# new pins.
 [[pin]]
 id = "gguf-transformers"
 class = "ours"
@@ -748,6 +763,7 @@ group = "gguf-convert-pip"
 family = "pypi"
 scheme = "pep440"
 source = { kind = "pypi", package = "transformers" }
+hold = { max = "5.21.0.post0", reason = "H59w is PENDING: H59 amendment R1 registered the drafter conversion Job with transformers==5.21.0, and a hold whose render carries another conversion Job does not start the arm", review_by = "2026-12-31" }
 sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\btransformers==(?P<v>[0-9][^ "]*)' }]
 
 [[pin]]
@@ -757,6 +773,7 @@ group = "gguf-convert-pip"
 family = "pypi"
 scheme = "pep440"
 source = { kind = "pypi", package = "huggingface-hub" }
+hold = { max = "2.3.0.post0", reason = "H59w is PENDING: H59 amendment R1 registered the drafter conversion Job with huggingface-hub==2.3.0, and a hold whose render carries another conversion Job does not start the arm", review_by = "2026-12-31" }
 sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\bhuggingface-hub==(?P<v>[0-9][^ "]*)' }]
 
 [[pin]]
@@ -766,6 +783,7 @@ group = "gguf-convert-pip"
 family = "pypi"
 scheme = "pep440"
 source = { kind = "pypi", package = "tokenizers" }
+hold = { max = "0.23.3.post0", reason = "H59w is PENDING: H59 amendment R1 registered the drafter conversion Job with tokenizers==0.23.3, and a hold whose render carries another conversion Job does not start the arm", review_by = "2026-12-31" }
 sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\btokenizers==(?P<v>[0-9][^ "]*)' }]
 
 [[pin]]
@@ -775,6 +793,7 @@ group = "gguf-convert-pip"
 family = "pypi"
 scheme = "pep440"
 source = { kind = "pypi", package = "safetensors" }
+hold = { max = "0.8.0.post0", reason = "H59w is PENDING: H59 amendment R1 registered the drafter conversion Job with safetensors==0.8.0, and a hold whose render carries another conversion Job does not start the arm", review_by = "2026-12-31" }
 sites = [{ file = "scripts/k3d-gpu", regex = '^GGUF_CONVERT_PIP="[^"]*\bsafetensors==(?P<v>[0-9][^ "]*)' }]
 
 [[pin]]
@@ -1266,6 +1285,10 @@ group = "eat-stock"
 family = "eat-stock"
 scheme = "eat"
 source = { kind = "eat", what = "tag" }
+# EAT release-2.0.0's tree is charts/, config.yaml, playbooks/ and roles/, with no core/;
+# integrations/eat/eat-up.sh copies its config into eat/core/inventory and brownfield.sh
+# runs EAT's core/lib path. integrations/eas is the EAT 2.0 integration.
+hold = { max = "release-2.0.0", reason = "release-2.0.0 removed the standalone installer: no core/ directory, and integrations/eat/eat-up.sh copies into eat/core/inventory and reads core/lib; EAT 2.0 goes through integrations/eas", review_by = "2027-01-31" }
 sites = [
   { file = "integrations/eat/eat-up.sh", regex = '^EAT_TAG="(?P<v>release-[0-9.]+(?:-[a-z0-9]+)?)"$' },
   { file = "integrations/eat/eat-up.sh", var = "EAT_COMMIT", key = "commit" },

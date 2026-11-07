@@ -6,7 +6,8 @@
   hack/bump --remove-workaround <id> [--body FILE] [--root DIR]
 
 1. Resolve each pin of the group (hack/pinlib sources; never backwards; holds and
-   `confirm` honoured: an unconfirmed pin is skipped with a note).
+   `confirm` honoured: a pin whose resolved version, --resolved included, reaches
+   its hold stays put, and an unconfirmed pin is skipped, each with a note).
 2. Rewrite the sites and derived values of every pin that moved (a hook-written
    pin is moved by its group's hook and checked after it).
 3. Hooks, in the group's order: lock (images.lock), readme-history, render-latest,
@@ -85,6 +86,10 @@ def plan(root, reg, group, resolved=None):
             except Exception as e:  # noqa: BLE001  (one pin failing leaves the rest of the group)
                 notes.append("%s: not resolved: %s" % (p["id"], e))
                 continue
+        r = sources.held(p, cur.get("v"), r)
+        if r.values.get("held"):
+            notes.append("%s: %s" % (p["id"], r.note))
+            continue
         if r.values.get("unconfirmed"):
             notes.append("%s: skipped, %s" % (p["id"], r.note))
             continue
