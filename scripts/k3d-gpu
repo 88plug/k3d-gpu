@@ -328,7 +328,8 @@ Usage: k3d-gpu <command>
   eat up [--legacy] [eas up options] | eat status | eat down | eat check [--legacy] [--model NAME]
             Intel's agent toolkit (EAT 2.0): 'eas up --agent-toolkit', 'eas status',
             'eas down' and 'eas check' on the same state. --legacy: EAT 1.x
-            (release-1.1.0) through its own installer, integrations/eat/eat-up.sh, and
+            (release-1.1.0) through its own installer, integrations/eat/eat-up.sh (in a
+            checkout of the repository; the packages do not ship it), and
             its check; it needs a cluster made with
             K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
@@ -7572,6 +7573,10 @@ eat_legacy() {
     shift
     dir=$(eas_dir) && dir=$(cd "${dir}/../eat" 2>/dev/null && pwd) \
         || err "integrations/eat not found next to integrations/eas (set K3D_GPU_EAS_DIR)"
+    # The packages ship integrations/eas and eat-check.sh; eat-up.sh and the files it
+    # builds and deploys from are in the repository only.
+    [ "${sub}" != up ] || [ -f "${dir}/eat-up.sh" ] \
+        || err "EAT 1.x's installer (integrations/eat/eat-up.sh) is not in the k3d-gpu packages: run 'scripts/k3d-gpu eat up --legacy' from a checkout of https://github.com/88plug/k3d-gpu (no ${dir}/eat-up.sh here)"
     require kubectl; require docker
     state="${STATE_DIR}/eat-${CLUSTER}"
     ( umask 077; mkdir -p "${state}" ) && chmod 0700 "${state}"
@@ -7579,7 +7584,6 @@ eat_legacy() {
     eas_kubeconfig "${state}"
     case "${sub}" in
         up)
-            [ -f "${dir}/eat-up.sh" ] || err "${dir}/eat-up.sh not found"
             EAT_KUBECONFIG="${state}/kubeconfig" EAT_WORK="${EAT_WORK:-${state}/work}" bash "${dir}/eat-up.sh" "$@" ;;
         check)
             while [ $# -gt 0 ]; do

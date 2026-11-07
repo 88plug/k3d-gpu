@@ -24,7 +24,7 @@ k3d-gpu eat up              # = eas up --agent-toolkit; creates the cluster firs
 k3d-gpu eat check           # Intel's validate, stack readiness, then chat, tool call, guard and sandbox through EAS's LiteLLM
 k3d-gpu eat status
 k3d-gpu eat down            # teardown platform; the cluster stays
-k3d-gpu eat up --legacy     # EAT 1.x (release-1.1.0) through its own installer, integrations/eat/eat-up.sh
+k3d-gpu eat up --legacy     # EAT 1.x (release-1.1.0) through its own installer, integrations/eat/eat-up.sh (from a checkout; not packaged)
 ```
 
 `eas up` without `--agent-toolkit` installs platform and inference. `--layer erag` reaches

@@ -6,7 +6,8 @@
 > [docs/intel/eas.md](../../docs/intel/eas.md)). This page is EAT 1.x, `release-1.1.0`,
 > the last release with the standalone installer; `k3d-gpu eat up --legacy` runs
 > `eat-up.sh` below on the current cluster, and `k3d-gpu eat check --legacy` runs
-> `eat-check.sh` on it.
+> `eat-check.sh` on it. `eat-up.sh` and its files are in a checkout of this repository
+> only: the packages do not ship them.
 
 Runs Intel's [Enterprise Agent Toolkit](https://github.com/intel/enterprise-agent-toolkit)
 (EAT) [`release-1.1.0`](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0)

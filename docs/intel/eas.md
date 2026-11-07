@@ -64,7 +64,7 @@ k3d-gpu eas status     # EAS status, pins, overlay decisions, gateway IP, pods n
 k3d-gpu eas check      # with --agent-toolkit: Intel's validate, then chat through the EAS gateway with a minted LiteLLM key, the guard and the sandbox step
 k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes it)
 
-k3d-gpu eat up [--legacy] [eas up options]   # EAT 2.0 = eas up --agent-toolkit; --legacy: EAT 1.x's eat-up.sh
+k3d-gpu eat up [--legacy] [eas up options]   # EAT 2.0 = eas up --agent-toolkit; --legacy: EAT 1.x's eat-up.sh (from a checkout)
 k3d-gpu eat status | down | check [--legacy] [--model NAME]
 ```
 

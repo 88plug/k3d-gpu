@@ -1623,6 +1623,14 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_refused "the release profile on the main env" "set up for agent-toolkit at profile main" up --agent-toolkit --dry-run
 
     # ---- eat: EAT 2.0 through EAS's agent toolkit; --legacy is EAT 1.x's own installer -------------
+    # The packages ship integrations/eas and eat-check.sh, not EAT 1.x's installer: the
+    # message says where --legacy runs from.
+    out=$(cli cmd_eat up --legacy); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q "is not in the k3d-gpu packages" <<< "${out}" && grep -q "github.com/88plug/k3d-gpu" <<< "${out}"; then
+        ok "cli: eat up --legacy without eat-up.sh (a package install) says it runs from a checkout"
+    else
+        fail "cli: eat up --legacy without eat-up.sh: rc=${rc} ${out}"
+    fi
     printf '#!/usr/bin/env bash\necho "eat-up $* kubeconfig=${EAT_KUBECONFIG:-} work=${EAT_WORK:-}" >> "${STUB_LOG}"\n' > "${K}/eat/eat-up.sh"
     : > "${LOG}"
     out=$(cli cmd_eat up --dry-run --eas-ref main); rc=$?
