@@ -5365,10 +5365,14 @@ amendment V4's records.
 It fires on an EAS release tag after v1.2.0 (`vX.Y.Z`, not a release candidate) or an EAT release
 tag after `release-2.0.0` (`release-X.Y.Z`, `vX.Y.Z`, or the `-hotfix` form, including
 `release-2.0.0-hotfix`). On 2026-11-07T04:06Z it read `fired: none`. It runs before setup and
-before each hold, and its output goes into the records.
+before each hold, and its output goes into the records: `campaign.sh` runs it there (up to 3
+reads, 60 s apart) and writes each read to `upstream.txt`.
 
+- Fired or unreadable before setup: nothing starts, and no setup attempt is spent.
 - Fired before hold 1: a dated amendment re-pins B5 to the tagged release, by amendment E1's
   logic. If the tag's components equal the pinned commits, the amendment only records that.
+  `campaign.sh` stops before hold 1 for it.
+- Unreadable before a hold: recorded as unreadable, and the hold runs.
 - Fired after hold 1: H62r's holds finish at these pins, and H62r keeps its verdict. A new row
   is pre-registered for the tagged release.
 
@@ -5378,8 +5382,8 @@ before each hold, and its output goes into the records.
   differences: the pins (`h62r.py PINS`), the guests' names, ports, label, share tag and state
   directory, D1 as a check (`eas-check`), D3's sibling read (`sibling-read`, `reserve`) and the
   sizing records in `guest-b.sh`, A1's image check in `guest-a.sh`, main's EAS check in
-  `smoke.sh`, the setup bound in `campaign.sh`, and the trigger's thresholds. `topology-spike.sh`
-  is the spike of item 3 above.
+  `smoke.sh`, the setup bound and the trigger's reads in `campaign.sh`, and the trigger's
+  thresholds. `topology-spike.sh` is the spike of item 3 above.
 - `bench/eatflow/pairs.py`: `DESIGNS["H62r"] = ("H49", "L3")` and its order seed.
   `bench/eatflow/live.sh`: `ARM=H62r` runs H62's remote-arm branch.
 - `pins/classes`: `bench/h62r/**` is H62r's ledger line, and H62r joins the `bench/eatflow` lines
@@ -5387,10 +5391,10 @@ before each hold, and its output goes into the records.
 - Tests: `bench/h62r/test_h62r.py` (in CI) and `H62rTest` in `bench/eatflow/test_pairs.py`.
 
 **Reproduce (planned).** On crescent, from `~/k3dgpu-bench/k3d-gpu-h62r` at the deploy commit:
-`bench/h62r/upstream.sh`, then `bench/h62r/campaign.sh` (setup, smoke, holds, score, teardown).
-Records go to `~/k3dgpu-bench/results/H62r/`, with the hold records in
-`~/k3dgpu-bench/runs/H62r-hold<n>/` and the smoke in `~/k3dgpu-bench/smoke/H62r/`. They come back
-under `bench/eatflow/results/2026-11-06/H62r/`.
+`bench/h62r/campaign.sh` (the trigger, setup, smoke, holds, score, teardown). Records go to
+`~/k3dgpu-bench/results/H62r/`, with the hold records in `~/k3dgpu-bench/runs/H62r-hold<n>/` and
+the smoke in `~/k3dgpu-bench/smoke/H62r/`. They come back under
+`bench/eatflow/results/2026-11-06/H62r/`.
 
 **Also found, offered upstream.** EAS v1.2.0's probe reads one thread per core on any Linux node
 that lists a core's threads as a range, as this KVM guest does. Counting the CPUs of the cpulist,

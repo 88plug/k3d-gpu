@@ -855,8 +855,9 @@ class ScriptsTest(unittest.TestCase):
 
     def test_campaign_order_caps_and_attempt_bound(self):
         sh = read(HERE, "campaign.sh")
-        pos = [sh.index(s) for s in ("ATTEMPTS_MAX=3", "trap teardown EXIT", '"${HERE}/setup.sh"', '"${HERE}/smoke.sh"',
-                                     '"${HERE}/pairs-hold.sh" "${n}"', "pairs-report")]
+        pos = [sh.index(s) for s in ("ATTEMPTS_MAX=3", "trigger setup", "trap teardown EXIT", '"${HERE}/setup.sh"',
+                                     '"${HERE}/smoke.sh"', 'trigger "hold${n}"', '"${HERE}/pairs-hold.sh" "${n}"',
+                                     "pairs-report")]
         self.assertEqual(pos, sorted(pos))
         self.assertIn("MAX_HOLDS=8", sh)
         self.assertIn("NOT_DELIVERABLE_MAX=2", sh)
@@ -877,6 +878,78 @@ class ScriptsTest(unittest.TestCase):
         self.assertIn("setup attempt bound", read(res, "campaign.log"))
         self.assertEqual(read(res, "attempts.txt"), "a\nb\nc\n")
         self.assertFalse(os.path.exists(os.path.join(res, "teardown.log")))             # nothing was started
+
+    def campaign_with_stubs(self, reads, holds_left=3):
+        """campaign.sh copied beside stub setup, smoke, holds, teardown, h62r.py and upstream.sh.
+        `reads` is upstream.sh's answer per call, in order ("ERR" exits 1). Returns the run, the
+        results directory and the order of the calls."""
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        here = os.path.join(tmp, "repo", "bench", "h62r")
+        os.makedirs(here)
+        shutil.copy(os.path.join(HERE, "campaign.sh"), here)
+        calls = os.path.join(tmp, "calls")
+        with open(os.path.join(tmp, "reads"), "w") as f:
+            f.write("".join(r + "\n" for r in reads))
+        stubs = {
+            "setup.sh": f'echo setup >> "{calls}"',
+            "smoke.sh": f'echo smoke >> "{calls}"',
+            "teardown.sh": f'echo teardown >> "{calls}"',
+            "pairs-hold.sh": f'echo "hold$1" >> "{calls}"; echo $(( $(cat "{tmp}/left") - 1 )) > "{tmp}/left"',
+            "upstream.sh": (f'echo upstream >> "{calls}"; r=$(head -1 "{tmp}/reads"); sed -i 1d "{tmp}/reads"; '
+                            '[ "${r}" != ERR ] || { echo "ls-remote failed" >&2; exit 1; }; echo "${r}"'),
+        }
+        for name, body in stubs.items():
+            with open(os.path.join(here, name), "w") as f:
+                f.write("#!/usr/bin/env bash\n" + body + "\n")
+        with open(os.path.join(here, "h62r.py"), "w") as f:
+            f.write(f'import sys\nprint(open("{tmp}/left").read().strip()) if sys.argv[1] == "pairs-left" else None\n')
+        with open(os.path.join(tmp, "left"), "w") as f:
+            f.write(f"{holds_left}\n")
+        r = subprocess.run(["bash", os.path.join(here, "campaign.sh")], capture_output=True, text=True, timeout=60,
+                           env=dict(os.environ, HOME=tmp, H62R_TRIGGER_RETRY_S="0"))
+        res = os.path.join(tmp, "k3dgpu-bench", "results", "H62r")
+        order = read(calls).split() if os.path.exists(calls) else []
+        return r, res, order
+
+    def test_campaign_reads_the_trigger_before_setup_and_before_each_hold(self):
+        # The pre-registration's re-run trigger: it runs before setup and before each hold, and its
+        # output goes into the records.
+        r, res, order = self.campaign_with_stubs(["fired: none"] * 4)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(order, ["upstream", "setup", "smoke", "upstream", "hold1", "upstream", "hold2",
+                                 "upstream", "hold3", "teardown"])
+        rec = read(res, "upstream.txt").splitlines()
+        self.assertEqual([ln.split(" ", 1)[1] for ln in rec],
+                         ["setup fired: none", "hold1 fired: none", "hold2 fired: none", "hold3 fired: none"])
+
+    def test_campaign_stops_when_the_trigger_fires_before_hold_1(self):
+        # Fired before setup: nothing starts and no setup attempt is spent.
+        r, res, order = self.campaign_with_stubs(["fired: eas v1.2.1"])
+        self.assertEqual(r.returncode, 11, r.stdout + r.stderr)
+        self.assertEqual(order, ["upstream"])
+        self.assertFalse(os.path.exists(os.path.join(res, "attempts.txt")))
+        self.assertIn("setup fired: eas v1.2.1", read(res, "upstream.txt"))
+        # Fired after setup, before hold 1: no hold runs; the guests are torn down.
+        r, res, order = self.campaign_with_stubs(["fired: none", "fired: eat release-2.0.1"])
+        self.assertEqual(r.returncode, 11, r.stdout + r.stderr)
+        self.assertEqual(order, ["upstream", "setup", "smoke", "upstream", "teardown"])
+        self.assertIn("amendment", read(res, "campaign.log"))
+
+    def test_campaign_finishes_at_its_pins_when_the_trigger_fires_after_hold_1(self):
+        r, res, order = self.campaign_with_stubs(["fired: none", "fired: none", "fired: eas v1.2.1", "fired: eas v1.2.1"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual([c for c in order if c.startswith("hold")], ["hold1", "hold2", "hold3"])
+        self.assertIn("hold2 fired: eas v1.2.1", read(res, "upstream.txt"))
+
+    def test_campaign_records_an_unreadable_trigger_after_three_reads(self):
+        r, res, order = self.campaign_with_stubs(["fired: none"] + ["ERR"] * 3 + ["fired: none"] * 2)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(order[:7], ["upstream", "setup", "smoke", "upstream", "upstream", "upstream", "hold1"])
+        self.assertRegex(read(res, "upstream.txt"), r"(?m)^\S+ hold1 unreadable: ls-remote failed$")
+        # Unreadable before setup: nothing starts.
+        r, res, order = self.campaign_with_stubs(["ERR"] * 3)
+        self.assertEqual((r.returncode, order), (11, ["upstream"] * 3), r.stdout + r.stderr)
 
     def test_setup_caps_and_gates(self):
         sh = read(HERE, "setup.sh")
