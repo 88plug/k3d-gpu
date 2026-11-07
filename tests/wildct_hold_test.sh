@@ -594,8 +594,9 @@ row_envs_match_the_registration() {
     local o=K3D_GPU_VENDORS=auto,-nvidia,-intel w3="K3D_GPU_K3S_ARGS=${W3_LEDGER}"
     has smoke -- K3D_GPU_CLUSTER=k3dgpu-w-smoke "${o}" "${w3}" "K3D_GPU_IMAGE=${IMG}" || return 1
     has h18w -- K3D_GPU_CLUSTER=k3dgpu-w-sbx "IMAGE=${IMG}" "${o}" "${w3}" || return 1
+    # H25w: the CPU Fast Draft its line registers, in both arms (wildct amendment R7).
     has h25w -- CLUSTER=k3dgpu-w-h25 LEVELS=typical SEED_BASE=2560 HOLD=1440 LOAD_CPUS=20-23 "${o}" "${w3}" \
-        "MODELS=${HOME}/k3dgpu-bench-wildct/models" || return 1
+        "MODELS=${HOME}/k3dgpu-bench-wildct/models" K3D_GPU_AGENT_DRAFT=CPU || return 1
     has h34w -- H34_CLUSTER=k3dgpu-w-h34 H34_VENDORS=auto,-nvidia,-intel H34_LEVELS=typical LOAD_CPUS=20-23 \
         "K3D_GPU_IMAGE=${IMG}" "H22_MODELS=${HOME}/k3dgpu-bench-wildct/models" "${w3}" || return 1
     has h28w-prep -- LEVELS=typical "IMAGE=${IMG}" || return 1
