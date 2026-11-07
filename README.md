@@ -1658,7 +1658,7 @@ release's packages.
 
 | Component | Ubuntu 24.04 / 26.04 | Fedora | Arch / Manjaro |
 |-----------|----------------------|--------|----------------|
-| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.35.39758.10, IGC 2.41.5; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
+| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.40.40196.8, IGC 2.42.6; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
 | Level Zero loader | 24.04: GitHub `libze1` 1.34.0 .deb, sha256-checked. 26.04: none pinned (level-zero publishes 22.04/24.04 .debs only); `host-setup` says so and names the archive's `libze1` 1.28.2 | `oneapi-level-zero` | `level-zero-loader` |
 | Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned media driver 26.3.5, libva 2.24.1, gmmlib 22.10.2 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
