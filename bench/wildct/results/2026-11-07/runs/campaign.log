@@ -37,3 +37,19 @@
 == H34w lock taken 2026-11-07T05:54:52Z
 == H34w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h34w 2026-11-07T05:54:53Z
 == H34w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T06:10:05Z
+== H28w-prep waiting for the lock 2026-11-07T07:37:52Z
+== H28w-prep lock taken 2026-11-07T07:37:52Z
+== H28w-prep start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T07:37:52Z
+== H28w-prep rc=0; clusters deleted: none; now: ; / 199 GB available 2026-11-07T07:38:49Z
+== H28w waiting for the lock 2026-11-07T07:39:38Z
+== H28w lock taken 2026-11-07T07:39:38Z
+== H28w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T07:39:38Z
+== H28w rc=143; clusters deleted: k3dgpu-w-h28; now: ; / 199 GB available 2026-11-07T07:42:30Z
+== H28w-prep-r2 waiting for the lock 2026-11-07T09:05:37Z
+== H28w-prep-r2 lock taken 2026-11-07T09:05:37Z
+== H28w-prep-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T09:05:37Z
+== H28w-prep-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:06:34Z
+== H28w-r2 waiting for the lock 2026-11-07T09:07:05Z
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+== H28w-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:11:42Z

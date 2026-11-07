@@ -1,0 +1,196 @@
+{
+ "void_rounds": {
+  "T": 0,
+  "C": 0
+ },
+ "rounds": [
+  {
+   "arm": "C",
+   "round": 1,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 3842.0,
+   "pss_kB": 1053207.5,
+   "shared_clean_kB": 5558.0
+  },
+  {
+   "arm": "C",
+   "round": 4,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 4102.5,
+   "pss_kB": 1053196.5,
+   "shared_clean_kB": 5534.0
+  },
+  {
+   "arm": "C",
+   "round": 5,
+   "void": false,
+   "resident_kB": 9437184.0,
+   "ready_ms": 4125.5,
+   "pss_kB": 1053215.5,
+   "shared_clean_kB": 5540.0
+  },
+  {
+   "arm": "T",
+   "round": 2,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 1392.0,
+   "pss_kB": 135741.0,
+   "shared_clean_kB": 1054092.0
+  },
+  {
+   "arm": "T",
+   "round": 3,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 1357.0,
+   "pss_kB": 135717.5,
+   "shared_clean_kB": 1054094.0
+  },
+  {
+   "arm": "T",
+   "round": 6,
+   "void": false,
+   "resident_kB": 1048576.0,
+   "ready_ms": 1394.0,
+   "pss_kB": 135724.5,
+   "shared_clean_kB": 1054172.0
+  }
+ ],
+ "load": {
+  "matched": true,
+  "void": false,
+  "verdict": "MATCHED",
+  "rule": "amendment-27",
+  "checks": [
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "C": 50.157,
+     "T": 50.213
+    },
+    "spread": 0.057,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 10.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "pre"
+   },
+   {
+    "metric": "busy_pct",
+    "arms": {
+     "C": 51.338,
+     "T": 50.877
+    },
+    "spread": 0.462,
+    "limit": 5.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_used_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 256.0,
+    "status": "ok",
+    "phase": "during"
+   },
+   {
+    "metric": "swap_delta_mib",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0,
+    "limit": 64.0,
+    "status": "ok",
+    "phase": "during"
+   }
+  ],
+  "outcomes": [
+   {
+    "metric": "pkg_w",
+    "arms": {
+     "C": 34.967,
+     "T": 34.757
+    },
+    "spread": 0.21
+   },
+   {
+    "metric": "throttle_per_min",
+    "arms": {
+     "C": 0.0,
+     "T": 0.0
+    },
+    "spread": 0.0
+   },
+   {
+    "metric": "load1",
+    "arms": {
+     "C": 4.875,
+     "T": 4.863
+    },
+    "spread": 0.012
+   }
+  ],
+  "unsettled": {}
+ },
+ "median": {
+  "T": {
+   "ready_ms": 1392.0,
+   "pss_kB": 135724.5,
+   "shared_clean_kB": 1054094.0,
+   "resident_kB": 1048576.0
+  },
+  "C": {
+   "ready_ms": 4102.5,
+   "pss_kB": 1053207.5,
+   "shared_clean_kB": 5540.0,
+   "resident_kB": 9437184.0
+  }
+ },
+ "ready_spread": {
+  "T": 0.02658045977011494,
+  "C": 0.06910420475319927
+ },
+ "ready_ratio": 0.3393,
+ "separated": true,
+ "verdict": "SUPPORTED",
+ "row": "T meets memory and time; C shows duplication"
+}

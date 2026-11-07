@@ -1,0 +1,44 @@
+kube-system/coredns-577d995dff-fx4wx hostPath 
+kube-system/coredns-577d995dff-fx4wx hostPath 
+kube-system/coredns-577d995dff-fx4wx hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-gateway-api-crd-r2scj hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-9j2x6 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/helm-install-traefik-crd-zm946 hostPath 
+kube-system/local-path-provisioner-6858d854cf-92fmc hostPath 
+kube-system/local-path-provisioner-6858d854cf-92fmc hostPath 
+kube-system/metrics-server-778c4649b4-7dhgb hostPath 
+kube-system/metrics-server-778c4649b4-7dhgb hostPath 
+kube-system/traefik-77b898c5c8-g5nf9 hostPath 
+kube-system/traefik-77b898c5c8-g5nf9 hostPath 
+kube-system/traefik-77b898c5c8-g5nf9 hostPath 
+node-feature-discovery/nfd-gc-8d4595cbc-sm2b5 hostPath 
+node-feature-discovery/nfd-master-74b44b767d-25qc7 hostPath 
+node-feature-discovery/nfd-master-74b44b767d-25qc7 hostPath 
+node-feature-discovery/nfd-worker-c8f7f hostPath /k3d-gpu/host/boot
+node-feature-discovery/nfd-worker-c8f7f hostPath /proc/swaps
+node-feature-discovery/nfd-worker-c8f7f hostPath /k3d-gpu/host/etc
+node-feature-discovery/nfd-worker-c8f7f hostPath /sys
+node-feature-discovery/nfd-worker-c8f7f hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-c8f7f hostPath /k3d-gpu/host/lib
+node-feature-discovery/nfd-worker-c8f7f hostPath /etc/kubernetes/node-feature-discovery/features.d/
+node-feature-discovery/nfd-worker-c8f7f hostPath 
+node-feature-discovery/nfd-worker-c8f7f hostPath 
+GPU-SCAN clean

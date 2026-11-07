@@ -1,0 +1,112 @@
+{
+ "matched": true,
+ "void": false,
+ "verdict": "MATCHED",
+ "rule": "amendment-27",
+ "checks": [
+  {
+   "metric": "busy_pct",
+   "arms": {
+    "C": 50.157,
+    "T": 50.213
+   },
+   "spread": 0.057,
+   "limit": 5.0,
+   "status": "ok",
+   "phase": "pre"
+  },
+  {
+   "metric": "throttle_per_min",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0,
+   "limit": 10.0,
+   "status": "ok",
+   "phase": "pre"
+  },
+  {
+   "metric": "swap_used_mib",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0,
+   "limit": 256.0,
+   "status": "ok",
+   "phase": "pre"
+  },
+  {
+   "metric": "swap_delta_mib",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0,
+   "limit": 64.0,
+   "status": "ok",
+   "phase": "pre"
+  },
+  {
+   "metric": "busy_pct",
+   "arms": {
+    "C": 51.338,
+    "T": 50.877
+   },
+   "spread": 0.462,
+   "limit": 5.0,
+   "status": "ok",
+   "phase": "during"
+  },
+  {
+   "metric": "swap_used_mib",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0,
+   "limit": 256.0,
+   "status": "ok",
+   "phase": "during"
+  },
+  {
+   "metric": "swap_delta_mib",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0,
+   "limit": 64.0,
+   "status": "ok",
+   "phase": "during"
+  }
+ ],
+ "outcomes": [
+  {
+   "metric": "pkg_w",
+   "arms": {
+    "C": 34.967,
+    "T": 34.757
+   },
+   "spread": 0.21
+  },
+  {
+   "metric": "throttle_per_min",
+   "arms": {
+    "C": 0.0,
+    "T": 0.0
+   },
+   "spread": 0.0
+  },
+  {
+   "metric": "load1",
+   "arms": {
+    "C": 4.875,
+    "T": 4.863
+   },
+   "spread": 0.012
+  }
+ ],
+ "unsettled": {}
+}

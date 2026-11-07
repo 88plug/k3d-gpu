@@ -1,15 +1,31 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6 and R7, and the
-"H52w run", "H18w run", "H25w run" and "H34w run" sections). This file changes no rule. Run it top
-to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
+pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6, R7, R8 and R9, and
+the "H52w run", "H18w run", "H25w run", "H34w run" and "H28w run" sections). This file changes no
+rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
 predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check
 passes.
 
-## Where things stand (2026-11-07, after H34w)
+## Where things stand (2026-11-07, after H28w)
 
-- **Next: row 5, `H28w-prep` (step 6), then row 6, `H28w`.** Holds used: 4 of at most 12.
+- **Next: row 7, the H57wb reading (step 6), then `H57w-1` to `H57w-4`.** Holds used: 8 of at
+  most 12, so H57wa and H57wm have holds 1-4 and no spare `H57w-5` (amendment R9).
+- **Rows 5 and 6, `H28w-prep` and `H28w`,** took four holds on 2026-11-07 and `H28w` is scored
+  SUPPORTED (EXPERIMENTS.md "H28w run"; records in `results/2026-11-07/runs/H28w-r2/`, the host
+  around all four in `results/2026-11-07/host/h28w.txt`). Amendment R8 (the node label
+  `nvidia.com/gpu.present=false` on H28w's plain `k3d cluster create`, and H28's pod image) merged
+  first, and main at `fd822b33` was shipped as `repo-fd822b337155`; its launcher and `share/` equal
+  0.1.89's. `H28w-prep` (hold 5, 07:37:52Z, rc 0) built the model images. `H28w` (hold 6, 07:39:38Z)
+  ended rc 143 at 07:42:30Z with no scored round: closing the ssh connection that launched it ended
+  its logind session, and wildct's `KillUserProcesses=yes` killed it (amendment R9; the journal in
+  `results/2026-11-07/host/h28w-session.txt`). Amendment R9 moved `launch` into a user-manager
+  scope and registered the one repeat: `H28w-prep-r2` (hold 7, 09:05:37Z, rc 0) and `H28w-r2`
+  (hold 8, 09:07:05Z to 09:11:42Z, rc 0; 6 scored rounds, none void, load MATCHED), from the same
+  archive. Amendment R8's read of each cluster found no GPU device plugin pod. The host's
+  containers, start times, restart counts, port codes and firewall rules read the same before and
+  after each hold, and nothing of the holds was left but the build cache of the two preps' `docker
+  build` (below).
 - **Row 4, `H34w`,** ran on 2026-11-07 (05:54:52Z to 06:10:05Z, rc 0; `out/verdict.json` written
   by `h34.py`, 12 of 12 pairs) and is scored INCONCLUSIVE, effect size not resolved by the CIs
   (EXPERIMENTS.md "H34w run"; records in `results/2026-11-07/runs/H34w/`, the host before and
@@ -40,6 +56,7 @@ passes.
   later hold runs it too. Step 3 does not run again, and neither does step 5.
   Release 0.1.90 was cut at 2026-11-07T05:25:00Z, during `H25w`, from packaging changes; its
   launcher equals 0.1.89's apart from the version line, and its `share/` equals 0.1.89's.
+  Releases 0.1.91 and 0.1.92 were cut since; neither is installed.
 - **Kernel modules** (each approved by the box owner on 2026-10-29; `kernel.modprobe` stays empty):
   - `vxlan` and `br_netfilter` (amendment R3; `results/2026-10-29/host/modules.txt`);
   - `xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT
@@ -89,25 +106,34 @@ passes.
       `8eb21d5b...`, 321,145,696 bytes, the i9's bytes) and Od's `graph.pbtxt` (`c57ecf35...`,
       the i9's); both hashed again on 2026-11-07;
     - `h57/bin/k3d` (the shim) and `h57/weights.sha256`;
-    - `repo` -> `repo-ce4ff16c47ee` (and the older archives, `repo-85a7bc8668d1` among them);
+    - `repo` -> `repo-fd822b337155` (and the older archives, `repo-ce4ff16c47ee` and
+      `repo-85a7bc8668d1` among them);
     - `setup/`: `images-before.txt`, `containers-before.txt`, `volumes-before.txt`,
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
+      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `H28w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
       earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
       `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
       root), `prodcheck.sh` (the host's services), `health.sh` (step 1, as written below) and
       `nftexpr.sh` (`runs/nftexpr.txt`), with `modules-append.conf`, the lines that load
-      appended; and 2026-10-30's `smoke4-live.sh` (a read-only view of the smoke cluster) and
-      `modstate.sh` (the loaded modules and firewall line counts, as root).
+      appended; 2026-10-30's `smoke4-live.sh` (a read-only view of the smoke cluster) and
+      `modstate.sh` (the loaded modules and firewall line counts, as root); and 2026-11-07's
+      `h28w-gpuread.sh` and `h28w-gpuread-r2.sh` (amendment R8's read), `h28w-launch2.inc` (the
+      `launch` of amendment R9) and `h28w-after.inc` (step 6's after-hold checks).
   - `/etc/modules-load.d/k3dgpu-wildct.conf` (root, 0644; 18 modules), written with the box
     owner's approval. It is the owner's: step 9 does not remove it.
-  - Images: `cryptoandcoffee/k3d-gpu:0.1.89`, `ghcr.io/k3d-io/k3d-tools:5.9.0`, the five refs of
+  - Images: `cryptoandcoffee/k3d-gpu:0.1.89`, `ghcr.io/k3d-io/k3d-tools:5.9.0`,
+    `ghcr.io/k3d-io/k3d-proxy:5.9.0` (not in `setup/images-before.txt`; H28w's plain `k3d cluster
+    create`, with its load balancer, is the campaign's only cluster that runs it), the five refs of
     `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
-    2026-10-29). `cryptoandcoffee/k3d-gpu:0.1.71`, `:0.1.79` and `:0.1.81` were removed in step 3c.
+    2026-10-29, and H28w's pod image, amendment R8). `cryptoandcoffee/k3d-gpu:0.1.71`, `:0.1.79` and
+    `:0.1.81` were removed in step 3c. No `h28-model` image is left.
+  - Build cache: the two `H28w-prep` holds' `docker build` took it from 1434 records and 106.2 GB
+    (before hold 5) to 1454 and 123.4 GB (after hold 7), by `docker system df`; `/` read 207 GB
+    available before hold 5 and 191 GB after hold 8. Step 9 reports it; nothing was pruned.
 - **Never existed.** No inference request. No measurement before `H52w`. `smoke1`, `smoke2`,
   `diag-smoke2`, `smoke3`, `smoke4` and `smoke5` are discarded and disclosed (amendments R1, R2,
   R3, R5 and R6); `smoke5` is the campaign's passing wiring smoke for 0.1.89.
