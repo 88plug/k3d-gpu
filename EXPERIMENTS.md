@@ -8836,14 +8836,15 @@ accelerators:    host inventory: UHD 770 8086:a780 (i915), RTX 4000 SFF Ada 10de
 k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc),
                  unpacked in ~/k3dgpu-bench-wildct/k3d-gpu; still the newest release when the hold started
 bench scripts:   main at 85a7bc86, shipped as the archive repo-85a7bc8668d1 (its launcher equals 0.1.89's apart
-                 from VERSION; its bench/ and scripts/ equal main's at 28b1e70b)
+                 from VERSION; its bench/ and scripts/ equal main's at 28b1e70b apart from
+                 bench/wildct/RESUME.md and the run records under bench/wildct/results/)
 node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4,
                  k3s v1.37.1+k3s1, containerd 2.3.4-k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
 runtime:         k3d-gpu test pods busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
 environment:     K3D_GPU_VENDORS=auto,-nvidia,-intel, K3D_GPU_K3S_ARGS=<rule W3>, K3D_GPU_CLUSTER=k3dgpu-w-h52,
                  K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl" (rule W4; H52w reads no energy)
 host load:       load1 0.61-1.14, foreign CPU 0.47-1.77 CPU-s/s, MemAvailable 113.6-114.5 GiB, package 61-67 C,
-                 / 207 GB available (sample.py, 13 samples)
+                 / 221.1-222.2 GB available (sample.py, 13 samples; df -h read 207G before and after)
 ```
 
 Command, on wildct: RESUME.md step 6's `launch H52w 1800 3 h52w`, which runs `bench/wildct/hold.sh H52w
@@ -8900,8 +8901,10 @@ containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the s
 line counts of `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 before and
 after, and their rules were identical with the counters stripped. After the hold, no `k3dgpu-w-*`
 cluster or container, no process of the hold and no network or volume of ours was left, and
-`live.lock` was free. The host's loaded module count read 224 before the hold and at 04:11Z,
-with all 18 modules of `/etc/modules-load.d/k3dgpu-wildct.conf` loaded and `kernel.modprobe` empty.
+`live.lock` was free. Before the hold (04:03Z) all 18 modules of
+`/etc/modules-load.d/k3dgpu-wildct.conf` were loaded and `kernel.modprobe` was empty; the preflight
+(03:28Z) counted 224 loaded modules (`host/preflight.txt`). The records hold no module read after
+the hold.
 
 Rule W7: this was the campaign's first hold, so every later wildct row runs release 0.1.89. Holds
 used: 1 of at most 12. The next row in the registered order is H18w.
