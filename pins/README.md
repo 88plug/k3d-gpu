@@ -94,8 +94,12 @@ Coupled components go in one group, so they land in one PR.
 hold = { max = "v4.0.0", reason = "helm v4 render output differs", review_by = "2027-01-31" }
 ```
 
-The bumper stays below `max`. `hack/pins check` fails once `review_by` has passed:
-review the hold, then move the date or drop it.
+The bumper stays below `max`. The github-release, oci and pypi sources take the newest
+release below it; every other kind reads one newest version, and when that reaches
+`max` the pin stays where it is (`hack/bump` notes `held at ...`, also for `--resolved`
+values). To freeze a pin at its version, set `max` to the first release after it
+(`v0.8.1` for llama.cpp `v0.8.0`, `5.21.0.post0` for PyPI `5.21.0`). `hack/pins check`
+fails once `review_by` has passed: review the hold, then move the date or drop it.
 
 ## Register a known issue
 

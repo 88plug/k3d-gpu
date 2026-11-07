@@ -8,6 +8,8 @@
 #     for strings no other file still pins;
 #   - leaves ledger (bench/), historical, eat-stock files and .github/ alone;
 #   - is a no-op when run a second time;
+#   - moves no held pin to or past its hold, from --resolved values and from a
+#     source alike (a held note names it);
 #   - with --reason known-issue:<id> records fixed_in, narrows affected and sets
 #     retained, and --remove-workaround then cuts the marked lines out
 #     (hack/known-issues check passes after each step);
@@ -262,6 +264,70 @@ check "a backreference inside another group moves with that group" grep -qx 'TOO
 git -C "${R4}" add -A && git -C "${R4}" commit -qm bump
 check "hack/pin-only-diff passes on the backreference bump" \
     python3 "${ROOT}/hack/pin-only-diff" --root "${R4}" --group tools HEAD~1 HEAD
+
+# a hold: no pin moves to or past its max. From --resolved values (hack/bump's own
+# gate) and from the sources (github-release and pypi list every release and take
+# the newest below the hold) alike; the group then has nothing to move.
+R5="${WORK}/repo5"
+mkdir -p "${R5}/pins" "${R5}/share"
+cat > "${R5}/pins/registry.toml" <<'EOF'
+[groups.tools]
+tests = []
+
+[[pin]]
+id = "tool"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "github-release", repo = "o/tool", tag = "{v}" }
+hold = { max = "v1.3.0", reason = "tool 1.3 drops a flag", review_by = "2099-01-01" }
+sites = [{ file = "share/tool.env", var = "TOOL_VERSION" }]
+
+[[pin]]
+id = "pkg"
+class = "ours"
+group = "tools"
+family = "pypi"
+scheme = "pep440"
+source = { kind = "pypi", package = "pkg" }
+hold = { max = "5.21.0.post0", reason = "a PENDING row registered pkg==5.21.0", review_by = "2099-01-01" }
+sites = [{ file = "share/pkg.txt", regex = '^pkg==(?P<v>[0-9][^\s]*)$' }]
+EOF
+echo 'TOOL_VERSION=v1.2.0' > "${R5}/share/tool.env"
+echo 'pkg==5.21.0' > "${R5}/share/pkg.txt"
+: > "${R5}/EXPERIMENTS.md"
+: > "${R5}/images.unpinned"
+git -C "${R5}" init -q -b main && git -C "${R5}" add -A && git -C "${R5}" commit -qm base
+echo '{"tool": {"v": "v1.4.0"}, "pkg": {"v": "5.21.0.post1"}}' > "${WORK}/resolved5.json"
+out=$(python3 "${ROOT}/hack/bump" --root "${R5}" --resolved "${WORK}/resolved5.json" --no-tests tools \
+    --summary "${WORK}/held.json" 2>&1); rc=$?
+check "bump with held pins exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "held pins: nothing to move" grep -qx 'tools: nothing to move' <<< "${out}"
+check "held pins: the tree is unchanged" test -z "$(git -C "${R5}" status --porcelain)"
+check "held pins: a note names each hold" python3 - "${WORK}/held.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert s["moved"] == [] and s["changed"] is False, s
+notes = sorted(s["notes"])
+assert len(notes) == 2, notes
+assert notes[0].startswith("pkg: held at 5.21.0: upstream 5.21.0.post1 reaches the hold 5.21.0.post0"), notes
+assert notes[1].startswith("tool: held at v1.2.0: upstream v1.4.0 reaches the hold v1.3.0 (tool 1.3 drops a flag)"), notes
+PY
+FIX5="${WORK}/fixtures5.json"
+cat > "${FIX5}" <<'EOF'
+{"https://api.github.com/repos/o/tool/releases?per_page=100&page=1": {"status": 200, "headers": {},
+  "json": [{"tag_name": "v1.4.0", "prerelease": false, "draft": false},
+           {"tag_name": "v1.3.0", "prerelease": false, "draft": false},
+           {"tag_name": "v1.2.0", "prerelease": false, "draft": false}]},
+ "https://pypi.org/pypi/pkg/json": {"status": 200, "headers": {},
+  "json": {"releases": {"5.21.0": [{"yanked": false}], "5.21.0.post1": [{"yanked": false}],
+                        "5.22.2": [{"yanked": false}]}}}}
+EOF
+out=$(PINLIB_FIXTURES="${FIX5}" python3 "${ROOT}/hack/bump" --root "${R5}" --no-tests tools 2>&1); rc=$?
+check "bump from the sources with held pins: nothing to move (rc ${rc}: ${out##*$'\n'})" \
+    test "${rc}" -eq 0 -a "${out%%$'\n'*}" = "tools: nothing to move"
+check "bump from the sources with held pins: the tree is unchanged" test -z "$(git -C "${R5}" status --porcelain)"
 
 # the registry: one group (one branch) for both NRI components
 check "nri-balloons and nri-balloons-guard bump in group nri (one branch)" python3 - "${ROOT}" <<'PY'
