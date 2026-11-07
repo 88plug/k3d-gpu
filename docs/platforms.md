@@ -234,19 +234,23 @@ two ways, one per EAT generation. Its pins:
   ([`0d3438d`](https://github.com/intel/enterprise-agent-toolkit/tree/0d3438d7119de44cafc5903f66665c0b623e3333);
   [compare](https://github.com/intel/enterprise-agent-toolkit/compare/0d3438d7119de44cafc5903f66665c0b623e3333...0c726f576595971c53cc45b94e08ba969beb4a4a),
   204 files). `bench/eatflow` keeps its own EAT pins (`bench/eatflow/agent.lock`).
-- **EAT 2.0:** `k3d-gpu eas up --agent-toolkit` installs EAT through Intel's EAS installer
-  (`es_auto_installer.sh install agent-toolkit`) on the cluster. It pins EAS `main`
-  `97f6157`, enterprise-inference `main` `3e8a244` and EAT `release-2.0.0` `036b662` in
-  `integrations/eas/pins.json`, with EAS `v1.2.0-rc.1` as an opt-in profile. Intel's GA
-  tags of 2026-11-06 are EAS [`v1.2.0`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0)
-  (`a051f00`), EAT `release-2.0.0` (`7b827e2`, four docs-only commits after `036b662`:
-  [compare](https://github.com/intel/enterprise-agent-toolkit/compare/036b66234801e9bd950afd90830821859780d668...7b827e2d95cec826a20c7e3f5a30eb4818ed2992))
-  and enterprise-inference [`v1.1.0`](https://github.com/intel/enterprise-inference/releases/tag/v1.1.0)
-  (`d035b1e`); H62r is pre-registered on them. Choices,
-  patches, refusals and limits: [intel/eas.md](intel/eas.md). F3 ran it once end to end
-  and is REFUTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the
-  install, `eas check` and the teardown passed, and the secret scan found the Keycloak admin
-  password on a process command line (enterprise-inference's `keycloak_config` role).
+- **EAT 2.0:** `k3d-gpu eat up` (`k3d-gpu eas up --agent-toolkit`) installs EAT through
+  Intel's EAS installer (`es_auto_installer.sh install agent-toolkit`) on the cluster. Its
+  default profile in `integrations/eas/pins.json` is Intel's GA tags of 2026-11-06: EAS
+  [`v1.2.0`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0) (`a051f00`),
+  enterprise-inference [`v1.1.0`](https://github.com/intel/enterprise-inference/releases/tag/v1.1.0)
+  (`d035b1e`) and EAT `release-2.0.0` (`7b827e2`, four docs-only commits after `036b662`:
+  [compare](https://github.com/intel/enterprise-agent-toolkit/compare/036b66234801e9bd950afd90830821859780d668...7b827e2d95cec826a20c7e3f5a30eb4818ed2992)).
+  The profiles `main` (EAS `main` `97f6157`, enterprise-inference `main` `3e8a244`, EAT
+  `036b662`) and `v1.2.0-rc.1` stay as recorded. Choices, patches, refusals and limits:
+  [intel/eas.md](intel/eas.md). F5 ran it once at the GA tags on the Xeon 6741P and is
+  SUPPORTED ([EXPERIMENTS.md](../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up`
+  with `failed=0` and no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed.
+  F3 ran the `main` profile once end to end and is REFUTED
+  ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check`
+  and the teardown passed, and the secret scan found the Keycloak admin password on a process
+  command line (enterprise-inference's `keycloak_config` role). H62r is pre-registered on the
+  GA tags.
 - `docs/intel.md`, `contrib/eat/` and `integrations/eat/upstream/` read `main` at
   [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a8331e8b502ef41e08bf6d2881416178c5).
 
