@@ -94,7 +94,9 @@ dry_no_proxy_env() {
 # hyperthread pairs (cpu_core), E-cores 16-31 one thread each (cpu_atom).
 # NOHT is an Arrow Lake-S: P-cores 0-7 without hyperthreads, E-cores 8-23.
 # FLAT has one core type: CPUs 0-7 as four hyperthread pairs, no hybrid PMUs.
-HYB=$(mktemp -d) NOHT=$(mktemp -d) FLAT=$(mktemp -d)
+# SPLIT has one core type with the pairs numbered apart, CPU c and c+4, as on many
+# Xeon and EPYC hosts.
+HYB=$(mktemp -d) NOHT=$(mktemp -d) FLAT=$(mktemp -d) SPLIT=$(mktemp -d)
 mkdir -p "${HYB}/sys/devices/cpu_core" "${HYB}/sys/devices/cpu_atom"
 echo 0-15 > "${HYB}/sys/devices/cpu_core/cpus"
 echo 16-31 > "${HYB}/sys/devices/cpu_atom/cpus"
@@ -113,6 +115,8 @@ done
 for c in $(seq 0 7); do
     mkdir -p "${FLAT}/sys/devices/system/cpu/cpu${c}/topology"
     echo "$((c - c % 2))-$((c - c % 2 + 1))" > "${FLAT}/sys/devices/system/cpu/cpu${c}/topology/thread_siblings_list"
+    mkdir -p "${SPLIT}/sys/devices/system/cpu/cpu${c}/topology"
+    echo "$((c % 4)),$((c % 4 + 4))" > "${SPLIT}/sys/devices/system/cpu/cpu${c}/topology/thread_siblings_list"
 done
 # threads_env <sysroot> <stack> [bench args...]: the LLAMA_ARG_THREADS value the
 # plan's docker run sets, or "none".
@@ -137,6 +141,8 @@ cpuset_threads() {
         && [ "$(threads_env "${HYB}" ollama --cpuset 16-23)" = 8 ] \
         && [ "$(threads_env "${FLAT}" ollama --cpuset 0-7)" = 4 ] \
         && [ "$(threads_env "${FLAT}" ollama --cpuset 0,2,4)" = 3 ] \
+        && [ "$(threads_env "${SPLIT}" ollama --cpuset 0-3)" = 4 ] \
+        && [ "$(threads_env "${SPLIT}" ollama --cpuset 0-7)" = 4 ] \
         && [ "$(threads_env "${HYB}" ollama)" = none ] \
         && [ "$(threads_env "${HYB}" llamacpp --cpuset 0-15)" = none ] \
         && [ "$(threads_env "${HYB}" ovms --cpuset 0-15)" = none ] \
@@ -161,7 +167,7 @@ cpuset_threads_no_ht() {
 
 # Fake docker and curl on PATH: the competitor container exits at once (OOM).
 FAKE=$(mktemp -d)
-trap 'rm -f "${OUT}"; rm -rf "${FAKE}" "${HYB}" "${NOHT}" "${FLAT}"' EXIT
+trap 'rm -f "${OUT}"; rm -rf "${FAKE}" "${HYB}" "${NOHT}" "${FLAT}" "${SPLIT}"' EXIT
 cat > "${FAKE}/docker" <<'EOF'
 #!/bin/bash
 echo "docker $*" >> "${FAKE_LOG}"
