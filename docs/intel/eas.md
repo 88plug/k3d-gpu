@@ -1,10 +1,13 @@
 # Intel EAS on k3d-gpu (`k3d-gpu eas`)
 
-> **Status: the GA tags are the default; F5 is PENDING.** Intel tagged EAS `v1.2.0`,
+> **Status: the GA tags are the default; F5 is SUPPORTED.** Intel tagged EAS `v1.2.0`,
 > enterprise-inference `v1.1.0` and EAT `release-2.0.0` on 2026-11-06, and `k3d-gpu eas`
-> (and `k3d-gpu eat`, its agent-toolkit layer) pins them by default. F5 in
-> [EXPERIMENTS.md](../../EXPERIMENTS.md#f5-pre-registration-xeon-6741p-2026-11-06) runs
-> `k3d-gpu eat` at those tags on the Xeon 6741P. The earlier run, F3 (2026-11-01, EAS `main`,
+> (and `k3d-gpu eat`, its agent-toolkit layer) pins them by default. F5
+> ([EXPERIMENTS.md](../../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)) ran `k3d-gpu eat` once
+> at those tags on the Xeon 6741P on 2026-11-07: `eat up` installed every layer with
+> `failed=0` and no hand edit, `eat check` passed (Intel's `validate agent-toolkit`, then chat,
+> a tool call, the guardrail's block and a sandbox run through the EAS gateway), the secret scan
+> counted 0, and `eat down` cleaned up. The earlier run, F3 (2026-11-01, EAS `main`,
 > i9-13900T), installed every layer with `failed=0` and passed `eas check`, and is REFUTED:
 > its secret scan found the Keycloak admin password once, in a `ps` sample of `kcadm.sh`'s
 > command line ([State and secrets](#state-and-secrets)). With `auth_provider: litellm`, the

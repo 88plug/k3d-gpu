@@ -1442,8 +1442,10 @@ ship them today; EAS's Enterprise RAG layer is not wired in yet, and an Arc or G
 stays with `k3d-gpu agent up`. F3 ran it once end to end on EAS `main` on the i9-13900T and
 is REFUTED ([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas
 check` and the teardown passed, but enterprise-inference's Keycloak step put the Keycloak
-admin password on a process command line, where the run's secret scan found it. F5 checks
-the GA tags on the Xeon 6741P. The commands are `k3d-gpu eat up` (`--dry-run`,
+admin password on a process command line, where the run's secret scan found it. F5 ran it
+at the GA tags on the Xeon 6741P and is SUPPORTED
+([EXPERIMENTS.md](EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0` and
+no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. The commands are `k3d-gpu eat up` (`--dry-run`,
 `--explain`; `--legacy` runs EAT 1.x), `eat status`, `eat check` and `eat down`, or `k3d-gpu
 eas` with the layer named. See [docs/intel/eas.md](docs/intel/eas.md), and
 [docs/intel.md](docs/intel.md#upstream-findings) for the upstream findings and issue drafts.

@@ -148,5 +148,10 @@ failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_M
 ## Verification
 
 F3 ran `eas up --agent-toolkit` on EAS `main` on an i9-13900T: every step passed and the
-secret scan found the Keycloak admin password on one sampled `kcadm` argv (REFUTED). F5 runs
-`k3d-gpu eat` at the GA tags on a Xeon 6741P ([EXPERIMENTS.md](../../EXPERIMENTS.md), row F5).
+secret scan found the Keycloak admin password on one sampled `kcadm` argv (REFUTED). F5 ran
+`k3d-gpu eat` once at the GA tags on a Xeon 6741P and is SUPPORTED
+([EXPERIMENTS.md](../../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0`
+and no hand edit, `eat check` (Intel's `validate agent-toolkit`, then chat, a tool call, the
+guardrail's block and a sandbox run printing 385), a secret scan of 0, and `eat down`. Its
+records and the three wiring smokes before it are in
+[bench/f5/results/2026-11-07/](../../bench/f5/results/2026-11-07/).

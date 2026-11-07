@@ -172,8 +172,10 @@ machine. There are two paths, one per EAT generation:
   end to end on EAS `main` on the i9-13900T and is REFUTED
   ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas
   check` and the teardown passed, but enterprise-inference's Keycloak step put the Keycloak
-  admin password on a process command line, where the run's secret scan found it. F5 runs
-  `k3d-gpu eat` at the GA tags on the Xeon 6741P. The commands are `k3d-gpu eat up`
+  admin password on a process command line, where the run's secret scan found it. F5 ran
+  `k3d-gpu eat` once at the GA tags on the Xeon 6741P and is SUPPORTED
+  ([EXPERIMENTS.md](../EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0`
+  and no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. The commands are `k3d-gpu eat up`
   (`--dry-run` and `--explain` print every choice and patch decision first), `eat status`,
   `eat check` (Intel's `validate agent-toolkit`, then chat, tool call, guardrail block and
   sandbox through the EAS gateway with a minted, then deleted, LiteLLM key) and `eat down`;
@@ -497,7 +499,8 @@ Shipped since this roadmap was first written:
   at the GA tags of 2026-11-06, with every k3d setting and patch chosen from the cluster
   ([intel/eas.md](intel/eas.md)). F3 ran it end to end once on EAS `main`; it is REFUTED on
   the Keycloak admin password in a command line, with every functional step passing. F5
-  checks the GA tags on the Xeon 6741P.
+  ran it at the GA tags on the Xeon 6741P and is SUPPORTED: install, check (chat, tool call,
+  guardrail block, sandbox), a secret scan of 0 and teardown.
 - **EAT on one node.** `K3D_GPU_NODE_LABELS` sets the `ei-*-eligible` labels and
   `K3D_GPU_BALLOONS=external` leaves the balloons policy to EAT [ledger:H14];
   [`integrations/eat/eat-up.sh`](../integrations/eat/eat-up.sh) runs EAT's brownfield path
