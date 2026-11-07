@@ -1,0 +1,30 @@
+[32m==>[0m Installing agent-sandbox v1.0.8 (/home/andrew/k3dgpu-bench-wildct/repo/share/agent-sandbox.yml)...
+namespace/agent-sandbox-system created
+customresourcedefinition.apiextensions.k8s.io/sandboxclaims.extensions.agents.x-k8s.io created
+customresourcedefinition.apiextensions.k8s.io/sandboxes.agents.x-k8s.io created
+customresourcedefinition.apiextensions.k8s.io/sandboxtemplates.extensions.agents.x-k8s.io created
+customresourcedefinition.apiextensions.k8s.io/sandboxwarmpools.extensions.agents.x-k8s.io created
+serviceaccount/agent-sandbox-controller created
+clusterrole.rbac.authorization.k8s.io/agent-sandbox-controller created
+clusterrole.rbac.authorization.k8s.io/agent-sandbox-controller-extensions created
+clusterrolebinding.rbac.authorization.k8s.io/agent-sandbox-controller created
+clusterrolebinding.rbac.authorization.k8s.io/agent-sandbox-controller-extensions created
+service/agent-sandbox-controller created
+deployment.apps/agent-sandbox-controller created
+customresourcedefinition.apiextensions.k8s.io/sandboxes.agents.x-k8s.io condition met
+customresourcedefinition.apiextensions.k8s.io/sandboxtemplates.extensions.agents.x-k8s.io condition met
+customresourcedefinition.apiextensions.k8s.io/sandboxclaims.extensions.agents.x-k8s.io condition met
+customresourcedefinition.apiextensions.k8s.io/sandboxwarmpools.extensions.agents.x-k8s.io condition met
+Waiting for deployment "agent-sandbox-controller" rollout to finish: 0 of 1 updated replicas are available...
+deployment "agent-sandbox-controller" successfully rolled out
+[32m==>[0m Applying the E-core sandbox profile (/home/andrew/k3dgpu-bench-wildct/repo/share/agent-sandbox-k3d.yml)...
+namespace/agent-sandbox created
+sandboxtemplate.extensions.agents.x-k8s.io/python-ecores created
+sandboxwarmpool.extensions.agents.x-k8s.io/python-ecores created
+[32m==>[0m Waiting for the python-ecores warm pool (first start pulls the runtime image)...
+NAME                                                       READY   DESIRED   AGE
+sandboxwarmpool.extensions.agents.x-k8s.io/python-ecores   1       1         12s
+
+NAME                                          READY   REASON              AGE
+sandbox.agents.x-k8s.io/python-ecores-7nd5c   True    DependenciesReady   12s
+  ok: python-ecores-7nd5c: CPUs 17 (E-cores 16-23)
