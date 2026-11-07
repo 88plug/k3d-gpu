@@ -1,11 +1,14 @@
 # Verbatim copies of intel/enterprise-ai-solutions (EAS) files, Apache-2.0,
 # Copyright (C) Intel Corporation; LICENSE here is EAS's own, the same file on
-# both branches. Only the files the overlay patches touch
-# (integrations/eas/overlay.json). tests/eas_test.sh checks every blob sha below,
+# every tree here. Only the files the overlay patches touch
+# (integrations/eas/overlay.json), and at a051f00 the layer manifests
+# configs/repos/repos.{agent-toolkit,inference}.yaml, from which `k3d-gpu eas up
+# --eas-ref <ref>` takes the EI and EAT commits. tests/eas_test.sh checks every blob sha below,
 # so a fixture is byte-identical to upstream or the suite fails.
 #
 #   97f6157  main         97f6157d6a72f7173c698c474d4e51d2c79f1fd6  2026-10-29 (#69)
 #   5c27fb3  release-1.2  5c27fb39a95eecec41aa4e29a1188984e9c726f3  2026-10-27 (tag v1.2.0-rc.1)
+#   a051f00  release-1.2  a051f00fcb2dd473fe763610471cd509db82c433  2026-11-06 (tag v1.2.0)
 #
 # <tree> <blob sha> <path>   (tree "-" is this directory)
 - 6e1424c3717dcf8c3883bf980662cc142cdd7864 LICENSE
@@ -33,3 +36,17 @@
 5c27fb3 edc15669db543ec0ea92833d6d9678ba1f643c49 roles/kubernetes/tasks/install.yaml
 5c27fb3 d8641f977da59f7cf990ea048fa2150ace9aa274 roles/nri_cpu_balloons/defaults/main.yaml
 5c27fb3 9f80228ecc15571687cc7b6833301dd107828302 roles/nri_cpu_balloons/tasks/install_advanced.yaml
+a051f00 d8d2537d36da0e965e21b966ca90880db66e4adc configs/defaults/global_config.yaml
+a051f00 dbc1fe9779e38f664d48d7f1b8b0f088fe54fddd docs/README.md
+a051f00 775b98e320ee99c4e8c6948719e3f48fe0ec6223 docs/customize/node_topology.md
+a051f00 bd9d5f7ff4565710f623187b73f1fe6a0168c21d docs/deploy/topologies.md
+a051f00 9f3d4234a159191d75dda1769fd9c6a46dc50d8d roles/envoy_gateway/tasks/install.yaml
+a051f00 b2e0882fce12d08831950ea89d1baca45bac92a8 roles/istio/defaults/main.yaml
+a051f00 6aafac3dd0977e44f5ff8d28ea49e95be1e4d3df roles/istio/tasks/install.yaml
+a051f00 3e0fc4abbcaf2daab1293c35930124972c6fd23b roles/istio/tasks/upgrade.yaml
+a051f00 c1a093133e09133f813426583438d706acc1ce44 roles/kubernetes/tasks/apply_node_topology.yaml
+a051f00 edc15669db543ec0ea92833d6d9678ba1f643c49 roles/kubernetes/tasks/install.yaml
+a051f00 d8641f977da59f7cf990ea048fa2150ace9aa274 roles/nri_cpu_balloons/defaults/main.yaml
+a051f00 9f80228ecc15571687cc7b6833301dd107828302 roles/nri_cpu_balloons/tasks/install_advanced.yaml
+a051f00 74c42961e1b3a9e5e6712e0d8ccb3516e555dbf4 configs/repos/repos.agent-toolkit.yaml
+a051f00 2c4c4c0c5998926e700fc0a27385a6d8dd734259 configs/repos/repos.inference.yaml

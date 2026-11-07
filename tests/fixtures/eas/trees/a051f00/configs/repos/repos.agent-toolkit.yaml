@@ -1,0 +1,28 @@
+---
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+# =============================================================================
+# Layer manifest — agent-toolkit
+# =============================================================================
+
+# Applied only to a global_config.yaml that init creates: new envs use LiteLLM.
+global_config:
+  auth_provider: "litellm"                # keycloak | litellm
+
+repos:
+  - layer: "inference"
+    url: "https://github.com/intel/enterprise-inference"
+    dest: "enterprise.ai-inference"
+    rev: "d035b1ef1981fbf5084ff05c9a337e620478bb87" # v1.1.0
+    deployment_subdir: ""
+    config_dir: ""
+    default_flavour: ""
+    model_catalog: "model_manager/models.yaml"
+
+  - layer: "agent-toolkit"
+    url: "https://github.com/intel/enterprise-agent-toolkit"
+    dest: "enterprise.agent-toolkit"
+    rev: "7b827e2d95cec826a20c7e3f5a30eb4818ed2992" # release-2.0.0 
+    deployment_subdir: ""
+    config_dir: ""
+    default_flavour: ""

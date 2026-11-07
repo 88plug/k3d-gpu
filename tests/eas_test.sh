@@ -4,7 +4,7 @@
 #
 #   overlay  integrations/eas/overlay.py, the k3s/k3d patch overlay, on synthetic
 #            git repos built from verbatim EAS files (tests/fixtures/eas/trees,
-#            EAS main 97f6157 and release-1.2 5c27fb3):
+#            EAS main 97f6157, release-1.2 5c27fb3 (v1.2.0-rc.1) and a051f00 (v1.2.0)):
 #            - the fixtures are byte-identical to upstream (blob shas in SOURCES)
 #            - overlay.json resolves every patch, upstream drafts first-class, no copies
 #            - main: 0002 and 0006 apply, 0003 only for nri-balloons, 0004 only on
@@ -21,6 +21,8 @@
 #            - a STOP names a `moved` hint only when the hint watches a file whose
 #              hunks fail, else the last commit on the failing files
 #            - release-1.2: 0006 variant b applies, 0006a and 0005 do not
+#            - v1.2.0 (a051f00): the same decisions as v1.2.0-rc.1 for every policy and
+#              node count the release profile can meet
 #            - --apply changes the checkout only when no row STOPs, and a re-run is a no-op
 #            - every decision prints as `fact -> choice [source]`; --explain gives permalinks
 #   config   integrations/eas/eas-config.py on golden fixtures, tests/fixtures/eas/config/<case>/:
@@ -37,27 +39,29 @@
 #            a permalink at a full commit SHA, and pins.json has the k3d-gpu.eas-pins/v1
 #            shape.
 #   argv     the LiteLLM master key on no process argument list during EI's model deploy:
-#            EI 3e8a244's two tasks that carry it (tests/fixtures/eas/argv, the
+#            EI 3e8a244's and v1.1.0's two tasks that carry it (tests/fixtures/eas/argv, the
 #            MM_LITELLM_MASTER_KEY line verbatim) run under ansible-playbook with a fake key
 #            while ps samples every argv. Without the overrides (the control) ansible's
 #            environment: puts the key on the deploy's /bin/sh -c argv; with the
 #            generator's k3d-gpu-overrides.yaml no sample holds it and the deploy gets an
 #            empty MM_LITELLM_MASTER_KEY. Needs ansible-playbook.
-#   kcadm    EI 3e8a244's keycloak_config role (tests/fixtures/eas/kcadm, verbatim) and
-#            integrations/eas/ei-kcadm.sh with patches/ei/0001:
+#   kcadm    EI's keycloak_config role (tests/fixtures/eas/kcadm, verbatim) at 3e8a244 and
+#            at v1.1.0 d035b1e, and integrations/eas/ei-kcadm.sh with patches/ei/0001's two
+#            variants (a for 3e8a244, b for release-1.1):
 #            - the role is byte-identical to upstream (blob shas in SOURCES)
-#            - apply patches a git checkout of it, a re-run is a no-op, revert leaves the
-#              checkout clean; a task of another shape, a kcadm call elsewhere with a
-#              secret argument, or a directory that is no git checkout stops it, the
-#              checkout as it was
+#            - apply patches a git checkout of it with the variant that fits, a re-run is
+#              a no-op, revert leaves the checkout clean; a task of another shape, a kcadm
+#              call elsewhere with a secret argument, or a directory that is no git
+#              checkout stops it, the checkout as it was
 #            - the role runs under ansible-playbook with kubernetes.core stubbed (k8s_exec
 #              execs the command as the real one does, in a "pod" whose environment holds
 #              the operator's KC_BOOTSTRAP_ADMIN_*) and a fake kcadm, while ps samples every
 #              argv for a fake admin password and the client secrets. As shipped (the
 #              control) the password and the client secret are on kcadm's argv; patched no
 #              sample holds either, kcadm gets the password from KC_CLI_PASSWORD, and the
-#              Secret stores the client secret Keycloak holds. Needs ansible-playbook.
-#   cli      `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
+#              Secret stores the client secret Keycloak holds; the same for the v1.1.0
+#              role with variant b. Needs ansible-playbook.
+#   cli     `k3d-gpu eas up|down|status|check`, eas.sh (the in-bastion driver) and the
 #            bastion, against stub docker, kubectl, k3d, git, yq and `k3d-gpu fit`, with the
 #            real eas-config.py (so the facts it gathers are the facts the generator reads)
 #            and a recording overlay.py:
@@ -183,7 +187,7 @@ EOF
         [ "${got}" = "${blob}" ] || { bad=$((bad + 1)); fail "fixture ${tree}/${path}: blob ${got:-missing}, upstream ${blob}"; }
     done < "${FIX}/SOURCES"
     [ "${bad}" -eq 0 ] && ok "all ${listed} fixture files match their upstream blob shas"
-    got=$(cd "${FIX}" && find . -type f ! -name SOURCES | sed 's#^\./##; s#^\(97f6157\|5c27fb3\)/#\1 #; /^LICENSE$/s#^#- #' | sort)
+    got=$(cd "${FIX}" && find . -type f ! -name SOURCES | sed 's#^\./##; s#^\(97f6157\|5c27fb3\|a051f00\)/#\1 #; /^LICENSE$/s#^#- #' | sort)
     want=$(awk '!/^#/ && NF==3 {print $1" "$3}' "${FIX}/SOURCES" | sort)
     check "the fixture trees hold exactly the files SOURCES lists" "${want}" "${got}"
     has "the fixtures carry EAS's Apache-2.0 LICENSE" "Apache License" "$(head -3 "${FIX}/LICENSE")"
@@ -222,8 +226,9 @@ EOF
     # 3. The recorded verified cases hold on the byte-identical fixture trees.
     mkrepo 97f6157 "${WORK}/main" || fail "mkrepo main"
     mkrepo 5c27fb3 "${WORK}/r12" || fail "mkrepo release-1.2"
+    mkrepo a051f00 "${WORK}/ga" || fail "mkrepo v1.2.0"
     while IFS='|' read -r fixture policy nodes want; do
-        r="${WORK}/main"; [ "${fixture##*/}" = 5c27fb3 ] && r="${WORK}/r12"
+        case "${fixture##*/}" in 5c27fb3) r="${WORK}/r12" ;; a051f00) r="${WORK}/ga" ;; *) r="${WORK}/main" ;; esac
         got=$(brief "${r}" "${policy}" "${nodes}")
         check "verified ${fixture##*/} ${policy} nodes=${nodes}" "${want}" "${got}"
     done < <(python3 -c '
@@ -284,6 +289,15 @@ for v in json.load(open(sys.argv[1]))["verified"]:
     out=$(python3 "${OVERLAY}" --eas "${WORK}/main" --policy best-effort --nodes 1 --explain)
     has "--explain: permalink at the full sha" "[${GH}/blob/${sha}/roles/envoy_gateway/tasks/controller.yaml#L154]" "${out}"
     has "--explain: a skip states its rule" "kubernetes_cpu_policy is nri-balloons" "${out}"
+
+    # 4b. v1.2.0 (the release profile): the decisions measured at rc.1, on one node and three.
+    check "v1.2.0 best-effort 1 node: 0002 apply, 0006 apply b, the rest skip" \
+        "0002=apply:a 0003=skip 0004=skip 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" best-effort 1)"
+    check "v1.2.0: exit 0" 0 "$(cat "${WORK}/rc")"
+    check "v1.2.0 nri-balloons 1 node: 0003 applies too" \
+        "0002=apply:a 0003=apply:a 0004=skip 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" nri-balloons 1)"
+    check "v1.2.0 nri-balloons 3 nodes: 0004 applies too" \
+        "0002=apply:a 0003=apply:a 0004=apply:a 0005=skip 0006=apply:b" "$(brief "${WORK}/ga" nri-balloons 3)"
 
     # 5. release-1.2: 0006 variant b; 0006a and 0005 do not apply there.
     got=$(brief "${WORK}/r12" best-effort 1)
@@ -640,11 +654,13 @@ assert gc == {"existing_kubernetes": "/kube/config"}, f"global_config edit: {gc!
 me = yaml.safe_load(open(os.path.join(out, "models.edit.yaml")))
 assert set(me) == {"defaults", "models"} and isinstance(me["defaults"]["require_amx"], bool), f"models edit: {me!r}"
 for m in me["models"]:
-    assert isinstance(m["name"], str) and all(isinstance(v, str) for v in m["env"].values()), f"models edit entry: {m!r}"
-    assert set(m) <= {"name", "env", "args_append"}, f"models edit entry: {m!r}"
+    assert isinstance(m["name"], str) and all(isinstance(v, str) for v in m.get("env", {}).values()), f"models edit entry: {m!r}"
+    assert set(m) <= {"name", "env", "args_append", "cpu"} and len(m) > 1, f"models edit entry: {m!r}"
+    # an explicit cpu is a whole number of CPUs, written as a string as EI reads it
+    assert "cpu" not in m or (isinstance(m["cpu"], str) and m["cpu"].isdigit() and int(m["cpu"]) >= 8), f"models edit cpu: {m!r}"
     # fit's KV cache holds a request only up to fit's context: a lowered KV cache always
     # comes with that --max-model-len, or vLLM takes the model's own context and stops.
-    if "VLLM_CPU_KVCACHE_SPACE" in m["env"]:
+    if "VLLM_CPU_KVCACHE_SPACE" in m.get("env", {}):
         a = m.get("args_append") or []
         assert len(a) == 2 and a[0] == "--max-model-len" and a[1].isdigit(), f"KV cache without --max-model-len: {m!r}"
 (rf,) = glob.glob(os.path.join(out, "repos.*.yaml"))
@@ -705,11 +721,46 @@ PY
         --eas-ref 89abcdef0123456789abcdef0123456789abcdef > "${WORK}/eassha.out" 2>&1 && rc=0 || rc=$?
     if [ "${rc}" -eq 0 ] && grep -q '^# k3d-gpu eas-config: profile custom, layer agent-toolkit' "${WORK}/eassha.out" \
        && grep -q '^# eas intel/enterprise-ai-solutions 89abcdef0123456789abcdef0123456789abcdef$' "${WORK}/eassha.out" \
-       && grep -q '^pin ei main (profile main) -> ' "${WORK}/eassha.out"; then
+       && grep -q '^pin ei v1.1.0 (profile release) -> ' "${WORK}/eassha.out"; then
         ok "--eas-ref <sha> is a custom profile with the default EI and EAT pins"
     else
         fail "--eas-ref <sha> (rc=${rc}): $(cat "${WORK}/eassha.out")"
     fi
+    # The default profile is release: EAS v1.2.0 and the EI and EAT commits its
+    # agent-toolkit manifest pins. The main and v1.2.0-rc.1 profiles stay as recorded.
+    gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/release" --layer agent-toolkit \
+        > "${WORK}/release.out" 2>&1 && rc=0 || rc=$?
+    want='# k3d-gpu eas-config: profile release, layer agent-toolkit, cluster k3d-gpu
+# eas intel/enterprise-ai-solutions a051f00fcb2dd473fe763610471cd509db82c433
+# ei intel/enterprise-inference d035b1ef1981fbf5084ff05c9a337e620478bb87
+# eat intel/enterprise-agent-toolkit 7b827e2d95cec826a20c7e3f5a30eb4818ed2992'
+    check "the default profile is release: EAS v1.2.0, EI v1.1.0, EAT release-2.0.0 (rc=${rc})" "${want}" \
+        "$(head -4 "${WORK}/release.out")"
+    for f in main:97f6157d6a72f7173c698c474d4e51d2c79f1fd6:3e8a24486b6ee812adf2bf452f8ba5751c16c8bd:036b66234801e9bd950afd90830821859780d668 \
+             v1.2.0-rc.1:5c27fb39a95eecec41aa4e29a1188984e9c726f3:170eb3abb1956de0787727f21e356aef2b13ff24:036b66234801e9bd950afd90830821859780d668; do
+        IFS=: read -r name eas ei eat <<< "${f}"
+        gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/p-${name}" --layer agent-toolkit \
+            --eas-ref "${name}" > "${WORK}/p-${name}.out" 2>&1
+        check "profile ${name} keeps its recorded commits" "${eas} ${ei} ${eat}" \
+            "$(sed -n '2,4s/^# [a-z]* [^ ]* //p' "${WORK}/p-${name}.out" | tr '\n' ' ' | sed 's/ $//')"
+    done
+
+    # --manifest-revs: a layer manifest's repos, as the CLI reads them for a non-profile
+    # --eas-ref (EAS v1.2.0's, verbatim: quoted revs with a trailing comment).
+    out=$(gen --manifest-revs "${ROOT}/tests/fixtures/eas/trees/a051f00/configs/repos/repos.agent-toolkit.yaml" 2>&1); rc=$?
+    check "--manifest-revs on EAS v1.2.0's agent-toolkit manifest (rc=${rc})" \
+        "$(printf 'inference\thttps://github.com/intel/enterprise-inference\td035b1ef1981fbf5084ff05c9a337e620478bb87\nagent-toolkit\thttps://github.com/intel/enterprise-agent-toolkit\t7b827e2d95cec826a20c7e3f5a30eb4818ed2992')" "${out}"
+    printf 'repos:\n  - layer: "inference"\n    url: https://github.com/intel/enterprise-inference\n    rev: main\n' > "${WORK}/mf-branch.yaml"
+    check "--manifest-revs: an unquoted branch rev" "$(printf 'inference\thttps://github.com/intel/enterprise-inference\tmain')" \
+        "$(gen --manifest-revs "${WORK}/mf-branch.yaml" 2>&1)"
+    printf 'repos:\n  - layer: "inference"\n    url: "https://github.com/intel/enterprise-inference"\n' > "${WORK}/mf-norev.yaml"
+    gen --manifest-revs "${WORK}/mf-norev.yaml" > /dev/null 2> "${WORK}/mf-norev.err" && rc=0 || rc=$?
+    if [ "${rc}" -eq 2 ] && grep -q 'no url or rev' "${WORK}/mf-norev.err"; then
+        ok "--manifest-revs: an entry without a rev exits 2"
+    else
+        fail "--manifest-revs without a rev: rc=${rc} $(cat "${WORK}/mf-norev.err")"
+    fi
+
     # A k3s.io/node-args annotation that is not a JSON list is an input error.
     python3 - "${FIXTURES}/desktop-i9-13900T/facts.json" "${WORK}/badargs.json" <<'PY'
 import json, sys
@@ -782,7 +833,7 @@ PY
     gen --facts "${FIXTURES}/desktop-i9-13900T/facts.json" --out "${WORK}/explain" --layer agent-toolkit --explain \
         > "${WORK}/explain.out" 2>&1 && rc=0 || rc=$?
     if [ "${rc}" -eq 0 ] \
-       && grep -qF '[https://github.com/intel/enterprise-ai-solutions/blob/97f6157d6a72f7173c698c474d4e51d2c79f1fd6/es_auto_installer.sh#L1342-L1358]' "${WORK}/explain.out" \
+       && grep -qF '[https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/es_auto_installer.sh#L1378-L1394]' "${WORK}/explain.out" \
        && [ "$(grep -c '^[^#].* -> ' "${WORK}/explain.out")" -eq "$(grep -c '^[^#].* -> ' "${FIXTURES}/desktop-i9-13900T/expected/choices.txt")" ] \
        && ! grep -E '^[^#].* -> ' "${WORK}/explain.out" | grep -qvE '\[https://[^] ]+\]$' \
        && cmp -s "${FIXTURES}/desktop-i9-13900T/expected/choices.txt" "${WORK}/explain/choices.txt"; then
@@ -832,8 +883,9 @@ PY
 section_cli() {
     local B="${WORK}/cli/bin" K="${WORK}/cli/k" S="${WORK}/cli/s" LOG="${WORK}/cli/log"
     local EAS_DIR="${ROOT}/integrations/eas" LAUNCHER="${ROOT}/scripts/k3d-gpu"
-    local SECRET="hf_SECRET_7f3a9c" EAS_SHA="97f6157d6a72f7173c698c474d4e51d2c79f1fd6"
-    local EI_SHA="3e8a24486b6ee812adf2bf452f8ba5751c16c8bd" EAT_SHA="036b66234801e9bd950afd90830821859780d668"
+    # The default profile's commits (release: EAS v1.2.0, EI v1.1.0, EAT release-2.0.0).
+    local SECRET="hf_SECRET_7f3a9c" EAS_SHA="a051f00fcb2dd473fe763610471cd509db82c433"
+    local EI_SHA="d035b1ef1981fbf5084ff05c9a337e620478bb87" EAT_SHA="7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
     local STATE="${S}/k3d-gpu-state/eas-easc"
     mkdir -p "${B}" "${K}/eas" "${K}/eat" "${S}/fx" "${S}/home" "${S}/host/proc/sys/fs/inotify"
 
@@ -855,7 +907,7 @@ section_cli() {
     cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/eas-ready.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
        "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
     mkdir -p "${K}/eas/patches/ei"
-    cp "${EAS_DIR}"/patches/ei/0001-keycloak-config-kcadm-argv.patch "${K}/eas/patches/ei/"
+    cp "${EAS_DIR}"/patches/ei/*.patch "${K}/eas/patches/ei/"
     # ei-kcadm.sh as a recorder too (section kcadm runs the real one on EI's role).
     cat > "${K}/eas/ei-kcadm.sh" <<'EOF'
 echo "ei-kcadm $*" >> "${STUB_LOG}"
@@ -932,6 +984,10 @@ if [ "$1" = ls-remote ]; then
     case "$4" in
         release-1.1) printf '170eb3abb1956de0787727f21e356aef2b13ff24\trefs/heads/release-1.1\n' ;;
         v9.9.9)      printf '1111111111111111111111111111111111111111\trefs/tags/v9.9.9\n2222222222222222222222222222222222222222\trefs/tags/v9.9.9^{}\n' ;;
+        v1.2.0)      printf '3333333333333333333333333333333333333333\trefs/tags/v1.2.0\na051f00fcb2dd473fe763610471cd509db82c433\trefs/tags/v1.2.0^{}\n' ;;
+        main)        printf '4444444444444444444444444444444444444444\trefs/heads/main\n' ;;
+        agentic-toolkit-migration) printf '5555555555555555555555555555555555555555\trefs/heads/agentic-toolkit-migration\n' ;;
+        old-main)    printf '6666666666666666666666666666666666666666\trefs/heads/old-main\n' ;;
     esac
     exit 0
 fi
@@ -939,7 +995,9 @@ if [ "$1" = clone ]; then
     # A checkout whose installer records its argv; init seeds env/<env> as the real one does.
     d=$4
     mkdir -p "${d}/.git" "${d}/configs/repos"
-    : > "${d}/configs/repos/repos.agent-toolkit.yaml"
+    # EAS v1.2.0's agent-toolkit manifest carries global_config: (repos.agent-toolkit.yaml#L9-L10).
+    printf '%s\n' 'global_config:' '  auth_provider: "litellm"                # keycloak | litellm' '' 'repos:' \
+        > "${d}/configs/repos/repos.agent-toolkit.yaml"
     : > "${d}/configs/repos/repos.inference.yaml"
     cat > "${d}/es_auto_installer.sh" <<'EOS'
 #!/usr/bin/env bash
@@ -958,7 +1016,7 @@ EOF
 #!/usr/bin/env python3
 import os, re, sys
 a = sys.argv[1:]
-env = " ".join("%s=%s" % (k, os.environ[k]) for k in ("L", "U", "R", "F", "N", "A") if k in os.environ and "strenv(%s)" % k in " ".join(a))
+env = " ".join("%s=%s" % (k, os.environ[k]) for k in ("L", "U", "R", "F", "N", "A", "M", "C") if k in os.environ and "strenv(%s)" % k in " ".join(a))
 with open(os.environ["STUB_LOG"], "a") as f:
     f.write("yq %s%s\n" % (" ".join(a), " [" + env + "]" if env else ""))
 if "-o=json" in a:
@@ -976,6 +1034,29 @@ elif "-r" in a:
     elif ".models[].name" in a:
         for m in re.finditer(r'^  - name: "([^"]*)"', text, re.M):
             print(m.group(1))
+    elif ".global_config // {}" in a[a.index("-r") + 1]:   # the manifest's global_config rows
+        m = re.search(r"^global_config:\n((?:  .*\n)+)", text, re.M)
+        for row in re.finditer(r'^  ([a-z_]+):\s*("[^"]*")', m.group(1) if m else "", re.M):
+            print("%s: %s" % row.groups())
+    elif ").cpu // " in a[a.index("-r") + 1]:   # one model's cpu in models.edit.yaml
+        m = re.search(r'^  - name: "%s"\n(?:    .*\n)*?    cpu: "([0-9]+)"' % re.escape(os.environ.get("N", "")), text, re.M)
+        print(m.group(1) if m else "")
+EOF
+    # curl: GitHub's raw files. EAS v1.2.0's layer manifests (the fixture tree), and an
+    # EAS commit 6666... whose manifest names branches; anything else is a 404 (exit 22).
+    cat > "${B}/curl" <<EOF
+#!/usr/bin/env bash
+echo "curl \$*" >> "\${STUB_LOG}"
+url=\${@: -1} o=/dev/stdout
+while [ \$# -gt 1 ]; do [ "\$1" != -o ] || o=\$2; shift; done
+exec > "\${o}"
+case "\${url}" in
+    https://raw.githubusercontent.com/intel/enterprise-ai-solutions/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.*.yaml)
+        cat "${ROOT}/tests/fixtures/eas/trees/a051f00/configs/repos/\${url##*/}" ;;
+    https://raw.githubusercontent.com/intel/enterprise-ai-solutions/6666666666666666666666666666666666666666/configs/repos/repos.agent-toolkit.yaml)
+        printf 'repos:\n  - layer: "inference"\n    url: "https://github.com/intel/enterprise-inference"\n    rev: "main"\n  - layer: "agent-toolkit"\n    url: "https://github.com/intel/enterprise-agent-toolkit"\n    rev: "agentic-toolkit-migration"\n' ;;
+    *) echo "curl: (22) The requested URL returned error: 404" >&2; exit 22 ;;
+esac
 EOF
     cat > "${B}/self" <<'EOF'
 #!/usr/bin/env bash
@@ -1033,6 +1114,11 @@ EOF
     printf 'MemTotal: 131500000 kB\nMemAvailable: 120000000 kB\n' > "${S}/host/proc/meminfo"
     echo 128 > "${S}/host/proc/sys/fs/inotify/max_user_instances"
     echo 1048576 > "${S}/host/proc/sys/fs/inotify/max_user_watches"
+    # /sys as EAS's probe-node-topology.sh reads it: 32 CPUs, cpu0's siblings 0 and 16, one node.
+    local i
+    for i in $(seq 0 31); do mkdir -p "${S}/host/sys/devices/system/cpu/cpu${i}/topology"; done
+    mkdir -p "${S}/host/sys/devices/system/cpu/cpufreq" "${S}/host/sys/devices/system/node/node0"
+    echo "0,16" > "${S}/host/sys/devices/system/cpu/cpu0/topology/thread_siblings_list"
 
     # cli <fn> [args...]: a launcher function in a subshell, the stubs first on PATH, the
     # launcher's own `up` and `fit` replaced by the self stub.
@@ -1065,6 +1151,7 @@ EOF
         "overlay --eas ${STATE}/eas --policy best-effort --nodes 1 --json ${STATE}/overlay-decisions.json"
     cli_lacks "cli: dry run: the overlay is not applied" "${log}" "--apply"
     cli_has   "cli: dry run says nothing was applied" "${out}" "Dry run: nothing applied"
+    cli_has   "cli: dry run lists the manifest's global_config eas.sh sets after init" "${out}" '  auth_provider: "litellm"'
     if grep -E '^docker ' <<< "${log}" | grep -Ev '^docker (info --format|exec k3d-easc-server-0 (test -S /var/run/nri/nri.sock|crictl info)$)' | grep -q .; then
         fail "cli: dry run: a docker call that is not a read: $(grep -E '^docker ' <<< "${log}" | grep -Ev '^docker (info|exec)' | head -1)"
     else
@@ -1087,7 +1174,10 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
       sorted(f["nodes"][0]), sorted(f["daemonsets"][0]), f["namespaces"], f["fit"]["meta-llama/Llama-3.1-8B-Instruct"],
       f["fit"]["Qwen/Qwen2.5-Coder-14B-Instruct"]["fits"])' "${STATE}/facts.json" 2>&1)
     cli_eq    "cli: facts.json has the k3d-gpu.eas-facts/v1 shape eas-config.py documents" "${facts}" \
-        "['agent_sandbox', 'cluster', 'containerd_cni_bin_dirs', 'daemonsets', 'docker_rootless', 'fit', 'host', 'namespaces', 'nodes', 'nri_socket', 'schema', 'server_version'] True ['/usr/bin'] None False ['inotify_max_user_instances', 'inotify_max_user_watches', 'mem_available_kib'] ['allocatable', 'annotations', 'labels', 'name'] ['annotations', 'labels', 'name', 'namespace'] ['default', 'kube-system', 'node-feature-discovery'] None False"
+        "['agent_sandbox', 'cluster', 'containerd_cni_bin_dirs', 'daemonsets', 'docker_rootless', 'fit', 'host', 'namespaces', 'nodes', 'nri_socket', 'schema', 'server_version'] True ['/usr/bin'] None False ['cpu', 'inotify_max_user_instances', 'inotify_max_user_watches', 'mem_available_kib'] ['allocatable', 'annotations', 'labels', 'name'] ['annotations', 'labels', 'name', 'namespace'] ['default', 'kube-system', 'node-feature-discovery'] None False"
+    cli_eq    "cli: facts.json: the host's CPU topology as EAS's probe reads /sys (cpu[0-9]*, cpu0's siblings, node[0-9]*)" \
+        "$(python3 -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["host"]["cpu"], sort_keys=True))' "${STATE}/facts.json")" \
+        '{"logical": 32, "numa_nodes": 1, "threads_per_core": 2}'
     cli_has   "cli: fit runs per eas-config candidate, vLLM on the CPU" "${log}" "self fit --model Qwen/Qwen2.5-Coder-7B-Instruct --engine vllm --device cpu --json"
     cli_has   "cli: pins.resolved.json records eas-config's commits" "$(cat "${STATE}/pins.resolved.json")" "\"sha\": \"${EAS_SHA}\""
 
@@ -1106,11 +1196,41 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_has   "cli: eas-config gets the commit, not the ref" "${out}" "# ei intel/enterprise-inference 170eb3abb1956de0787727f21e356aef2b13ff24"
     cli_has   "cli: an annotated tag resolves to its commit" "$(cat "${STATE}/repos.agent-toolkit.yaml")" 'rev: "2222222222222222222222222222222222222222"'
     : > "${LOG}"
-    out=$(cli cmd_eas up --dry-run --eas-ref 0123456789abcdef0123456789abcdef01234567); rc=$?
+    out=$(cli cmd_eas up --dry-run --eas-ref 0123456789abcdef0123456789abcdef01234567 --ei-ref 89abcdef0123456789abcdef0123456789abcdef); rc=$?
     cli_has   "cli: a full SHA is taken as given" "${out}" "eas: intel/enterprise-ai-solutions@0123456 (as given)"
     cli_lacks "cli: a full SHA needs no ls-remote" "$(cat "${LOG}")" "git ls-remote"
     out=$(cli cmd_eas up --dry-run --ei-ref no-such-branch); rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'has no branch or tag no-such-branch' <<< "${out}"; then ok "cli: an unknown ref stops"; else fail "cli: an unknown ref: rc=${rc} ${out}"; fi
+    # An EAS ref that is no profile takes EI and EAT from that commit's layer manifest
+    # (configs/repos/repos.<layer>.yaml), never the default profile's: EAS v1.2.0 with
+    # enterprise-inference main would be a mix no release pins.
+    : > "${LOG}"
+    out=$(cli cmd_eas up --dry-run --agent-toolkit --eas-ref v1.2.0); rc=$?
+    cli_eq    "cli: --eas-ref v1.2.0 (no profile) runs" "${rc}" 0
+    cli_has   "cli: the manifest at that commit is read" "$(cat "${LOG}")" \
+        "https://raw.githubusercontent.com/intel/enterprise-ai-solutions/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.agent-toolkit.yaml"
+    cli_has   "cli: EI comes from that manifest" "${out}" "ei: intel/enterprise-inference@d035b1e (repos.agent-toolkit.yaml at enterprise-ai-solutions@a051f00)"
+    cli_has   "cli: EAT comes from that manifest" "${out}" "eat: intel/enterprise-agent-toolkit@7b827e2 (repos.agent-toolkit.yaml at enterprise-ai-solutions@a051f00)"
+    cli_has   "cli: eas-config gets the manifest's EI" "${out}" "# ei intel/enterprise-inference d035b1ef1981fbf5084ff05c9a337e620478bb87"
+    cli_has   "cli: eas-config gets the manifest's EAT" "${out}" "# eat intel/enterprise-agent-toolkit 7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
+    : > "${LOG}"
+    out=$(cli cmd_eas up --dry-run --eas-ref v1.2.0); rc=$?
+    cli_has   "cli: the inference layer reads repos.inference.yaml" "$(cat "${LOG}")" "a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.inference.yaml"
+    cli_has   "cli: ...and takes its EI" "${out}" "# ei intel/enterprise-inference d035b1ef1981fbf5084ff05c9a337e620478bb87"
+    out=$(cli cmd_eas up --dry-run --agent-toolkit --eas-ref old-main); rc=$?
+    cli_eq    "cli: a manifest naming branches runs" "${rc}" 0
+    cli_has   "cli: a manifest's branch rev resolves through git ls-remote" "${out}" \
+        "ei: intel/enterprise-inference@4444444 (main in repos.agent-toolkit.yaml at enterprise-ai-solutions@6666666, git ls-remote"
+    cli_has   "cli: ...the EAT branch too" "${out}" "# eat intel/enterprise-agent-toolkit 5555555555555555555555555555555555555555"
+    out=$(cli cmd_eas up --dry-run --agent-toolkit --eas-ref v1.2.0 --ei-ref 0123456789abcdef0123456789abcdef01234567); rc=$?
+    cli_has   "cli: a given --ei-ref wins over the manifest" "${out}" "# ei intel/enterprise-inference 0123456789abcdef0123456789abcdef01234567"
+    cli_has   "cli: ...the manifest still gives EAT" "${out}" "# eat intel/enterprise-agent-toolkit 7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
+    out=$(cli cmd_eas up --dry-run --eas-ref 0123456789abcdef0123456789abcdef01234567); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'cannot read configs/repos/repos.inference.yaml at enterprise-ai-solutions@0123456' <<< "${out}"; then
+        ok "cli: an EAS commit whose manifest cannot be read stops (pass --ei-ref and --eat-ref)"
+    else
+        fail "cli: unreadable manifest: rc=${rc} ${out}"
+    fi
 
     # ---- refusals ---------------------------------------------------------------------------------
     # cli_refused <name> <message> <cmd_eas args...>: non-zero, the message, and no change.
@@ -1232,6 +1352,41 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
         "installer install agent-toolkit --env k3d-gpu -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml -e x=1"
     cli_lacks  "cli: configure is never called" "${log}" "installer configure"
     cli_eq     "cli: .venv links to the baked venv" "$(readlink "${ES}/eas/.venv")" "${WORK}/cli/venv"
+    # The manifest's global_config: (auth_provider litellm at v1.2.0) into the env's
+    # global_config.yaml after init, which sets it only in a file it creates; k3d-gpu's own
+    # edit after it.
+    cli_before "cli: init, then the manifest's global_config into the env" "${log}" "installer init" \
+        "yq -i . *= (load(strenv(M)).global_config // {}) ${ES}/eas/env/k3d-gpu/global_config.yaml [M=${ES}/eas/configs/repos/repos.agent-toolkit.yaml]"
+    cli_before "cli: the manifest's global_config, then global_config.edit.yaml" "${log}" "load(strenv(M)).global_config" \
+        "yq -i . *= load(strenv(F)) ${ES}/eas/env/k3d-gpu/global_config.yaml"
+    cli_has    "cli: eas.sh says which manifest keys it set" "${out}" 'the global_config of repos.agent-toolkit.yaml (auth_provider: "litellm"; init sets it only in a new file)'
+    cli_lacks  "cli: no cpu edit, no cpu write" "${log}" ".cpu = strenv(C)"
+    # A model edit with a cpu (eas-config.py's explicit cpu under nri-balloons) replaces the
+    # catalog's cpu: auto.
+    command cp -f "${ES}/models.edit.yaml" "${ES}/models.edit.saved"
+    printf '%s\n' '    cpu: "72"' >> "${ES}/models.edit.yaml"
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=nri-balloons EAS_NODES=1 \
+        EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
+    cli_eq     "cli: eas.sh up with a model cpu exits 0" "${rc}" 0
+    cli_has    "cli: the model's cpu replaces the catalog's" "$(cat "${LOG}")" \
+        "yq -i (.models[] | select(.name == strenv(N))).cpu = strenv(C) ${ES}/eas/env/k3d-gpu/models.yaml [N=qwen2-5-coder-7b C=72]"
+    cli_before "cli: the cpu edit, then install" "$(cat "${LOG}")" ".cpu = strenv(C)" "installer install"
+    command cp -f "${ES}/models.edit.saved" "${ES}/models.edit.yaml"
+    # validate: Intel's post-deploy checks with install's extra vars.
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_VENV="${WORK}/cli/venv" \
+        bash "${K}/eas/eas.sh" validate agent-toolkit 2>&1); rc=$?
+    cli_eq     "cli: eas.sh validate exits 0" "${rc}" 0
+    cli_has    "cli: validate <layer> with install's extra vars" "$(cat "${LOG}")" \
+        "installer validate agent-toolkit --env k3d-gpu -- -e @${ES}/k3d-gpu-images.yaml -e @${ES}/k3d-gpu-overrides.yaml"
+    # overlay-check <layer>: the decisions, then the manifest's global_config, read only.
+    : > "${LOG}"
+    out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
+        bash "${K}/eas/eas.sh" overlay-check agent-toolkit 2>&1); rc=$?
+    cli_eq     "cli: overlay-check <layer> exits 0" "${rc}" 0
+    cli_has    "cli: overlay-check lists the manifest's global_config" "${out}" '  auth_provider: "litellm"'
+    cli_lacks  "cli: overlay-check writes no global_config" "$(cat "${LOG}")" "load(strenv(M))"
     : > "${LOG}"
     PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit >/dev/null 2>&1
@@ -1297,7 +1452,7 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     rm -rf "${ES}/eas/ext"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA=main bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'EAS_SHA must be a full commit SHA' <<< "${out}"; then ok "cli: eas.sh refuses a floating EAS ref"; else fail "cli: eas.sh floating ref: rc=${rc} ${out}"; fi
-    sed -i 's/rev: "3e8a/rev: "main-3e8a/' "${ES}/repos.agent-toolkit.yaml"
+    sed -i "s/rev: \"${EI_SHA:0:4}/rev: \"main-${EI_SHA:0:4}/" "${ES}/repos.agent-toolkit.yaml"
     out=$(PATH="${B}:${PATH}" STUB_LOG="${LOG}" EAS_STATE="${ES}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY=best-effort EAS_NODES=1 \
         EAS_VENV="${WORK}/cli/venv" bash "${K}/eas/eas.sh" up agent-toolkit 2>&1); rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'is not a commit SHA' <<< "${out}"; then ok "cli: eas.sh refuses a manifest rev that is not a SHA"; else fail "cli: eas.sh manifest rev: rc=${rc} ${out}"; fi
@@ -1342,7 +1497,7 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     out=$(cli cmd_eas status); rc=$?
     cli_eq    "cli: status exits 0" "${rc}" 0
     cli_has   "cli: status: the layer" "${out}" "Layer: agent-toolkit"
-    cli_has   "cli: status: pins" "${out}" "eas: intel/enterprise-ai-solutions@97f6157 (profile main)"
+    cli_has   "cli: status: pins" "${out}" "eas: intel/enterprise-ai-solutions@a051f00 (profile release)"
     cli_has   "cli: status: overlay decisions" "${out}" "0006 envoy control-plane affinity -> apply (variant a)"
     cli_has   "cli: status: EAS's own status" "$(cat "${LOG}")" "eas.sh status"
     cli_has   "cli: status: the gateway with its --resolve line" "${out}" "--resolve litellm.solutions.ai:443:172.18.0.2"
@@ -1358,6 +1513,66 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_eq  "cli: check exits 0" "${rc}" 0
     cli_has "cli: check runs eat-check.sh in eas mode on this cluster's kubeconfig and domain" "$(cat "${LOG}")" \
         "eat-check mode=eas kubeconfig=${STATE}/kubeconfig domain=solutions.ai model=qwen2-5-coder-7b"
+    cli_has "cli: check runs Intel's validate for the layer in the bastion" "$(grep '^docker run' "${LOG}")" \
+        "bash /k3d-gpu/integrations/eas/eas.sh validate agent-toolkit"
+    cli_before "cli: Intel's validate, then eat-check" "$(cat "${LOG}")" "eas.sh validate agent-toolkit" "eat-check mode=eas"
+
+    # ---- an env set up at other pins or for another layer ------------------------------------------
+    # EAS keeps one layer per checkout, and init never reseeds models.yaml or
+    # config.<layer>.yaml, so the env up recorded (env.json) must match the run.
+    : > "${STATE}/eas/env/k3d-gpu/.solutions.yaml"
+    cli_has   "cli: env.json records the layer and the pins up installed" "$(cat "${STATE}/env.json" 2>/dev/null)" '"layer": "agent-toolkit"'
+    out=$(cli cmd_eas up --agent-toolkit --dry-run); rc=$?
+    cli_eq    "cli: the same layer and pins run on the env" "${rc}" 0
+    cli_refused "another profile on the env" "env/k3d-gpu was set up for agent-toolkit at profile release" up --agent-toolkit --eas-ref main --dry-run
+    cli_refused "...says how to start over" "k3d-gpu eas up --reset-env" up --agent-toolkit --eas-ref main --dry-run
+    cli_refused "another layer on the env" "this run asks for inference at profile release" up --dry-run
+    setinst() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); d["installed"] = sys.argv[2] == "1"; json.dump(d, open(sys.argv[1], "w"))' "${STATE}/env.json" "$1"; }
+    cli_has   "cli: eas down marked the env torn down" "$(cat "${STATE}/env.json")" '"installed": false'
+    setinst 1
+    cli_refused "--reset-env while the stack is installed" "run 'k3d-gpu eas down' first" up --agent-toolkit --eas-ref main --reset-env
+    setinst 0
+    mkdir -p "${STATE}/eas/ext/enterprise.ai-inference"
+    out=$(cli cmd_eas up --agent-toolkit --eas-ref main --reset-env --dry-run); rc=$?
+    cli_eq    "cli: --reset-env --dry-run runs" "${rc}" 0
+    cli_has   "cli: --reset-env --dry-run says what it would move" "${out}" "would move env/k3d-gpu aside"
+    cli_eq    "cli: --reset-env --dry-run moves nothing" "$(ls "${STATE}/eas/env/k3d-gpu/.solutions.yaml" 2>&1)" "${STATE}/eas/env/k3d-gpu/.solutions.yaml"
+    : > "${LOG}"
+    out=$(cli cmd_eas up --agent-toolkit --eas-ref main --reset-env); rc=$?
+    cli_eq    "cli: --reset-env after eas down runs" "${rc}" 0
+    cli_eq    "cli: --reset-env moves env/k3d-gpu aside" "$(ls -d "${STATE}"/env-k3d-gpu.*/.solutions.yaml 2>/dev/null | wc -l)" 1
+    cli_eq    "cli: --reset-env drops ext/, the clones at the old revs" "$(ls -d "${STATE}/eas/ext" 2>/dev/null)" ""
+    cli_has   "cli: env.json now records the new profile" "$(cat "${STATE}/env.json")" '"profile": "main"'
+    mkdir -p "${STATE}/eas/env/k3d-gpu" && : > "${STATE}/eas/env/k3d-gpu/.solutions.yaml"
+    cli_refused "an unknown option of up" "unknown eas up option: --reset" up --reset
+    cli_refused "the release profile on the main env" "set up for agent-toolkit at profile main" up --agent-toolkit --dry-run
+
+    # ---- eat: EAT 2.0 through EAS's agent toolkit; --legacy is EAT 1.x's own installer -------------
+    printf '#!/usr/bin/env bash\necho "eat-up $* kubeconfig=${EAT_KUBECONFIG:-} work=${EAT_WORK:-}" >> "${STUB_LOG}"\n' > "${K}/eat/eat-up.sh"
+    : > "${LOG}"
+    out=$(cli cmd_eat up --dry-run --eas-ref main); rc=$?
+    cli_eq    "cli: eat up --dry-run runs" "${rc}" 0
+    cli_has   "cli: eat up is eas up --agent-toolkit" "${out}" "# k3d-gpu eas-config: profile main, layer agent-toolkit"
+    out=$(cli cmd_eat up --layer inference); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q "eat up is EAS's agent-toolkit layer" <<< "${out}"; then ok "cli: eat up refuses --layer"; else fail "cli: eat up --layer: rc=${rc} ${out}"; fi
+    : > "${LOG}"
+    out=$(cli cmd_eat up --legacy); rc=$?
+    cli_eq    "cli: eat up --legacy runs" "${rc}" 0
+    cli_has   "cli: eat up --legacy runs EAT 1.x's eat-up.sh on this cluster's kubeconfig, work dir in the state dir" "$(cat "${LOG}")" \
+        "eat-up  kubeconfig=${S}/k3d-gpu-state/eat-easc/kubeconfig work=${S}/k3d-gpu-state/eat-easc/work"
+    cli_lacks "cli: eat up --legacy does not run the EAS bastion" "$(cat "${LOG}")" "docker run"
+    : > "${LOG}"
+    out=$(cli cmd_eat up --legacy model cpu-qwen3-1-7b); rc=$?
+    cli_has   "cli: eat up --legacy passes eat-up.sh's arguments" "$(cat "${LOG}")" "eat-up model cpu-qwen3-1-7b"
+    : > "${LOG}"
+    out=$(cli cmd_eat check --legacy); rc=$?
+    cli_has   "cli: eat check --legacy is eat-check.sh in eat mode on the same kubeconfig" "$(cat "${LOG}")" \
+        "eat-check mode=eat kubeconfig=${S}/k3d-gpu-state/eat-easc/kubeconfig"
+    : > "${LOG}"
+    out=$(cli cmd_eat status); rc=$?
+    cli_has   "cli: eat status is eas status" "$(cat "${LOG}")" "eas.sh status"
+    out=$(cli cmd_eat); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'usage: k3d-gpu eat up' <<< "${out}"; then ok "cli: eat with no subcommand prints its usage"; else fail "cli: eat usage: rc=${rc} ${out}"; fi
 
     # ---- nothing installed ---------------------------------------------------------------------------
     rm -rf "${STATE}/eas"
@@ -1377,6 +1592,9 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     out=$(K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" HOME="${S}/home" "${LAUNCHER}" eas 2>&1); rc=$?
     if [ "${rc}" -ne 0 ] && grep -q 'usage: k3d-gpu eas up' <<< "${out}"; then ok "cli: dispatcher: 'eas' reaches cmd_eas"; else fail "cli: dispatcher: rc=${rc} ${out}"; fi
     cli_has "cli: help documents eas up" "$("${LAUNCHER}" help)" "eas up [--agent-toolkit] [--model NAME]"
+    out=$(K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" HOME="${S}/home" "${LAUNCHER}" eat 2>&1); rc=$?
+    if [ "${rc}" -ne 0 ] && grep -q 'usage: k3d-gpu eat up' <<< "${out}"; then ok "cli: dispatcher: 'eat' reaches cmd_eat"; else fail "cli: dispatcher eat: rc=${rc} ${out}"; fi
+    cli_has "cli: help documents eat up and --legacy" "$("${LAUNCHER}" help)" "eat up [--legacy] [eas up options]"
 
     # ---- the bastion: its pins are pins.json's bastion profile -----------------------------------------
     local k3s kc want got
@@ -1404,8 +1622,9 @@ PY
     cli_eq "cli: bastion FROM is the EAT bastion's digest" \
         "$(grep -m1 '^FROM ' "${EAS_DIR}/bastion.Dockerfile")" "$(grep -m1 '^FROM ' "${ROOT}/integrations/eat/bastion.Dockerfile")"
     want=$(python3 -c 'import json, sys
-print(next(r["sha"] for r in json.load(open(sys.argv[1]))["pins"] if r["profile"] == "main" and r["name"] == "eas"))' "${EAS_DIR}/pins.json")
-    cli_eq "cli: requirements.lock is for the pinned EAS commit" "$(head -1 "${EAS_DIR}/requirements.lock")" "# enterprise-ai-solutions@${want} requirements.txt"
+d = json.load(open(sys.argv[1]))
+print(next(r["sha"] for r in d["pins"] if r["profile"] == d["default_profile"] and r["name"] == "eas"))' "${EAS_DIR}/pins.json")
+    cli_eq "cli: requirements.lock is for the default profile's EAS commit" "$(head -1 "${EAS_DIR}/requirements.lock")" "# enterprise-ai-solutions@${want} requirements.txt"
     cli_eq "cli: requirements.in names the same commit" "$(head -1 "${EAS_DIR}/requirements.in")" "$(head -1 "${EAS_DIR}/requirements.lock")"
     if python3 - "${EAS_DIR}/pins.json" "${EAS_DIR}/requirements.lock" <<'PY'
 import json, re, sys
@@ -1653,15 +1872,15 @@ section_argv() {
         > /dev/null 2>&1 || { fail "argv: eas-config.py on desktop-i9-13900T"; return; }
     # The key as a grep pattern file, so the sampler's own grep never holds it in its argv.
     printf '%s\n' "${fake}" > "${A}/pattern"
-    # play <out dir> [extra ansible args]: EI's two tasks under ansible-playbook while ps
-    # samples every process's argv; prints the play's rc and the argv lines holding the key.
+    # play <playbook> <out dir> [extra ansible args]: EI's two tasks under ansible-playbook
+    # while ps samples every process's argv; prints the play's rc and the argv lines holding the key.
     play() {
-        local out=$1
-        shift
+        local book=$1 out=$2
+        shift 2
         mkdir -p "${out}"
         ARGV_FAKE_KEY="${fake}" ANSIBLE_LIBRARY="${D}/library" ANSIBLE_LOCAL_TEMP="${A}/tmp" \
             ANSIBLE_REMOTE_TEMP="${A}/tmp" ANSIBLE_NOCOLOR=1 ANSIBLE_RETRY_FILES_ENABLED=0 \
-            ansible-playbook -i localhost, "${D}/deploy-models.yml" -e "argv_out=${out}" "$@" \
+            ansible-playbook -i localhost, "${D}/${book}" -e "argv_out=${out}" "$@" \
             < /dev/null > "${out}/play.log" 2>&1 &
         pb=$!
         hits=0
@@ -1672,44 +1891,49 @@ section_argv() {
         done
         wait "${pb}" && rc=0 || rc=$?
     }
-    # The control: EI's tasks as they ship put the key on the argv of the /bin/sh -c that
-    # ansible's environment: wraps around the deploy, for the whole deploy.
-    play "${A}/control"
-    if [ "${rc}" -eq 0 ] && [ "${hits}" -gt 0 ]; then
-        ok "argv: control: without the overrides the key is on a process argv (${hits} sampled lines)"
-    else
-        fail "argv: control: rc=${rc}, ${hits} sampled lines hold the key (want rc 0 and > 0): $(tail -5 "${A}/control/play.log")"
-    fi
-    play "${A}/fixed" -e "@${A}/gen/k3d-gpu-overrides.yaml"
-    if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
-        ok "argv: with k3d-gpu-overrides.yaml no process argv holds the master key"
-    else
-        fail "argv: with the overrides: rc=${rc}, ${hits} sampled lines hold the key: $(tail -5 "${A}/fixed/play.log")"
-    fi
-    if [ "$(cat "${A}/control/key" 2>/dev/null)" = set ] && [ "$(cat "${A}/fixed/key" 2>/dev/null)" = empty ]; then
-        ok "argv: the deploy gets an empty MM_LITELLM_MASTER_KEY with the overrides (model-manager reads the Secret itself)"
-    else
-        fail "argv: MM_LITELLM_MASTER_KEY in the deploy: control '$(cat "${A}/control/key" 2>/dev/null)', with the overrides '$(cat "${A}/fixed/key" 2>/dev/null)' (want set, empty)"
-    fi
-    if grep -rqF -- "${fake}" "${A}/fixed" "${A}/gen"; then
-        fail "argv: the key reached a log or the generator's files"
-    else
-        ok "argv: the key is in no log and no generated file"
-    fi
+    local v book
+    for v in 3e8a244 v1.1.0; do
+        book=deploy-models.yml; [ "${v}" = 3e8a244 ] || book="deploy-models-${v}.yml"
+        # The control: EI's tasks as they ship put the key on the argv of the /bin/sh -c that
+        # ansible's environment: wraps around the deploy, for the whole deploy.
+        play "${book}" "${A}/${v}/control"
+        if [ "${rc}" -eq 0 ] && [ "${hits}" -gt 0 ]; then
+            ok "argv: ${v}: control: without the overrides the key is on a process argv (${hits} sampled lines)"
+        else
+            fail "argv: ${v}: control: rc=${rc}, ${hits} sampled lines hold the key (want rc 0 and > 0): $(tail -5 "${A}/${v}/control/play.log")"
+        fi
+        play "${book}" "${A}/${v}/fixed" -e "@${A}/gen/k3d-gpu-overrides.yaml"
+        if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
+            ok "argv: ${v}: with k3d-gpu-overrides.yaml no process argv holds the master key"
+        else
+            fail "argv: ${v}: with the overrides: rc=${rc}, ${hits} sampled lines hold the key: $(tail -5 "${A}/${v}/fixed/play.log")"
+        fi
+        if [ "$(cat "${A}/${v}/control/key" 2>/dev/null)" = set ] && [ "$(cat "${A}/${v}/fixed/key" 2>/dev/null)" = empty ]; then
+            ok "argv: ${v}: the deploy gets an empty MM_LITELLM_MASTER_KEY with the overrides (model-manager reads the Secret itself)"
+        else
+            fail "argv: ${v}: MM_LITELLM_MASTER_KEY in the deploy: control '$(cat "${A}/${v}/control/key" 2>/dev/null)', with the overrides '$(cat "${A}/${v}/fixed/key" 2>/dev/null)' (want set, empty)"
+        fi
+        if grep -rqF -- "${fake}" "${A}/${v}/fixed" "${A}/gen"; then
+            fail "argv: ${v}: the key reached a log or the generator's files"
+        else
+            ok "argv: ${v}: the key is in no log and no generated file"
+        fi
+    done
 }
 
 section_kcadm() {
     local D="${ROOT}/tests/fixtures/eas/kcadm" A="${WORK}/kcadm" H="${ROOT}/integrations/eas/ei-kcadm.sh"
     local pw="kc-ARGVPROBE5e0b7d21c94f4a8b" T="roles/keycloak_config/tasks/install.yaml" sha path got out rc pb n hits pwhits
     mkdir -p "${A}/tmp"
-    # The role is EI 3e8a244's, byte for byte.
+    # The roles are EI 3e8a244's and v1.1.0's, byte for byte.
     while read -r sha path; do
         got=$(git hash-object "${D}/${path}")
-        if [ "${got}" = "${sha}" ]; then ok "kcadm: ${path} is EI 3e8a244's"; else fail "kcadm: ${path} is blob ${got}, want ${sha}"; fi
+        if [ "${got}" = "${sha}" ]; then ok "kcadm: ${path} is EI's"; else fail "kcadm: ${path} is blob ${got}, want ${sha}"; fi
     done < <(grep -v '^#' "${D}/SOURCES")
-    # ei_checkout <dir>: a git checkout holding the role, as EAS's init clones EI.
+    # ei_checkout <dir> [<roles dir>]: a git checkout holding the role (3e8a244's unless
+    # named), as EAS's init clones EI.
     ei_checkout() {
-        rm -rf "$1" && mkdir -p "$1" && cp -r "${D}/roles" "$1/" && git -C "$1" init -q \
+        rm -rf "$1" && mkdir -p "$1" && cp -r "${2:-${D}/roles}" "$1/" && git -C "$1" init -q \
             && git -C "$1" add -A && git -C "$1" -c user.name=t -c user.email=t@t.invalid commit -qm ei
     }
     # ---- ei-kcadm.sh on a checkout ----
@@ -1744,6 +1968,32 @@ section_kcadm() {
         fail "kcadm: revert: rc=${rc}, $(git -C "${A}/ei" status --porcelain)"
     fi
     if bash "${H}" revert "${A}/ei" > /dev/null 2>&1; then ok "kcadm: revert without the patch is a no-op"; else fail "kcadm: revert without the patch fails"; fi
+    # EI v1.1.0 (EAS v1.2.0's pin): variant a does not fit its task, variant b does.
+    ei_checkout "${A}/v110" "${D}/v1.1.0/roles"
+    out=$(bash "${H}" apply "${A}/v110" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q '0001-release-1.1-keycloak-config-kcadm-argv.patch' <<< "${out}"; then
+        ok "kcadm: v1.1.0: apply patches the task with variant b"
+    else
+        fail "kcadm: v1.1.0: apply: rc=${rc} ${out}"
+    fi
+    if grep -vE '^[[:space:]]*#' "${A}/v110/${T}" | grep -qE -- '--password|-s secret='; then
+        fail "kcadm: v1.1.0: the patched task still passes a secret to kcadm: $(grep -nE -- '--password|-s secret=' "${A}/v110/${T}")"
+    else
+        ok "kcadm: v1.1.0: the patched task has no --password and no -s secret="
+    fi
+    sha=$(sha256sum < "${A}/v110/${T}")
+    out=$(bash "${H}" apply "${A}/v110" 2>&1); rc=$?
+    if [ "${rc}" -eq 0 ] && grep -q 'already' <<< "${out}" && [ "$(sha256sum < "${A}/v110/${T}")" = "${sha}" ]; then
+        ok "kcadm: v1.1.0: a second apply is a no-op"
+    else
+        fail "kcadm: v1.1.0: second apply: rc=${rc} ${out}"
+    fi
+    bash "${H}" revert "${A}/v110" > /dev/null 2>&1; rc=$?
+    if [ "${rc}" -eq 0 ] && [ -z "$(git -C "${A}/v110" status --porcelain)" ]; then
+        ok "kcadm: v1.1.0: revert leaves the checkout clean"
+    else
+        fail "kcadm: v1.1.0: revert: rc=${rc}, $(git -C "${A}/v110" status --porcelain)"
+    fi
     # A task of another shape: the patch does not fit, nothing is written.
     ei_checkout "${A}/moved"
     sed -i 's/--realm master$/--realm master --insecure/' "${A}/moved/${T}"
@@ -1829,6 +2079,27 @@ section_kcadm() {
         fail "kcadm: patched, a secret reached ansible's output"
     else
         ok "kcadm: patched, no secret in ansible's output"
+    fi
+    # EI v1.1.0's role: the same, as shipped and with variant b.
+    role_run "${A}/control110" "${D}/v1.1.0/roles"
+    if [ "${rc}" -eq 0 ] && [ "${pwhits}" -gt 0 ] && [ "${hits}" -gt "${pwhits}" ]; then
+        ok "kcadm: v1.1.0 control: as shipped, the admin password and the client secret are on kcadm's argv"
+    else
+        fail "kcadm: v1.1.0 control: rc=${rc}, ${pwhits} password lines, ${hits} secret lines: $(tail -5 "${A}/control110/play.log")"
+    fi
+    bash "${H}" apply "${A}/v110" > /dev/null 2>&1 || fail "kcadm: v1.1.0: apply before the patched run"
+    role_run "${A}/fixed110" "${A}/v110/roles"
+    if [ "${rc}" -eq 0 ] && [ "${hits}" -eq 0 ]; then
+        ok "kcadm: v1.1.0 patched, no process argv holds the admin password or a client secret"
+    else
+        fail "kcadm: v1.1.0 patched: rc=${rc}, ${hits} sampled lines hold a secret: $(tail -5 "${A}/fixed110/play.log")"
+    fi
+    kc_eq "kcadm: v1.1.0 patched, kcadm got the right password from KC_CLI_PASSWORD" "$(cat "${A}/fixed110/state/auth" 2>/dev/null)" "env ok"
+    kc_eq "kcadm: v1.1.0 patched, the Secret stores the client secret Keycloak holds" "$(cat "${A}/fixed110/state/stored" 2>/dev/null)" match
+    if grep -qF -f "${A}/fixed110/pattern" "${A}/fixed110/play.log"; then
+        fail "kcadm: v1.1.0 patched, a secret reached ansible's output"
+    else
+        ok "kcadm: v1.1.0 patched, no secret in ansible's output"
     fi
 }
 

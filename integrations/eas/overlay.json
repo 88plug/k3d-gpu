@@ -1,6 +1,6 @@
 {
   "schema": "k3d-gpu.eas-overlay/v1",
-  "checked": "2026-10-29",
+  "checked": "2026-11-06",
   "repo": "intel/enterprise-ai-solutions",
   "patch_dirs": ["integrations/eas/patches", "integrations/eat/upstream/patches"],
   "rules": {
@@ -141,6 +141,19 @@
          "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:a"}},
         {"policy": "nri-balloons", "nodes": 3,
          "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:a"}}
+      ]
+    },
+    {
+      "profile": "release",
+      "rev": "a051f00fcb2dd473fe763610471cd509db82c433",
+      "fixture": "tests/fixtures/eas/trees/a051f00",
+      "cases": [
+        {"policy": "best-effort", "nodes": 1,
+         "expect": {"0002": "apply:a", "0003": "skip", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+        {"policy": "nri-balloons", "nodes": 1,
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "skip", "0005": "skip", "0006": "apply:b"}},
+        {"policy": "nri-balloons", "nodes": 3,
+         "expect": {"0002": "apply:a", "0003": "apply:a", "0004": "apply:a", "0005": "skip", "0006": "apply:b"}}
       ]
     },
     {
