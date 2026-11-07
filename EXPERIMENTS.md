@@ -9730,6 +9730,72 @@ port codes. `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 5
 with the same rules once counters are stripped. After `H28w`, no `k3dgpu-w-*` cluster or container,
 no process of the hold and no `h28-model` image was left, and `live.lock` was free.
 
+### Wildct amendment R10: H57wb's reading, its gates met, and the stop before H57w's holds (2026-11-07)
+
+Recorded 2026-11-07, after the H28w repeat (hold 8) and before any H57w hold. No row's hypothesis,
+prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes. No
+runner changes. No kernel module was loaded, and nothing on wildct changed apart from the record the
+reading wrote (`runs/H57wb/reading.txt`, which did not exist before it). H57wb stays PENDING.
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T09:26:53Z (one reading, not a hold)
+hypothesis:      H57wb (the start reading its row and the pre-registration's order name)
+host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700, 125 GiB RAM, Manjaro, up since
+                 2026-10-29T09:11Z
+host kernel:     6.6.156-2-MANJARO
+k3d-gpu:         release 0.1.89 (rule W7's release since the first hold, H52w); 0.1.90, 0.1.91 and 0.1.92
+                 have been cut since and are not installed. Nothing of k3d-gpu ran for the reading
+bench scripts:   the archive H28w-prep-r2 and H28w-r2 ran (repo-fd822b337155, main at fd822b33); its
+                 bench/wildct/row.sh equals main's at e1e932d8 (sha256 f62125ca…a4)
+command:         bash ~/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57wb (RESUME.md step 6, row 7),
+                 under `timeout 60 flock -n ~/k3dgpu-bench-wildct/live.lock`, so that no hold ran during it
+reading:         / 191G available (need >= 15 + 70 = 85 GB); MemAvailable 113.6 GiB (need >= 100). row.sh's
+                 root_avail_gb is `df -P -BG`, so 191 GiB rounded up, about 205 GB; the gate compares it
+                 with 85 in GiB, which is stricter than 85 GB, so the disk gate is met in either unit
+records:         bench/wildct/results/2026-11-07/runs/H57wb/reading.txt (sha256 e96ca9c7…e2),
+                 bench/wildct/results/2026-11-07/host/h57wb.txt
+```
+
+`reading.txt`, as `row.sh` wrote it:
+
+```text
+2026-11-07T09:26:53Z root_avail_gb=191 (need >= 85) mem_available_gib=113.6 (need >= 100): gates met: H57wb has no runner on this host; stop and register one before any H57w hold
+```
+
+**What it means.** Both of the row's start gates are met, so H57wb is not INCONCLUSIVE (not run):
+by its row it runs. The resume procedure stops at this row, before `H57w-1` (RESUME.md step 6,
+row 7, as amendments R5 and R6 said in advance). It stops because the registered protocol has
+nothing that runs H57wb on wildct:
+
+- **No runner.** The pre-registration's runner changes list nothing for H57wb, and `row.sh h57wb`
+  only reads the two gates. H57db's design, which the row names (H50's banking flow under rule L3,
+  arm B EAT stock CPU vLLM on the QAT bf16 weights with `VLLM_CPU_KVCACHE_SPACE` 40), has not been
+  wired for this host. H57db itself never ran (its memory gate failed on the i9).
+- **No hold.** The order and caps give H57wb its reading and no hold ("H52w (1 hold), H18w (1),
+  H25w (1), H34w (1), H28w (prep + 1), H57wb's reading, H57wa and H57wm (at most 5)", at most 12
+  holds). After the H28w repeat (amendment R9), 8 holds are used, and the 4 left are `H57w-1` to
+  `H57w-4`. H57db's own cap is 1 hold, so running H57wb here changes the hold count.
+- **No bf16 weights.** The 51.6 GB of bf16 weights were never downloaded. Running the stock arm
+  would add them to `/` (95% used) and keep about 94 GB resident (H57db's estimate) on a host with
+  125 GiB RAM that serves the box owner's production containers.
+
+So the next step is a decision, not a measurement: a new amendment that registers a runner and a
+hold for H57wb, with the box owner's approval of the download and of that memory use on this
+host, or an amendment of H57wb's row. Until one is merged, the pack stays stopped at row 7, and
+H57wa and H57wm do not start.
+
+**Host.** The production snapshots before (09:26:08Z) and after (09:27:48Z) the reading read the
+same: the 18 containers Up, each started 2026-10-29T09:11:27Z with restart count 0, the same port
+codes, and `iptables-save`, `ip6tables-save` and `nft list ruleset` at 180, 53 and 286 lines with
+the same rules once counters are stripped. Before and after it, no `k3dgpu-w-*` cluster or
+container and no process of a hold existed, and `live.lock` was free. The installed release is
+0.1.89 (node image `cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b511...`, the only k3d-gpu node
+image on the host; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2), and the archive's launcher and
+`share/` equal it apart from the version line.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
