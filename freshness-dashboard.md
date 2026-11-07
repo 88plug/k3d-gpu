@@ -1,23 +1,21 @@
 # Freshness dashboard
 
-Updated 2026-11-07 02:59 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-07 06:00 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 red:freshness.yml
-red:watchdog.yml
 stale:freshness.yml
-stale:watchdog.yml
 
 ## Pins behind (17)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 1d |
-| examples | `examples-crewai` | `1.15.36` | `1.15.37` | patch | 2026-11-07 | 0h |
+| examples | `examples-crewai` | `1.15.36` | `1.15.37` | patch | 2026-11-07 | 3h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.1` | `v1.108.1` | `v1.108.2` | patch | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 1d |
-| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `8c0b3d30f3ae96f5c7f774de704bf0ada83e422a` | revision | 2026-11-05 | 1d |
+| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 1h |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 7d |
 | host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 3d |
 | host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 11d |
@@ -25,7 +23,7 @@ stale:watchdog.yml
 | images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 9d |
 | images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 1d |
 | k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 3d |
-| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 4h |
+| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 7h |
 | opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.0` | minor | 2026-11-03 | 3d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.12` | patch | ? | ? |
 | packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 4d |
@@ -47,7 +45,7 @@ stale:watchdog.yml
 | #322 | k3s | auto | - |
 | #321 | images | review | a human approval at the head |
 | #320 | host-intel | review | a human approval at the head |
-| #318 | hf-console-fallback | auto | - |
+| #318 | hf-console-fallback | review | a human approval at the head |
 | #317 | examples | auto | - |
 | #315 | cuda-test | review | a human approval at the head |
 | #314 | digests | review | a human approval at the head |
@@ -80,7 +78,6 @@ A PENDING row's arm pins move only by a dated amendment pushed before it runs. P
 - H25w (`bench/xhost/fetch_models.py`, `bench/wildct/**`, `bench/load/**`, `bench/shared-prefix/**`): `gh workflow run freshness.yml -f propose_amendment=H25w`
 - H28w (`bench/xhost/fetch_models.py`, `bench/wildct/**`, `bench/load/**`, `bench/zero-copy-models/**`): `gh workflow run freshness.yml -f propose_amendment=H28w`
 - H34w (`bench/xhost/fetch_models.py`, `bench/wildct/**`, `bench/load/**`, `bench/hetero-spec/**`): `gh workflow run freshness.yml -f propose_amendment=H34w`
-- H52w (`bench/xhost/fetch_models.py`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H52w`
 - H57wa (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wa`
 - H57wb (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wb`
 - H57wm (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wm`
@@ -131,11 +128,12 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H31 | cryptoandcoffee/k3d-gpu 0.1.55; llama.cpp b11706; openvino/model_server 2026.4.1 | yes |
 | H32 | cryptoandcoffee/k3d-gpu 0.1.55; llama.cpp b11706; openvino/model_server 2026.4.1 | yes |
 | H34 | cryptoandcoffee/k3d-gpu 0.1.55; openvino/model_server 2026.4.1 | no |
+| H52w | cryptoandcoffee/k3d-gpu 0.1.89; rancher/k3s v1.37.1+k3s1 | no |
 | H57dm | cryptoandcoffee/k3d-gpu 0.1.63; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11749; openvino/model_server 2026.4.1 | yes |
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.89; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.1-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.32.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.90; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.1-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.32.0
 
 ### Not machine-readable
 
