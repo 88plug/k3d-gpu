@@ -1,0 +1,227 @@
+# wildct around the H25w hold, 2026-11-07 (UTC). Read-only reads as andrew, except the firewall
+# dumps (iptables-save, ip6tables-save and nft list ruleset), as root.
+# The production snapshot: running containers, published-port HTTP codes from the host, and each
+# running container's StartedAt and RestartCount.
+
+== state before the hold (2026-11-07T05:18Z), after step 3b shipped main at ce4ff16c (amendment R7)
+## date 2026-11-07T05:18:11+00:00
+## boot: 2026-10-29 05:11:09
+## kernel: 6.6.156-2-MANJARO
+## disk
+/dev/nvme0n1p2             3667G 3274G      207G      95% /
+## mem
+MemTotal:       131524088 kB
+MemAvailable:   119958892 kB
+## loadavg: 0.64 0.46 0.46 1/3707 49457
+VERSION="0.1.89"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+## repo -> repo-ce4ff16c47ee COMMIT=ce4ff16c47ee447664abd6ddead869dd1bc80ce8
+## runs/IMAGE: cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+v4.3.1+gc0d08d0
+## clusters (k3d cluster list; names only)
+wtm (the box owner's; exited; not this campaign's). No k3dgpu-w-* cluster.
+## our containers
+ps rc=0
+## live.lock
+-rw-r--r-- 1 andrew andrew 0 Nov  6 23:22 /home/andrew/k3dgpu-bench-wildct/live.lock
+lock-free
+hold procs rc=1
+H18w pid=46184 alive=no rc=0
+H52w pid=40856 alive=no rc=0
+convert pid=24108 alive=no rc=0
+diag-smoke2 pid=17199 alive=no rc=1
+smoke2 pid=32217 alive=no rc=1
+smoke3 pid=62226 alive=no rc=0
+smoke4 pid=48184 alive=no rc=0
+smoke5 pid=31149 alive=no rc=0
+## modules of /etc/modules-load.d/k3dgpu-wildct.conf
+loaded: 18 of 18; missing: 0; 224 modules loaded in all
+modprobe=[]
+## newest k3d-gpu release at 05:18Z (gh release list): aur-v0.1.89 (2026-11-07T00:23:41Z), as installed;
+## rule W7 froze it at the first hold (H52w)
+
+== the row's command, models and images, read before the launch (row.sh h25w with WILDCT_ROW_PRINT=1)
+## row print
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+MODELS=/home/andrew/k3dgpu-bench-wildct/models
+OUT=/home/andrew/k3dgpu-bench-wildct/runs/H25w/out
+LEVELS=typical
+CLUSTER=k3dgpu-w-h25
+SEED_BASE=2560
+HOLD=1440
+LOAD_CPUS=20-23
+K3D_GPU_VENDORS=auto,-nvidia,-intel
+K3D_GPU_K3S_ARGS=--kubelet-arg=eviction-hard=memory.available<100Mi,nodefs.available<2Gi,imagefs.available<2Gi,nodefs.inodesFree<1%
+K3D_GPU_AGENT_DRAFT=CPU
+bash /home/andrew/k3dgpu-bench-wildct/repo/bench/shared-prefix/run.sh
+## row check
+check rc=0
+## launcher vs release
+LAUNCHER-MATCH
+share diff done
+## node image
+cryptoandcoffee/k3d-gpu@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 sha256:5811390ea98da96ebe01a3338291d4f462bb8c16e0063c99939944190547b8c8
+## cpu model
+model name	: 13th Gen Intel(R) Core(TM) i7-13700
+## staged models (sha256 of openvino_model.bin: target, and the draft staged under it)
+074214fa29ab1b479536fc7184ef3036e7b355a5835e8590b61b70a8de1df2f9  OpenVINO/Qwen3-4B-int4-ov/openvino_model.bin
+28613e994a6e1aaf54a6fe8677eda35e8e86684e653dde09f3ba960b8e53e152  OpenVINO/Qwen3-4B-int4-ov/OpenVINO-Qwen3-0.6B-int4-ov/openvino_model.bin
+## verify logs
+/home/andrew/k3dgpu-bench-wildct/setup/dl.log:VERIFY ok
+/home/andrew/k3dgpu-bench-wildct/setup/dl.log:VERIFY 1 bad
+/home/andrew/k3dgpu-bench-wildct/setup/verify-h57.log:VERIFY ok
+newer-than-verify done
+## autoquant cache
+XDG_STATE_HOME=[]
+ls: cannot access '/home/andrew/.local/state/k3d-gpu': No such file or directory
+## OVMS image
+AGENT_OVMS_IMAGE="openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58"
+sha256:6348136997e05a7ee2c2b08e47bb15deb6e5096c62ab3fb821907ded7e2afd7c openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+## stress-ng image (load.py's pin): present
+ghcr.io/colinianking/stress-ng@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe (image sha256:eb124d52...)
+## cpu_atom, cpu_core
+16-23
+0-15
+
+== production snapshot before the hold (2026-11-07T05:18Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== production snapshot after the hold (2026-11-07T05:37Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== comparison
+production snapshot: identical
+iptables-save rules, packet counters stripped: identical
+ip6tables-save rules, packet counters stripped: identical
+nft list ruleset, counters stripped: identical
+
+== after-hold checks (RESUME.md step 6)
+== after H25w 2026-11-07T05:37:17Z
+0
+== H25w lock taken 2026-11-07T05:18:20Z
+== H25w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h25w 2026-11-07T05:18:20Z
+== H25w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T05:36:58Z
+list rc=0
+ps rc=0
+strays rc=0
+/dev/nvme0n1p2             3667G 3274G      207G      95% /
+lock-free
+net rc=1 (grep found no k3dgpu network)
+vol rc=1 (grep found no k3dgpu volume)
+
+== host state after the hold
+## date 2026-11-07T05:37:41+00:00
+## modules: 224 loaded
+modprobe=[]
+clusters rc=0
+ours grep rc=1 (1 = none)
+lock-free
+hold procs rc=1 (1 = none)
+/dev/nvme0n1p2             3667G 3274G      207G      95% /
+## thermal_throttle files: 24
+## sshd: active

@@ -58,8 +58,8 @@ All drafts are unsent and need a maintainer's approval before anything is filed.
 SUPPORTED rows, each scoped to its host:
 
 - On the Xeon 6741P: the CPU engine choice [ledger:H59], DRAM-resident serving of Qwen3.8-Flash-Next [ledger:H60], and H25 replicated [ledger:H25x].
-- On the i9-13900T: sixteen rows, among them EAT `release-1.0.3-hotfix` deployed and served on a default k3d-gpu cluster, n=1 [ledger:H1b], EAT's NRI balloons chart installing over a k3d-gpu cluster [ledger:H14], and agent sandboxes behind default-deny egress [ledger:H18]. The full list is in the [technical report](technical-report.md#supported-quotable-scoped-to-the-i9-13900t-h25x-h59-and-h60-to-the-xeon-6741p-h52w-and-h18w-to-wildcts-i7-13700).
-- On wildct, an i7-13700 client host: detection of its hybrid cores and ISA extensions with its GPUs opted out [ledger:H52w], and H18 replicated, agent sandboxes on its E-cores behind default-deny egress [ledger:H18w].
+- On the i9-13900T: sixteen rows, among them EAT `release-1.0.3-hotfix` deployed and served on a default k3d-gpu cluster, n=1 [ledger:H1b], EAT's NRI balloons chart installing over a k3d-gpu cluster [ledger:H14], and agent sandboxes behind default-deny egress [ledger:H18]. The full list is in the [technical report](technical-report.md#supported-quotable-scoped-to-the-i9-13900t-h25x-h59-and-h60-to-the-xeon-6741p-h52w-h18w-and-h25w-to-wildcts-i7-13700).
+- On wildct, an i7-13700 client host: detection of its hybrid cores and ISA extensions with its GPUs opted out [ledger:H52w], H18 replicated, agent sandboxes on its E-cores behind default-deny egress [ledger:H18w], and H25 replicated, an added agent's first chunk 14.3x sooner with OVMS's shipped prefix caching on [ledger:H25w].
 
 ## Two results that help EAT
 
@@ -73,7 +73,7 @@ v0.28.0 is past the v0.24.0 CPU attention hang that stalled EAT 1.0.3's stock ar
 - **The Keycloak argv secret.** F3 stays REFUTED. `k3d-gpu eas up` now patches enterprise-inference's `keycloak_config` role so that neither the admin password nor the client secret is a `kcadm.sh` argument ([State and secrets](eas.md#state-and-secrets)). The patch is checked with a `ps` sampler against a stand-in for kcadm; no live run has checked it yet. A fresh `eas up --agent-toolkit` with F3's secret scan would.
 - **Intel's default install in a guest (H62).** A re-run needs the `cpu: auto` sizing to leave room for EAT's sandbox router, or a guest shape where it does.
 - **k3d-gpu gaps found on the Xeon.** `/dev/dri/by-path` for oneCCL across B70s (H53); the fit refusing rather than falling back to the CPU, and no DRAM bandwidth cached on a new host (H58); placing one-card arms on one card (H54b, H54c).
-- **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct client-host rows after H18w. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
+- **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct client-host rows after H25w. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
 - **EAT 1.1.0 through `eat-up.sh`.** Pinned since 2026-10-29 and pre-registered as F4; not run yet.
 - **EAS upstream moves.** EAS #61 merged on 2026-10-30 (EAS `main` `0f7bc2b`). The pin stays at `97f6157`; moving past #61 needs patch 0002 regenerated. EAS #50 and #52 (OpenShift) are open and would move 0006. EAS #71 (teardown hang) is open; `eas down` uses its workaround.
 - **ERAG and Arc under EAS.** EAS's Enterprise RAG layer is not wired into `k3d-gpu eas` yet, and EAS has no Intel GPU path on this branch; Arc and Gaudi stay with `k3d-gpu agent up`.
