@@ -439,7 +439,7 @@ class FitXeon(unittest.TestCase):
         self.assertEqual((d["engine"], d["placement"], d["tp"]), ("vllm", "gpu-tp", 2))
         self.assertTrue(d["degraded"])  # BF16 on two free cards: under 4 x 32768
         self.assertEqual((d["ctx"], d["seqs"]), (16384, 5))
-        self.assertEqual(d["smallest_fit"], "OpenVINO/Qwen3.8-27B-int4-ov@7b20ea8c7df7223a85ff27bab5c473f0cb038943")
+        self.assertEqual(d["smallest_fit"], "OpenVINO/Qwen3.8-27B-int4-ov@d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e")
         self.assertIn("--tensor-parallel-size=2", d["flags"])
 
     def test_flash_next_w4a16(self):
