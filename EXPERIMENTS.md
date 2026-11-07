@@ -8753,6 +8753,72 @@ smoke pass, so the next step is step 6's first hold, `H52w`. H57wb's start gates
 MemAvailable >= 100 GiB) were met at step 1; if they still are at step 6's row 7, the pack stops
 there, as it says.
 
+### Wildct amendment R6: the outage, release 0.1.89 and smoke5 (2026-11-07)
+
+Recorded 2026-11-07 (UTC; 2026-11-06 in the box owner's time zone), before any wildct hold has
+measured anything. No row's hypothesis, prediction, arm, model, statistic, threshold, cap, disk
+need, hold count or order changes. No runner changes. No kernel module was loaded.
+
+**What happened (disclosed).** wildct could not be reached from 2026-10-31 to 2026-11-06: its
+Tailscale key had expired. The key was renewed. Nothing of this campaign ran on the host in that
+time. On 2026-11-07 at 03:27Z the host read as amendment R5 left it
+(`bench/wildct/results/2026-11-07/host/preflight.txt`):
+
+- up since 2026-10-29T09:11Z, so not rebooted since the module loads of amendments R3-R5; kernel
+  6.6.156-2-MANJARO; `/` 208 GB available; MemAvailable 114.6 GiB; `load1` 0.56;
+- the 18 production containers Up, each started 2026-10-29T09:11:27Z with restart count 0;
+- no `k3dgpu-w-*` cluster or container;
+- `live.lock` free, with no holder and no `hold.sh` process; every earlier run's pid was gone
+  and had written its rc;
+- all 18 modules of `/etc/modules-load.d/k3dgpu-wildct.conf` loaded, `kernel.modprobe` empty.
+
+The resume procedure then ran. Step 1 (03:30:03Z, the archive of main at `cf49f0e6`, the 0.1.81
+node image) passed H1-H10, H10 `NFPROBE clean`. Step 3a: rule W7's newest release is 0.1.89
+(`aur-v0.1.89`, cut 2026-11-07T00:23:41Z); its launcher (apart from the version line) and
+`share/` equal main's at `85a7bc86`. Step 3b shipped main at `85a7bc86`. Step 3c: `.deb` sha256
+`8f94d69c...` (equal to the release's `SHA256SUMS`), node image
+`cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b511...`, k3d v5.9.0, helm v4.3.1, kubectl v1.37.2;
+the tag resolves to the digest, and the installed launcher and `share/` match main's.
+`cryptoandcoffee/k3d-gpu:0.1.81`, pulled by the campaign, was removed. Step 1 again (03:32:22Z,
+main at `85a7bc86`, the 0.1.89 node image; `runs/resume-health.txt`): H1-H10 pass, with Docker
+29.7.2, live-restore off, cgroup systemd/2, `/` 207 GB available, MemAvailable 114.5 GiB, `load1`
+0.74, H9 `br_netfilter vxlan` with `modprobe=[]`, and H10 `NFPROBE clean` (rc 0). Step 4's checks:
+the only files under the models newer than the verify log are step 4c's own outputs of
+2026-10-29, and the drafter GGUF and Od's `graph.pbtxt` still hash to `8eb21d5b...` and
+`c57ecf35...` (amendment R2); H57w's k3d shim equals the archive's.
+
+The wiring smoke `smoke5` (03:34:15Z, under `hold.sh`, rc 0) passed every marker of the resume
+procedure: `up rc=0 in 33 s`, `pods ready: yes after 15 s`, `GPU-SCAN clean` and `down rc=0`;
+nvidia and intel named as opted out; the node container had `devices=[]`, `gpus=[]`, runtime
+`runc` and `restarts=0`, and read running with `restarts=0` every 10 s from 03:34:33Z to
+03:35:03Z. Seven pods were 1/1 Running with 0 restarts and the gateway API CRD job Completed;
+the node had no taint. It sent no request and measured nothing: as rule W1's smoke it is discarded
+and disclosed, and is not a hold of any row. After it, no `k3dgpu-w-*` cluster or container and
+no process of the hold was left. The host's containers, start times, restart counts and port codes
+read as before the preflight, and so did the line counts of `iptables-save`, `ip6tables-save` and
+`nft list ruleset` (180, 53 and 286); `iptables-save`'s rules, with packet counters stripped, were
+identical.
+
+**GPU isolation on smoke5's running cluster** (rule W8; `out/pods.txt`, `out/gpu-scan.txt` and
+`out/node.txt`, read before `down`): none of the eight pods is a GPU plugin; no pod mounts a
+hostPath under `/dev`, and none asks for an nvidia.com/ or gpu.intel.com/ resource; the node's
+allocatable lists cpu, ephemeral-storage, hugepages-1Gi, hugepages-2Mi, memory and pods only.
+
+**Rule W7.** 0.1.89 is the release the first hold runs, unless a newer k3d-gpu release is cut
+before `H52w` starts. Then step 3 runs again, and so does the wiring smoke, as `smoke6`.
+
+**Reported, not acted on.**
+
+- H57wb's start gates are met (`/` 207 GB available, MemAvailable 114.5 GiB). If they still are
+  at step 6's row 7, the pack stops there before H57w's holds: H57wb has no runner on this host.
+- H59w (H59 amendment R1) runs through `row.sh h59w` and `row.sh h59w-prep`. `row.sh h59w`
+  takes holds 1-6 only, so it has no path for the wiring smoke that amendment R1 runs before a
+  row's first hold (`bench/h59/hold.sh HOST smoke`). `h59w-prep` has not run on wildct.
+
+**Resume procedure.** `RESUME.md` records the outage, 0.1.89 and `smoke5`. Step 3c's removal of
+old node images names every release the campaign installed. Step 1 and the smoke pass, so the
+next step is step 6's first hold, `H52w`.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the
