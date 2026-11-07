@@ -5,11 +5,11 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-07T10:43:12Z. 2 open.
+Updated 2026-11-07T11:22:00Z. 2 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
-Opened 2026-11-07T10:06:03Z, updated 2026-11-07T10:06:03Z.
+Opened 2026-11-07T10:06:03Z, updated 2026-11-07T11:22:00Z.
 
 The latest scheduled run of `bot-sweep.yml` failed.
 
@@ -18,26 +18,69 @@ Conclusion: **failure**, created 2026-11-07T10:04:27Z, commit 07448438459f7cc485
 Failed jobs: CI on bot PRs
 Hint: no known signature matched
 
-<details><summary>Last 17 lines of the failed log</summary>
+<details><summary>Last 60 lines of the failed log</summary>
 
 ```text
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines ﻿2026-11-07T10:04:51.2301671Z ##[group]Run hack/bot-ci-dispatch --workflow canary.yml
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:51.2302044Z ^[[36;1mhack/bot-ci-dispatch --workflow canary.yml^[[0m
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:51.2347510Z shell: /usr/bin/bash -e {0}
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:51.2347730Z env:
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:51.2349842Z   GH_TOKEN: ***
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:51.2350167Z ##[endgroup]
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:58.4379582Z #314 autobump/digests 723fa08: error: hack/pins policy failed: hack/pins: base c27d42a722aa2087bdcfc9db8f0fbd30ddbc0922: eas-release: site integrations/eas/pins.json ^    \{"profile": "release"
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:04:59.6334343Z #315 autobump/cuda-test 4e59d2e: error: hack/pins policy failed: hack/pins: base c27d42a722aa2087bdcfc9db8f0fbd30ddbc0922: eas-release: site integrations/eas/pins.json ^    \{"profile": "releas
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:00.7581521Z #317 autobump/examples 4a0ff4b: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:01.9284297Z #318 autobump/hf-console-fallback f44153c: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:02.3420899Z #320 autobump/host-intel e7d9a95: canary.yml run 42349582916 at the head is completed/success; nothing to do
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:03.4828960Z #321 autobump/images 24353c7: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release",
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:03.8797017Z #322 autobump/k3s b71f0d5: canary.yml run 42350061542 at the head is completed/success; nothing to do
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:04.5076820Z #324 autobump/opt-in-manifests 7ba4b20: canary.yml run 42352213796 at the head is completed/success; nothing to do
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:05.6041775Z #325 autobump/packaging-images 32ad2af: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": 
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:06.1828694Z #326 autobump/vllm-xpu eb361c7: canary.yml run 42353148072 at the head is completed/success; nothing to do
-CI on bot PRs Dispatch the canary on bot PRs whose policy maps canary engines 2026-11-07T10:05:06.1853792Z ##[error]Process completed with exit code 1.
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9542916Z Removing SSH command configuration
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9545590Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9576356Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9832941Z Removing HTTP extra header
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9835448Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:42.9865431Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0117351Z Removing includeIf entries pointing to credentials config files
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0119729Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0145200Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0145876Z includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0146300Z includeif.gitdir:/github/workspace/.git.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0146604Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0151940Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0181686Z /home/runner/work/_temp/git-credentials-07bbefea-d279-49f7-8796-e3940282d614.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0189470Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-07bbefea\-d279\-49f7\-8796\-e3940282d614\.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0222984Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0246383Z /home/runner/work/_temp/git-credentials-07bbefea-d279-49f7-8796-e3940282d614.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0253359Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/k3d-gpu/k3d-gpu/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-07bbefea\-d279\-49f7\-8796\-e3940282d614\.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0285482Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0310498Z /github/runner_temp/git-credentials-07bbefea-d279-49f7-8796-e3940282d614.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0317342Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-07bbefea\-d279\-49f7\-8796\-e3940282d614\.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0350337Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0372847Z /github/runner_temp/git-credentials-07bbefea-d279-49f7-8796-e3940282d614.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0378369Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-07bbefea\-d279\-49f7\-8796\-e3940282d614\.config
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0412079Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0665955Z Removing credentials config '/home/runner/work/_temp/git-credentials-07bbefea-d279-49f7-8796-e3940282d614.config'
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0722541Z ##[endgroup]
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0914803Z ##[group]Run hack/bot-ci-dispatch
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0915089Z ^[[36;1mhack/bot-ci-dispatch^[[0m
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0963307Z shell: /usr/bin/bash -e {0}
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0963527Z env:
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0965742Z   GH_TOKEN: ***
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:43.0965925Z ##[endgroup]
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:46.4217115Z #314 autobump/digests 723fa08: ci.yml run 42349496078 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:47.1217639Z #315 autobump/cuda-test 4e59d2e: ci.yml run 42352116965 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:47.6058004Z #317 autobump/examples 4a0ff4b: ci.yml run 42355692862 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:48.1494537Z #318 autobump/hf-console-fallback f44153c: ci.yml run 42355698654 is failure (attempt 2); left for review
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:48.6305759Z #320 autobump/host-intel e7d9a95: ci.yml run 42359326240 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:49.1431501Z #321 autobump/images 24353c7: ci.yml run 42362304636 at the head is queued/-; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:49.6994523Z #322 autobump/k3s b71f0d5: only held ci.yml runs at the head: deferred, 1 bot ci.yml run(s) in flight (cap 1)
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:50.2448375Z #324 autobump/opt-in-manifests 7ba4b20: only held ci.yml runs at the head: deferred, 1 bot ci.yml run(s) in flight (cap 1)
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:50.7253657Z #325 autobump/packaging-images 32ad2af: only held ci.yml runs at the head: deferred, 1 bot ci.yml run(s) in flight (cap 1)
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2254517Z #326 autobump/vllm-xpu eb361c7: only held ci.yml runs at the head: deferred, 1 bot ci.yml run(s) in flight (cap 1)
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2301678Z ##[group]Run hack/bot-ci-dispatch --workflow canary.yml
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2302046Z ^[[36;1mhack/bot-ci-dispatch --workflow canary.yml^[[0m
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2347515Z shell: /usr/bin/bash -e {0}
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2347731Z env:
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2349845Z   GH_TOKEN: ***
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:51.2350169Z ##[endgroup]
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:58.4379630Z #314 autobump/digests 723fa08: error: hack/pins policy failed: hack/pins: base c27d42a722aa2087bdcfc9db8f0fbd30ddbc0922: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise-ai-solut
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:04:59.6334497Z #315 autobump/cuda-test 4e59d2e: error: hack/pins policy failed: hack/pins: base c27d42a722aa2087bdcfc9db8f0fbd30ddbc0922: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise-ai-sol
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:00.7581565Z #317 autobump/examples 4a0ff4b: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise-ai-solu
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:01.9284366Z #318 autobump/hf-console-fallback f44153c: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterpr
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:02.3420943Z #320 autobump/host-intel e7d9a95: canary.yml run 42349582916 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:03.4829028Z #321 autobump/images 24353c7: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise-ai-soluti
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:03.8797060Z #322 autobump/k3s b71f0d5: canary.yml run 42350061542 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:04.5076873Z #324 autobump/opt-in-manifests 7ba4b20: canary.yml run 42352213796 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:05.6041818Z #325 autobump/packaging-images 32ad2af: error: hack/pins policy failed: hack/pins: base db6de051cba794e3c86a3f030437b13c6c448c63: eas-release: site integrations/eas/pins.json ^    \{"profile": "release", "name": "eas", "repo": "intel/enterprise
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:06.1828744Z #326 autobump/vllm-xpu eb361c7: canary.yml run 42353148072 at the head is completed/success; nothing to do
+CI on bot PRs UNKNOWN STEP 2026-11-07T10:05:06.1853804Z ##[error]Process completed with exit code 1.
 ```
 </details>
 
