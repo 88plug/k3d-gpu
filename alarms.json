@@ -46,5 +46,13 @@
     "updated_at": "2026-11-07T00:21:26Z",
     "notified_at": "2026-11-07T00:21:26Z",
     "acked": false
+  },
+  "bot-pr-stuck": {
+    "title": "bot PRs open over 72 h without green CI",
+    "body": "These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:\n\n- https://github.com/88plug/k3d-gpu/pull/298 chore(gguf-convert-pip): gguf-transformers 5.22.2, gguf-huggingface-hub 2.4.0 (`autobump/gguf-convert-pip`, open since 2026-11-01T21:45:54Z): ci.yml at 11179747fb26: pull_request action_required, workflow_dispatch queued\n- https://github.com/88plug/k3d-gpu/pull/299 chore(hf-console-fallback): hf-gemma4-26b-int4-ov 7b3cbc98e24a9946e561f82c752ae26cd53fc660, hf-qwen3.8-27b 8c0b3d30f3ae96f5c7f774de704bf0ada83e422a, hf-qwen3.8-27b-int4-ov d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e (`autobump/hf-console-fallback`, open since 2026-11-01T21:46:07Z): ci.yml at 0c28470384eb: pull_request action_required, workflow_dispatch failure\n- https://github.com/88plug/k3d-gpu/pull/301 chore(images): image:images:ollama/ollama:0.40.13 0.40.15, image:images:busybox:1.37 1.38 (`autobump/images`, open since 2026-11-01T21:47:03Z): ci.yml at 15d9fe4aeead: pull_request action_required, workflow_dispatch failure\n- https://github.com/88plug/k3d-gpu/pull/302 chore(opt-in-manifests): open-webui v0.13.0, agent-sandbox v1.0.9 (`autobump/opt-in-manifests`, open since 2026-11-01T21:47:40Z): ci.yml at e0b3e74aea2d: pull_request action_required, workflow_dispatch failure\n- https://github.com/88plug/k3d-gpu/pull/306 chore(vllm-xpu): vllm-xpu v0.33.0 (`autobump/vllm-xpu`, open since 2026-11-02T06:40:43Z): ci.yml at 7f9ea5e7e52f: pull_request action_required, workflow_dispatch failure\n- https://github.com/88plug/k3d-gpu/pull/307 chore(packaging-images): packaging-fedora 45, image:packaging-images:debian:trixie-slim trixie-slim, image:packaging-images:ghcr.io/homebrew/brew:7.0.11 7.0.12 (`autobump/packaging-images`, open since 2026-11-02T22:02:55Z): ci.yml at 0de0bffb0042: pull_request action_required, workflow_dispatch failure\n\nA PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.",
+    "opened_at": "2026-11-07T00:21:40Z",
+    "updated_at": "2026-11-07T00:21:40Z",
+    "notified_at": "2026-11-07T00:21:40Z",
+    "acked": false
   }
 }
