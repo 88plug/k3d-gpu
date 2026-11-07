@@ -47,6 +47,7 @@
 #                   pairs: ARM = H47, H49, H47b, H49b, H50 or H50o, both arms live in cluster k3dgpu-e-<arm>, one hold
 #                   of interleaved pairs into LIVE_PAIRS_DIR (LIVE_HOLD = this hold's number);
 #                   ARM = H62: both servers in KVM guests, driven by LIVE_REMOTE_A and LIVE_REMOTE_B (bench/h62);
+#                   ARM = H62r: the same, with H62r's guests (bench/h62r);
 #                   code: H43 (amendment W1), the coding agent on C12 with `k3d-gpu sandbox up`, one
 #                   block per level in LIVE_CODE_LEVELS (default "typical heavy heavy typical") into
 #                   LIVE_CODE_DIR/h43-<arm>-<level> (shared by an arm's holds, so a level's halves resume);
@@ -498,6 +499,7 @@ if [ "${MODE}" = pairs ]; then
     DESIGN=${FAMILY}
     [ "${ARM}" = H50o ] && DESIGN=H50o
     [ "${ARM}" = H62 ] && DESIGN=H62
+    [ "${ARM}" = H62r ] && DESIGN=H62   # H62 re-run at the GA tags: the same remote arms (bench/h62r)
     [ "${ARM}" = H50 ] && KV_GIB=${LIVE_EAT_KV_GIB:-40}   # EAT's shipped KV cache (40 GiB)
     mkdir -p "${PD}"
     PD=$(cd "${PD}" && pwd)
