@@ -479,7 +479,9 @@ group = "vllm-cpu"
 family = "runtime-engine"
 component = "vllm-openai-cpu"
 scheme = "zerover"
-source = { kind = "github-release", repo = "vllm-project/vllm", tag = "{v}" }
+# The highest stable release by version: vLLM publishes rcs with prerelease false
+# (v0.33.0rc3, 2026-11-02), so GitHub's "latest" flag can name an rc.
+source = { kind = "github-release", repo = "vllm-project/vllm", select = "highest", tag = "{v}" }
 confirm = { kind = "oci", image = "vllm/vllm-openai-cpu", tag = "{v}" }
 canary = ["vllm-cpu"]
 sites = [
