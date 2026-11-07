@@ -5218,7 +5218,8 @@ measurement.
    Run again on 2026-11-07 with the probe's sibling line, it also printed `NRI_SIBLINGS` with all
    96 vCPUs, `0,1,...,95`: the probe's sibling read (line 74) takes the first comma field of each
    CPU's list as that core's lowest thread, and in the guest that field is the whole range `0-1`,
-   which matches no CPU id. On crescent's host the same read gives `48,...,95`.
+   which matches no CPU id. On lists in the host's numbering (`0,48`, `1,49`, ...) the same read
+   gives `48,...,95` (the probe run on such a sysfs tree, not on crescent).
 4. With one thread per core, the default `siblings` profile of
    `roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh` logs "SMT/Hyperthreading
    disabled — no siblings to reserve" and falls back to `standard` (line 264): 12 reserved CPUs.
@@ -5414,8 +5415,8 @@ core (line 31) counts the list's comma fields and reads one. Its sibling list (l
 first comma field as the core's lowest thread and lists every CPU. With only the count changed,
 the `siblings` profile would reserve all 96 vCPUs here, because it reserves `NRI_SIBLINGS` as
 read. With the ranges expanded in both reads, the probe gives two threads per core and the 48
-higher threads. It is an upstreamable finding for Intel's EAS team; nothing is filed
-from this row.
+higher threads. It is an upstreamable finding for Intel's EAS team; nothing is filed from this
+row.
 
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
