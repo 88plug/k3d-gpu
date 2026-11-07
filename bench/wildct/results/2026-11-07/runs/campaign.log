@@ -25,3 +25,11 @@
 == H52w lock taken 2026-11-07T04:03:54Z
 == H52w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h52w 2026-11-07T04:03:54Z
 == H52w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T04:05:00Z
+== H18w waiting for the lock 2026-11-07T04:22:23Z
+== H18w lock taken 2026-11-07T04:22:23Z
+== H18w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h18w 2026-11-07T04:22:24Z
+== H18w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T04:26:30Z
+== H25w waiting for the lock 2026-11-07T05:18:20Z
+== H25w lock taken 2026-11-07T05:18:20Z
+== H25w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h25w 2026-11-07T05:18:20Z
+== H25w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T05:36:58Z

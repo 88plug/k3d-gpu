@@ -17,7 +17,7 @@ the level's full load. The arm-level check is amendment 27 (load.matched_a27) ov
 pairs' pre-windows. bg_cpu, package W and throttle during the attempt are reported, never
 gated.
 
-Load rule L3 (H50, H50o, H53, H62; EXPERIMENTS.md "Crescent amendment A3"): the same
+Load rule L3 (H50, H50o, H53, H62, H62r; EXPERIMENTS.md "Crescent amendment A3"): the same
 pre-windows, no match filter. Every complete pair enters the statistic; a balance gate (a
 sign-flip test of arm on each pre covariate, p < 0.01 gates) replaces it; a two-regressor
 adjustment and L2's matched subset are reported, never gated. The arm order of pair j is drawn
@@ -538,16 +538,17 @@ def boot_share(d, pred, boot=stats.BOOT, seed=stats.SEED, stat=None):
 # Rule L3 rows: the seed of their arm order, fixed in the pre-registration (amendment A3).
 ORDER_SEEDS = {"H50": "H50-crescent-2026-10-20", "H50o": "H50o-crescent-2026-10-20",
                "H53": "H53-crescent-2026-10-20", "H62": "H62-crescent-2026-10-29",
-               "H58": "H58-crescent-2026-11-01"}
+               "H58": "H58-crescent-2026-11-01", "H62r": "H62r-crescent-2026-11-06"}
 
 # Hypothesis id -> (design, load rule). H47b and H49b are H47 and H49 under rule L2; H50 is
 # H49b's design on the Xeon 6741P, H50o the same with arm B3 (EXPERIMENTS.md "H50-H52 pre-registration");
 # H53 the H49 statistic over solo-hold block pairs on the Arc Pro B70s (solo.py; block-level verdict, "H53 pre-registration");
 # H62 H50's design with arm B5, Intel's EAS default, each server in a KVM guest ("H62 pre-registration");
-# H58 one solo hold of arm Z, the zero-touch agent, for its clause (c) ("H58 amendment R1").
+# H58 one solo hold of arm Z, the zero-touch agent, for its clause (c) ("H58 amendment R1");
+# H62r H62's design with B5 at the GA tags ("H62r pre-registration").
 DESIGNS = {"H47": ("H47", "L1"), "H49": ("H49", "L1"), "H47b": ("H47", "L2"), "H49b": ("H49", "L2"),
            "H50": ("H49", "L3"), "H50o": ("H49", "L3"), "H53": ("H49", "L3"), "H62": ("H49", "L3"),
-           "H58": ("H49", "L3")}
+           "H58": ("H49", "L3"), "H62r": ("H49", "L3")}
 
 
 # The ledger a rule-L3 row must be pre-registered in before any of its holds runs.

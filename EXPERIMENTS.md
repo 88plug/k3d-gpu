@@ -69,6 +69,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H50o | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) H50's comparison with arm B3, EAT's own OVMS chart (`core/helm-charts/ovms` at release-1.0.3-hotfix, stock values, `openvino/model_server` 2025.4, the closest OpenVINO/ model it pulls, `OpenVINO/Qwen3-4B-int4-ov`) instead of B1: A1 delivers far more B24 tasks within budget than B3. With H50 it splits B1 -> A1 into EAT switching its own engine (B1 -> B3) and what k3d-gpu adds on top (B3 -> A1). | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. B3's stock graph has no tool parser (the chart's `ovms --pull` writes none) and its model reasons by default, so its tool calls arrive as text: B3 within-budget success <= 0.10 (0.7), paired A1 - B3 >= +60 points (0.65). Pair yield: a B3 attempt should end within 30-90 s (a failed tool call or a reasoned text answer), so a 40-min hold should run 15-25 pairs and 24 pairs fit 2-3 holds; L2 passes (0.6), so SUPPORTED (0.5), INCONCLUSIVE (0.45). | As H50 with arm B = B3 (same pairs, gates, thresholds, statistic, cluster per hold `k3dgpu-e-h50o`); holds of at most 40 min until 24 pairs or 6 holds. The B1 -> B3 and B3 -> A1 splits are described from the two rows' matched pairs, never gated. `bench/eatflow/crescent/pairs-hold.sh H50o <n>`, `agentbench pairs-report --hyp H50o --arm-a A1 --arm-b B3`. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). Analysis rule L3 from [amendment A3](#crescent-amendment-a3-analysis-rule-l3-for-the-crescent-pairs-rows-2026-10-20). B3 is unchanged under [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29) (EAT release-1.1.0's OVMS chart renders the same objects); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); H50o's deploy commit, B3's records and its wiring smoke per [H50o amendment O1](#h50o-amendment-o1-deploy-commit-b3s-records-and-a-b3-wiring-smoke-2026-10-29). Result ([H50o run](#h50o-run-xeon-6741p-2026-10-29)): B3 was not ready in hold 1, so under M1's rule H50o runs no further hold and no pair ran (1 of the 6 permitted holds). On k3d, B3's PVC bound, its pod was scheduled and its init container pulled `OpenVINO/gemma-4-26b-a4b-it-int4-ov` at `4e5885c3` (every file equal to the Hub's), but OVMS 2025.4's server failed on each of its 7 starts, going into CrashLoopBackOff; the last start's recorded exit is 139 (SIGSEGV), a second into loading the model. The same server in a plain container, outside k3d, on the same revision, exited 139 the same way with and without the chart's limits. Not deliverable: EAT's OVMS chart as shipped does not serve this model. | INCONCLUSIVE |
 | H51 | (Model, arms and sampling superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20): Gemma 4 26B-A4B QAT.) Graded agents per box on the Xeon 6741P: H45's ramp, gates and scoring (B15-RO, typical load, 300 s steps, pooled p95 turn <= 10 s, success >= the arm's N=1 success - 10 points, errors <= 1%, >= 60 window requests), extended to N=16, for A1 and B1. | Superseded by [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20), which restates the predictions; as first written: Written 2026-10-20, before any measurement. A1 in [1, 8] (0.5). B1 in [0, 4] (0.5). B1 <= A1 (0.55). | H45's `apb` runner and scorer (`apb-score --hyp H51`, ramp 1, 2, 4, 8, 16), one fresh cluster per hold, at most 4 holds of at most 40 min. A prediction holds when the arm's bracket lies inside its range and is refuted when it lies outside; B1 <= A1 is decided only on matched load. REFUTED when any prediction is refuted, SUPPORTED when all three hold, else INCONCLUSIVE. Runs only if H50's holds end within their cap. Model and predictions from [amendment M1](#crescent-amendment-m1-gemma-4-26b-a4b-qat-on-the-cpu-rows-2026-10-20). B1 as H50, from [amendment E1](#crescent-amendment-e1-eat-stock-is-release-110-for-h50-h50o-and-h51-2026-10-29); node image, deploy commit and order per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); deploy commit, M1's ranges in the scorer, one hold per arm and the wiring smokes per [H51 amendment S1](#h51-amendment-s1-deploy-commit-scorer-ranges-ramp-per-hold-and-wiring-smokes-2026-10-29). Result ([H51 run](#h51-run-xeon-6741p-2026-10-29)): one hold per arm, 2 of the 4 permitted, none VOID. Both arms failed N=1. A1: 65 window requests, turn p95 10.41 s against the 10 s SLO, success 30/32. B1: 58 window requests (under 60), p95 11.52 s, success 27/29. Agents per box A1 0, outside its predicted [1, 4], so REFUTED. B1's 0 lies inside [0, 4], and B1 <= A1 holds on matched load (0 <= 0). | REFUTED |
 | H62 | Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0-rc.1 (`5c27fb3`) installing EAT 2.0 (`release-2.0.0` `036b662`) and enterprise-inference `release-1.1` (`170eb3a`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-10-29, before any H62 step and after H50 (A1 19/24, B1 21/24) and H51 were known. A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62 pre-registration](#h62-pre-registration-k3d-gpu-against-intels-new-default-eas-with-eat-20-on-the-xeon-6741p-2026-10-29): H50's design, statistic, gates and verdict rule (rule L3, amendment A3, seed `H62-crescent-2026-10-29`), two KVM guests on crescent (VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5), the harness's LiteLLM per arm on the host, holds of at most 40 min until 24 pairs or 8 holds, each hold restarting both serving pods. Setup and wiring-smoke gates (memory, disk, AMX in each guest, NFD label, B5's weights equal to the QAT checkpoint, EAS's own `validate` and gateway check) come before hold 1. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62/campaign.sh`; `agentbench pairs-report --hyp H62 --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release at v1.2.0 or later or an EAT release at 2.0.0 or later is tagged (`bench/h62/upstream.sh`). Mechanics per [H62 amendment V1](#h62-amendment-v1-the-wiring-smokes-eas-check-without-the-rest-of-260-2026-11-01) (the smoke's EAS check), [V2](#h62-amendment-v2-eass-configure-answered-on-a-terminal-2026-11-01) (configure on a terminal), [V3](#h62-amendment-v3-d2-reads-the-catalogs-commented-name-lines-2026-11-01) (D2's catalog parse) and [V4](#h62-amendment-v4-the-clusters-state-is-recorded-when-b5s-install-fails-2026-11-01) (records on an install failure; the last setup attempt). Result ([H62 run](#h62-run-xeon-6741p-2026-11-01)): no hold ran, 0 of the 8 permitted, and no smoke ran. A1 served in its guest within its 45 min ceiling (`guest-a.sh` done at 35.7 and 34.7 min). Intel's install of B5 failed twice at the same step, inside its 120 min ceiling: EAT's sandbox-router could not be scheduled ("Insufficient cpu") because enterprise-inference's `cpu: auto` had sized gemma-4-26b to 76 of the node's 95.4 allocatable CPUs, beside Qwen3Guard's 8 and the platform's requests, which left 0.25 CPU for the router's 0.5. B5 is not deliverable in its guest, so H62 is INCONCLUSIVE by amendment V4's rule. | INCONCLUSIVE |
+| H62r | H62's hypothesis, verbatim but for B5's release identifiers (the GA tags): Against Intel's new default. On the Xeon 6741P, inside EAT's banking flow (B24) with Gemma 4 26B-A4B on its QAT weights, the k3d-gpu CPU stack A1 (H50's A1 unchanged: `agent manifest`, OVMS 2026.4.1 int4 on the snapped QAT IR, CPU, no draft) delivers far more tasks within the 120 s turn budget than B5, Intel's documented single-node default for its agent toolkit: EAS v1.2.0 (`a051f00`) installing EAT 2.0 (`release-2.0.0` `7b827e2`) and enterprise-inference `v1.1.0` (`d035b1e`) with Kubespray onto one node, serving its catalog entry `gemma-4-26b` (vLLM CPU v0.28.0 on KServe, NRI balloons) on the same QAT weights. Each stack runs in its own KVM guest of one shape on the same host; both are live in one hold, interleaved. Deviations from stock are named (D1-D4; D4: the harness reaches B5's workload Service, not EAS's LiteLLM gateway and guardrail). A stack-vs-stack claim (amendment 16). | Written 2026-11-06, before any H62r step, after H62 (INCONCLUSIVE: no hold ran, B5's install not deliverable in its guest) was known. H62's predictions, copied verbatim and not tuned: A1 within-budget success >= 0.70 (0.65). B5 >= 0.70 (0.6). Paired A1 - B5 in [-0.20, +0.15] (0.6). Balance gate passes (0.9). REFUTED (0.6), INCONCLUSIVE (0.35: mostly B5 not deliverable in its guest within 120 min, a failed wiring smoke or a gate), SUPPORTED (0.05). Not gated: median attempt A1/B5 <= 0.85 (0.5); A1's median attempt in its guest over H50's 8.0 s on the host in [1.0, 1.3] (0.6). | [H62r pre-registration](#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06): H62's design, statistic, gates, caps, budget and verdict rule, unchanged (rule L3, amendment A3, its own seed `H62r-crescent-2026-11-06`; VM a 96 vCPU and 96 GiB for A1, VM b 96 vCPU and 192 GiB for B5; the harness's LiteLLM per arm on the host; holds of at most 40 min until 24 pairs or 8 holds, each restarting both serving pods; VM a's setup 45 min and VM b's install 120 min). B5 at the GA tags: EAS `v1.2.0`, whose layer manifest names enterprise-inference `v1.1.0` and EAT `release-2.0.0` by commit itself, so D1 is a check. From H62's commits to these, only docs, `VERSION`, the layer manifests and enterprise-inference's LiteLLM (v1.84.0) changed. Mechanics for H62's failure, registered before any measurement: EAS's topology probe counts the comma fields of cpu0's `thread_siblings_list`, reads the guest's adjacent pair (`0-1`) as one thread per core and falls back to its `standard` reservation (12 CPUs), so `cpu: auto` gave gemma-4-26b 96 - 12 - 8 = 76 CPUs and starved EAT's sandbox router; on crescent's host (`0,48`) the probe reads two and reserves the 48 siblings. D3's sibling read: when EAS's probe reads one thread per core where the guest kernel lists two, `nri_reserved_cpu_list` (EAS's documented setting in `global_config.yaml`) names the guest's 48 sibling vCPUs, the reservation EAS's default `siblings` profile makes on crescent's host; expected, not gated, gemma-4-26b at 40 CPUs. A1's render must carry H50's OVMS image. At most 3 setup attempts. SUPPORTED: paired difference CI lower bound >= +30 points and A1 >= 0.6, with every gate passed. REFUTED: CI upper bound < +30 points. Otherwise INCONCLUSIVE. `bench/h62r/campaign.sh`; `agentbench pairs-report --hyp H62r --arm-a A1 --arm-b B5`. Re-run as a new row when an EAS release after v1.2.0 or an EAT release after `release-2.0.0` is tagged (`bench/h62r/upstream.sh`). | PENDING |
 | H52 | A plain `k3d-gpu up` (no flags, the auto-adapt default) on the Xeon 6741P host as found detects and enables every engine actually present and advertises each usable one to the scheduler, with nothing missing and nothing phantom; engines present but not configured on the host are named, not advertised. | Written 2026-10-20 from an inventory read from sysfs, lspci and CPUID, not from k3d-gpu. 4 x Arc Pro B70 (xe) as `gpu.intel.com/xe: 4`; AMX TILE, BF16, INT8, FP16 and 14 AVX-512/VNNI labels; no hybrid, NUMA, NVIDIA, Gaudi or NPU objects; DSA, IAA and QAT named as present but unconfigured (0.4: `up` may not name them). | The table in [H50-H52 pre-registration](#h50-h52-pre-registration-the-xeon-6741p-2026-10-20): `k3d-gpu doctor`, `K3D_GPU_CLUSTER=k3dgpu-h52 k3d-gpu up`, `kubectl get node -o json`, `k3d-gpu test`, and one enumeration pod per B70. SUPPORTED: every row matches. REFUTED: any row does not. Run 2026-10-20 ([H52 run](#h52-run-xeon-6741p-2026-10-20)): the four B70s (`gpu.intel.com/xe: 4`, `xmx=true`), AMX (TILE, BF16, INT8, FP16) and all 14 AVX-512/VNNI labels detected and reached pods, nothing phantom; but no media engine label on `xe`, and `up` does not name the unconfigured DSA, IAA and QAT (`doctor` does). | REFUTED |
 | H52b | After `k3d-gpu host-setup --apply` configures the host's DSA, IAA and QAT (the fix that adds that path, merged first), a plain `k3d-gpu up` also advertises them, and each one reaches a pod; the host is then restored exactly. | Written 2026-10-20, before the fix exists. DSA, IAA and QAT allocatable > 0, each at the count host-setup reports configuring; their test pods see `/dev/dsa`, `/dev/iax`, `/dev/vfio` (0.6). The other rows read as H52's expected table, media labels included ([amendment D1](#h52-amendment-d1-the-fixes-and-h52b-2026-10-20)). | Runs after H52, once the host-setup fix is merged; same procedure plus `host-setup --apply` before `up` and its printed revert after. SUPPORTED: the three engines advertised and reached, the H52 rows unchanged, and the host inventory read back equal to the one taken before. REFUTED: any of these fails. The host-setup command (`--apply --with-kernel-wqs`), the plan read first, the counts, the plain `up`'s node image and the revert per [amendment D2](#h52-amendment-d2-h52bs-host-setup-step-on-crescent-2026-10-29); the runner and deploy commit per [amendment D3](#h52-amendment-d3-h52bs-runner-and-deploy-commit-2026-10-29). Result ([H52b run](#h52b-run-xeon-6741p-2026-10-29)): one hold at k3d-gpu 0.1.79; the plan passed D2's gate (8 commands) and applied. DSA advertised 3 of the 3 configured work queues and its pod saw `/dev/dsa`; IAA got no work queue and no resource (as D2 item 4 disclosed); QAT got 48 VFs, but its plugin crash-looped and advertised none; `gpu.intel.com/xe` read 2, not 4: the serving pairs hold about half the VRAM of all four cards, and `up`'s busy-card filter (half the VRAM) left out the two just over half (16.1, 16.2 GiB) and kept the two just under it (15.4, 15.5 GiB), which the pairs also hold, so two enumeration pods ran, not four. Media labels (`vcs` 2, `vecs` 2), AMX, the 14 AVX-512/VNNI labels, CPU 96 and no other vendor read as expected. The third inventory equals the first. Three clauses fail, so REFUTED. | REFUTED |
 | H53 | Inside EAT's banking flow on the Arc Pro B70s with Qwen3.8-27B (thinking off), k3d-gpu's own GPU choice AG (OVMS int4 on one card, `agent manifest`, auto device) delivers far more B24 tasks within the 120 s turn budget than B2, "EAT PR #21 nearest profile (Qwen3.6-27B) on Qwen3.8 weights, fp16" (vLLM XPU v0.28.0, TP 4). A stack-vs-stack claim. | Written 2026-10-20, before any H53 measurement. AG >= 0.70 (0.6); B2 boots by ladder rung (b) (0.6); B2 >= 0.50 (0.5); block mean AG - B2 in [-0.15, +0.30] (0.5). INCONCLUSIVE (0.6), REFUTED (0.3), SUPPORTED (0.1). | Solo holds in the order AG, B2, B2, AG, AG, B2 (up to 8), blocks = hold pairs (2k-1, 2k), block-level inference: mean of per-block d over >= 3 counted blocks, t-interval. SUPPORTED: lower bound >= +30 points and AG >= 0.6, L3 gates passed. REFUTED: upper bound < +30 points. Else INCONCLUSIVE. `bench/eatflow/crescent/solo-hold.sh N ARM`, `agentbench solo-report --hyp H53 --arm-a AG --arm-b B2`. See [H53 pre-registration](#h53-pre-registration-eats-banking-flow-on-arc-pro-b70-2026-10-20). Node image, deploy commit, order and the restore check per [amendment E2](#crescent-amendment-e2-pins-deploy-commits-order-and-the-restore-check-for-the-pending-crescent-rows-2026-10-29); the solo runner fix, setup, the wiring smokes, the window and its futility stop per [H53 amendment R1](#h53-amendment-r1-the-solo-runner-fix-setup-wiring-smokes-and-the-gpu-window-2026-10-30); tools per [amendment E4](#crescent-amendment-e4-kubectl-v1372-helm-v431-and-uv-0136-in-the-crescent-workspace-2026-10-29). Result ([H53 run](#h53-run-arc-pro-b70-2026-10-30)): no hold ran, 0 of the 8 permitted. AG's wiring smoke passed (OVMS on one card, warm-up answered). B2 needed rung (b) (`setvars.sh` is not in the v0.28.0 image), then failed in its first cross-card collective: oneCCL opens `/dev/dri/by-path`, which the k3d node and pod lack. No further rung applies, so B2 is not deliverable and H53 is INCONCLUSIVE by its pre-registered rule. | INCONCLUSIVE |
@@ -85,8 +86,8 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H57dp | On the i9-13900T P-cores under the shared host's own load, llama.cpp with Gemma 4 QAT Q4_0 and the QAT MTP drafter decodes faster unpinned (8 threads, no `-C`/`--cpu-strict`) than strictly pinned one thread per physical P-core: N=1 ratio >= 1.10. | Written 2026-10-21, after H57d, before any H57dp measurement. SUPPORTED (0.5); Ld-mtp-u/Ld-mtp in [1.0, 1.8] (0.6). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): 2 holds of at most 75 min, H57d's protocol. SUPPORTED: pooled median ratio >= 1.10, CI lower bound > 1.0, faster in both holds. REFUTED: CI upper bound < 1.10. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched, foreign P-core load spread 2.97 > 2.0 CPU-s/s (Od 0.45, Ld-mtp 3.42, Ld-mtp-u 3.11), so the scorer stops before the statistic. Not gated: Ld-mtp-u/Ld-mtp 1.108 (95% CI 1.072-1.142), faster in both holds (1.108, 1.100); Ld-mtp-u 13.39, Ld-mtp 12.09 tok/s pooled N=1; affinity as registered. | INCONCLUSIVE |
 | H57de | H57da with the unpinned llama.cpp arm: no arm decodes Gemma 4 QAT at N=1 5% or more faster than k3d-gpu's OVMS pick Od on the i9-13900T P-cores. | Written 2026-10-21, before any H57de measurement. REFUTED (0.5); Ld-mtp-u/Od in [1.0, 1.6] (0.5). | [H57dp pre-registration](#h57dp-pre-registration-llamacpp-thread-pinning-on-the-busy-client-i9-13900t-2026-10-21): same holds as H57dp. REFUTED: Ld-mtp-u/Od CI lower bound >= 1.05 and faster in both holds. SUPPORTED: CI upper bound < 1.05. Else INCONCLUSIVE, or when the load gate fails. Run 2026-10-29 ([H57dp run](#h57dp-run-i9-13900t-2026-10-29)): load unmatched (the same gate, spread 2.97 > 2.0). Od also ran without the P-core balloon (cpuset 0-15,17-31: the runner's `agent manifest` call named no cluster, so after #183 it missed the hold's kube context), so it was not the registered Od. Not gated: Ld-mtp-u/Od 1.369 (1.345-1.396), Od 9.78 tok/s pooled N=1. | INCONCLUSIVE |
 | H52w | A plain `k3d-gpu up` on wildct, a client Raptor Lake host (i7-13700, 8 P-cores + 8 E-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, one NUMA node), with only the box owner's GPU opt-out (`K3D_GPU_VENDORS=auto,-nvidia,-intel`), detects every CPU engine actually present and advertises each usable one, with nothing missing and nothing phantom; the two NVIDIA cards and the Intel iGPU are named as detected and opted out, and nothing in the cluster mounts or advertises a GPU. | Written 2026-10-20 from an inventory read from sysfs, /proc and PCI sysfs, not from k3d-gpu. Hybrid active, balloons policy running, the P-core test pod inside CPUs 0-15 and the E-core one inside 16-23 (0.8); launcher ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT, CETSS, and no AVX512 or AMX label from any source (0.85); no NUMA, DSA, IAA, QAT, NPU or Gaudi object (0.9); `up` names nvidia and intel as opted out, no GPU resource, no GPU plugin pod, no pod mounting `/dev/dri` or `/dev/nvidia*` (0.85, given the opt-out fix). SUPPORTED (0.6), REFUTED (0.4). | The table in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): `bench/wildct/h52w.sh` under `bench/wildct/hold.sh` (inventory, `detect` as found, `doctor`, `up`, node object, pod GPU scan, `k3d-gpu test`, `down`, inventory again), the installed release. SUPPORTED: every row matches. REFUTED: any row does not. Result ([H52w run](#h52w-run-wildct-i7-13700-2026-11-07)): one hold on release 0.1.89 (rule W7's release for the campaign). `up` took 32 s, named nvidia and intel as opted out and printed `Accelerators: hybrid`; the balloons policy pod Running, `k3d-gpu test`'s P-core pod on CPU 0 and its E-core pod on CPU 17; the launcher's ISA labels exactly AVXVNNI, VAES, GFNI, SHA, CETIBT and CETSS, no AVX512 or AMX label from any source; no NUMA label; allocatable cpu, ephemeral-storage, hugepages, memory and pods only; no GPU plugin pod, no `/dev` hostPath and no GPU resource (`GPU-SCAN clean`); the node container `gpus=[]`; the inventory unchanged. Every row matches. | SUPPORTED |
-| H18w | H18's hypothesis on wildct: `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. A replication: H18's runner, image source (the release node image) and parts (a), (b), (c). | Written 2026-10-20, before any H18w measurement. Every run meets (a), (b) and (c) (0.8): sandbox `Cpus_allowed_list` inside 16-23; TCP to `100.66.38.121:22` (tailscale CGNAT) and `192.168.8.238:22` (host LAN) refused from the sandbox with the drop-log counter > 0, connected from the control pod; `pip install --user tomli_w==1.2.0` exits 0. | H18's `bench/sandbox_round.sh`, n = 3 runs in one hold, unchanged except as listed in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): cluster `k3dgpu-w-sbx`, the GPU opt-out, rule W3, the release node image, RAPL through rule W4. Outcome table: H18's. | PENDING |
-| H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). | PENDING |
+| H18w | H18's hypothesis on wildct: `k3d-gpu sandbox up` keeps agent sandboxes on the E-cores and inside a default-deny egress policy on k3d (kube-router), while public egress (PyPI) still works. A replication: H18's runner, image source (the release node image) and parts (a), (b), (c). | Written 2026-10-20, before any H18w measurement. Every run meets (a), (b) and (c) (0.8): sandbox `Cpus_allowed_list` inside 16-23; TCP to `100.66.38.121:22` (tailscale CGNAT) and `192.168.8.238:22` (host LAN) refused from the sandbox with the drop-log counter > 0, connected from the control pod; `pip install --user tomli_w==1.2.0` exits 0. | H18's `bench/sandbox_round.sh`, n = 3 runs in one hold, unchanged except as listed in [the wildct pre-registration](#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20): cluster `k3dgpu-w-sbx`, the GPU opt-out, rule W3, the release node image, RAPL through rule W4. Outcome table: H18's. Result ([H18w run](#h18w-run-wildct-i7-13700-2026-11-07)): one hold of 3 runs on release 0.1.89 (rule W7's release for the campaign), a fresh cluster each. In every run `sandbox up` exited 0 with the warm pool's `readyReplicas` 1 and the sandbox pod on CPU 17, inside the E-cores 16-23; from the sandbox, TCP to `100.66.38.121:22` and to `192.168.8.238:22` was refused in 0.11-0.12 s with 2 packets on the policy's drop-log rule, and from the control pod both connected; `pypi.org` resolved, `pypi.org:443` connected and `pip install --user tomli_w==1.2.0` gave `pip_rc=0`, with the import reading `/tmp/.local`. Every run meets (a), (b) and (c). | SUPPORTED |
+| H25w | H25's hypothesis (T part) on wildct: agents that send a byte-identical system prompt and tools to one OVMS CPU server reuse one prefix KV, so an added agent's first chunk arrives at least 4x sooner with the shipping prefix caching on than with `--enable_prefix_caching=false`. A replication: original model, prefix shape, probe, scorer and thresholds. | Written 2026-10-20, before any H25w measurement. Added-agent median TTFT OFF 10 s (7-15), ON 1.0 s (0.6-1.6), ratio 10x (6-14), CI lower bound >= 4x; c/OFF >= 0.8. SUPPORTED 0.8. | H25's `bench/shared-prefix/run.sh` and `probe.py score` (A3 first-chunk TTFT, A4 amendment-27 load rule), ON OFF interleaved 3+3 rounds at `typical`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h25`, the GPU opt-out, rule W2 (load on E-cores 20-23 only), W3, W4, new seeds (`SEED_BASE=2560`). Both arms keep the CPU Fast Draft the line registers through `K3D_GPU_AGENT_DRAFT=CPU`, since the launcher's default no longer drafts on a CPU class no H34-family row measured: [wildct amendment R7](#wildct-amendment-r7-h25ws-cpu-fast-draft-2026-11-07) (2026-11-07, before any H25w hold). Result ([H25w run](#h25w-run-wildct-i7-13700-2026-11-07)): one hold on release 0.1.89 (rule W7's release for the campaign), load MATCHED (amendment 27), no round void; round 6 (OFF) was cut by the level's 18:30 cap, so OFF has 2 rounds (n = 10) and ON 3 (n = 15). Added agent's first chunk 2.198 s ON vs 31.437 s OFF (14.30x, CI 13.38-14.89), c/OFF 1.00, a1 ON/OFF 0.97, every round pair >= 4x: T SUPPORTED. Outside the point ranges: OFF and ON took 2.9x and 2.2x H25 run 4's times on the i9, the package at 33.6-36.3 W (PL1 35 W). | SUPPORTED |
 | H28w | H28's hypothesis on wildct: N = 8 agent pods that mmap one 1 GiB model through an image volume share one page-cache copy and become ready in at most half the time of pods that copy it into an emptyDir. A replication (H28 has no model; the 1 GiB blob is kept). | Written 2026-10-20, before any H28w measurement. Memory parts hold (0.95): T PSS <= 160 MiB per pod, model page cache about 1.0x size (T) vs about 9x (C). Time part: T/C round-median ready 0.5 (0.4-0.65), against H28's 0.47 on the i9. SUPPORTED 0.45, REFUTED (time part) 0.4, INCONCLUSIVE or not run (disk) 0.15. | H28's `bench/zero-copy-models/probe.sh` (A1, A2), arms C T T C C T plus the unscored warm-up, `typical` only, scored by `bench/zero-copy-models/score.py`, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h28`, node on the P-cores (`NODE_CPUS=0-15`), W2, W3 (passed to the plain `k3d cluster create`), and a disk gate (W6). | PENDING |
 | H34w | H34's hypothesis on wildct: same-engine CPU Fast Draft (OVMS 2026.4.1, `OpenVINO/Qwen3-0.6B-int4-ov` draft on the CPU) beats the `OpenVINO/Qwen3-4B-int4-ov` target alone on single-stream decode, both on the 16-CPU P-core balloon, under matched background load. A replication: original models, runner, scorer and rule. | Written 2026-10-20, before any H34w measurement. At `typical`: median paired B/A decode tok/s 1.35 (1.15-1.6) and median paired B/A package J/token 0.76 (0.6-0.92). SUPPORTED by H34's rule at 0.6, REFUTED 0.25, INCONCLUSIVE 0.15. | H34's `bench/hetero-spec/h34.sh` and `h34.py`, n = 12 pairs A B / B A, 5 s load window per request, `typical` only, unchanged except as listed in the wildct pre-registration: cluster `k3dgpu-w-h34`, the GPU opt-out in place of H34's `intel,hybrid`, W2, W3, W4. | PENDING |
 | H57wa | H57da's hypothesis on wildct (i7-13700, the 16 P-core CPUs, AVX2 and AVX-VNNI, no AVX-512, no AMX): with the Gemma 4 26B-A4B QAT family, k3d-gpu's own CPU pick Od (`agent manifest` auto on the P-cores: OVMS 2026.4.1, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`) is the fastest single-stream arm: no other gate-passing arm (llama.cpp with Google's QAT Q4_0 GGUF, with or without the QAT MTP drafter) decodes at N=1 5% or more faster. A cross-host replication of H57da on a second AMX-less client. | Written 2026-10-20, before any H57d or H57w measurement. N=1 median decode tok/s: Od in [7, 18] (0.5); Ld in [10, 26] (0.5); Ld/Od in [1.1, 1.8] (0.5); every arm's GSM8K 0-49 score >= 0.80 (0.6). REFUTED (0.55), SUPPORTED (0.25), INCONCLUSIVE (0.2). Not gated: TTFT on a 1,000-token prompt, aggregate tok/s at N=4, package J/token. | H57da's protocol, runner, statistic and outcome rules (the H57d pre-registration and its runner amendment), unchanged except as listed in the wildct pre-registration: H57d's runner (amendment R1) with the host knobs listed there: clusters `k3dgpu-w-h57d-<hold>`, the GPU opt-out in place of `K3D_GPU_VENDORS=hybrid`, W2-W6, hold-start `load1` <= 12, models downloaded on wildct at H57d's revisions, at most 5 holds of at most 75 min. Od's render names the hold's cluster: [H57d amendment R2](#h57d-amendment-r2-ods-render-names-the-holds-cluster-2026-10-29) (2026-10-29, before any H57w hold). | PENDING |
@@ -5146,6 +5147,278 @@ node-config-hash labels, which are hashes.
 default inside EAT's banking flow. On this guest shape that default does not finish installing,
 so the row is not decided. No new row is pre-registered here.
 
+### H62r pre-registration: H62 at the GA tags, EAS v1.2.0 with EAT 2.0, on the Xeon 6741P (2026-11-06)
+
+Written 2026-11-06 and committed with its runner (`bench/h62r/`) before any H62r step. No guest
+exists on crescent, nothing has been installed there for H62r, and nothing below is a measurement
+of either arm. Crescent was only read, over read-only ssh, at 2026-11-07T03:36Z (its CPU sibling
+lists). The hypothesis and predictions in the row are H62's, copied verbatim (B5's release
+identifiers aside) and not tuned; they are never edited. A protocol change is a dated amendment,
+merged before the data it governs.
+
+**Why.**
+
+- H62's pre-registration names this row for an EAS release at v1.2.0 or later or an EAT release
+  at 2.0.0 or later: "A new row, H62r, is pre-registered: the same design with B5 at the tagged
+  release (its release notes' component table)." H62 ended at setup with no hold (INCONCLUSIVE,
+  not deliverable), so it keeps its verdict and its records stay as they are.
+- The trigger has fired. `bench/h62/upstream.sh`, run 2026-11-07T04:06Z: `fired: eas v1.2.0, eat
+  release-2.0.0`.
+- H62's question stands at the release Intel now ships: does k3d-gpu's CPU stack deliver far more
+  banking tasks within budget than Intel's documented single-node default for its agent toolkit?
+
+**Heads, read 2026-11-06 (`gh api`, `git ls-remote`, the release pages, the registries).**
+
+- EAS: `v1.2.0` is a lightweight tag on `a051f00fcb2dd473fe763610471cd509db82c433` ("Update rag's
+  revs (#108)", 2026-11-06T11:15:59Z). Its release (2026-11-06T13:53:39Z) is not a pre-release.
+  `release-1.2` is at the same commit; main is `35be51f8`. `VERSION` reads 1.2.0. A
+  `v1.2.0-rc.2` tag (`328b2322`) also exists and is not used.
+- The EAS release notes' solution table: enterprise-agent-toolkit v2.0.0 (`release-2.0.0`),
+  ai-inference v1.1.0 and ai-erag v3.0.1. They give the install as `init agent-toolkit`, then
+  `install agent-toolkit`.
+- EAT: `release-2.0.0` is an annotated tag on `7b827e2d95cec826a20c7e3f5a30eb4818ed2992`
+  (release published 2026-11-06T06:05:17Z). Its release notes say to clone enterprise-ai-solutions
+  and follow `docs/single-node-deployment.md`, then init, install and validate. That guide still
+  clones `-b release-1.2` (line 19), which is `a051f00`.
+- enterprise-inference (EI): `v1.1.0` is an annotated tag on
+  `d035b1ef1981fbf5084ff05c9a337e620478bb87`, also the head of `release-1.1`.
+- The v1.2.0 layer manifest (`configs/repos/repos.agent-toolkit.yaml` lines 16 and 25) names both
+  commits itself: `rev: "d035b1ef..." # v1.1.0` and `rev: "7b827e2d..." # release-2.0.0`. EAS main's
+  manifest names the branches `main` and `agentic-toolkit-migration`, so an unpinned clone is not
+  the release.
+- What changed since H62's commits (`gh api repos/intel/<repo>/compare/<H62's>...<GA>`):
+  - EAS `5c27fb3`..`a051f00` (3 commits, 23 files): docs, `VERSION` and the layer manifests. The
+    installer and every role are unchanged. `configure` still refuses `--force` and still needs a
+    terminal (H62 amendment V2), and the topology probe and the reservation code are rc.1's.
+  - EAT `036b662`..`7b827e2` (4 commits, 17 files): docs only (the rename to "Intel® Agent
+    Toolkit"). `config.yaml` and `roles/agent_sandbox` are unchanged, so the sandbox router is
+    still the upstream manifest's 2 replicas at 250m CPU each, on the floating
+    `sandbox-router:latest-main` tag.
+  - EI `170eb3a`..`d035b1e` (2 commits, 21 files): docs, and LiteLLM moved to v1.84.0 (#53, a CVE
+    fix). `model_manager/` is unchanged: the `gemma-4-26b` entry (`cpu: auto`, 128Gi, vLLM CPU
+    `server_version` 0.28.0, the same args and env) and `nri_policy.py` are 170eb3a's byte for byte.
+- `google/gemma-4-26B-A4B-it-qat-q4_0-unquantized` is still at `f1e06dc5` and not gated.
+  `vllm/vllm-openai-cpu:v0.28.0` still serves `sha256:197354e6...`.
+
+**H62's failure, traced to its mechanism, from source at the GA tags.** These are the mechanics
+for enterprise-inference's `cpu: auto` starving EAT's sandbox router, registered before any
+measurement.
+
+1. EAS's NRI role reads each node's topology with `roles/nri_cpu_balloons/files/probe-node-topology.sh`.
+   Its threads per core is the number of comma fields in `cpu0/topology/thread_siblings_list`
+   (line 31: `awk -F, '{print NF}'`).
+2. Linux writes that list as a cpulist, with adjacent CPUs as a range. On crescent's host a core's
+   threads are `n` and `n+48`: cpu0 reads `0,48` and cpu1 `1,49` (read 2026-11-07T03:36Z), two
+   fields. QEMU numbers a guest's threads of one core next to each other, so in a guest of H62's
+   shape cpu0 and cpu1 are one core and the list reads `0-1`, one field.
+3. Reproduced on the desktop, not on crescent: `bench/h62r/topology-spike.sh` boots a KVM guest
+   with `-smp 96,sockets=1,cores=48,threads=2` (QEMU 10.2.1, `-cpu host`, kernel 6.6, no disk and no
+   network) and runs the probe fetched from EAS at `a051f00`. It printed `cpu1
+   thread_siblings_list=0-1`, `NRI_NUMA=1`, `NRI_LOGICAL=96`, `NRI_TPC=1` and `NRI_PHYSICAL=96`.
+   That matches H62's read of VM b (H62 run: `numa=1 physical_cpus=96 threads_per_core=1`).
+   Run again on 2026-11-07 with the probe's sibling line, it also printed `NRI_SIBLINGS` with all
+   96 vCPUs, `0,1,...,95`: the probe's sibling read (line 74) takes the first comma field of each
+   CPU's list as that core's lowest thread, and in the guest that field is the whole range `0-1`,
+   which matches no CPU id. On lists in the host's numbering (`0,48`, `1,49`, ...) the same read
+   gives `48,...,95` (the probe run on such a sysfs tree, not on crescent).
+4. With one thread per core, the default `siblings` profile of
+   `roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh` logs "SMT/Hyperthreading
+   disabled — no siblings to reserve" and falls back to `standard` (line 264): 12 reserved CPUs.
+   With two, it reserves every sibling, the higher thread of each core: on crescent's host
+   `48-95`, 48 CPUs. `gen-balloon-types.py` (line 71) documents that reservation as how the
+   balloons keep vLLM on physical cores.
+5. EI's `auto_cpu` (`model_manager/core/nri_policy.py` line 569) gives a TP 1 model one NUMA
+   node's capacity (`status.capacity.cpu` over the NUMA nodes), minus the reserved CPUs per NUMA
+   node, minus the CPU requests of pods already in balloons. It does not subtract pods outside the
+   balloons. In H62's guest that was 96 - 12 - 8 (Qwen3Guard) = 76. With the rest of the stack's
+   11.2 CPUs, 95.154 of 95.4 allocatable were requested, and 0.246 was left for the router's 0.5.
+6. With the reservation the host's numbering gives, the same arithmetic is 96 - 48 - 8 = 40. About
+   59.2 of 95.4 is then requested, and the router fits. This is Intel's own arithmetic on the
+   recorded requests, not a measurement. B5 cannot run on crescent's host to test it, because
+   Kubespray would remove Docker (H62 pre-registration).
+7. So H62's "not deliverable" came from the guest's numbering meeting the probe's comma count
+   (D3), with EAS's sizing code doing what it does on any node it reads that way. The GA tags
+   change neither the probe nor the sizing, so a stock install in the same guest is expected to
+   fail at the same step.
+
+**B5 at the GA tags.** Intel's documented single-node install in VM b, with deviations D1-D4
+only. The steps, in order (changes from H62 marked):
+
+1. The node kernel settings of EAT's `docs/prerequisites.md`, verbatim.
+2. `git clone -b v1.2.0`; the head must be `a051f00` (changed: H62 cloned `-b v1.2.0-rc.1`).
+3. D1, now a check (changed). `h62r.py eas-check` requires each layer's one rev line to name the
+   pinned commit and, in its comment, the pinned release. Nothing is rewritten.
+4. `./es_auto_installer.sh configure` on a new terminal that is sent `y` (H62 amendment V2).
+5. `init agent-toolkit`. The two cloned layers must be at `d035b1e` and `7b827e2`.
+6. The one documented edit (`llm_services_autodeploy_models: ["gemma-4-26b"]`), then D2.
+7. D3's sibling read (new, below).
+8. `install agent-toolkit`, with `HF_TOKEN` unset (recorded as set or unset).
+9. Wait for the gemma-4-26b workload pod to be Ready.
+
+Left at EAS's and EAT's defaults, as in H62: Kubespray onto localhost, NRI balloons with the
+`siblings` profile, Istio ambient, MetalLB, Envoy's AI gateway, observability, LiteLLM (now
+v1.84.0) with the content-safety guardrail and the hybrid router, Langfuse, Redis Stack, pgvector
+and agent-sandbox v0.5.0. `base_domain_name` stays `solutions.ai`.
+
+**Deviations from stock, named.** H62's D1-D4, with these changes.
+
+- **D1, commits: a check.** The GA manifest names the release commits itself (above), so D1
+  changes nothing in the file. It stays named because the runner refuses any other manifest.
+- **D2, weights:** unchanged.
+- **D3, the guest:** H62's guest shape, image and QEMU, unchanged (below), plus the sibling read.
+  - In VM b, after the edit and before the install, `guest-b.sh` runs EAS's own probe from the
+    clone (`probe.txt`) and reads every CPU's `thread_siblings_list` (`thread-siblings.txt`).
+  - `h62r.py sibling-read` compares them. When the probe and the kernel agree, nothing is set
+    and B5 is stock. When the probe reads one thread per core and the kernel lists two on every
+    core, the result is the higher thread of each core: in this guest the 48 odd vCPUs, `1,3,...,95`.
+    Anything else stops the setup for an amendment.
+  - `h62r.py reserve` writes that cpuset as `nri_reserved_cpu_list: "..."` into
+    `env/local/global_config.yaml`. It refuses the file when the key already holds another value.
+  - That key is EAS's documented operator setting (`docs/customize/nri_cpu_balloons.md`, section 2,
+    "Edit global_config.yaml": "Optional: pin reserved CPUs to a fixed cpuset"). The installer
+    passes `global_config.yaml` to every playbook as extra vars (`es_auto_installer.sh` line 1490).
+    The NRI role then skips its own computation and writes the cpuset into the node's
+    BalloonsPolicy (`roles/nri_cpu_balloons/tasks/install_advanced.yaml` line 50, "Use
+    operator-supplied reserved CPU list"). `nri_deployment_profile` stays `siblings`.
+  - The lean. The setting restores the reservation EAS makes on crescent's own numbering, so the
+    guest stops changing Intel's sizing. It does not tune B5 to a number. The cpuset is the set
+    EAS's probe defines as siblings ("the non-lowest thread of each physical core", its lines
+    16-17), read with the ranges expanded. It is not the probe's own `NRI_SIBLINGS`, which in this
+    guest names all 96 vCPUs (item 3 above). With the cpuset set, the role does not read that line:
+    only `compute_advanced_reserved_cpus.yaml` does, and `install_advanced.yaml` skips it.
+    Expected, not gated: `cpu: auto` renders gemma-4-26b at 40 CPUs, where H62's stock read
+    rendered 76 and left the stack undeliverable. A1 serves on 48 CPUs in its guest (`agent
+    manifest`'s count in H62's setup). The guests' vCPUs float over the host's CPUs, so the
+    guest's sibling split is not the host's; that is part of the VM tax, described for both arms.
+- **D4, the request path:** unchanged.
+
+**A1: H50's A1 unchanged.** The same guest steps and the same `agent manifest` command as H62 (no
+backend named), at the deploy commit. New check: the render must carry H50's OVMS image,
+`openvino/model_server:2026.4.1-gpu@sha256:a928903f...`, or the setup stops. Main has moved from
+k3d-gpu 0.1.83 (H62's deploy) to 0.1.89, and since H59 the fit's engine serves a model the fit
+sizes on this CPU class. The local IR is not sized (H62's records: "fit: no metadata"), so OVMS
+is expected to serve it.
+
+**Guests (D3).** H62's shape: KVM, `-cpu host`, 96 vCPUs as 1 socket of 48 cores with 2
+threads, unpinned, no hugepages; VM a 96 GiB, VM b 192 GiB; user-mode networking with each
+guest's ports on 127.0.0.1 only. Every guest pin was read again on 2026-11-06 and is still the
+current one: the Ubuntu 24.04 cloud image `release-20261017` (the newest noble release, sha256
+`04e8f246...6c94`, 621284352 bytes), `ubuntu:26.04@sha256:6a06111c...` (the tag's digest is
+unchanged), and `qemu-system-x86` 1:10.2.1+ds-1ubuntu3.3 and genisoimage 9:1.1.11-5 (the
+candidates in that image). The one exception is Docker CE in VM a, which moves to 5:29.9.3, its
+current patch release (a security release, 2026-11-03); containerd.io 2.4.2-3 is unchanged.
+Docker's apt key still carries `9DC85822...0EBFCD88`. The guests, ports and state are H62r's own:
+`h62r-vm-a` and `h62r-vm-b`, ssh 18842 and 18843, serve 18851 and 18852, `~/k3dgpu-bench/h62r`.
+
+**Harness, model, sampling, workload, design, statistic and verdict: H62's.**
+
+- The harness per arm on the host, the port-forwards to A1's `svc/ovms` and B5's
+  `gemma-4-26b-kserve-workload-svc:8000`, amendment M1's model and sampling (profile
+  `agent_gemma4`), B24 at N=1 under `typical` load, both arms live in one hold, interleaved pairs.
+- Rule L3 (amendment A3) with seed `H62r-crescent-2026-11-06`.
+- The settle gap and the 10 s pre-window, the balance gate, at least 16 complete pairs, at most 2
+  void pairs and the idle-arm check (at or under 0.5 CPU, read in the other arm's guest).
+- 120 s turn budget, 240 s task cap, H49b's outcome classes and grader.
+- Scorer: `agentbench pairs-report --hyp H62r --arm-a A1 --arm-b B5`, H50's banking scorer
+  unchanged (`pairs.DESIGNS["H62r"]` is `("H49", "L3")`).
+- **SUPPORTED** when the paired difference's 95% CI lower bound is at least +30 points and A1's
+  within-budget success is at least 0.6, with every gate passed. **REFUTED** when the CI's upper
+  bound is under +30 points. Otherwise **INCONCLUSIVE**, including a row that is not deliverable.
+- Reported, never gated: H62's list (median attempt and turn p95, paired J per attempt, the
+  period-balanced estimate and L2's matched subset, the serving covariate and each guest's
+  CPU-s/s, B5's rendered CPU request, cpuset, `nproc` and ISA per hold, and the VM tax by
+  `h62r.py vmtax`), plus the sizing records below.
+
+**Sizing records**, reported, never gated. In VM b: `probe.txt`, `thread-siblings.txt`,
+`d3-siblings.txt` and its diff, and the env files after the edit. After the install, whether it
+passed (`ok-*`) or failed (`fail-*`): the BalloonsPolicy CRs, every pod's CPU request and limit,
+`kubectl describe nodes` and the sandbox router's Deployment. A failed install also keeps H62
+amendment V4's records.
+
+**Holds, caps and gates.** H62's items 1-8, with these changes.
+
+- Deploy commit: one clean, detached checkout at `~/k3dgpu-bench/k3d-gpu-h62r`, at an
+  `origin/main` commit at or after this PR's merge. PR #260 merged on 2026-11-01, so there is no
+  run-branch condition. VM a gets the same commit (`git archive`), and every record names it.
+- Setup: at most 3 attempts in all. `campaign.sh` counts its starts in `attempts.txt` and
+  refuses a fourth before anything starts. It also refuses any start once a hold has run (its
+  holds number from 1, and the 8 holds are counted in all), and that refusal is not an attempt.
+  Between attempts, a dated amendment names the cause and the change. If the records trace a
+  failed install to stock B5 itself (EAS's or EAT's own sizing, images or defaults in this guest
+  with D3's sibling read), H62r is INCONCLUSIVE (not deliverable) with no further attempt, as H62
+  amendment V4 ruled. A router that is still not placed with the sibling read is that case.
+- Wiring smoke (`bench/h62r/smoke.sh`): `./es_auto_installer.sh validate agent-toolkit`, then
+  `integrations/eat/eat-check.sh` with `EAT_MODE=eas` through EAS's own gateway on `gemma-4-26b`
+  (#260's check, now on main, with `integrations/eas/eas-ready.py` beside it), both from the deploy
+  commit and recorded by sha256. Then one hold, `H62r-smoke`, with the pair-start guard past its
+  end. All of it must pass before hold 1. An earlier attempt's smoke records are moved aside first,
+  so none is overwritten and the warm-up count is this smoke's own.
+- Holds (`bench/h62r/pairs-hold.sh N` under `bench/eatflow/crescent/hold.sh`): at most 40 min each,
+  until 24 pairs or 8 holds, each restarting both serving pods with H62's 900 s readiness rule,
+  two not-deliverable holds in a row ending the row, the 600 s pair-start guard and the hold-start
+  rule.
+- One hold at a time on crescent (amendment E2 item 4; H56 forbids two unsliced holds at once). The
+  guests stay up from setup to teardown, and other rows run no hold in that window.
+
+**Risks, named before measuring.** H62's list, plus these.
+
+- The operator cpuset path has not run here. The NRI role still generates its balloon types from
+  the probe's read (96 CPUs, one thread per core), now beside a reserved cpuset of 48, and the
+  probe's records will list all 96 vCPUs as siblings (item 3 above). A failure there goes to the
+  setup bound above.
+- B5 runs vLLM on about 40 vCPUs, not 76. If B5 then misses the 120 s turn budget more often,
+  that is the result of Intel's sizing on this host's numbering, and it is reported with the
+  rendered request.
+- Another limit may wait after the router step, which H62 never passed. EAS's gateway now runs
+  LiteLLM v1.84.0; the smoke's check reads the guardrail's answers of v1.83.14 and v1.105.1.
+- The router image is EAT's floating staging tag; each hold records the pod's image ID.
+- The trigger can fire again during the run (below).
+
+**Re-run trigger.** `bench/h62r/upstream.sh` (`h62r.py trigger`) reads both repositories' tags.
+It fires on an EAS release tag after v1.2.0 (`vX.Y.Z`, not a release candidate) or an EAT release
+tag after `release-2.0.0` (`release-X.Y.Z`, `vX.Y.Z`, or the `-hotfix` form, including
+`release-2.0.0-hotfix`). On 2026-11-07T04:06Z it read `fired: none`. It runs before setup and
+before each hold, and its output goes into the records: `campaign.sh` runs it there (up to 3
+reads, 60 s apart) and writes each read to `upstream.txt`.
+
+- Fired or unreadable before setup: nothing starts, and no setup attempt is spent.
+- Fired before hold 1: a dated amendment re-pins B5 to the tagged release, by amendment E1's
+  logic. If the tag's components equal the pinned commits, the amendment only records that.
+  `campaign.sh` stops before hold 1 for it.
+- Unreadable before a hold: recorded as unreadable, and the hold runs.
+- Fired after hold 1: H62r's holds finish at these pins, and H62r keeps its verdict. A new row
+  is pre-registered for the tagged release.
+
+**Runner (this PR), with regression tests.**
+
+- `bench/h62r/` started as a copy of `bench/h62/`, which stays as it is (historical). The
+  differences: the pins (`h62r.py PINS`), the guests' names, ports, label, share tag and state
+  directory, D1 as a check (`eas-check`), D3's sibling read (`sibling-read`, `reserve`) and the
+  sizing records in `guest-b.sh`, A1's image check in `guest-a.sh`, main's EAS check in
+  `smoke.sh`, the setup bound and the trigger's reads in `campaign.sh`, and the trigger's
+  thresholds. `topology-spike.sh` is the spike of item 3 above.
+- `bench/eatflow/pairs.py`: `DESIGNS["H62r"] = ("H49", "L3")` and its order seed.
+  `bench/eatflow/live.sh`: `ARM=H62r` runs H62's remote-arm branch.
+- `pins/classes`: `bench/h62r/**` is H62r's ledger line, and H62r joins the `bench/eatflow` lines
+  that list H62.
+- Tests: `bench/h62r/test_h62r.py` (in CI) and `H62rTest` in `bench/eatflow/test_pairs.py`.
+
+**Reproduce (planned).** On crescent, from `~/k3dgpu-bench/k3d-gpu-h62r` at the deploy commit:
+`bench/h62r/campaign.sh` (the trigger, setup, smoke, holds, score, teardown). Records go to
+`~/k3dgpu-bench/results/H62r/`, with the hold records in `~/k3dgpu-bench/runs/H62r-hold<n>/` and
+the smoke in `~/k3dgpu-bench/smoke/H62r/`. They come back under
+`bench/eatflow/results/2026-11-06/H62r/`.
+
+**Also found, offered upstream.** EAS v1.2.0's probe does not expand the range form of
+`thread_siblings_list`, which Linux writes when a core's threads are numbered next to each other,
+as in this KVM guest. Two of its reads use that list, and both need the change. Its threads per
+core (line 31) counts the list's comma fields and reads one. Its sibling list (line 74) takes the
+first comma field as the core's lowest thread and lists every CPU. With only the count changed,
+the `siblings` profile would reserve all 96 vCPUs here, because it reserves `NRI_SIBLINGS` as
+read. With the ranges expanded in both reads, the probe gives two threads per core and the 48
+higher threads. It is an upstreamable finding for Intel's EAS team; nothing is filed from this
+row.
+
 ### H53 pre-registration: EAT's banking flow on Arc Pro B70 (2026-10-20)
 
 Written 2026-10-20, before any H53 measurement and before either H53 arm has run on a GPU. The
@@ -8910,6 +9183,114 @@ the hold.
 Rule W7: this was the campaign's first hold, so every later wildct row runs release 0.1.89. Holds
 used: 1 of at most 12. The next row in the registered order is H18w.
 
+### H18w run (wildct, i7-13700, 2026-11-07)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T04:22:23Z to 04:26:30Z (one hold; lock free, no load wait: load1 0.52);
+                 runs 1-3 began 04:22:29Z, 04:23:31Z and 04:25:25Z
+hypothesis:      H18w (H18's runner and outcome table, as the wildct pre-registration's H18w line lists them)
+host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700 (family 6 model 183), 8 P-cores
+                 (cpu_core 0-15) and 8 E-cores (cpu_atom 16-23), 1 NUMA node, 125 GiB RAM, Manjaro; Docker
+                 29.7.2, live-restore off, cgroup systemd/2 (step 1, 03:32:22Z)
+host kernel:     6.6.156-2-MANJARO
+accelerators:    hybrid=1; UHD 770 (i915), RTX 4000 SFF Ada and RTX 2000 Ada (nvidia), opted out and not
+                 used (rule W8)
+network:         tailscale0 100.66.38.121, default-route source 192.168.8.238, sshd on 0.0.0.0:22 and [::]:22;
+                 TARGETS as the runner resolved them: 100.66.38.121:22 192.168.8.238:22 pypi.org:443
+k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc),
+                 rule W7's release since the first hold (H52w)
+bench scripts:   main at 85a7bc86, shipped as the archive repo-85a7bc8668d1; sandbox_round.sh runs its
+                 scripts/k3d-gpu (equal to 0.1.89's apart from VERSION) and share/ (equal to 0.1.89's)
+node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4,
+                 k3s v1.37.1+k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
+runtime:         agent-sandbox v1.0.8 controller and python-runtime-sandbox v1.0.8, both pinned by digest in
+                 share/ (H18 ran v1.0.7); NetworkPolicy enforced by k3s's embedded kube-router
+model:           none
+environment:     IMAGE=<the node image>, K3D_GPU_CLUSTER=k3dgpu-w-sbx, K3D_GPU_VENDORS=auto,-nvidia,-intel,
+                 K3D_GPU_K3S_ARGS=<rule W3>, K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl" (rule W4)
+energy source:   intel-rapl:0 energy_uj (package-0), confounds only: package W over 5 s idle before each run
+runs:            3 counted, one fresh cluster each, in one hold; no pilot
+host load:       load1 0.48-1.51, foreign CPU 0.51-1.65 CPU-s/s, MemAvailable 113.4-114.7 GiB, package
+                 61-69 C, / 220.3-222.2 GB available (sample.py, 49 samples; df -BG read 207G before and
+                 after); swap used 0 MiB at each run's start (the runner's read)
+```
+
+Command, on wildct: RESUME.md step 6's `launch H18w 2100 3 h18w`, which runs `bench/wildct/hold.sh H18w
+2100 3 bash bench/wildct/row.sh h18w`, and so `IMAGE=<the node image> OUT=~/k3dgpu-bench-wildct/runs/H18w/out
+K3D_GPU_CLUSTER=k3dgpu-w-sbx K3D_GPU_VENDORS=auto,-nvidia,-intel K3D_GPU_K3S_ARGS=<rule W3>
+bench/sandbox_round.sh <n>` for n = 1, 2, 3, the registered line. Records (each run's key=value block,
+`up` and `sandbox up` logs, the hold's samples; the kubeconfigs were not copied):
+[bench/wildct/results/2026-11-07/runs/H18w/](bench/wildct/results/2026-11-07/runs/H18w/). The host
+before and after the hold: [bench/wildct/results/2026-11-07/host/h18w.txt](bench/wildct/results/2026-11-07/host/h18w.txt).
+The scored lines of each run:
+
+```bash
+grep -hE '^(run=|sandbox_up_rc|warm_ready|pod=|probe|policy_chain|dns_pypi|env=|pip_rc)' \
+    bench/wildct/results/2026-11-07/runs/H18w/out/run-{1,2,3}.txt
+```
+
+Each `up` named nvidia and intel as opted out, printed `Accelerators: hybrid` and ended with
+`Accelerators schedulable: hybrid=1`.
+
+| Run | `sandbox up` (s) | sandbox CPUs | sandbox -> 100.66.38.121:22 | control -> same | sandbox -> 192.168.8.238:22 | control -> same | drop-log pkts | pypi.org:443 | pip `tomli_w` | load (1 min) | throttle delta |
+|-----|------|----|------|------|------|------|---|------|------|------|------|
+| 1 | 12.3 | 17 | refused, 0.12 s | connect | refused, 0.12 s | connect | 2 | connect | ok, 7.4 s | 0.48 | 0 |
+| 2 | 69.9 | 17 | refused, 0.12 s | connect | refused, 0.12 s | connect | 2 | connect | ok, 1.2 s | 1.23 | 0 |
+| 3 | 15.0 | 17 | refused, 0.11 s | connect | refused, 0.12 s | connect | 2 | connect | ok, 1.7 s | 1.15 | 0 |
+
+In each run:
+
+- `sandbox up` exited 0, the warm pool's `readyReplicas` was 1, and its status check printed
+  `ok: python-ecores-<id>: CPUs 17 (E-cores 16-23)`. The runner's own read of the pod's
+  `Cpus_allowed_list` was 17, with the host's `cpu_atom` 16-23.
+- Every blocked connect printed `NOCONNECT ConnectionRefusedError [Errno 111] Connection refused`.
+  Each of kube-router's policy chains (one per cluster) counted 2 packets on its NFLOG rule
+  ("DROP by policy agent-sandbox/python-ecores-network-policy"). Each control connect to those two
+  addresses took 0.08-0.09 s.
+- `pypi.org` resolved to 151.101.0.223 (runs 1 and 2) and 151.101.192.223 (run 3), both Fastly. The
+  sandbox's connect to `pypi.org:443` took 2.33, 0.22 and 0.14 s.
+- The sandbox ran with `HOME=/tmp uid=1000`. pip's last line of output was its upgrade notice, and the
+  import read `/tmp/.local/lib/python3.14/site-packages/tomli_w/__init__.py`.
+
+`sandbox up` wall time: median 15.0 s, spread (max - min) 57.6 s, n = 3. Run 2's warm pool was 67 s
+old when `sandbox up` read it ready (9 s and 12 s in runs 1 and 3); each fresh cluster pulls the
+controller and runtime images, and the records do not say more. None of the checks is a timing
+threshold. Confounds: package power over the 5 s before each run 35.6, 35.3 and 34.6 W; swap used 0 MiB;
+the package throttle count delta, summed over the host's 24 counters, 0 in every run.
+
+**Verdict: SUPPORTED.** Every run meets (a), (b) and (c), the first line of H18's outcome table. On a
+second client Raptor Lake host, `k3d-gpu sandbox up` from the release kept each sandbox on an E-core
+and behind the default-deny egress policy: the tailscale and LAN addresses were refused from the
+sandbox and reached from a control pod without the policy, and PyPI stayed reachable for a `pip install
+--user`. The prediction (every run meets (a), (b) and (c), 0.8) held. Scope: as H18's, k3s v1.37.1
+kube-router and IPv4 targets only; the three registered targets; agent-sandbox v1.0.8, the release's.
+
+Not scored:
+
+- Rule W2 keeps CPUs 16-19 free for the production services, except for H18w's one 1-CPU sandbox pod
+  and k3s's own pods. The sandbox pod got CPU 17, inside that range, and ran the probes and the pip
+  install there (1.2-7.4 s).
+- As in H18, `pip_rc` is the exit of `pip install ... | tail -1 && python3 -c 'import tomli_w ...'` in
+  the pod's `sh`, so pip's own exit reaches it only through the import that follows. The import read
+  the package from `/tmp/.local`, where only the `--user` install puts it.
+- The control pod's six connects to the host's sshd (two per run) left fail2ban's sshd jail as it was:
+  `Total failed` 0 and `Total banned` 2 before and after the hold. The jail runs the filter's `normal`
+  mode, with `maxretry` 5.
+
+Production box. The snapshot before the hold (04:20Z) and after it (04:27Z) read the same: 18
+containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the same port codes. The
+line counts of `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 before and
+after, and their rules were identical with the counters stripped. After the hold, no `k3dgpu-w-*`
+cluster or container, no process of the hold and no network or volume of ours was left, and
+`live.lock` was free. Before the hold (04:20Z) all 18 modules of
+`/etc/modules-load.d/k3dgpu-wildct.conf` were loaded and `kernel.modprobe` was empty; after it
+(04:27Z) the host had 224 modules loaded and `kernel.modprobe` was still empty.
+
+Holds used: 2 of at most 12. The next row in the registered order is H25w.
+
 ### Wildct amendment R7: H25w's CPU Fast Draft (2026-11-07)
 
 Recorded 2026-11-07, after the H52w and H18w holds and before any H25w hold. Mechanics only. No
@@ -8950,6 +9331,204 @@ nothing. H34w is not affected: `h34.sh` writes its own graphs (A, the target alo
 draft). Test: `tests/wildct_hold_test.sh` (row.sh's H25w environment), in CI.
 
 **Resume procedure.** Before H25w, step 3b ships main at this amendment's merge commit. Its
+`scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
+hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
+
+### H25w run (wildct, i7-13700, 2026-11-07)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-07T05:18:20Z to 05:36:58Z (one hold; lock free, no load wait: load1 0.99);
+                 rounds' pre-windows began 05:19:51Z, 05:21:43Z, 05:26:04Z, 05:28:00Z, 05:32:24Z and 05:34:18Z
+hypothesis:      H25w (H25's T part, A3 first-chunk TTFT, A4 amendment-27 load rule, as the wildct
+                 pre-registration's H25w line lists them; wildct amendment R7)
+host:            wildct, reached by IP 100.66.38.121: Intel Core i7-13700 (family 6 model 183), 8 P-cores
+                 (cpu_core 0-15) and 8 E-cores (cpu_atom 16-23), 1 NUMA node, 125 GiB RAM, PL1 35 W, Manjaro;
+                 Docker 29.7.2, live-restore off, cgroup systemd/2 (step 1, 03:32:22Z)
+host kernel:     6.6.156-2-MANJARO
+accelerators:    hybrid=1; UHD 770 (i915), RTX 4000 SFF Ada and RTX 2000 Ada (nvidia), opted out and not
+                 used (rule W8)
+k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc),
+                 rule W7's release since the first hold (H52w); 0.1.90 was cut at 05:25:00Z, during the hold,
+                 from packaging changes (its launcher equals 0.1.89's apart from VERSION)
+bench scripts:   main at ce4ff16c (amendment R7's merge), shipped as the archive repo-ce4ff16c47ee; run.sh
+                 runs its scripts/k3d-gpu (equal to 0.1.89's apart from VERSION) and share/ (equal to 0.1.89's)
+node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4,
+                 k3s v1.37.1+k3s1; k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
+runtime:         openvino/model_server@sha256:a928903f…6fc58 (2026.4.1), pulled by the pod (k3d image import
+                 found no local copy of the tag@digest ref, as in H25 run 4); `agent manifest` CPU as shipped
+                 (P-cores, 16 CPUs, memory 6Gi) with the CPU Fast Draft OpenVINO/Qwen3-0.6B-int4-ov
+                 (K3D_GPU_AGENT_DRAFT=CPU, amendment R7) in both arms; pod Cpus_allowed_list 0-15 in all rounds
+models:          OpenVINO/Qwen3-4B-int4-ov b467368d (openvino_model.bin 074214fa…df2f9); draft f864c610
+                 (28613e99…) staged at <target>/OpenVINO-Qwen3-0.6B-int4-ov; hostPath from a copy in the node
+load:            bench/load/load.py `typical`, stress-ng 0.22.01 @sha256:2ea9a7c3…1cbe on E-cores 20-23
+                 (LOAD_CPUS, rule W2; 3 containers, 3 of 3 running in every window)
+energy source:   intel-rapl:0 energy_uj (package-0) through k3dgpu-w-rapl (rule W4), per round and per window
+environment:     IMAGE=<the node image>, MODELS=~/k3dgpu-bench-wildct/models, LEVELS=typical,
+                 CLUSTER=k3dgpu-w-h25, SEED_BASE=2560, HOLD=1440, LOAD_CPUS=20-23,
+                 K3D_GPU_VENDORS=auto,-nvidia,-intel, K3D_GPU_K3S_ARGS=<rule W3>, K3D_GPU_AGENT_DRAFT=CPU,
+                 K3D_GPU_RAPL_EXEC="docker exec k3dgpu-w-rapl"
+runs per arm:    order ON OFF ON OFF ON OFF, seeds 2561-2566; ON 3 rounds (n = 15 added agents), OFF 2 rounds
+                 (n = 10): round 6 (OFF) was stopped by run.sh's 18:30 level cap and wrote no round file
+host load:       load1 1.15-11.55, foreign CPU 0.63-8.14 CPU-s/s (p90 1.62), MemAvailable 109.6-114.4 GiB,
+                 package 61-72 C, / 213.1-222.0 GB available (sample.py, 223 samples; df -BG read 207G
+                 before and after)
+```
+
+Command, on wildct: RESUME.md step 6's `launch H25w 1500 8 h25w`, which runs `bench/wildct/hold.sh H25w
+1500 8 bash bench/wildct/row.sh h25w`, and so `IMAGE=<the node image> MODELS=<models> OUT=<out>
+LEVELS=typical CLUSTER=k3dgpu-w-h25 SEED_BASE=2560 HOLD=1440 LOAD_CPUS=20-23 $E K3D_GPU_AGENT_DRAFT=CPU
+bench/shared-prefix/run.sh`, the registered line with amendment R7's variable. Records (round files,
+load windows, the score, both manifests, the `up`, image import and cache-usage logs, `run.sh`'s output
+in `hold.log`, the hold's samples; the kubeconfig was not copied):
+[bench/wildct/results/2026-11-07/runs/H25w/](bench/wildct/results/2026-11-07/runs/H25w/).
+The host before and after the hold: [bench/wildct/results/2026-11-07/host/h25w.txt](bench/wildct/results/2026-11-07/host/h25w.txt).
+The score, from the copied records (identical to the `score.json` written on wildct):
+
+```bash
+python3 bench/shared-prefix/probe.py score \
+    --load bench/wildct/results/2026-11-07/runs/H25w/out/typical/load.jsonl \
+    bench/wildct/results/2026-11-07/runs/H25w/out/typical/round-*.json
+```
+
+`up` named nvidia and intel as opted out, printed `Accelerators: hybrid` and ended with
+`Accelerators schedulable: hybrid=1`. The agent manifest read "agent:
+OpenVINO/Qwen3-4B-int4-ov as 'Qwen3-4B-int4-ov' on CPU, P-cores, 16 CPU(s)" and "agent: Fast Draft
+OpenVINO/Qwen3-0.6B-int4-ov on CPU"; `off.yaml` differs from `on.yaml` by the one
+`--enable_prefix_caching=false` line. All 35 scored requests returned with no error, `prompt_tokens`
+1634 and `completion_tokens` 8, TTFT present in every one; graph.pbtxt read back as intended in all 5
+rounds. No round is void.
+
+**Load, amendment 27: MATCHED.** Covariates (gating, `TOLERANCE`):
+
+| Phase | Metric | ON | OFF | spread / limit |
+|-------|--------|----|-----|----------------|
+| pre (n = 3 per arm) | E-core busy % (CPUs 20-23) | 50.05 | 49.85 | 0.20 / 5.0 ok |
+| pre | throttle/min | 0 | 0 | 0 / 10 ok |
+| pre | swap used / growth MiB | 0 / 0 | 0 / 0 | ok |
+| during (ON 54, OFF 119 windows) | E-core busy % (load CPUs minus pod CPUs 0-15 = 20-23) | 54.24 | 54.92 | 0.68 / 5.0 ok |
+| during | swap used / growth MiB | 0 / 0 | 0 / 0 | ok |
+
+Outcomes during the rounds (reported, never gating): package W 34.87 ON vs 34.87 OFF; throttle/min
+0 vs 0; 1-min load 8.43 vs 10.12. OFF's windows include round 6's pre-window and its 28 during windows,
+since the level's load record holds every round that started; without them the rule also reads MATCHED
+(pre busy spread 0.07, during 0.70; not gated).
+
+**Pre-registered verdict: T SUPPORTED at `typical`** (`probe.py score`). M is not measured (A3).
+
+| | ON (shipping default) | OFF (`--enable_prefix_caching=false`) |
+|---|---|---|
+| added agents a2..a6, median TTFT | 2.198 s (n = 15) | 31.437 s (n = 10) |
+| per-round medians | 2.154, 2.204, 2.281 s (spread 0.127 s, 6%) | 31.408, 32.584 s (spread 1.176 s, 4%) |
+| cold agent a1, per round | 32.43, 30.87, 30.88 s | 32.47, 31.41 s |
+| control c (one token changed near position 16), per round | 32.25, 31.50, 30.09 s | 30.62, 30.61 s |
+| package energy per round | 3439, 3406, 3354 J | 8439, 8500 J |
+
+- Ratio OFF/ON of the added-agent median TTFT: **14.30x**, bootstrap 95% CI 13.38-14.89x (10000
+  resamples, seed 25). The lower bound clears the pre-registered 4x.
+- Controls: c/OFF median 1.00 (>= 0.8x: one changed token near the start makes a cold request); a1
+  ON/OFF 0.97 (inside ±15%). Per-arm spread gate passes. No round is void.
+- Cross-round pairs >= 4x: 6 of 6. Derived confidence by the A2 rule: (6+1)/(6+2) = 0.88.
+- Round 6 (OFF, seed 2566) started at 05:34:18Z and `run.sh`'s level cap (no new round after 18:30,
+  the probe under `timeout` of what is left) stopped its probe 1111 s into the run, before it wrote its
+  round file.
+  The H25 pre-registration ends a level with a hard abort at 18:30, and rounds not run count as missing
+  under the arm rule, which turns an arm INCONCLUSIVE only when more than 1 of its 3 rounds is lost; OFF
+  lost 1. Each of an OFF round's seven scored requests is a cold prefill: about 31 s here (240 s per
+  round with the warm-up), against 10.9 s on the i9 in H25 run 4. So six rounds did not fit the
+  level's 18:30.
+
+Against the prediction (written 2026-10-20, SUPPORTED 0.8): the verdict and both gates held (CI lower
+bound 13.38x >= 4x, c/OFF 1.00 >= 0.8). The point ranges did not: OFF 31.44 s against 10 s (7-15), ON
+2.20 s against 1.0 s (0.6-1.6), and the ratio 14.30x against 10x (6-14), just above that range. OFF
+ran 2.9x and ON 2.2x slower than H25 run 4 on the i9-13900T (OFF 10.87 s, ON 1.02 s). The package read
+33.6-36.3 W in every load window of both arms, pre-windows with the pod idle included; wildct's PL1 is
+35 W, and the i9 runs PL1 = PL2 = 117 W. The run does not test whether the power limit is the cause.
+Per added agent, the shared prefix saved 29.2 s of first-chunk time here, against 9.85 s on the i9.
+
+Not scored:
+
+- The ON rounds used 0.40x the OFF rounds' package energy (median 3406 J vs 8469 J for a round's 8
+  requests; whole package, the production containers' draw included).
+- CPUs 0-15, the pod's 16-CPU balloon, read about 8 CPU-s/s busy through the rounds (sample.py
+  `busy_p`, median 8.01, max 8.16); the records do not say which threads ran.
+- Foreign CPU (everything but this campaign's containers) was above 3 CPU-s/s in four samples: three
+  during cluster setup (05:18:25-05:18:50Z) and one at cleanup (05:36:52Z); none during a round.
+
+Production box. The snapshot before the hold (05:18Z) and after it (05:37Z) read the same: 18
+containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the same port codes. The
+line counts of `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 before and
+after, and their rules were identical with the counters stripped. After the hold, no `k3dgpu-w-*`
+cluster or container, no process of the hold and no network or volume of ours was left, and
+`live.lock` was free. Before the hold (05:18Z) all 18 modules of
+`/etc/modules-load.d/k3dgpu-wildct.conf` were loaded and `kernel.modprobe` was empty; after it
+(05:37Z) the host had 224 modules loaded and `kernel.modprobe` was still empty.
+
+Holds used: 3 of at most 12. The next row in the registered order is H34w.
+
+### Wildct amendment R8: H28w's NVIDIA plugin and its pod image (2026-11-07)
+
+Recorded 2026-11-07, after the H52w, H18w, H25w and H34w holds and before any H28w hold (neither
+`H28w-prep` nor `H28w` has run). Mechanics only. No row's hypothesis, prediction, arm, model,
+statistic, threshold, cap, disk need, hold count or order changes. No kernel module was loaded,
+and nothing on wildct changed.
+
+**What was found.**
+
+1. **The NVIDIA device plugin.** H28w's cluster comes from `probe.sh`'s plain `k3d cluster
+   create`, which never reads `K3D_GPU_VENDORS`. Amendment R1 gave it the two Intel GPU disables
+   that `up` passes when intel is not active. It left out what `up` does when nvidia is not
+   active: `up` labels the node `nvidia.com/gpu.present=false` ("Keeps the baked NVIDIA plugin off
+   the node", `scripts/k3d-gpu`). The node image bakes `nvidia-device-plugin-daemonset` into
+   k3s's auto-deploy manifests (`Dockerfile`, `share/nvidia-device-plugin.yml`). Its only node
+   affinity is `nvidia.com/gpu.present NotIn ["false"]`, which a node without that label matches,
+   and it runs under `runtimeClassName: nvidia`. So the registered H28w line, with R1's disables,
+   would run the NVIDIA device plugin on its node, on a host with two NVIDIA cards. Rule W8 rules
+   out any GPU device plugin. With the label, as on every `up` cluster of this campaign, the
+   DaemonSet has 0 pods desired (H52w: `nvidia-device-plugin-daemonset` 0 desired, no pod). The
+   other device plugins the image bakes select labels this node does not get:
+   `habana.ai/gaudi.present` and `k3d-gpu.io/wsl-gpu` are the launcher's, and of
+   `intel.feature.node.kubernetes.io/{npu,dsa,iaa,qat}` NFD set none on wildct (H52w's node read
+   only `intel.feature.node.kubernetes.io/gpu=true`, which only the two disabled Intel GPU stacks
+   select). The balloons policy needs the launcher's `k3d-gpu.io/hybrid-cpu=true`, so it does not
+   run on this node, as in H28 on the i9.
+2. **The pod image.** The wildct pre-registration (#181, `c247f3fb`) was written when
+   `probe.sh`'s `PYIMG` was `python:3.13-slim@sha256:70729b46...8c2f`, the image H28's run used
+   for its agent pods, prime pods and eviction helper. The nightly digest repin (#220,
+   `702c8d7b`, 2026-10-29) moved the default to `@sha256:2d44738e...86bb`. Neither the
+   pre-registration nor amendments R1-R7 list that change, and the pre-registration says a
+   replication keeps the original row's probe, with every change listed. H28x amendment R2 kept
+   H28x on the registered image for the same reason. Read on 2026-11-07: Docker Hub still
+   resolves `70729b46` (`docker buildx imagetools inspect`), and wildct holds it (image
+   `ce3ff9524414`, pulled by the campaign's setup on 2026-10-20 as the RAPL reader's image of
+   then). Rule W4's RAPL reader keeps `2d44738e` (amendment R2); it reads `energy_uj` only.
+
+**Runner change.** `bench/wildct/row.sh`:
+
+- `h28w` adds `--node-label=nvidia.com/gpu.present=false` to `K3D_GPU_K3S_ARGS`, after W3 and
+  R1's two disables. `probe.sh` passes each flag to `k3d cluster create` as `--k3s-arg
+  <flag>@server:*`, as it does W3. Both arms run on that one cluster, so both get it alike.
+- `h28w-prep` and `h28w` set
+  `PYIMG=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f`.
+  `probe.sh` reads `PYIMG` from the environment, and its `meta` line records it. As in H28x run 2,
+  `k3d image import` imports the model images by tag and skips the digest ref, so the node pulls
+  the pod image at the warm-up round's prime pod.
+
+Tests: `tests/wildct_hold_test.sh` (the create arguments carry the label; the baked manifest's
+affinity is the one the label excludes, and the launcher still sets it; both rows set the pod image
+registered here), in CI.
+
+**Read during the H28w hold, not scored.** Rule W8's pod-level checks have not been read on a
+plain `k3d cluster create` node on this host. Once the level's two baseline windows are written
+(`out/typical/baseline.jsonl` has 2 lines), during the unscored warm-up round, the controller reads
+H28w's cluster once from the host, read-only, with the run's scratch kubeconfig: `kubectl get pods
+-A -o json` through `bench/wildct/gpu_scan.py`, `kubectl get ds -A`, and the node's labels and
+allocatable. If a GPU device plugin pod is there, the hold is stopped (a signal to `hold.sh`, whose
+cleanup deletes the cluster), and the hold counts as failed.
+
+**Resume procedure.** Before `H28w-prep`, step 3b ships main at this amendment's merge commit. Its
 `scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
 hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
 
