@@ -9663,6 +9663,72 @@ cleanup deletes the cluster), and the hold counts as failed.
 `scripts/k3d-gpu` must still equal 0.1.89's apart from the version line, or `hold.sh` refuses the
 hold (exit 7), and its `share/` must equal 0.1.89's. Rule W7 keeps release 0.1.89.
 
+### Wildct amendment R9: the H28w hold its ssh session ended, and holds launched outside it (2026-11-07)
+
+Recorded 2026-11-07, after the failed `H28w` hold and before its repeat. Mechanics only. No row's
+hypothesis, prediction, arm, model, statistic, threshold, cap, disk need, hold count or order
+changes. No kernel module was loaded, and no host setting changed.
+
+**What happened (disclosed).** Main at `fd822b33` (amendment R8's merge) was shipped as
+`repo-fd822b337155`; its launcher equals 0.1.89's apart from the version line and its `share/`
+equals 0.1.89's. `H28w-prep` (hold 5, 07:37:52Z to 07:38:49Z, rc 0) built `h28-model:r0` to `r6`
+(1.07 GB each) with R8's pod image. `docker system df` read the build cache at 1434 records and
+106.2 GB before it and 1444 and 114.8 GB after it. The `H28w` hold (hold 6) started at 07:39:38Z
+with no load wait. `probe.sh` finished its setup at 106 s; its `meta` line records the pod image
+`70729b46`, snapshotter overlayfs, k3s v1.37.1+k3s1, load CPUs 20-23 and node CPUs 0-15. The two
+baseline windows and the unscored warm-up round r0 ran, and r1's settle gap settled after 5 s.
+
+At 07:42:21.79Z systemd sent SIGTERM to every process of logind session 27, `hold.sh` (PID 9482)
+first, then its sampler, the command and its children (`journalctl`: "session-27.scope: Killing
+process 9482 (bash) with signal SIGTERM"). Session 27 was the controller's ssh master connection,
+opened at 07:37:04Z; RESUME.md's `launch` had started the hold through it, and the connection
+closed at 07:42:21.79Z ("Connection closed by 100.65.179.24"). wildct's logind runs with
+`KillUserProcesses=yes` (set in its configuration; the manager's property reads true), so the
+processes of a session are killed when the session ends. `setsid nohup` gives a process a new
+session ID and ignores SIGHUP, but leaves it in the session's cgroup. `hold.sh`'s cleanup ran: it
+deleted `k3dgpu-w-h28`, stopped the load, and deleted the `h28-model` images because the command
+did not end 0. It wrote rc 143 at 07:42:30Z. No scored round finished: the CSV holds r0's rows and
+r1's settle line. The earlier holds were launched the same way and ended while their connection
+was up. What on the controller closed this connection was not found.
+
+**Amendment R8's read, clean.** At 07:41:45.9Z, during r0, the cluster's pods held no GPU device
+plugin pod, and `GPU-SCAN` read clean. `nvidia-device-plugin-daemonset` had 0 pods desired; the
+node carried `nvidia.com/gpu.present=false`. There was no `intel-gpu-plugin` or `intel-gpu-dra`
+DaemonSet. The Gaudi, DSA, IAA, NPU, QAT and WSL plugin DaemonSets and the balloons policy each had
+0 pods desired. The node's allocatable listed cpu, ephemeral-storage, hugepages, memory and pods
+only.
+
+**The fix, tried first (07:46Z to 07:48Z).** In one ssh session, made over a second connection of
+the controller's own, one `sleep` was started with `setsid nohup`, as `launch` does, and one under
+`systemd-run --user --scope`. When that connection closed, systemd killed the first ("session-29.scope:
+Killing process 2320 (sleep) with signal SIGTERM"). The second kept running in
+`user@1000.service/app.slice/run-...scope` until it was stopped by its PID. The user manager runs
+with linger on (`Linger=yes`), systemd 261. `systemd-run` expands `$` in the command line by default
+(`$$` read back as `$`); with `--expand-environment=no` the command line ran as written.
+
+**Consequences.** Hold 6 failed (rc 143, a signal), and it counts. The pre-registration lets a row
+repeat a failed hold once. `hold.sh` deleted the model images, so the repeat needs `H28w-prep`
+again first (RESUME.md). The repeat is `H28w-prep-r2` (hold 7) and then `H28w-r2` (hold 8): the
+registered commands, with R8's environment, from the same archive (`repo-fd822b337155`). R9 changes
+no file that `hold.sh` or `row.sh` runs. Their verdict is H28w's. The failed hold measured no scored
+round, so nothing is pooled. After hold 8, 4 of the 12 holds are left, so H57wa and H57wm get holds
+1-4 and no spare 5.
+
+**Procedure change.** `RESUME.md`'s `launch` now runs `hold.sh` under `systemd-run --user --scope
+--quiet --collect --expand-environment=no`, still behind `setsid nohup`. The scope keeps the
+caller's environment and runs the command in place, so `hold.sh`, its pid and rc files, its lock
+and its cleanup are unchanged. A hold no longer ends with the ssh session that started it. Test:
+`tests/wildct_hold_test.sh` (`launch` runs `hold.sh` under that command), in CI.
+
+**Records.** `bench/wildct/results/2026-11-07/runs/H28w-prep/` and `H28w/` (the hold's records; the
+kubeconfig was not copied), `H28w-gpuread/` (R8's read, with the script that made it), and
+`bench/wildct/results/2026-11-07/host/h28w-session.txt` (logind's setting, the journal lines, the
+fix's trial). Production: the snapshots before `H28w-prep`, before `H28w` and after it read the same.
+They show 18 containers Up, each started 2026-10-29T09:11:27Z with restart count 0, and the same
+port codes. `iptables-save`, `ip6tables-save` and `nft list ruleset` read 180, 53 and 286 lines,
+with the same rules once counters are stripped. After `H28w`, no `k3dgpu-w-*` cluster or container,
+no process of the hold and no `h28-model` image was left, and `live.lock` was free.
+
 ### H5 amendment A1: stage-1 harness and definitions (2026-10-19)
 
 Written 2026-10-19T22:30-07:00, before any H5 measurement. It fixes what the

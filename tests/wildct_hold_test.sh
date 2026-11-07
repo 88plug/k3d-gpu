@@ -727,6 +727,19 @@ EOF
         || { echo "the launcher no longer labels nvidia.com/gpu.present=false with nvidia not active"; return 1; }
 }
 
+# wildct amendment R9: wildct's logind runs KillUserProcesses=yes, so a hold started in an ssh
+# session is killed (SIGTERM) when that session's connection closes, setsid or not. RESUME.md's
+# launch moves hold.sh into a transient scope of the user manager (systemd-run --user --scope),
+# with systemd-run's own `$` expansion off, so the command line runs as written.
+resume_launch_runs_outside_the_session() {
+    local body
+    body=$(awk '/^launch\(\) \{/ {f = 1} f {print} f && /^\}/ {exit}' "${ROOT}/bench/wildct/RESUME.md")
+    [ -n "${body}" ] || { echo "no launch() in RESUME.md"; return 1; }
+    grep -qE 'setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no bash "\$R/bench/wildct/hold.sh"' <<< "${body}" \
+        || { echo "RESUME.md's launch does not run hold.sh under systemd-run --user --scope --expand-environment=no:"; echo "${body}"; return 1; }
+    [ "$(grep -c 'hold.sh' <<< "${body}")" = 1 ] || { echo "RESUME.md's launch starts hold.sh more than once"; return 1; }
+}
+
 row_guards() {
     fresh
     IMAGE=cryptoandcoffee/k3d-gpu:0.1.74 bash "${ROW}" h25w 2> /dev/null; [ $? = 2 ] || { echo "IMAGE without a digest accepted"; return 1; }
@@ -917,6 +930,7 @@ check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, un
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "H28w's plain k3d cluster create disables both baked Intel GPU stacks (W8), keeps W3" h28w_cluster_disables_the_intel_gpu_stacks
 check "H28w's plain k3d cluster create labels nvidia.com/gpu.present=false, as up does (W8, R8)" h28w_cluster_keeps_the_nvidia_plugin_off
+check "RESUME.md's launch runs hold.sh in a transient user scope, outside the ssh session (R9)" resume_launch_runs_outside_the_session
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down
 check "a command that ran and failed: hold.sh deletes the h28-model images (H28w row), nothing else" failed_command_deletes_h28_model_images
 check "a cleanup step that fails at once is named in cleanup-incomplete" failed_cleanup_steps_are_named
