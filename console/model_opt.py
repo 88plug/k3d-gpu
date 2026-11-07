@@ -132,16 +132,16 @@ FALLBACK = {
         "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
         "model_type": "gemma4", "multimodal": True, "thinking_default": False,
         "variants": {
-            "OpenVINO/gemma-4-26b-a4b-it-int4-ov": {"revision": "4e5885c3f03844f5887982def09708bdc9f53f7a", "format": "openvino-ir", "precision": "int4"},
+            "OpenVINO/gemma-4-26b-a4b-it-int4-ov": {"revision": "7b3cbc98e24a9946e561f82c752ae26cd53fc660", "format": "openvino-ir", "precision": "int4"},
             "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized": {"revision": "f1e06dc520982d9b9edd76859fdb7ab209449949", "format": "safetensors", "precision": "bf16", "qat": True},
             "google/gemma-4-26B-A4B-it-assistant": {"revision": "6e5aaaf4c42b98394530b8fda2e95cadd65c151c", "format": "safetensors", "precision": "bf16", "drafter": "assistant"},
         },
     },
     "Qwen/Qwen3.8-27B": {
-        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
         "model_type": "qwen3_5", "multimodal": True, "thinking_default": True, "mtp": True,
         "variants": {
-            "OpenVINO/Qwen3.8-27B-int4-ov": {"revision": "7b20ea8c7df7223a85ff27bab5c473f0cb038943", "format": "openvino-ir", "precision": "int4", "mtp": True},
+            "OpenVINO/Qwen3.8-27B-int4-ov": {"revision": "d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e", "format": "openvino-ir", "precision": "int4", "mtp": True},
         },
     },
 }
