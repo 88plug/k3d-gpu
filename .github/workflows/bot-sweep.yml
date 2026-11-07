@@ -1,9 +1,18 @@
 name: Bot sweep
 
-# Hourly upkeep of the bot's PRs (branches autobump/*, opened by github-actions[bot]
-# with GITHUB_TOKEN, so their own pull_request runs wait for approval).
+# Upkeep of the bot's PRs (branches autobump/*, opened by github-actions[bot] with
+# GITHUB_TOKEN, so their own pull_request runs wait for approval).
 #
-#   ci-fill: hack/bot-ci-dispatch runs ci.yml by workflow_dispatch on each bot PR
+# When it runs: each ci.yml run dispatched on autobump/* or main and each canary.yml
+# run dispatched on autobump/* ends with job sweep, which dispatches this workflow
+# with after_run set to its own run id: those are the runs whose results the sweep
+# acts on, and a run dispatched with GITHUB_TOKEN starts no workflow_run. The
+# hourly cron is the backstop: GitHub started it only 3.7 to 9.8 h apart here
+# (22 scheduled runs, 2026-11-01 to 11-07).
+#
+#   ci-fill: with after_run set, it first waits (5 min at most) for that run to
+#            complete, so the sweep reads it finished.
+#            hack/bot-ci-dispatch runs ci.yml by workflow_dispatch on each bot PR
 #            branch with no run at its head, and re-runs a first-attempt failure
 #            once, one bot run in flight at a time and none while a human PR's CI
 #            is queued. It fills in what the nightly deferred. Then the same for
@@ -24,6 +33,11 @@ on:
   schedule:
     - cron: '13 * * * *'
   workflow_dispatch:
+    inputs:
+      after_run:
+        description: 'a run id: wait for that run to complete first (job sweep of ci.yml and canary.yml sets it)'
+        type: string
+        default: ''
 
 permissions: {}
 
@@ -35,12 +49,34 @@ jobs:
   ci-fill:
     name: CI on bot PRs
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15 # the wait for after_run (5 min at most), then the dispatches
     permissions:
       actions: write
       contents: read
       pull-requests: read
     steps:
+      - name: Wait for the run that dispatched this sweep to complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AFTER_RUN: ${{ inputs.after_run }}
+        run: |
+          [ -n "$AFTER_RUN" ] || exit 0
+          if ! [[ $AFTER_RUN =~ ^[0-9]+$ ]]; then
+            echo "::error::after_run must be a run id (digits only)"
+            exit 1
+          fi
+          st=unread
+          for _ in $(seq 60); do
+            st=$(gh run view "$AFTER_RUN" --json status -q .status 2>/dev/null) || st=unreadable
+            if [ "$st" = completed ]; then
+              echo "run $AFTER_RUN completed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::run $AFTER_RUN is still ${st:-unread} after 5 min; this sweep reads its evidence as it stands"
+
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

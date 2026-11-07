@@ -1757,8 +1757,9 @@ Freshness workflow (`pins/registry.toml`, group `nri`) runs `--latest` for the
 components and opens one PR for them (branch `autobump/nri`); merging it changes `share/`,
 so auto-release cuts a launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
 their own pull_request CI runs wait for approval; `hack/bot-ci-dispatch` runs `ci.yml` on
-the branch by workflow_dispatch instead, and that run is the PR's CI. The hourly bot sweep
-(`hack/bot-merge`) merges one such PR at a time when its pins policy says auto (or a
+the branch by workflow_dispatch instead, and that run is the PR's CI. The bot sweep
+(`hack/bot-merge`), which each such CI or canary run starts as it ends (its hourly cron is
+the backstop), merges one such PR at a time when its pins policy says auto (or a
 maintainer approved its head), its CI and canary are green, its base is current and main's
 CI is green; it then dispatches CI on main and a batched release. Any other bot PR stays
 open with one comment that says what blocks it.
