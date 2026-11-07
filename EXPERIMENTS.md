@@ -9733,7 +9733,8 @@ no process of the hold and no `h28-model` image was left, and `live.lock` was fr
 
 Recorded 2026-11-07, after the H28w repeat (hold 8) and before any H57w hold. No row's hypothesis,
 prediction, arm, model, statistic, threshold, cap, disk need, hold count or order changes. No
-runner changes. No kernel module was loaded, and nothing on wildct changed. H57wb stays PENDING.
+runner changes. No kernel module was loaded, and nothing on wildct changed apart from the record the
+reading wrote (`runs/H57wb/reading.txt`, which did not exist before it). H57wb stays PENDING.
 
 **Reproduce:**
 
@@ -9750,7 +9751,9 @@ bench scripts:   the archive H28w-prep-r2 and H28w-r2 ran (repo-fd822b337155, ma
                  bench/wildct/row.sh equals main's at e1e932d8 (sha256 f62125ca…a4)
 command:         bash ~/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57wb (RESUME.md step 6, row 7),
                  under `timeout 60 flock -n ~/k3dgpu-bench-wildct/live.lock`, so that no hold ran during it
-reading:         / 191 GB available (need >= 15 + 70 = 85); MemAvailable 113.6 GiB (need >= 100)
+reading:         / 191G available (need >= 15 + 70 = 85 GB); MemAvailable 113.6 GiB (need >= 100). row.sh's
+                 root_avail_gb is `df -P -BG`, so 191 GiB rounded up, about 205 GB; the gate compares it
+                 with 85 in GiB, which is stricter than 85 GB, so the disk gate is met in either unit
 records:         bench/wildct/results/2026-11-07/runs/H57wb/reading.txt (sha256 e96ca9c7…e2),
                  bench/wildct/results/2026-11-07/host/h57wb.txt
 ```
