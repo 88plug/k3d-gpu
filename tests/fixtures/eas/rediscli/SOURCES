@@ -1,0 +1,19 @@
+# Verbatim copies of intel/enterprise-agent-toolkit (EAT) files, Apache-2.0, Copyright (C)
+# Intel Corporation; LICENSE here is EAT's own. The redis_stack role at release-2.0.0
+# 7b827e2d (the commit EAS v1.2.0 pins), whose validate task runs redis-cli in the Redis
+# pod with the password as `-a <value>` (integrations/eas/patches/eat/0001-*.patch is cut
+# against it; release-2.0.0 036b662, the main profile's pin, has the same blob).
+# tests/eas_test.sh checks every blob sha below, so the role is byte-identical to upstream
+# or the suite fails.
+#
+#   7b827e2  release-2.0.0  7b827e2d95cec826a20c7e3f5a30eb4818ed2992  (tag release-2.0.0)
+#
+# The rest of this directory is the test's own: play/play.yml runs the role's validate,
+# bin/redis-cli stands in for the pod's redis-cli and bin/kubectl for the bastion's
+# kubectl, and collections/ replaces kubernetes.core.
+#
+# <blob sha> <path>
+6e1424c3717dcf8c3883bf980662cc142cdd7864 LICENSE
+4bbe3506965951acb4aa972f112ccf550113e1ee roles/redis_stack/defaults/main.yaml
+144ec3753dee2e525d806b135a7ae067fa0a22a1 roles/redis_stack/tasks/main.yaml
+c784167d92bc5c37577b6034789b69039bb7baf3 roles/redis_stack/tasks/validate.yaml

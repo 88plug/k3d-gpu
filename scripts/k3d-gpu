@@ -60,6 +60,8 @@
 #   audit   posture checks: unauthenticated listeners off loopback, images not in images.lock
 #   eas     up|down|status|check: Intel Enterprise AI Solutions (platform, inference, agent
 #           toolkit) through its own installer, in a bastion container
+#   eat     up|down|status|check: Intel's agent toolkit (EAT 2.0) = eas --agent-toolkit;
+#           --legacy runs EAT 1.x's own installer (integrations/eat/eat-up.sh)
 #   sandbox up [--adopt]|down|status
 #           kubernetes-sigs/agent-sandbox with a warm pool of sandboxes pinned to E-cores;
 #           --adopt keeps another installer's controller and adds only the E-core profile
@@ -73,7 +75,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.92"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.93"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -303,22 +305,33 @@ Usage: k3d-gpu <command>
             endpoint in the sandbox's Secret k3d-gpu-llm, which sandbox code can
             read (use a key you would hand to that code); status checks the pin
   eas up [--agent-toolkit] [--model NAME] [--eas-ref R] [--ei-ref R] [--eat-ref R]
-         [--dry-run] [--explain] [-- <ansible-playbook args>]
+         [--reset-env] [--dry-run] [--explain] [-- <ansible-playbook args>]
             Intel Enterprise AI Solutions on this cluster through its own installer
             (es_auto_installer.sh, bring-your-own-cluster mode) in a bastion
             container: platform + inference (default), or the agent toolkit (EAT 2.0)
             on top (--agent-toolkit). Creates the cluster first when it is absent.
             Every choice prints as 'fact -> choice [source]' (--explain: full links);
             --dry-run prints them and the patch overlay's decisions and changes
-            nothing. Commits come from integrations/eas/pins.json; a ref given here
-            is resolved to a commit once and recorded in the state dir
+            nothing. Commits come from integrations/eas/pins.json (profile release:
+            EAS v1.2.0, enterprise-inference v1.1.0, EAT release-2.0.0); a ref given
+            here is resolved to a commit once and recorded in the state dir, and an
+            EAS ref that is no profile takes EI and EAT from that commit's layer
+            manifest. The env keeps the layer and pins it was set up with; another
+            layer or other pins need 'eas down', then --reset-env (moves it aside)
   eas status|down|check [--model NAME]
             status: EAS's own status, pins, overlay, gateway, pods not Ready and the
             cause of each stack pod not Ready. down: teardown platform (the cluster
             stays). check (agent toolkit): the stack's pods Ready (each one that is
             not, with its cause), then chat, tool call, the guardrail on an unsafe
             prompt and a sandbox run through EAS's LiteLLM gateway with a
-            short-lived virtual key
+            short-lived virtual key, after Intel's own 'validate agent-toolkit'
+  eat up [--legacy] [eas up options] | eat status | eat down | eat check [--legacy] [--model NAME]
+            Intel's agent toolkit (EAT 2.0): 'eas up --agent-toolkit', 'eas status',
+            'eas down' and 'eas check' on the same state. --legacy: EAT 1.x
+            (release-1.1.0) through its own installer, integrations/eat/eat-up.sh (in a
+            checkout of the repository; the packages do not ship it), and
+            its check; it needs a cluster made with
+            K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true
   model-share --image REF --agent-image REF [--replicas N] [--name NAME]
             Print a Deployment whose N agent replicas mount one model OCI image as a
             read-only image volume (pipe to kubectl apply -f -). It warns when this
@@ -6934,7 +6947,7 @@ cmd_sandbox() {
 # ---- eas: Intel Enterprise AI Solutions on this cluster ---------------------------
 # intel/enterprise-ai-solutions ships one installer, es_auto_installer.sh, for its
 # platform, inference (intel/enterprise-inference) and agent-toolkit
-# (intel/enterprise-agent-toolkit 2.0) layers. Its bring-your-own mode
+# (intel/enterprise-agent-toolkit 2.0) layers; `k3d-gpu eat` is its agent-toolkit layer. Its bring-your-own mode
 # (existing_kubernetes) installs onto this cluster. The installer runs in a bastion
 # container (integrations/eas/bastion.Dockerfile), never on the host:
 #   integrations/eas/eas.sh        the in-bastion driver (clone, overlay, init, edits, install)
@@ -6950,10 +6963,17 @@ EAS_DEFAULT_DOMAIN="solutions.ai"   # base_domain_name in EAS configs/defaults/g
 # Environment the bastion gets by name only (docker run -e NAME), never by value.
 EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy ES_LOG_LEVEL)
 EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json
-           ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch)
-# Files eas-config.py writes; each `eas up` starts without them.
+           ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch
+           patches/ei/0001-release-1.1-keycloak-config-kcadm-argv.patch
+           eat-redis-cli.sh patches/eat/0001-redis-stack-validate-redis-cli-auth.patch)
+# Files eas-config.py writes (and pins.resolved.json, from its choices.txt). `eas up`
+# writes them into <state>/next and they replace the state's once eas_env_check passes,
+# so a refused run leaves the files the installed stack was set up with, which check,
+# status and down read. env.json (the layer and pins env/k3d-gpu was set up with) stays:
+# eas_env_check compares each run with it. <state>/layer, the installed layer, goes only
+# when an install starts.
 EAS_OUTPUTS=(choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml
-             repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json layer)
+             repos.inference.yaml repos.agent-toolkit.yaml pins.resolved.json)
 
 # eas_dir: K3D_GPU_EAS_DIR, then the checkout's integrations/eas, then the packaged copy.
 # The packages keep the repo's integrations/ layout, which overlay.py's patch lookup
@@ -7029,44 +7049,82 @@ eas_ref() {
     echo "${sha}"
 }
 
-# eas_pin_refs <dir> <eas-ref> <ei-ref> <eat-ref>: EAS_REF_ARGS for eas-config.py. A profile
-# name of pins.json (--eas-ref v1.2.0-rc.1) and a full SHA go as given; any other ref is
-# resolved here, once, and printed: a floating ref never reaches the installer.
+# eas_pin_refs <dir> <layer> <eas-ref> <ei-ref> <eat-ref>: EAS_REF_ARGS for eas-config.py.
+# A profile name of pins.json (--eas-ref v1.2.0-rc.1) and a full SHA go as given; any other
+# ref is resolved here, once, and printed: a floating ref never reaches the installer. An
+# EAS ref that is no profile takes each EI and EAT commit the layer needs and the flags do
+# not give from configs/repos/repos.<layer>.yaml at that EAS commit (its rev, resolved the
+# same way), as EAS's own init would, never from the default profile: EAS v1.2.0 beside
+# another release's EI or EAT is a set no EAS release pins.
 eas_pin_refs() {
-    local dir=$1 profiles name repo ref sha
+    local dir=$1 layer=$2 eas_ref=$3 profiles name repo ref sha mf rows L U R
+    local -A given=([ei]=$4 [eat]=$5) repos=([eas]=intel/enterprise-ai-solutions [ei]=intel/enterprise-inference
+                                           [eat]=intel/enterprise-agent-toolkit) of_layer=([inference]=ei [agent-toolkit]=eat)
+    local need=()
     EAS_REF_ARGS=()
     profiles=" $(python3 -c 'import json, sys
 print(" ".join(sorted({r["profile"] for r in json.load(open(sys.argv[1]))["pins"]})))' "${dir}/pins.json") " \
         || err "cannot read ${dir}/pins.json"
-    shift
-    for name in eas ei eat; do
-        ref=$1; shift
-        [ -n "${ref}" ] || continue
-        if [ "${name}" = eas ] && [[ "${profiles}" == *" ${ref} "* ]]; then
-            EAS_REF_ARGS+=(--eas-ref "${ref}")
-            echo "  eas: profile ${ref} of pins.json"
-            continue
-        fi
-        case "${name}" in
-            eas) repo="intel/enterprise-ai-solutions" ;;
-            ei)  repo="intel/enterprise-inference" ;;
-            eat) repo="intel/enterprise-agent-toolkit" ;;
-        esac
-        sha=$(eas_ref "${repo}" "${ref}") || exit 1
-        EAS_REF_ARGS+=("--${name}-ref" "${sha}")
-        if [ "${sha}" = "${ref}" ]; then
-            echo "  ${name}: ${repo}@${sha:0:7} (as given)"
+    # resolved <name> <sha> <ref> [<where>]: the line that says where a commit came from.
+    resolved() {
+        local where=${4:+ in $4}
+        if [ "$2" = "$3" ]; then
+            echo "  $1: ${repos[$1]}@${2:0:7} (${4:-as given})"
         else
-            echo "  ${name}: ${repo}@${sha:0:7} (${ref}, git ls-remote https://github.com/${repo} ${ref})"
+            echo "  $1: ${repos[$1]}@${2:0:7} ($3${where}, git ls-remote https://github.com/${repos[$1]} $3)"
         fi
+    }
+    if [ -n "${eas_ref}" ] && [[ "${profiles}" == *" ${eas_ref} "* ]]; then
+        EAS_REF_ARGS+=(--eas-ref "${eas_ref}")
+        echo "  eas: profile ${eas_ref} of pins.json"
+    elif [ -n "${eas_ref}" ]; then
+        sha=$(eas_ref "${repos[eas]}" "${eas_ref}") || exit 1
+        EAS_REF_ARGS+=(--eas-ref "${sha}")
+        resolved eas "${sha}" "${eas_ref}"
+        case "${layer}" in
+            inference)     [ -n "${given[ei]}" ] || need=(ei) ;;
+            agent-toolkit) for name in ei eat; do [ -n "${given[${name}]}" ] || need+=("${name}"); done ;;
+        esac
+        if [ "${#need[@]}" -gt 0 ]; then
+            require curl
+            mf=$(mktemp)
+            curl -fsSL -o "${mf}" "https://raw.githubusercontent.com/${repos[eas]}/${sha}/configs/repos/repos.${layer}.yaml" \
+                || { rm -f "${mf}"; err "cannot read configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7}: give the EI and EAT commits with --ei-ref and --eat-ref"; }
+            rows=$(python3 "${dir}/eas-config.py" --manifest-revs "${mf}") || { rm -f "${mf}"; err "cannot read the repos of configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7}"; }
+            rm -f "${mf}"
+            for name in "${need[@]}"; do
+                ref=""
+                while IFS=$'\t' read -r L U R; do
+                    if [ "${of_layer[${L}]:-}" = "${name}" ]; then
+                        [ "${U}" = "https://github.com/${repos[${name}]}" ] \
+                            || err "configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7} takes layer ${L} from ${U}, not github.com/${repos[${name}]}"
+                        ref=${R}
+                    fi
+                done <<< "${rows}"
+                [ -n "${ref}" ] || err "configs/repos/repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7} has no entry for ${repos[${name}]}"
+                [[ "${ref}" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || err "configs/repos/repos.${layer}.yaml: not a ref: '${ref}'"
+                R=$(eas_ref "${repos[${name}]}" "${ref}") || exit 1
+                EAS_REF_ARGS+=("--${name}-ref" "${R}")
+                resolved "${name}" "${R}" "${ref}" "repos.${layer}.yaml at enterprise-ai-solutions@${sha:0:7}"
+            done
+        fi
+    fi
+    for name in ei eat; do
+        ref=${given[${name}]}
+        [ -n "${ref}" ] || continue
+        sha=$(eas_ref "${repos[${name}]}" "${ref}") || exit 1
+        EAS_REF_ARGS+=("--${name}-ref" "${sha}")
+        resolved "${name}" "${sha}" "${ref}"
     done
 }
 
 # eas_facts <state> <dir>: the facts eas-config.py reads (schema k3d-gpu.eas-facts/v1), all
 # read-only: nodes, namespaces, DaemonSets, the agent-sandbox CRD and controller image, the
 # server version, rootless docker, the node container's NRI socket and containerd CNI
-# bin_dirs, MemAvailable and inotify limits, and `k3d-gpu fit` of each of eas-config.py's
-# model candidates (vLLM on the CPU).
+# bin_dirs, MemAvailable and inotify limits, the host's CPU topology read from /sys as
+# EAS's roles/nri_cpu_balloons/files/probe-node-topology.sh reads it (a k3d node shares
+# the host's /sys), and `k3d-gpu fit` of each of eas-config.py's model candidates (vLLM
+# on the CPU).
 eas_facts() {
     local state=$1 dir=$2 raw node id rc doc
     raw="${state}/facts.d"
@@ -7102,7 +7160,7 @@ for c in m.CANDIDATES:
 PY
 )
     python3 - "${raw}" "${state}/facts.json" "${CLUSTER}" "${SYSROOT}" <<'PY' || err "could not assemble ${state}/facts.json"
-import json, os, sys
+import json, os, re, sys
 raw, out, cluster, sysroot = sys.argv[1:]
 def load(name, default):
     try:
@@ -7133,6 +7191,23 @@ def meminfo(key):
     return None
 def meta(o, *keys):
     return {k: o["metadata"].get(k) or {} for k in keys}
+def cpu_topology():
+    # EAS v1.2.0 probe-node-topology.sh#L27-L32: node[0-9]* dirs, cpu[0-9]* dirs, and the
+    # comma-separated fields of cpu0's thread_siblings_list (1 when unreadable).
+    base = sysroot + "/sys/devices/system"
+    try:
+        nodes = [d for d in os.listdir(base + "/node") if re.fullmatch(r"node[0-9]+", d)]
+        logical = [d for d in os.listdir(base + "/cpu") if re.fullmatch(r"cpu[0-9]+", d)]
+    except OSError:
+        return None
+    try:
+        with open(base + "/cpu/cpu0/topology/thread_siblings_list") as f:
+            tpc = len(f.read().strip().split(","))
+    except OSError:
+        tpc = 1
+    if not nodes or not logical:
+        return None
+    return {"logical": len(logical), "threads_per_core": max(1, tpc), "numa_nodes": len(nodes)}
 cni = (load("crictl-info.json", {}).get("config") or {}).get("cni") or {}
 bin_dirs = cni.get("binDirs") or ([cni["binDir"]] if cni.get("binDir") else [])
 ids = (text("fit/ids") or "").split()
@@ -7147,7 +7222,8 @@ facts = {
     "containerd_cni_bin_dirs": bin_dirs,
     "host": {"mem_available_kib": meminfo("MemAvailable"),
              "inotify_max_user_instances": read_int("/proc/sys/fs/inotify/max_user_instances"),
-             "inotify_max_user_watches": read_int("/proc/sys/fs/inotify/max_user_watches")},
+             "inotify_max_user_watches": read_int("/proc/sys/fs/inotify/max_user_watches"),
+             "cpu": cpu_topology()},
     "nodes": [dict(name=n["metadata"]["name"], allocatable=n.get("status", {}).get("allocatable", {}),
                    **meta(n, "labels", "annotations")) for n in load("nodes.json", {"items": []})["items"]],
     "namespaces": sorted(o["metadata"]["name"] for o in load("namespaces.json", {"items": []})["items"]),
@@ -7220,6 +7296,62 @@ eas_gateway() {
     echo "    curl -k --resolve litellm.${domain}:443:${ip} https://litellm.${domain}/v1/models -H \"Authorization: Bearer \${KEY}\""
 }
 
+# eas_env_check <state> <next> <layer> <reset 0|1> <dry 0|1>: env/k3d-gpu keeps the layer
+# and the pins it was set up with; <next>/pins.resolved.json holds this run's. EAS keeps
+# one layer per checkout (EAT release-2.0.0 release notes, Known Limitations), and init
+# never reseeds models.yaml or config.<layer>.yaml (es_auto_installer.sh #L1093, #L1123
+# at v1.2.0), so another layer or other commits on an existing env would install with the
+# old catalog and config. env.json records what up
+# set the env up with; an env with no env.json predates it. A mismatch stops here, before
+# any change; --reset-env, once 'eas down' has run, moves env/k3d-gpu aside and drops ext/
+# (the clones at the old revs), so init starts fresh.
+eas_env_check() {
+    local state=$1 next=$2 layer=$3 reset=$4 dry=$5 env="$1/eas/env/${EAS_ENV}" have want aside
+    [ -f "${env}/.solutions.yaml" ] || return 0
+    want=$(python3 - "${next}/pins.resolved.json" "${layer}" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+pins = {r["name"]: r["sha"] for r in d["pins"]}
+print("%s at profile %s (%s)" % (sys.argv[2], d["profile"], ", ".join("%s %s" % (n, pins[n][:7]) for n in ("eas", "ei", "eat") if n in pins)))
+PY
+) || err "cannot read ${next}/pins.resolved.json"
+    have=$(python3 - "${state}/env.json" <<'PY' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1]))
+print("%s at profile %s (%s)" % (d["layer"], d["profile"], ", ".join("%s %s" % (n, d["pins"][n][:7]) for n in ("eas", "ei", "eat") if n in d["pins"])))
+PY
+) || have="an earlier k3d-gpu (no ${state}/env.json)"
+    [ "${have}" != "${want}" ] || return 0
+    if [ "${reset}" = 0 ]; then
+        err "env/${EAS_ENV} was set up for ${have}; this run asks for ${want}. EAS keeps one layer per checkout and init never reseeds models.yaml or config.<layer>.yaml. Run 'k3d-gpu eas down', then 'k3d-gpu eas up --reset-env' with the same options (it moves env/${EAS_ENV} aside)"
+    fi
+    # installed: up sets it before the install starts, a finished eas down clears it.
+    if ! python3 -c 'import json, sys; sys.exit(1 if json.load(open(sys.argv[1])).get("installed", True) else 0)' "${state}/env.json" 2>/dev/null; then
+        err "env/${EAS_ENV} (${have}) may still be installed: run 'k3d-gpu eas down' first, then --reset-env"
+    fi
+    aside="${state}/env-${EAS_ENV}.$(date +%Y%m%d-%H%M%S)"
+    if [ "${dry}" = 1 ]; then
+        info "--reset-env: would move env/${EAS_ENV} aside to ${aside} and drop ${state}/eas/ext (dry run: nothing moved)"
+        return 0
+    fi
+    mv "${env}" "${aside}" || err "could not move ${env} aside"
+    rm -rf "${state}/eas/ext"
+    rm -f "${state}/env.json"
+    info "--reset-env: env/${EAS_ENV} (${have}) moved to ${aside}; ext/ dropped, init clones it again"
+}
+
+# eas_env_record <state> <layer> <installed true|false>: env.json, what env/k3d-gpu is set up for.
+eas_env_record() {
+    python3 - "$1/pins.resolved.json" "$1/env.json" "$2" "$3" <<'PY' || err "could not write $1/env.json"
+import json, sys
+src, out, layer, installed = sys.argv[1:]
+d = json.load(open(src))
+json.dump({"schema": "k3d-gpu.eas-env/v1", "layer": layer, "profile": d["profile"],
+           "pins": {r["name"]: r["sha"] for r in d["pins"]}, "installed": installed == "true"},
+          open(out, "w"), indent=2)
+PY
+}
+
 eas_require_files() {
     local f
     for f in "${EAS_FILES[@]}"; do
@@ -7228,9 +7360,9 @@ eas_require_files() {
 }
 
 # eas up [--agent-toolkit | --layer L] [--model NAME] [--eas-ref R] [--ei-ref R]
-#        [--eat-ref R] [--dry-run] [--explain] [-- <ansible-playbook args>]
+#        [--eat-ref R] [--reset-env] [--dry-run] [--explain] [-- <ansible-playbook args>]
 eas_up() {
-    local layer=inference model="" eas_ref="" ei_ref="" eat_ref="" dry=0 explain=() extra=() dir state rc v image
+    local layer=inference model="" eas_ref="" ei_ref="" eat_ref="" dry=0 reset=0 explain=() extra=() dir state next rc v image
     while [ $# -gt 0 ]; do
         case "$1" in
             --agent-toolkit) layer="agent-toolkit" ;;
@@ -7240,6 +7372,7 @@ eas_up() {
             --ei-ref)  [ $# -ge 2 ] || err "--ei-ref needs a value"; ei_ref=$2; shift ;;
             --eat-ref) [ $# -ge 2 ] || err "--eat-ref needs a value"; eat_ref=$2; shift ;;
             --dry-run) dry=1 ;;
+            --reset-env) reset=1 ;;
             --explain) explain=(--explain) ;;
             --) shift; extra=("$@"); break ;;
             *) err "unknown eas up option: $1 (see 'k3d-gpu help')" ;;
@@ -7268,21 +7401,28 @@ eas_up() {
 
     info "EAS ${layer} on cluster '${CLUSTER}' (state ${state})"
     if [ -n "${eas_ref}${ei_ref}${eat_ref}" ]; then info "Refs:"; fi
-    eas_pin_refs "${dir}" "${eas_ref}" "${ei_ref}" "${eat_ref}"
+    eas_pin_refs "${dir}" "${layer}" "${eas_ref}" "${ei_ref}" "${eat_ref}"
     info "Facts (read-only)..."
     eas_facts "${state}" "${dir}"
     info "Choices (fact -> choice [source]):"
-    for v in "${EAS_OUTPUTS[@]}"; do rm -f "${state:?}/${v}"; done
+    # Into next/ first: the state's files stay the installed stack's until the env check passes.
+    next="${state}/next"
+    rm -rf "${next:?}"
+    mkdir -p "${next}"
     rc=0
-    python3 "${dir}/eas-config.py" --facts "${state}/facts.json" --out "${state}" --layer "${layer}" \
+    python3 "${dir}/eas-config.py" --facts "${state}/facts.json" --out "${next}" --layer "${layer}" \
         --pins "${dir}/pins.json" ${EAS_REF_ARGS[@]+"${EAS_REF_ARGS[@]}"} ${model:+--model "${model}"} \
         ${explain[@]+"${explain[@]}"} || rc=$?
     [ "${rc}" -ne 3 ] || err "refused (above); nothing was changed"
     [ "${rc}" -eq 0 ] || err "eas-config.py failed (exit ${rc}); nothing was changed"
     for v in choices.txt k3d-gpu-overrides.yaml global_config.edit.yaml models.edit.yaml "repos.${layer}.yaml"; do
-        [ -s "${state}/${v}" ] || err "eas-config.py wrote no ${state}/${v}"
+        [ -s "${next}/${v}" ] || err "eas-config.py wrote no ${next}/${v}"
     done
-    eas_record_pins "${state}"
+    eas_record_pins "${next}"
+    eas_env_check "${state}" "${next}" "${layer}" "${reset}" "${dry}"
+    for v in "${EAS_OUTPUTS[@]}"; do rm -f "${state:?}/${v}"; done
+    for v in "${EAS_OUTPUTS[@]}"; do [ ! -e "${next}/${v}" ] || mv -f "${next}/${v}" "${state}/${v}"; done
+    rm -rf "${next:?}"
     EAS_CPU_POLICY=$(eas_choice_value "${state}" kubernetes_cpu_policy)
     EAS_NODES=$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["nodes"]))' "${state}/facts.json")
     cp "${dir}/images.yaml" "${state}/k3d-gpu-images.yaml"
@@ -7291,11 +7431,13 @@ eas_up() {
     if [ "${dry}" = 1 ]; then
         info "Overlay (enterprise-ai-solutions@${EAS_SHA:0:7}, kubernetes_cpu_policy ${EAS_CPU_POLICY}, ${EAS_NODES} node(s)):"
         EAS_STATE="${state}" EAS_SHA="${EAS_SHA}" EAS_CPU_POLICY="${EAS_CPU_POLICY}" EAS_NODES="${EAS_NODES}" \
-            bash "${dir}/eas.sh" overlay-check || err "the overlay stops at this EAS commit (above); nothing was changed"
+            bash "${dir}/eas.sh" overlay-check "${layer}" || err "the overlay stops at this EAS commit (above); nothing was changed"
         info "Dry run: nothing applied. Under ${state}: facts.json, choices.txt, k3d-gpu-overrides.yaml, global_config.edit.yaml, models.edit.yaml, repos.${layer}.yaml, overlay.txt"
         return 0
     fi
     image=$(eas_bastion_image "${dir}")
+    rm -f "${state}/layer"
+    eas_env_record "${state}" "${layer}" true
     eas_run "${dir}" "${state}" "${image}" up "${layer}" -- ${extra[@]+"${extra[@]}"} \
         || err "es_auto_installer.sh install ${layer} failed (log above, and ${state}/eas/env/${EAS_ENV}/logs); 'k3d-gpu eas status' names the cause of each pod not Ready"
     echo "${layer}" > "${state}/layer"
@@ -7329,6 +7471,10 @@ eas_down() {
     image=$(eas_bastion_image "${dir}")
     eas_run "${dir}" "${state}" "${image}" down || err "teardown platform failed (log above)"
     rm -f "${state}/layer"
+    python3 -c 'import json, os, sys
+d = json.load(open(sys.argv[1])) if os.path.exists(sys.argv[1]) else {"schema": "k3d-gpu.eas-env/v1"}
+d["installed"] = False
+json.dump(d, open(sys.argv[1], "w"), indent=2)' "${state}/env.json" || warn "could not mark ${state}/env.json as torn down"
     info "EAS removed from '${CLUSTER}'; the cluster stays ('k3d-gpu down' deletes it)"
 }
 
@@ -7376,7 +7522,7 @@ print("\n".join(bad) if bad else "  none")'
 }
 
 eas_check() {
-    local dir state chk model=""
+    local dir state chk image layer model=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --model) [ $# -ge 2 ] || err "--model needs a value"; model=$2; shift ;;
@@ -7384,17 +7530,25 @@ eas_check() {
         esac
         shift
     done
-    require kubectl; require curl; require jq; require python3
+    require kubectl; require curl; require jq; require python3; require docker
     dir=$(eas_dir) || err "integrations/eas not found (set K3D_GPU_EAS_DIR)"
     state=$(eas_state)
     eas_installed "${state}"
-    # LiteLLM and the sandbox come with the agent toolkit (auth_type litellm_vkey); the
+    # LiteLLM and the sandbox come with the agent toolkit (auth_provider litellm); the
     # inference layer alone serves models behind a Keycloak token.
-    [ "$(cat "${state}/layer" 2>/dev/null)" = agent-toolkit ] \
+    layer=$(cat "${state}/layer" 2>/dev/null || true)
+    [ "${layer}" = agent-toolkit ] \
         || err "eas check exercises the agent toolkit (LiteLLM and the sandbox): run 'k3d-gpu eas up --agent-toolkit' first"
     chk="${dir}/../eat/eat-check.sh"
     [ -f "${chk}" ] || err "${chk} not found"
     eas_kubeconfig "${state}"
+    # Intel's own post-deploy checks first (EAT docs/validate-stack.md): every enabled
+    # component of the layer and its dependencies; a failure stops with its reason.
+    info "Intel's validate ${layer} (es_auto_installer.sh validate, in the bastion):"
+    image=$(eas_bastion_image "${dir}")
+    eas_run "${dir}" "${state}" "${image}" validate "${layer}" \
+        || err "es_auto_installer.sh validate ${layer} failed (log above): Intel's checks name the component"
+    info "End to end (${chk}):"
     EAT_MODE=eas EAT_KUBECONFIG="${state}/kubeconfig" EAT_EAS_DOMAIN="$(eas_domain "${state}")" \
         EAT_MODEL="${model:-${EAT_MODEL:-}}" bash "${chk}"
 }
@@ -7407,7 +7561,71 @@ cmd_eas() {
         down)   eas_down "$@" ;;
         status) eas_status "$@" ;;
         check)  eas_check "$@" ;;
-        *) err "usage: k3d-gpu eas up [--agent-toolkit] [--model NAME] [--eas-ref R] [--ei-ref R] [--eat-ref R] [--dry-run] [--explain] [-- ansible args] | status | down | check [--model NAME]" ;;
+        *) err "usage: k3d-gpu eas up [--agent-toolkit] [--model NAME] [--eas-ref R] [--ei-ref R] [--eat-ref R] [--reset-env] [--dry-run] [--explain] [-- ansible args] | status | down | check [--model NAME]" ;;
+    esac
+}
+
+# ---- eat: Intel's Enterprise Agent Toolkit ------------------------------------------
+# EAT 2.0 is a layer of EAS, agent-toolkit, on top of platform and inference (EAT
+# release-2.0.0 components.yaml#L14-L17), installed by EAS's es_auto_installer.sh; it has
+# no installer of its own. So `eat up|status|down|check` is `eas up --agent-toolkit`,
+# `eas status|down|check`, on the same state. --legacy is EAT 1.x (release-1.1.0) through
+# its standalone installer, integrations/eat/eat-up.sh, and its check in eat mode; its
+# state (the kubeconfig and EAT_WORK) is ${STATE_DIR}/eat-<cluster>.
+eat_legacy() {
+    local sub=$1 dir state model=""
+    shift
+    dir=$(eas_dir) && dir=$(cd "${dir}/../eat" 2>/dev/null && pwd) \
+        || err "integrations/eat not found next to integrations/eas (set K3D_GPU_EAS_DIR)"
+    # The packages ship integrations/eas and eat-check.sh; eat-up.sh and the files it
+    # builds and deploys from are in the repository only.
+    [ "${sub}" != up ] || [ -f "${dir}/eat-up.sh" ] \
+        || err "EAT 1.x's installer (integrations/eat/eat-up.sh) is not in the k3d-gpu packages: run 'scripts/k3d-gpu eat up --legacy' from a checkout of https://github.com/88plug/k3d-gpu (no ${dir}/eat-up.sh here)"
+    require kubectl; require docker
+    state="${STATE_DIR}/eat-${CLUSTER}"
+    ( umask 077; mkdir -p "${state}" ) && chmod 0700 "${state}"
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable: EAT 1.x installs onto a running cluster made with K3D_GPU_NODE_LABELS=ei-infra-eligible=true,ei-inference-eligible=true k3d-gpu up"
+    eas_kubeconfig "${state}"
+    case "${sub}" in
+        up)
+            EAT_KUBECONFIG="${state}/kubeconfig" EAT_WORK="${EAT_WORK:-${state}/work}" bash "${dir}/eat-up.sh" "$@" ;;
+        check)
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --model) [ $# -ge 2 ] || err "--model needs a value"; model=$2; shift ;;
+                    *) err "unknown eat check option: $1" ;;
+                esac
+                shift
+            done
+            require curl; require jq; require python3
+            [ -f "${dir}/eat-check.sh" ] || err "${dir}/eat-check.sh not found"
+            EAT_MODE=eat EAT_KUBECONFIG="${state}/kubeconfig" EAT_WORK="${EAT_WORK:-${state}/work}" \
+                EAT_MODEL="${model:-${EAT_MODEL:-}}" bash "${dir}/eat-check.sh" ;;
+    esac
+}
+
+cmd_eat() {
+    local sub=${1:-} legacy=0 seen=0 a args=()
+    [ $# -eq 0 ] || shift
+    # --legacy anywhere before `--`; what follows `--` goes on unchanged.
+    for a in "$@"; do
+        if [ "${seen}" = 0 ] && [ "${a}" = -- ]; then seen=1; fi
+        if [ "${seen}" = 0 ] && [ "${a}" = --legacy ]; then legacy=1; continue; fi
+        if [ "${seen}" = 0 ] && [ "${a}" = --layer ]; then
+            err "eat up is EAS's agent-toolkit layer and takes no --layer ('k3d-gpu eas up --layer' installs the others)"
+        fi
+        args+=("${a}")
+    done
+    case "${sub}:${legacy}" in
+        up:0)     eas_up --agent-toolkit ${args[@]+"${args[@]}"} ;;
+        up:1)     eat_legacy up ${args[@]+"${args[@]}"} ;;
+        check:0)  eas_check ${args[@]+"${args[@]}"} ;;
+        check:1)  eat_legacy check ${args[@]+"${args[@]}"} ;;
+        status:0) eas_status ${args[@]+"${args[@]}"} ;;
+        down:0)   eas_down ${args[@]+"${args[@]}"} ;;
+        status:1|down:1)
+            err "eat ${sub} --legacy: EAT 1.x's installer has no ${sub}; 'k3d-gpu down' deletes the cluster with it" ;;
+        *) err "usage: k3d-gpu eat up [--legacy] [eas up options] | status | down | check [--legacy] [--model NAME] (EAT 2.0 = 'eas --agent-toolkit'; --legacy: EAT 1.x's own installer, integrations/eat/eat-up.sh)" ;;
     esac
 }
 
@@ -12937,6 +13155,7 @@ case "${1:-help}" in
     audit)   shift; cmd_audit "$@" ;;
     sandbox) shift; cmd_sandbox "$@" ;;
     eas)     shift; cmd_eas "$@" ;;
+    eat)     shift; cmd_eat "$@" ;;
     remote)  shift; cmd_remote "$@" ;;
     model-share) shift; cmd_model_share "$@" ;;
     apply)   shift; cmd_apply "$@" ;;

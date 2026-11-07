@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# The bastion's kubectl for EAT's redis_stack validate "Get Redis password from secret"
+# task: the Secret's REDIS_PASSWORD (base64, as jsonpath prints .data), or the pod's
+# environment through exec.
+case "$*" in
+    *"get secret "*"redis-stack-server-credentials"*) printf '%s' "${REDISCLI_FAKE_PASSWORD}" | base64 -w0 ;;
+    *"exec "*"printenv REDIS_PASSWORD"*) printf '%s\n' "${REDISCLI_FAKE_PASSWORD}" ;;
+    *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
+esac

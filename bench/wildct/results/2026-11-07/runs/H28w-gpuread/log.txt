@@ -1,0 +1,9 @@
+2026-11-07T07:39:41.546Z waiting for 2 baseline windows in /home/andrew/k3dgpu-bench-wildct/runs/H28w/out/typical/baseline.jsonl
+2026-11-07T07:41:45.896Z baseline windows written; reading
+2026-11-07T07:41:45.969Z get pods -o json rc=0
+2026-11-07T07:41:45.970Z read done
+2026-11-07T07:41:46.037Z get pods -o wide rc=0
+2026-11-07T07:41:46.089Z get ds rc=0
+2026-11-07T07:41:46.138Z get node rc=0
+2026-11-07T07:41:46.184Z gpu_scan rc=0 GPU-SCAN clean
+2026-11-07T07:41:46.190Z done: clean: no GPU device plugin pod, GPU-SCAN clean
