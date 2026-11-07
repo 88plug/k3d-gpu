@@ -41,11 +41,19 @@ refuses() {
 
 dry() { "${K}" bench --dry-run "$@"; }
 
+# lock_image <stack>: the stack's image in bench/competitors.lock, cut to
+# name:tag@sha256:<first 8 hex> as the plans print it (a bump moves the lock, not this test).
+lock_image() {
+    python3 -c 'import json, sys
+i = json.load(open(sys.argv[1]))["stacks"][sys.argv[2]]["image"]
+print(i[:i.index("@sha256:") + 16])' "${ROOT}/bench/competitors.lock" "$1"
+}
+
 dry_ollama() {
     local o
     o=$(dry --vs ollama --id H10 --cpuset 0-15) || return 1
     grep -q '^docker run -d --name k3dgpu-g-vs-ollama -p 127.0.0.1:[0-9]*:11434 ' <<< "${o}" \
-        && grep -q -- '--cpuset-cpus 0-15 ollama/ollama:0.40.13@sha256:b2f0122c' <<< "${o}" \
+        && grep -qF -- "--cpuset-cpus 0-15 $(lock_image ollama)" <<< "${o}" \
         && grep -q -- '--id H10 ' <<< "${o}" \
         && grep -q -- '--arm ollama=http://127.0.0.1:[0-9]*/v1,qwen3:4b-q4_K_M$' <<< "${o}" \
         && grep -q '^verify: sha256 /root/.ollama/models/blobs/sha256-163553aea1b1de62de7c5eb2ef5afb756b4b3133308d9ae7e42e951d8d696ef5 = 163553ae' <<< "${o}"
@@ -54,7 +62,8 @@ dry_ollama() {
 dry_llamacpp() {
     local o
     o=$(dry --vs llamacpp) || return 1
-    grep -q 'llama.cpp:server-b11960@sha256:8052c13e.* -mu https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf -m /root/.cache/llama.cpp/Qwen3-4B-Q4_K_M.gguf --alias Qwen3-4B --host 0.0.0.0 --port 8080$' <<< "${o}" \
+    grep -qF "$(lock_image llamacpp)" <<< "${o}" \
+        && grep -q ' -mu https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf -m /root/.cache/llama.cpp/Qwen3-4B-Q4_K_M.gguf --alias Qwen3-4B --host 0.0.0.0 --port 8080$' <<< "${o}" \
         && ! grep -q -- ' -hf ' <<< "${o}" \
         && grep -q -- '--arm llamacpp=http://127.0.0.1:[0-9]*/v1,Qwen3-4B$' <<< "${o}" \
         && grep -q -- '--id H0 --out bench-H0-llamacpp/result.json' <<< "${o}"
@@ -63,7 +72,7 @@ dry_llamacpp() {
 dry_ovms() {
     local o
     o=$(dry --vs ovms) || return 1
-    grep -q 'model_server:2026.4.1-gpu@sha256:a928903f.* --source_model OpenVINO/Qwen3-4B-int4-ov ' <<< "${o}" \
+    grep -qF "$(lock_image ovms)" <<< "${o}" && grep -q ' --source_model OpenVINO/Qwen3-4B-int4-ov ' <<< "${o}" \
         && ! grep -q -- '--target_device' <<< "${o}" \
         && grep -q -- ' --user 0 ' <<< "${o}" \
         && grep -q -- '--arm ovms=http://127.0.0.1:[0-9]*/v3,OpenVINO/Qwen3-4B-int4-ov$' <<< "${o}"

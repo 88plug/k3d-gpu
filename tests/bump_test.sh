@@ -4,8 +4,12 @@
 # digests): no network. Checks that a bump
 #   - changes only declared sites, derived values and hook outputs
 #     (hack/pin-only-diff passes on the result);
-#   - substitutes goldens (exact old -> new strings) in tests/** only, and only
-#     for strings no other file still pins;
+#   - substitutes goldens (exact old -> new strings) in tests/** only: not a string
+#     another pin's site still holds, not in a test that names a file still holding
+#     it, and a bare version only in recorded files (prose and records no test reads
+#     hold nothing back);
+#   - with the hf-meta hook, re-reads the saved Hugging Face metadata of each moved
+#     repo at its new revision;
 #   - leaves ledger (bench/), historical, eat-stock files and .github/ alone;
 #   - is a no-op when run a second time;
 #   - moves no held pin to or past its hold, from --resolved values and from a
@@ -124,7 +128,8 @@ check "the tool site moved" grep -qx 'TOOL_VERSION=v1.3.0' "${R}/share/tool.env"
 check "the derived value followed" grep -qx 'built with tool 1.3.0' "${R}/share/notes.txt"
 check "the image moved with its new digest" grep -qx "image: x/img:1.1.0@${D_NEW}" "${R}/share/app.yml"
 check "the golden of the moved image was substituted" grep -qx "want x/img:1.1.0@${D_NEW}" "${R}/tests/golden.txt"
-check "a golden of a string the ledger still pins stays" grep -qx 'want TOOL_VERSION=v1.2.0' "${R}/tests/golden.txt"
+check "a golden the ledger run also holds moves (the test does not read that run)" \
+    grep -qx 'want TOOL_VERSION=v1.3.0' "${R}/tests/golden.txt"
 check "the eat-stock golden stays" grep -qx "want x/eat:2.0.0@${D_EAT}" "${R}/tests/golden.txt"
 for f in bench/h1/run.sh .github/workflows/x.yml EXPERIMENTS.md integrations/eat/values.yaml; do
     check "${f} untouched" git -C "${R}" diff --quiet -- "${f}"
@@ -328,6 +333,152 @@ out=$(PINLIB_FIXTURES="${FIX5}" python3 "${ROOT}/hack/bump" --root "${R5}" --no-
 check "bump from the sources with held pins: nothing to move (rc ${rc}: ${out##*$'\n'})" \
     test "${rc}" -eq 0 -a "${out%%$'\n'*}" = "tools: nothing to move"
 check "bump from the sources with held pins: the tree is unchanged" test -z "$(git -C "${R5}" status --porcelain)"
+
+# goldens: which strings in tests/ move with a bump. A golden moves unless another
+# pin's site still holds its old string (two images at one digest), the test names a
+# file outside tests/ that still holds it (it reads that record: a ledger run's
+# image), or it is a bare version (a site's value alone) in test code, where it is as
+# likely the test's own input. A prose line or a kept record no test names holds
+# nothing back.
+R6="${WORK}/repo6"
+mkdir -p "${R6}/pins" "${R6}/share" "${R6}/tests" "${R6}/bench/h1"
+cat > "${R6}/pins/registry.toml" <<'EOF'
+[groups.tools]
+tests = []
+
+[groups.other]
+tests = []
+
+[[pin]]
+id = "k3s"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "k8s"
+source = { kind = "github-release", repo = "o/k3s", tag = "{v}" }
+sites = [{ file = "share/pins.env", var = "K3S_TAG" }]
+
+[[pin]]
+id = "img"
+class = "ours"
+group = "tools"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "x/img", tag = "{v}" }
+sites = [{ file = "share/app.yml", ref = "x/img" }]
+
+[[pin]]
+id = "mirror"
+class = "ours"
+group = "other"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "y/img", tag = "{v}" }
+sites = [{ file = "share/mirror.yml", ref = "y/img" }]
+EOF
+echo 'K3S_TAG=v1.2.0-k3s1' > "${R6}/share/pins.env"
+printf 'image: x/img:1.0.0@%s\n' "${D_OLD}" > "${R6}/share/app.yml"
+printf 'image: y/img:3.0.0@%s\n' "${D_OLD}" > "${R6}/share/mirror.yml"
+# prose in an ours file (a pinned name:tag@digest there would be a site of its own)
+echo '# before this release: K3S_TAG=v1.2.0-k3s1' > "${R6}/share/CHANGES"
+printf 'IMAGE=x/img:1.0.0@%s  # H1 measured this\n' "${D_OLD}" > "${R6}/bench/h1/run.sh"
+printf 'k3s v1.2.0-k3s1\nimage x/img:1.0.0@%s\ndigest %s\n' "${D_OLD}" "${D_OLD}" > "${R6}/tests/audit.golden"
+printf '#!/usr/bin/env bash\ngrep -q "x/img:1.0.0@%s" share/app.yml\n' "${D_OLD}" > "${R6}/tests/app_test.sh"
+printf '#!/usr/bin/env bash\ngrep -q "IMAGE=x/img:1.0.0@%s" bench/h1/run.sh\n' "${D_OLD}" > "${R6}/tests/h1_test.sh"
+printf 'assert parse("v1.2.0-k3s1") == (1, 2, 0)\n' > "${R6}/tests/version_test.py"
+: > "${R6}/EXPERIMENTS.md"
+: > "${R6}/images.unpinned"
+git -C "${R6}" init -q -b main && git -C "${R6}" add -A && git -C "${R6}" commit -qm base
+echo '{"k3s": {"v": "v1.2.1-k3s1"}, "img": {"v": "1.1.0", "tag": "1.1.0"}}' > "${WORK}/resolved6.json"
+out=$(PINLIB_FIXTURES="${FIX}" python3 "${ROOT}/hack/bump" --root "${R6}" --resolved "${WORK}/resolved6.json" \
+    --no-tests tools 2>&1); rc=$?
+check "goldens: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "goldens: a recorded golden's bare version moves past a prose line that keeps it" \
+    grep -qx 'k3s v1.2.1-k3s1' "${R6}/tests/audit.golden"
+check "goldens: a recorded golden's image moves past a ledger run that keeps it" \
+    grep -qx "image x/img:1.1.0@${D_NEW}" "${R6}/tests/audit.golden"
+check "goldens: a digest another pin's site still holds stays" grep -qx "digest ${D_OLD}" "${R6}/tests/audit.golden"
+check "goldens: a test's image moves when the test does not read the ledger run" \
+    grep -q "x/img:1.1.0@${D_NEW}" "${R6}/tests/app_test.sh"
+check "goldens: a test that names the ledger run keeps the run's image" \
+    git -C "${R6}" diff --quiet -- tests/h1_test.sh
+check "goldens: a bare version in test code stays (a test input)" git -C "${R6}" diff --quiet -- tests/version_test.py
+for f in share/CHANGES share/mirror.yml bench/h1/run.sh; do
+    check "goldens: ${f} untouched" git -C "${R6}" diff --quiet -- "${f}"
+done
+
+# the hf-meta hook: a moved Hugging Face pin's record in each saved metadata bundle
+# (tests/fixtures/hf) is read again at the new revision; other repos' records and
+# bundles without the repo stay as they are.
+R7="${WORK}/repo7"
+HF_OLD=$(printf 'a%.0s' {1..40}) HF_NEW=$(printf 'b%.0s' {1..40}) HF_BASE=$(printf 'c%.0s' {1..40})
+mkdir -p "${R7}/pins" "${R7}/console" "${R7}/tests/fixtures/hf"
+cp "${ROOT}/console/model_opt.py" "${ROOT}/console/convert-pins.json" "${R7}/console/"
+cat > "${R7}/pins/registry.toml" <<'EOF'
+[groups.hf]
+tests = []
+hooks = ["hf-meta"]
+outputs = ["tests/fixtures/hf/*.json"]
+
+[[pin]]
+id = "hf-m"
+class = "ours"
+group = "hf"
+family = "hf"
+scheme = "hf-sha"
+source = { kind = "hf", model = "o/m-int4" }
+sites = [{ file = "console/fallback.txt", regex = '"o/m-int4": \{"revision": "(?P<v>[0-9a-f]{40})"' }]
+EOF
+printf '"o/m-int4": {"revision": "%s"}\n' "${HF_OLD}" > "${R7}/console/fallback.txt"
+python3 - "${R7}" "${HF_OLD}" "${HF_BASE}" <<'PY'
+import json, sys
+root, old, base = sys.argv[1:]
+def rec(rid, sha, lines):
+    return {"id": rid, "sha": sha, "url": "https://huggingface.co/%s/tree/%s" % (rid, sha), "files": ["README.md"],
+            "card": {}, "card_lines": lines, "library_name": None, "pipeline_tag": None, "params_total": None, "tags": []}
+b = {"schema": "k3d-gpu.hfmeta/v1", "requested": "o/m", "target": "o/m", "revision": "main", "source": "huggingface",
+     "searches": [], "repos": {"o/m": rec("o/m", base, []), "o/m-int4": rec("o/m-int4", old, [{"line": 1, "text": "* mode: **INT4**"}])}}
+other = dict(b, requested="o/n", target="o/n", repos={"o/n": rec("o/n", base, [])})
+for name, d in (("o__m.json", b), ("o__n.json", other)):
+    with open("%s/tests/fixtures/hf/%s" % (root, name), "w") as f:
+        f.write(json.dumps(d, indent=1, sort_keys=True) + "\n")
+PY
+: > "${R7}/EXPERIMENTS.md"
+: > "${R7}/images.unpinned"
+git -C "${R7}" init -q -b main && git -C "${R7}" add -A && git -C "${R7}" commit -qm base
+FIX7="${WORK}/fixtures7.json"
+cat > "${FIX7}" <<EOF
+{"https://huggingface.co/api/models/o/m-int4/revision/${HF_NEW}": {"status": 200, "headers": {},
+  "json": {"id": "o/m-int4", "sha": "${HF_NEW}", "siblings": [{"rfilename": "README.md"}], "tags": ["openvino"]}},
+ "https://huggingface.co/o/m-int4/resolve/${HF_NEW}/README.md": {"status": 200, "headers": {},
+  "body": "# m-int4\n\n* mode: **INT4**\n* group_size: **128**\n"}}
+EOF
+echo "{\"hf-m\": {\"v\": \"${HF_NEW}\"}}" > "${WORK}/resolved7.json"
+out=$(PINLIB_FIXTURES="${FIX7}" python3 "${ROOT}/hack/bump" --root "${R7}" --resolved "${WORK}/resolved7.json" \
+    --no-tests hf --summary "${WORK}/hf.json" 2>&1); rc=$?
+check "hf-meta: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "hf-meta: the moved repo's record is the one Hugging Face serves at the new revision" \
+    python3 - "${R7}" "${HF_NEW}" "${HF_BASE}" "${ROOT}" <<'PY'
+import json, sys
+root, new, base, repo = sys.argv[1:]
+sys.dont_write_bytecode = True
+sys.path.insert(0, repo + "/console")
+import model_opt
+readme = "# m-int4\n\n* mode: **INT4**\n* group_size: **128**\n"
+text = open(root + "/tests/fixtures/hf/o__m.json").read()
+assert text == json.dumps(json.loads(text), indent=1, sort_keys=True) + "\n", "bundle not written as saved"
+r = json.loads(text)["repos"]
+m = r["o/m-int4"]
+assert m["sha"] == new and m["url"].endswith("/tree/" + new), m
+assert m["tags"] == ["openvino"] and m["card_lines"] == model_opt.card_lines(readme) != [], m
+assert r["o/m"]["sha"] == base, r["o/m"]
+PY
+check "hf-meta: a bundle without the repo is untouched" git -C "${R7}" diff --quiet -- tests/fixtures/hf/o__n.json
+check "hf-meta: the summary notes the refreshed bundle" \
+    grep -q "hf-meta: tests/fixtures/hf/o__m.json o/m-int4 ${HF_OLD:0:8} -> ${HF_NEW:0:8}" "${WORK}/hf.json"
+git -C "${R7}" add -A && git -C "${R7}" commit -qm bump
+check "hack/pin-only-diff passes on the hf-meta bump" \
+    python3 "${ROOT}/hack/pin-only-diff" --root "${R7}" --group hf HEAD~1 HEAD
 
 # the registry: one group (one branch) for both NRI components
 check "nri-balloons and nri-balloons-guard bump in group nri (one branch)" python3 - "${ROOT}" <<'PY'

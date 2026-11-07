@@ -5,10 +5,11 @@
 
 A test that names a pinned value (a golden transcript, a recorded image list)
 moves with the pin. Only tests/** is written: never a ledger, historical, arm or
-eat-stock path, nor .github/. A pair applies only once no file outside tests/
-holds its old string any more (one still pinned elsewhere may be what a test
-checks). Idempotent: a second run changes nothing, even when an old string is
-part of its new one (1.37 -> 1.37.1). hack/bump runs it after every bump.
+eat-stock path, nor .github/. A test keeps an old string that another pin's site
+still holds, that a file outside tests/ it names still holds (a ledger run it
+reads), or that is a bare version in test code (hack/pinlib/goldens.py, pins/README.md).
+Idempotent: a second run changes nothing, even when an old string is part of its
+new one (1.37 -> 1.37.1). hack/bump runs it after every bump.
 --pairs FILE: a JSON list of [old, new]. Prints the paths changed.
 """
 
