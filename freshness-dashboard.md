@@ -1,25 +1,21 @@
 # Freshness dashboard
 
-Updated 2026-11-07 00:38 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-07 02:55 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-bot-pr-stuck
-red:bot-sweep.yml
 red:freshness.yml
 red:watchdog.yml
-stale:bot-sweep.yml
 stale:freshness.yml
 stale:watchdog.yml
 
-## Pins behind (19)
+## Pins behind (17)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 1d |
+| examples | `examples-crewai` | `1.15.36` | `1.15.37` | patch | 2026-11-07 | 0h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.1` | `v1.108.1` | `v1.108.2` | patch | ? | ? |
-| gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 8d |
-| gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 8h |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 1d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `8c0b3d30f3ae96f5c7f774de704bf0ada83e422a` | revision | 2026-11-05 | 1d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 7d |
@@ -27,14 +23,13 @@ stale:watchdog.yml
 | host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 11d |
 | host-intel | `linux-tools` | `7.3.1` | `7.3.3` | patch | ? | ? |
 | images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 9d |
-| images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 23h |
+| images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 1d |
 | k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 3d |
-| llama-cpp | `llama-cpp` | `v0.8.0` | `v0.9.0` | minor | 2026-11-04 | 2d |
-| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 2h |
+| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 4h |
 | opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.0` | minor | 2026-11-03 | 3d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.12` | patch | ? | ? |
 | packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 4d |
-| vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 4d |
+| vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 5d |
 
 ### Not resolved (3)
 
@@ -42,27 +37,24 @@ stale:watchdog.yml
 - `eat-vllm-cpu` (eat-stock): eat-vllm-cpu: HTTP 404 from https://raw.githubusercontent.com/intel/enterprise-agent-toolkit/release-2.0.0/core/helm-charts/vllm/xeon-values.yaml
 - `vllm-cpu` (vllm-cpu): vllm-cpu: vllm-project/vllm's latest release 'v0.33.0rc3' does not match {v}
 
-## Open bot PRs (13)
+## Open bot PRs (10)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
 | #326 | vllm-xpu | review | a human approval at the head |
 | #325 | packaging-images | review | a human approval at the head |
 | #324 | opt-in-manifests | review | a human approval at the head |
-| #323 | llama-cpp | review | a human approval at the head |
 | #322 | k3s | auto | - |
 | #321 | images | review | a human approval at the head |
 | #320 | host-intel | review | a human approval at the head |
-| #319 | gguf-convert-pip | auto | - |
 | #318 | hf-console-fallback | auto | - |
 | #317 | examples | auto | - |
-| #316 | eat-stock | review | a human approval at the head |
 | #315 | cuda-test | review | a human approval at the head |
 | #314 | digests | review | a human approval at the head |
 
 ## EAT stock (always review)
 
-- `eat`: behind: `release-1.1.0` -> `release-2.0.0`
+- `eat`: current (`release-1.1.0`)
 - `eat-litellm`: error: eat-litellm: HTTP 404 from https://raw.githubusercontent.com/intel/enterprise-agent-toolkit/release-2.0.0/core/helm-charts/genai-gateway/values.yaml
 - `eat-vllm-cpu`: error: eat-vllm-cpu: HTTP 404 from https://raw.githubusercontent.com/intel/enterprise-agent-toolkit/release-2.0.0/core/helm-charts/vllm/xeon-values.yaml
 - `image:eat-stock:bitnamilegacy/clickhouse:25.2.1-debian-12-r0`: current (`25.2.1-debian-12-r0`)
