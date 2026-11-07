@@ -79,7 +79,9 @@ EOF
 chmod +x "${WORK}/bin/kubectl"
 STUB_PATH="${WORK}/bin:${PATH}"
 
-run() { env PATH="${STUB_PATH}" K3D_GPU_TUNE_DIR="${WORK}/profiles" "$@"; }
+# TMPDIR inside WORK: the workdirs a real 'tune run' keeps go when the test ends.
+mkdir -p "${WORK}/tmp"
+run() { env PATH="${STUB_PATH}" K3D_GPU_TUNE_DIR="${WORK}/profiles" TMPDIR="${WORK}/tmp" "$@"; }
 
 echo "== fingerprint"
 h1=$(host h1 "13th Gen Intel(R) Core(TM) i9-13900T" 0-15 16-31)
