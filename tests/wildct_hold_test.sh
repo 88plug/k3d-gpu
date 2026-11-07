@@ -580,6 +580,9 @@ ROW=${ROOT}/bench/wildct/row.sh
 IMG=cryptoandcoffee/k3d-gpu:0.1.74@sha256:1d7513e65064b36a7d62eac56ddb4b6d7b904d53f482a984a39ed8590bd527a4
 W3_LEDGER=$(awk '/^### Wildct pre-registration/ {f = 1; next} f && /^### / {exit} f' "${ROOT}/EXPERIMENTS.md" \
     | grep -o 'K3D_GPU_K3S_ARGS="[^"]*"' | head -1 | sed 's/^K3D_GPU_K3S_ARGS="//; s/"$//')
+# H28's pod image, as wildct amendment R8 registers it for H28w-prep and H28w (H28x amendment R2's).
+H28_PYIMG=$(awk '/^### Wildct amendment R8/ {f = 1; next} f && /^### / {exit} f' "${ROOT}/EXPERIMENTS.md" \
+    | grep -oE 'PYIMG=python:3\.13-slim@sha256:[0-9a-f]{64}' | head -1 | sed 's/^PYIMG=//')
 rowprint() { WILDCT_ROW_PRINT=1 IMAGE=${IMG} bash "${ROW}" "$@"; }
 has() {  # has ROW... -- LINE...: every LINE is a line of row.sh's printout
     local args=() l out
@@ -599,10 +602,14 @@ row_envs_match_the_registration() {
         "MODELS=${HOME}/k3dgpu-bench-wildct/models" K3D_GPU_AGENT_DRAFT=CPU || return 1
     has h34w -- H34_CLUSTER=k3dgpu-w-h34 H34_VENDORS=auto,-nvidia,-intel H34_LEVELS=typical LOAD_CPUS=20-23 \
         "K3D_GPU_IMAGE=${IMG}" "H22_MODELS=${HOME}/k3dgpu-bench-wildct/models" "${w3}" || return 1
-    has h28w-prep -- LEVELS=typical "IMAGE=${IMG}" || return 1
-    # H28w: W3 plus the two Intel GPU disables `up` passes with intel not active (amendment R1, W8).
+    # H28w-prep and H28w: H28's registered pod image (wildct amendment R8).
+    [ -n "${H28_PYIMG}" ] || { echo "no PYIMG in wildct amendment R8"; return 1; }
+    has h28w-prep -- LEVELS=typical "IMAGE=${IMG}" "PYIMG=${H28_PYIMG}" || return 1
+    # H28w: W3 plus the two Intel GPU disables `up` passes with intel not active (amendment R1, W8),
+    # and the node label `up` sets with nvidia not active (amendment R8).
     has h28w -- CLUSTER=k3dgpu-w-h28 LEVELS=typical HOLD=1440 NODE_CPUS=0-15 LOAD_CPUS=20-23 \
-        "${w3} --disable=intel-gpu-plugin --disable=intel-gpu-dra" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" || return 1
+        "${w3} --disable=intel-gpu-plugin --disable=intel-gpu-dra --node-label=nvidia.com/gpu.present=false" \
+        "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" "PYIMG=${H28_PYIMG}" || return 1
     has h57w 2 perf -- H57D_ROW=H57w H57D_PREFIX=k3dgpu-w- H57D_LOAD1_MAX=12 H57D_VENDORS=auto,-nvidia,-intel \
         "H57D_IMAGE=${IMG}" "H57D_K3S_ARGS=${W3_LEDGER}" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" \
         "G=${HOME}/k3dgpu-bench-wildct/h57" "H57D_G=${HOME}/k3dgpu-bench-wildct/h57" "K3D_REAL=${HOME}/k3dgpu-bench-wildct/bin/k3d" \
@@ -694,6 +701,30 @@ h28w_cluster_disables_the_intel_gpu_stacks() {
         grep -q "share/${a}.yml /var/lib/rancher/k3s/server/manifests/${a}.yaml" "${ROOT}/Dockerfile" \
             || { echo "the node image no longer bakes ${a}.yaml (the disable names its manifest)"; return 1; }
     done
+}
+
+# Rule W8 for H28w, NVIDIA (wildct amendment R8): the node image bakes the NVIDIA device plugin
+# DaemonSet, whose only node affinity is `nvidia.com/gpu.present NotIn ["false"]`, so a plain
+# `k3d cluster create` node (no such label) would run it. `up` labels the node
+# nvidia.com/gpu.present=false when nvidia is not active; H28w's create carries the same label.
+h28w_cluster_keeps_the_nvidia_plugin_off() {
+    local env=() args m=${ROOT}/share/nvidia-device-plugin.yml
+    mapfile -t env < <(rowprint h28w | sed '$d')
+    [ "${#env[@]}" -gt 0 ] || { echo "row.sh h28w printed no environment"; return 1; }
+    args=$(env "${env[@]}" bash "${ROOT}/bench/zero-copy-models/probe.sh" create-args) || { echo "probe.sh create-args failed"; return 1; }
+    [[ " ${args} " == *" --k3s-arg --node-label=nvidia.com/gpu.present=false@server:* "* ]] \
+        || { echo "H28w's k3d cluster create has no nvidia.com/gpu.present=false node label: ${args}"; return 1; }
+    grep -q "share/nvidia-device-plugin.yml /var/lib/rancher/k3s/server/manifests/" "${ROOT}/Dockerfile" \
+        || { echo "the node image no longer bakes the NVIDIA device plugin (recheck amendment R8)"; return 1; }
+    python3 - "${m}" <<'EOF' || return 1
+import sys
+t = open(sys.argv[1]).read()
+want = ['- key: nvidia.com/gpu.present', 'operator: NotIn', 'values: ["false"]']
+missing = [w for w in want if w not in t]
+sys.exit(f"{sys.argv[1]}: affinity changed, missing {missing} (recheck amendment R8)" if missing else 0)
+EOF
+    grep -q 'create_args+=(--k3s-node-label="nvidia.com/gpu.present=false@server:\*;agent:\*")' "${ROOT}/scripts/k3d-gpu" \
+        || { echo "the launcher no longer labels nvidia.com/gpu.present=false with nvidia not active"; return 1; }
 }
 
 row_guards() {
@@ -885,6 +916,7 @@ check "RESUME.md: docker ps and strays.py checks read as empty print their rc" r
 check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "H28w's plain k3d cluster create disables both baked Intel GPU stacks (W8), keeps W3" h28w_cluster_disables_the_intel_gpu_stacks
+check "H28w's plain k3d cluster create labels nvidia.com/gpu.present=false, as up does (W8, R8)" h28w_cluster_keeps_the_nvidia_plugin_off
 check "row.sh smoke: up, pod wait, GPU scan, down; a failed up fails the smoke" row_smoke_runs_up_scan_down
 check "a command that ran and failed: hold.sh deletes the h28-model images (H28w row), nothing else" failed_command_deletes_h28_model_images
 check "a cleanup step that fails at once is named in cleanup-incomplete" failed_cleanup_steps_are_named
