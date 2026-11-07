@@ -309,6 +309,8 @@ jobs:
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
       - run: bash bench/admission/test_run.sh
+      # F3's lock runner (F3 note N1): one lock, K3DGPU_LIVE_LOCK or ~/k3dgpu-bench.lock.
+      - run: bash bench/f3/test_lockrun.sh
 
   mcp-tests:
     name: MCP server tests

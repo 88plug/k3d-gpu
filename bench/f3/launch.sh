@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Starts the scored F3 run detached: lockrun.sh takes ~/k3dgpu-bench.lock, then live.lock
-# (amendment R1), then runs run.sh with a 180 min cap.
+# Starts the scored F3 run detached: lockrun.sh takes K3DGPU_LIVE_LOCK (default
+# ~/k3dgpu-bench.lock; F3 note N1), then runs run.sh with a 180 min cap.
 set -uo pipefail
 R=/home/andrew/.cache/k3dgpu-f3/f3-scored
 export K3D_GPU_IMAGE=k3d-gpu-f3node:48e1da90
