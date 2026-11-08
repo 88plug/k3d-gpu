@@ -1,32 +1,33 @@
 # Freshness dashboard
 
-Updated 2026-11-07 22:14 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-08 06:21 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 None.
 
-## Pins behind (17)
+## Pins behind (18)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 2d |
-| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 9h |
+| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 17h |
+| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.2` | `v1.108.2` | `v1.108.3` | patch | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 2d |
-| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 17h |
+| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 1d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 8d |
 | host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 4d |
 | host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 12d |
 | host-intel | `linux-tools` | `7.3.1` | `7.3.3` | patch | ? | ? |
-| images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 9d |
-| images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 1d |
+| images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 10d |
+| images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 2d |
 | k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 4d |
 | nri | `nri-balloons` | `v0.15.0` | `v0.15.1` | patch | ? | ? |
 | opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 1d |
 | opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.0` | minor | 2026-11-03 | 4d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.12` | patch | ? | ? |
 | packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 5d |
-| vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 5d |
+| vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 6d |
 
 ### Not resolved (1)
 
@@ -131,7 +132,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.93; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.1-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.32.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.95; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.1-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.32.0
 
 ### Not machine-readable
 
