@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-08 06:21 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-08 06:38 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -33,10 +33,11 @@ None.
 
 - `vllm-cpu` (vllm-cpu): vllm-cpu: vllm-project/vllm's latest release 'v0.33.0rc3' does not match {v}
 
-## Open bot PRs (11)
+## Open bot PRs (12)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #368 | examples | auto | - |
 | #366 | docs-build | auto | - |
 | #365 | nri | auto | - |
 | #357 | vllm-xpu | review | a human approval at the head |
