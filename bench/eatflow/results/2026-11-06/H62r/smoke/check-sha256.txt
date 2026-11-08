@@ -1,0 +1,2 @@
+84ac69bc8405bff4fae43727f7f2e843f6883c9a77f3329ebfd2f4e64ae8982b  /home/devcloud/k3dgpu-bench/k3d-gpu-h62r/integrations/eat/eat-check.sh
+f5ff8b31c14af7e2c9965d8130441795f1af6951a9f7d7773c48ea62c74fcee4  /home/devcloud/k3dgpu-bench/k3d-gpu-h62r/integrations/eas/eas-ready.py
