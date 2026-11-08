@@ -75,7 +75,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.93"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.95"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -9136,7 +9136,11 @@ vllm_manifest() {
         env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
     done
     [ -z "${hybrid}" ] || podlabels=$'\n        k3d-gpu.io/cores: performance'
-    [ -z "${gid}" ] || podspec=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
+    # No Service environment variables: Service vllm would set VLLM_PORT=tcp://<ip>:8000,
+    # which vLLM reads as its own internal port and refuses as a URI when the engine
+    # core starts (vllm/envs.py get_vllm_port, evaluated for all by enable_envs_cache).
+    podspec=$'\n      enableServiceLinks: false'
+    [ -z "${gid}" ] || podspec+=$'\n      securityContext:\n        supplementalGroups: ['"${gid}"']'
     local memlim=""
     [ -z "${AGENT_MEMORY_LIMIT}" ] || memlim=$'\n'"              memory: ${AGENT_MEMORY_LIMIT}"
 
@@ -9692,18 +9696,20 @@ EOF
 }
 
 # One short chat completion: runs the first generation, which is slower than the
-# rest, and proves generation end to end. OVMS is asked from inside its pod (the
-# image ships curl), not through the API server's service proxy: the proxy hands
-# OVMS a POST body it cannot route ("Mediapipe graph definition with requested
-# name is not found"). vLLM and llama-server are asked through the service proxy.
+# rest, and proves generation end to end. OVMS and vLLM are asked from inside their
+# pod with curl (all their images ship it), not through the API server's service
+# proxy: the proxy hands OVMS a POST body it cannot route ("Mediapipe graph
+# definition with requested name is not found"), and `kubectl create --raw` sends
+# no Content-Type, which vLLM's chat route answers with 400 (only application/json
+# is allowed). llama-server is asked through the service proxy.
 agent_warmup() {
     local body reply start=${SECONDS}
     body="{\"model\":\"${AGENT_MODEL_NAME}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}"
-    if [ "${AGENT_APP}" != ovms ]; then
+    if [ "${AGENT_APP}" = llamacpp ]; then
         reply=$(kubectl create --raw "${AGENT_PROXY}${AGENT_API}/chat/completions" -f - <<< "${body}" 2>&1)
     else
-        reply=$(kubectl -n "${AGENT_NS}" exec deployment/ovms -c ovms -- \
-            curl -sS --max-time 600 http://127.0.0.1:8000/v3/chat/completions -H 'Content-Type: application/json' -d "${body}" 2>&1)
+        reply=$(kubectl -n "${AGENT_NS}" exec "deployment/${AGENT_APP}" -c "${AGENT_APP}" -- \
+            curl -sS --max-time 600 "http://127.0.0.1:8000${AGENT_API}/chat/completions" -H 'Content-Type: application/json' -d "${body}" 2>&1)
     fi || err "warm-up request failed: ${reply}"
     case "${reply}" in *'"choices"'*) ;; *) err "warm-up request failed: ${reply}" ;; esac
     info "warm-up reply ($((SECONDS - start))s): $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
@@ -10903,7 +10909,7 @@ cmd_tune_trial() {
 }
 
 cmd_tune_run() {
-    local objective=throughput dry="" full="" budget=10 arg inputs facts_file fp workdir
+    local objective=throughput dry="" full="" budget=10 arg inputs facts facts_file fp workdir
     local -a extra=()
     while [ $# -gt 0 ]; do
         arg=$1
@@ -10929,19 +10935,27 @@ cmd_tune_run() {
     [ "${AGENT_BACKEND}" = ovms ] || err "'k3d-gpu tune' searches the OVMS agent; unset K3D_GPU_AGENT_BACKEND=${AGENT_BACKEND}"
     require kubectl
     kubectl get nodes >/dev/null 2>&1 || err "no cluster reachable — run 'k3d-gpu up' first"
-    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
-    facts_file="${workdir}/facts.json"
-    tune_facts > "${facts_file}"
+    facts=$(tune_facts)
     if [ -n "${dry}" ]; then
         local n0=27 seed=1 i
         for ((i = 0; i < ${#extra[@]}; i += 2)); do
             case "${extra[i]}" in --n0) n0=${extra[i+1]} ;; --seed) seed=${extra[i+1]} ;; esac
         done
-        tune_py space --facts "${facts_file}" --n0 "${n0}" --seed "${seed}"
-        return 0
+        # The preview keeps nothing: its facts file goes with its temp dir.
+        (
+            workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+            trap 'rm -rf "${workdir}"' EXIT
+            printf '%s\n' "${facts}" > "${workdir}/facts.json"
+            tune_py space --facts "${workdir}/facts.json" --n0 "${n0}" --seed "${seed}"
+        )
+        return
     fi
     require curl
     tune_need_bench
+    # The run's workdir holds its trials and logs, and stays after the run.
+    workdir=$(mktemp -d "${TMPDIR:-/tmp}/k3d-gpu-tune.XXXXXX")
+    facts_file="${workdir}/facts.json"
+    printf '%s\n' "${facts}" > "${facts_file}"
     fp=$(tune_fingerprint)
     inputs=$(tune_fingerprint_inputs | python3 -c 'import json, sys; print(json.dumps(dict(l.rstrip("\n").split("=", 1) for l in sys.stdin)))')
     mkdir -p "${TUNE_DIR}"
