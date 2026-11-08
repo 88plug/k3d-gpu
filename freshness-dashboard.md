@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-08 06:38 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-08 07:05 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -11,7 +11,7 @@ None.
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 2d |
-| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 17h |
+| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 18h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.2` | `v1.108.2` | `v1.108.3` | patch | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 2d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 1d |
@@ -31,7 +31,7 @@ None.
 
 ### Not resolved (1)
 
-- `vllm-cpu` (vllm-cpu): vllm-cpu: vllm-project/vllm's latest release 'v0.33.0rc3' does not match {v}
+- `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
 ## Open bot PRs (12)
 
