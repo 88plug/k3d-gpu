@@ -206,6 +206,10 @@ class Drift(unittest.TestCase):
     def test_not_yet_run_in_a_table_row(self):
         self.assertDrift("| Row | State |\n|---|---|\n| H2 | not yet run |\n", r"guide.md:3: H2 reads not yet run")
 
+    def test_not_yet_run_capitalized(self):
+        self.assertDrift("| Row | State |\n|---|---|\n| H2 | Not yet run |\n", r"guide.md:3: H2 reads not yet run")
+        self.assertDrift("| H3 | Pre-registered. Not run yet |\n", r"guide.md:1: H3 reads not yet run.*SUPPORTED")
+
     def test_lettered_id_reference(self):
         rc, out = run("Status: PENDING [ledger:H1b].\n", LEDGER.replace(
             "| H2 | two", "| H1b | one, re-run | p | probe | SUPPORTED |\n| H2 | two"))

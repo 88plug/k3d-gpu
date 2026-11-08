@@ -23,9 +23,10 @@ A doc states a verdict for row Hn in any of these forms:
              must equal the ledger's count for that verdict.
   not run    "H62r is pre-registered and not yet run", "rows H28w and H57wa,
              pre-registered and not yet run": every id before "not yet run", "not
-             run yet" or "is/are pre-registered" in the same clause (no '.', ';' or
-             '|' between; a paragraph's line breaks allowed), or the one id of a
-             table row, must be PENDING in the ledger. Docs only, not scripts.
+             run yet" or "is/are pre-registered", in any case, in the same clause (no
+             '.', ';' or '|' between; a paragraph's line breaks allowed), or the one
+             id of a table row ("| H28w | Not yet run |"), must be PENDING in the
+             ledger. Docs only, not scripts.
 
 A row id may carry one lowercase letter (H1b, a re-run row of H1).
 
@@ -50,7 +51,7 @@ HEADING = re.compile(r"^#+\s+\**(" + V + r")\b")
 LIST_LINE = re.compile(r"^\s*(?:[-*]\s+)?\**(" + V + r")\b[^:]{0,40}:")
 COUNT = re.compile(r"\b(\d+|" + "|".join(NUMBERS) + r")\s+(?:hypotheses\s+|rows\s+)?(?:are|is)\s+(" + V + r")\b",
                    re.IGNORECASE)
-NOT_RUN = re.compile(r"\b(?:not yet run|not run yet|(?:is|are) pre-registered)\b")
+NOT_RUN = re.compile(r"\b(?:not yet run|not run yet|(?:is|are) pre-registered)\b", re.IGNORECASE)
 BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 SENTENCE_END = re.compile(r"\.(?=\s|$)")
 
