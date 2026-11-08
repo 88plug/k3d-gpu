@@ -1,0 +1,4 @@
+PASS VM a: amx_tile on 96 of 96 vCPUs
+PASS VM a: nproc 96 == 96
+PASS VM b: amx_tile on 96 of 96 vCPUs
+PASS VM b: nproc 96 == 96
