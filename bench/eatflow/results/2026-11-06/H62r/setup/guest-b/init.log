@@ -1,0 +1,17 @@
+init: env=local  layer=agent-toolkit  →  /home/ubuntu/enterprise-ai-solutions/env/local
+  created: local/inventory/hosts.yaml
+Cloning enterprise.ai-inference (d035b1ef1981fbf5084ff05c9a337e620478bb87)
+Cloning into '/home/ubuntu/enterprise-ai-solutions/ext/enterprise.ai-inference'...
+HEAD is now at d035b1e Documentation Updates (#55)
+Cloning enterprise.agent-toolkit (7b827e2d95cec826a20c7e3f5a30eb4818ed2992)
+Cloning into '/home/ubuntu/enterprise-ai-solutions/ext/enterprise.agent-toolkit'...
+HEAD is now at 7b827e2 Merge branch 'main' into release-2.0.0
+  created: local/global_config.yaml  (auth_provider from repos.agent-toolkit.yaml)
+  created: local/nodes.yaml
+  created: local/config.inference.yaml  (enterprise.ai-inference/config.yaml)
+  created: local/models.yaml  (from enterprise.ai-inference/model_manager/models.yaml)
+  created: local/config.agent-toolkit.yaml  (enterprise.agent-toolkit/config.yaml)
+[0;32minit: done.[0m
+  Configure  /home/ubuntu/enterprise-ai-solutions/env/local/global_config.yaml  (see README.md § Configuration Reference)
+  Configure  /home/ubuntu/enterprise-ai-solutions/env/local/models.yaml          (see README.md § Deploy a Model)
+  Then       ./es_auto_installer.sh install --env local agent-toolkit

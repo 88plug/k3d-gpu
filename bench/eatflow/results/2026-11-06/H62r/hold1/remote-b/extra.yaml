@@ -1,0 +1,186 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  creationTimestamp: "2026-11-07T08:08:57Z"
+  finalizers:
+  - serving.kserve.io/llmisvc-finalizer
+  generation: 1
+  labels:
+    app.kubernetes.io/managed-by: model-manager
+    app.kubernetes.io/name: gemma-4-26b
+  name: gemma-4-26b
+  namespace: llm-inference
+  resourceVersion: "21101"
+  uid: 9bda5b25-37fc-4e9f-a811-049747037a6f
+spec:
+  annotations:
+    balloon.balloons.resource-policy.nri.io/container.main: vllm-balloon-tp1
+    cpu-policy.model-manager.io/balloon: vllm-balloon-tp1
+    cpu-policy.model-manager.io/type: nri-balloons
+  model:
+    uri: pvc://model-store/gemma-4-26b
+  replicas: 1
+  router:
+    gateway:
+      refs:
+      - name: ai-gateway
+        namespace: llm-inference
+    route: {}
+    scheduler: {}
+  template:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: feature.node.kubernetes.io/cpu-cpuid.AMXBF16
+              operator: In
+              values:
+              - "true"
+    containers:
+    - args:
+      - --max-num-seqs
+      - "128"
+      - --max-num-batched-tokens
+      - "2048"
+      - --enable-chunked-prefill
+      - --block-size
+      - "128"
+      - --dtype
+      - bfloat16
+      - --distributed_executor_backend
+      - mp
+      - --enable_chunked_prefill
+      - --enforce-eager
+      - --enable-prefix-caching
+      - --enable-auto-tool-choice
+      - --tool-call-parser
+      - gemma4
+      - --tensor-parallel-size
+      - "1"
+      - --served-model-name
+      - gemma-4-26b
+      - --chat-template
+      - /etc/chat-template/chat_template.jinja
+      env:
+      - name: HF_HOME
+        value: /data
+      - name: KMP_BLOCKTIME
+        value: "1"
+      - name: TRITON_CACHE_DIR
+        value: /tmp/.triton
+      - name: USER
+        value: vllm
+      - name: VLLM_ALLOW_LONG_MAX_MODEL_LEN
+        value: "1"
+      - name: VLLM_CPU_KVCACHE_SPACE
+        value: "40"
+      - name: VLLM_CPU_NUM_OF_RESERVED_CPU
+        value: "1"
+      - name: VLLM_CPU_SGL_KERNEL
+        value: "0"
+      - name: VLLM_ENGINE_ITERATION_TIMEOUT_S
+        value: "120"
+      - name: VLLM_NO_USAGE_STATS
+        value: "1"
+      - name: VLLM_RPC_TIMEOUT
+        value: "100000"
+      image: docker.io/vllm/vllm-openai-cpu:v0.28.0
+      livenessProbe:
+        failureThreshold: 12
+        httpGet:
+          path: /health
+          port: 8000
+        periodSeconds: 10
+        timeoutSeconds: 10
+      name: main
+      readinessProbe:
+        failureThreshold: 5
+        httpGet:
+          path: /health
+          port: 8000
+        periodSeconds: 10
+        timeoutSeconds: 5
+      resources:
+        limits:
+          cpu: "40"
+          memory: 128Gi
+        requests:
+          cpu: "40"
+          memory: 128Gi
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+          - ALL
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      startupProbe:
+        failureThreshold: 120
+        httpGet:
+          path: /health
+          port: 8000
+        periodSeconds: 10
+      volumeMounts:
+      - mountPath: /etc/chat-template
+        name: chat-template
+        readOnly: true
+    securityContext:
+      seccompProfile:
+        type: RuntimeDefault
+    volumes:
+    - configMap:
+        name: gemma-4-26b-chat-template
+      name: chat-template
+status:
+  addresses:
+  - name: internal
+    url: http://10.233.38.223/llm-inference/gemma-4-26b
+  annotations:
+    serving.kserve.io/config-llm-decode-template: kserve-config-llm-decode-template
+    serving.kserve.io/config-llm-decode-worker-data-parallel: kserve-config-llm-decode-worker-data-parallel
+    serving.kserve.io/config-llm-prefill-template: kserve-config-llm-prefill-template
+    serving.kserve.io/config-llm-prefill-worker-data-parallel: kserve-config-llm-prefill-worker-data-parallel
+    serving.kserve.io/config-llm-router-route: kserve-config-llm-router-route
+    serving.kserve.io/config-llm-scheduler: kserve-config-llm-scheduler
+    serving.kserve.io/config-llm-template: kserve-config-llm-template
+    serving.kserve.io/config-llm-worker-data-parallel: kserve-config-llm-worker-data-parallel
+  conditions:
+  - lastTransitionTime: "2026-11-07T08:09:06Z"
+    severity: Info
+    status: "True"
+    type: GatewaysReady
+  - lastTransitionTime: "2026-11-07T08:09:14Z"
+    severity: Info
+    status: "True"
+    type: HTTPRoutesReady
+  - lastTransitionTime: "2026-11-07T08:11:29Z"
+    severity: Info
+    status: "True"
+    type: InferencePoolReady
+  - lastTransitionTime: "2026-11-07T08:24:33Z"
+    severity: Info
+    status: "True"
+    type: MainWorkloadReady
+  - lastTransitionTime: "2026-11-07T08:09:06Z"
+    severity: Info
+    status: "True"
+    type: PresetsCombined
+  - lastTransitionTime: "2026-11-07T08:24:33Z"
+    status: "True"
+    type: Ready
+  - lastTransitionTime: "2026-11-07T08:11:29Z"
+    status: "True"
+    type: RouterReady
+  - lastTransitionTime: "2026-11-07T08:09:38Z"
+    severity: Info
+    status: "True"
+    type: SchedulerWorkloadReady
+  - lastTransitionTime: "2026-11-07T08:24:33Z"
+    status: "True"
+    type: WorkloadsReady
+  observedGeneration: 1
+  url: http://10.233.38.223/llm-inference/gemma-4-26b

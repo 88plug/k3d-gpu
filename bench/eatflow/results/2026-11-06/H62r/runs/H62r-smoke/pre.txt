@@ -1,0 +1,15 @@
+2026-11-07T08:15:36Z
+ 08:15:36 up 52 days,  9:30, 11 users,  load average: 3.01, 5.39, 5.10
+%CPU     PID USER     COMMAND
+ 323 3647403 devcloud qemu-system-x86
+ 137 3646938 devcloud qemu-system-x86
+ 100 3652861 devcloud ps
+15.4  872705 65532    epp
+ 2.6    3911 nobody   node_exporter
+ 1.2    3934 root     python3
+ 1.2    2651 root     dockerd
+ 1.0    3892 10001    loki
+ 0.7    3914 root     alloy
+ 0.6    3941 472      grafana
+aiperf_procs: 0
+/dev/nvme0n1p1  3637102748 1302217696 2334868668      36% /
