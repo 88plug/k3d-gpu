@@ -60,9 +60,11 @@ of the same Gemma 4 26B-A4B QAT weights), each in its own KVM guest of one shape
 - `validate agent-toolkit` passed, and a chat, a tool call, the guardrail's block and a sandbox run went through EAS's gateway.
 - In 24 interleaved pairs of EAT's banking tasks, each stack finished 21 of 24 within the turn budget. The paired difference was 0.000 (CI -0.125 to +0.125), and every gate passed.
 
-The row predicted k3d-gpu's stack far ahead, so the ledger grades it REFUTED. For EAT users the
-reading is simple: on this Xeon, Intel's GA install, run as Intel documents it, does as well in
-EAT's own banking flow as k3d-gpu's own CPU stack.
+The row predicted k3d-gpu's stack far ahead, so the ledger grades it REFUTED. For EAT users: on
+this Xeon, Intel's GA install, with the documented reserve list set, did as well in EAT's own
+banking flow as k3d-gpu's own CPU stack. The scope is the ledger's: one hold, both stacks in KVM
+guests, and the harness sent Intel's arm its turns at the model's Service, past EAS's LiteLLM
+gateway and guardrail, a deviation H62 named before it ran (D4).
 
 One finding from the run is for EAS: in a KVM guest whose kernel numbers a core's two threads
 next to each other, EAS's topology probe counts the comma fields of `thread_siblings_list`
@@ -70,7 +72,7 @@ next to each other, EAS's topology probe counts the comma fields of `thread_sibl
 and reads one thread per core. EAS then reserves 12 CPUs instead of the 48 siblings, which is how
 H62's install came to size the model to 76 CPUs
 ([H62r pre-registration](../../EXPERIMENTS.md#h62r-pre-registration-h62-at-the-ga-tags-eas-v120-with-eat-20-on-the-xeon-6741p-2026-11-06)).
-The reserve list above is the documented way around it.
+Setting EAS's documented reserve list, as above, works around it.
 
 **Pins move on their own, and each move is checked before it merges.** One registry,
 `pins/registry.toml`, now owns every version, digest and model revision that k3d-gpu's own
@@ -164,7 +166,7 @@ Each is stated as the ledger graded it. Inside EAT's banking flow on the Xeon 67
 
 - **The Keycloak argv secret.** F3 stays REFUTED. With the agent toolkit at the GA tags (`auth_provider: litellm`), EAS installs no Keycloak, and F5 found no Keycloak secret; the inference layer on its own keeps Keycloak. `k3d-gpu eas up` now patches enterprise-inference's `keycloak_config` role so that neither the admin password nor the client secret is a `kcadm.sh` argument ([State and secrets](eas.md#state-and-secrets)). The patch is checked with a `ps` sampler against a stand-in for kcadm; no live run has checked it yet. A fresh `eas up --agent-toolkit` with F3's secret scan would.
 - **EAS's topology probe in a KVM guest.** H62r answered H62's question at the GA tags, with EAS's documented reserve list set. The probe's reading of a guest's threads as one per core is unchanged at `v1.2.0`, and we have not drafted an EAS issue for it yet. The `cpu: auto` issue draft stands for an install whose reserve leaves the pods outside the balloons too little CPU.
-- **The vLLM agent path on Arc and Gaudi.** Up to release 0.1.93, `k3d-gpu agent up` did not serve through vLLM. On an Arc Pro B70 the engine exited at start because the pod's Kubernetes service link set `VLLM_PORT` to a URI, and the warm-up request carried no JSON content type. [#339](https://github.com/88plug/k3d-gpu/pull/339) fixes both and ships in release 0.1.94; with its pod spec and warm-up request, vLLM v0.33.0 served Qwen3-4B on one B70. A full `agent up` run of a release on a B70 is not recorded yet. The Gaudi path shares the manifest and has not run on hardware. On Arc, `agent up` with no backend set serves OVMS, which this did not affect; with `--model`, the fit can pick vLLM.
+- **The vLLM agent path on Arc and Gaudi.** Up to release 0.1.93, `k3d-gpu agent up` did not serve through vLLM. On an Arc Pro B70 the engine exited at start because the pod's Kubernetes service link set `VLLM_PORT` to a URI, and the warm-up request carried no JSON content type. [#339](https://github.com/88plug/k3d-gpu/pull/339) fixes both and ships in release 0.1.94. With its pod spec and warm-up request applied by hand, vLLM v0.33.0 served Qwen3-4B on one B70; 0.1.94 ships v0.32.0, and a full `agent up` run of a release on a B70 is not recorded yet. The Gaudi path shares the manifest and has not run on hardware. On Arc, `agent up` with no backend set serves OVMS, which this did not affect; with `--model`, the fit can pick vLLM.
 - **k3d-gpu gaps found on the Xeon.** `/dev/dri/by-path` for oneCCL across B70s (H53); the fit refusing rather than falling back to the CPU, and no DRAM bandwidth cached on a new host (H58); placing one-card arms on one card (H54b, H54c).
 - **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct rows H57wa, H57wm and H57wb; H28w's result is in review. H34 on the i7-13700 (H34w) is INCONCLUSIVE: the CPU Fast Draft's gain over the target alone was neither the pre-registered win nor ruled out, so that class keeps no default CPU draft. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
 - **EAT 1.1.0 through `eat-up.sh`.** Pinned since 2026-10-29 and pre-registered as F4; not run yet.
