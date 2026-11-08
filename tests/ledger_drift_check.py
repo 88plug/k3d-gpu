@@ -21,6 +21,11 @@ A doc states a verdict for row Hn in any of these forms:
              that opens with a verdict word and a colon; every id on it.
   count      "Six hypotheses are SUPPORTED", "Eight are PENDING": the number
              must equal the ledger's count for that verdict.
+  not run    "H62r is pre-registered and not yet run", "rows H28w and H57wa,
+             pre-registered and not yet run": every id before "not yet run", "not
+             run yet" or "is/are pre-registered" in the same clause (no '.', ';' or
+             '|' between; a paragraph's line breaks allowed), or the one id of a
+             table row, must be PENDING in the ledger. Docs only, not scripts.
 
 A row id may carry one lowercase letter (H1b, a re-run row of H1).
 
@@ -45,6 +50,9 @@ HEADING = re.compile(r"^#+\s+\**(" + V + r")\b")
 LIST_LINE = re.compile(r"^\s*(?:[-*]\s+)?\**(" + V + r")\b[^:]{0,40}:")
 COUNT = re.compile(r"\b(\d+|" + "|".join(NUMBERS) + r")\s+(?:hypotheses\s+|rows\s+)?(?:are|is)\s+(" + V + r")\b",
                    re.IGNORECASE)
+NOT_RUN = re.compile(r"\b(?:not yet run|not run yet|(?:is|are) pre-registered)\b")
+BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+SENTENCE_END = re.compile(r"\.(?=\s|$)")
 
 
 def ledger(root):
@@ -158,6 +166,52 @@ def check_file(path, rel, rows):
             have = sum(1 for v in rows.values() if v == verdict)
             if said != have:
                 errors.append(f"{rel}:{n}: says {said} {verdict} but EXPERIMENTS.md has {have}")
+    return errors + check_not_run(path.read_text(), rel, rows)
+
+
+def units(text):
+    """(start line, [(line number, text), ...]) for each table row, paragraph and list
+    item: blank lines, headings, skipped lines and a new list item end a unit."""
+    unit, last = [], 0
+    for n, line in visible_lines(text):
+        table, new = line.lstrip().startswith("|"), BULLET.match(line)
+        if unit and (n != last + 1 or not line.strip() or line.startswith("#") or table or new):
+            yield unit
+            unit = []
+        last = n
+        if table:
+            yield [(n, line)]
+        elif line.strip() and not line.startswith("#"):
+            unit.append((n, line))
+    if unit:
+        yield unit
+
+
+def check_not_run(text, rel, rows):
+    """A row that a doc calls pre-registered or not yet run must be PENDING. The row
+    is every id before the words in their clause (no '.', ';' or '|' between, line
+    breaks inside a paragraph or list item allowed), or the one id of a table row."""
+    errors = []
+    for unit in units(text):
+        joined, starts = "", []
+        for n, line in unit:
+            starts.append((len(joined), n))
+            joined += line + " "
+        cuts = [m.end() for m in SENTENCE_END.finditer(joined)]
+        cuts += [i + 1 for i, c in enumerate(joined) if c in ";|"]
+        table = joined.lstrip().startswith("|")
+        for said in NOT_RUN.finditer(joined):
+            at = said.start()
+            n = [ln for off, ln in starts if off <= at][-1]
+            clause = joined[max([c for c in cuts if c <= at], default=0):at]
+            named = ids_in(clause)
+            if table and len(ids_in(joined)) == 1:
+                named |= ids_in(joined)
+            for hid in sorted(named):
+                have = rows.get(hid)
+                error = f"{rel}:{n}: {hid} reads not yet run (not run) but EXPERIMENTS.md says {have}"
+                if have not in (None, "PENDING") and error not in errors:
+                    errors.append(error)
     return errors
 
 

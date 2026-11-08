@@ -124,6 +124,31 @@ class Agrees(unittest.TestCase):
     def test_another_id_between_breaks_the_clause(self):
         self.assertClean("H3 and H2 is REFUTED.\n")
 
+    def test_a_pending_row_not_yet_run(self):
+        self.assertClean("H4 is pre-registered and not yet run.\n")
+
+    def test_not_yet_run_in_another_sentence(self):
+        self.assertClean("H3 ran on the desktop. F4 is pre-registered and not yet run.\n")
+
+    def test_did_not_run_is_not_pending(self):
+        self.assertClean("H1 did not run: its arm was not deliverable.\n")
+
+    def test_not_yet_run_after_a_paragraph_break(self):
+        self.assertClean("about H2\n\nnot yet run elsewhere\n")
+
+    def test_not_yet_run_names_the_rows_before_it_in_its_clause(self):
+        self.assertClean("That path is pre-registered as F4 and has not run yet; the old pin passed [ledger:H3].\n")
+        self.assertClean("The old pin passed [ledger:H3]; the new one is F4 and not run yet.\n")
+
+    def test_a_table_row_naming_two_rows_reads_each_cell(self):
+        self.assertClean("| H2, H4 | H4 is not yet run |\n")
+
+    def test_a_bullet_ends_a_not_yet_run_sentence(self):
+        self.assertClean("- H2 ran on the Xeon\n- H4 is pre-registered and not yet run.\n")
+
+    def test_not_yet_run_in_a_comment(self):
+        self.assertClean("<!-- H2 is not yet run -->\n")
+
 
 class Drift(unittest.TestCase):
     def assertDrift(self, doc, pattern, path="docs/guide.md"):
@@ -159,6 +184,27 @@ class Drift(unittest.TestCase):
 
     def test_count(self):
         self.assertDrift("- Six are PENDING.\n", r"says 6 PENDING but EXPERIMENTS.md has 1")
+
+    def test_decided_row_not_yet_run(self):
+        self.assertDrift("H2 is pre-registered and not yet run.\n",
+                         r"guide.md:1: H2 reads not yet run \(not run\).*REFUTED")
+
+    def test_decided_row_pre_registered(self):
+        self.assertDrift("H3 is pre-registered on the new tags.\n", r"H3 reads not yet run \(not run\).*SUPPORTED")
+
+    def test_not_run_yet(self):
+        self.assertDrift("H5 has not run yet.\n", r"H5 reads not yet run \(not run\).*INCONCLUSIVE")
+
+    def test_not_yet_run_across_lines(self):
+        self.assertDrift("After the campaign, H3 repeats H4 at the\nnew tags, and it is pre-registered and not yet run.\n",
+                         r"guide.md:2: H3 reads not yet run \(not run\).*SUPPORTED")
+
+    def test_not_yet_run_in_a_bullet(self):
+        self.assertDrift("- H4 ran.\n- the rows H2 and H4, pre-registered and not yet run.\n",
+                         r"guide.md:2: H2 reads not yet run")
+
+    def test_not_yet_run_in_a_table_row(self):
+        self.assertDrift("| Row | State |\n|---|---|\n| H2 | not yet run |\n", r"guide.md:3: H2 reads not yet run")
 
     def test_lettered_id_reference(self):
         rc, out = run("Status: PENDING [ledger:H1b].\n", LEDGER.replace(
