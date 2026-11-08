@@ -13519,7 +13519,8 @@ recorded result. The run above took both locks as amendment R1 says, and its rec
   the lock is held. It takes one lock, `K3DGPU_LIVE_LOCK`, by default `~/k3dgpu-bench.lock`, with
   `flock -o -w 36000`. That is R1's first lock and the desktop holds' lock; the variable and
   default are those of H55's runner (`bench/admission/run.sh`). R1 took the scratchpad lock
-  second only to exclude a hold on that path alone. A reproduce runs `step0.sh`, then
+  second to exclude holds that took that path alone; no committed runner outside a finished
+  record names it now. A reproduce runs `step0.sh`, then
   `reproduce.sh <src> k3dgpu-f3-eas <out> 180` in place of `lockrun.sh`, with `launch.sh`'s
   environment. Its `lock.txt` reads `waiting for <lock>`, `lock taken` and `lock released` where
   the run's reads `waiting for locks`, `locks taken` and `locks released`. With an empty `/tmp`
