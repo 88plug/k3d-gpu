@@ -6,5 +6,13 @@
     "updated_at": "2026-11-08T13:53:30Z",
     "notified_at": "2026-11-08T13:53:30Z",
     "acked": false
+  },
+  "stale:canary.yml": {
+    "title": "no successful scheduled run within 30 h",
+    "body": "`canary.yml` (cron `29 3 * * *`, every 24 h) has no successful scheduled run within 30 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/42364599996 at 2026-11-07T10:35:26Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-08T19:10:28Z",
+    "updated_at": "2026-11-08T19:10:28Z",
+    "notified_at": "2026-11-08T19:10:28Z",
+    "acked": false
   }
 }
