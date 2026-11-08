@@ -838,7 +838,7 @@ The device comes from what the cluster advertises, not from the host alone:
 
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
-| allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, for vLLM, which no release up to 0.1.93 serves (see [vLLM on Gaudi](#vllm-on-gaudi)) |
+| allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM, not yet run on Gaudi hardware (see [vLLM on Gaudi](#vllm-on-gaudi)) |
 | allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true`, skipping a driver labelled `k3d-gpu.io/xmx.<driver>=false` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
 | anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
@@ -977,8 +977,8 @@ OpenAI API at `/v1` from `svc/vllm`:
 
 | Backend | Image (pinned by digest) | Notes |
 |---------|--------------------------|-------|
-| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); not yet served here on an Arc B-series card (status below) |
-| `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70 |
+| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); served end to end here on an Arc Pro B70 at release 0.1.94 (status below) |
+| `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70; not yet run here on hardware (status below) |
 
 ```bash
 K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up
@@ -1000,12 +1000,24 @@ other backend first so its GPU is free; `agent down` and `agent status` cover bo
 The chat UI below and other clients that use `svc/ovms` at `/v3` need
 `http://vllm.k3d-gpu-agent.svc:8000/v1` instead.
 
-**Status: no release up to 0.1.93 serves with vLLM.** In every release since these
-backends and the Gaudi path below shipped (0.1.21, 2026-10-16), `agent up` with vLLM
-does not serve, and neither does `agent up --model` when the fit picks vLLM. The
-hardware canary for the `v0.33.0` bump ([#326](https://github.com/88plug/k3d-gpu/pull/326))
-found two causes on an Arc Pro B70 on 2026-11-07; the pinned `v0.32.0` image exits there
-on the first one too:
+**Status: `vllm` is verified end to end on an Arc Pro B70 at release 0.1.94.** On
+2026-11-08, release 0.1.94, installed by the public `packaging/install.sh`, ran
+`k3d-gpu up` and `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up` with the defaults and no
+patching: `vllm/vllm-openai-xpu:v0.32.0` (vLLM 0.32.0, digest `sha256:20509fab...`)
+serving `Qwen/Qwen3-4B` at revision `1cfa9a72`. The pod was Ready on one card
+(`gpu.intel.com/xe: 1`) and the launcher's warm-up was answered. Through the
+port-forward `agent up` prints, "What is 17 times 23?" came back 391, and the `hermes`
+parser returned the tool call. The host was a Xeon 6741P with 4x Arc Pro B70 (`xe`,
+kernel 7.0.0-31, Ubuntu 26.04.1). The same checks passed in the same hold on the
+`v0.33.0` bump's head ([#357](https://github.com/88plug/k3d-gpu/pull/357)). Record, with
+every version and file:
+[bench/vllm-agent/results/2026-11-08](bench/vllm-agent/results/2026-11-08/README.md).
+
+Releases 0.1.21 (2026-10-16) through 0.1.93 do not serve with vLLM, on Arc or on a
+Gaudi, and neither does `agent up --model` when the fit picks vLLM. The hardware canary
+for the `v0.33.0` bump ([#326](https://github.com/88plug/k3d-gpu/pull/326)) found two
+causes on an Arc Pro B70 on 2026-11-07; the `v0.32.0` image exits there on the first one
+too:
 
 - The Service is named `vllm`, so Kubernetes gives the pod
   `VLLM_PORT=tcp://<cluster IP>:8000`. vLLM reads `VLLM_PORT` as its own port and exits
@@ -1013,15 +1025,14 @@ on the first one too:
 - The warm-up posts through the API server's service proxy with no `Content-Type`, and
   vLLM answers such a request with 400.
 
-llm-scaler and the Gaudi image are built on vLLM 0.26 and 0.30, whose upstream source
-has both checks. [#339](https://github.com/88plug/k3d-gpu/pull/339) fixes both: the pod
-spec sets `enableServiceLinks: false`, and the warm-up runs curl inside the pod with
-`Content-Type: application/json`. No release up to 0.1.93 includes it. With the fix,
-the end-state proof on an Arc B70 (pod Ready, the warm-up answered, a correct chat
-answer, through the launcher alone) is pending, and llm-scaler and the Gaudi path have
-not run on hardware. Tensor parallelism above 1 has not run on Arc hardware either
-(`CCL_ZE_IPC_EXCHANGE=pidfd`; oneCCL calls `prctl(PR_SET_PTRACER, getppid())`,
-so sibling workers should need no `CAP_SYS_PTRACE` under yama `ptrace_scope=1`).
+[#339](https://github.com/88plug/k3d-gpu/pull/339) fixed both in 0.1.94: the pod spec
+sets `enableServiceLinks: false`, and the warm-up runs curl inside the pod with
+`Content-Type: application/json`. llm-scaler and the Gaudi image are built on vLLM 0.26
+and 0.30, whose upstream source has both checks, and they get the same pod spec and
+warm-up; neither has run on hardware yet. Tensor parallelism above 1 has not run on
+Arc hardware either (`CCL_ZE_IPC_EXCHANGE=pidfd`; oneCCL calls
+`prctl(PR_SET_PTRACER, getppid())`, so sibling workers should need no `CAP_SYS_PTRACE`
+under yama `ptrace_scope=1`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -1058,10 +1069,11 @@ for tensor parallelism and Qwen models, `SYS_NICE`, an 8 GiB memory-backed
 bounds the HPU warm-up, which runs on every start and takes minutes;
 `K3D_GPU_AGENT_TIMEOUT` (1800 s) bounds it.
 
-Not yet run on Gaudi hardware here: serving end to end. No release up to 0.1.93 serves
-it: the Gaudi pod shares the Arc pod spec and warm-up, and with them the
+Not yet run on Gaudi hardware here: serving end to end. Releases up to 0.1.93 do not
+serve it: the Gaudi pod shares the Arc pod spec and warm-up, and with them the
 [two faults above](#vllm-backends-for-discrete-arc-battlemage) that
-[#339](https://github.com/88plug/k3d-gpu/pull/339) fixes. The device plugin runs
+[#339](https://github.com/88plug/k3d-gpu/pull/339) fixed in 0.1.94, whose end-to-end
+check ran on an Arc Pro B70 only. The device plugin runs
 without Intel's `habana-container-runtime` hook (see `share/gaudi-device-plugin.yml`),
 so whether vLLM opens the HPU with only the plugin's device nodes and environment
 is unverified. vllm-gaudi validates `Qwen3-0.6B`, not `Qwen3-4B`, and tensor

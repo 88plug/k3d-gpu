@@ -161,7 +161,8 @@ Predicted: 20 to 40 min.
 What differs: **the LLM runs on the CPU, not the NVIDIA GPU.** The cluster
 advertises `nvidia.com/gpu` for your own pods, but `agent up` and quickstart
 serve on Intel XMX GPUs or the CPU only (their Gaudi path, vLLM, does not serve in
-any release up to 0.1.93: [status](../README.md#vllm-on-gaudi)). To serve an LLM on
+any release up to 0.1.93 and has not yet run on Gaudi hardware:
+[status](../README.md#vllm-on-gaudi)). To serve an LLM on
 the NVIDIA GPU, see [GPUStack](integrations/gpustack.md) Recipe A; it is not verified
 on a k3d-gpu cluster.
 

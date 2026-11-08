@@ -27,11 +27,12 @@ it, therefore passes. The two faults that kept the launcher's vLLM agent from se
 every release up to 0.1.93 were of that kind: its Service, named `vllm`, gave the pod
 `VLLM_PORT=tcp://...`, on which vLLM exits, and its warm-up reached vLLM with no
 `Content-Type`, which vLLM answers with 400
-([#339](https://github.com/88plug/k3d-gpu/pull/339)). The images that agent serves
-(`vllm-xpu`, `llm-scaler`, `gaudi-vllm`) are surface engines only: a hosted runner has
-no Intel GPU or Gaudi, so the canary never serves them. `tests/detect_test.sh` checks
-the rendered pod spec and the warm-up command against stubs; nothing in CI serves
-through them.
+([#339](https://github.com/88plug/k3d-gpu/pull/339), fixed in 0.1.94). The images that
+agent serves (`vllm-xpu`, `llm-scaler`, `gaudi-vllm`) are surface engines only: a hosted
+runner has no Intel GPU or Gaudi, so the canary never serves them. `tests/detect_test.sh`
+checks the rendered pod spec and the warm-up command against stubs; nothing in CI serves
+through them. The fix was checked by hand on an Arc Pro B70, for `vllm-xpu` only
+([record](../bench/vllm-agent/results/2026-11-08/README.md)).
 
 ## Files
 

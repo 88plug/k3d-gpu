@@ -301,10 +301,10 @@ except where an item says otherwise, and item 11 is new there. In
     stops before touching the cluster, reading each key as `read_config_file`
     does, on `compute_platform=xpu` (fresh-install.sh:219 applies
     intel-device-plugins' `gpu_plugin` from `main`, unpinned, beside the plugin
-    k3d-gpu bakes; the message names k3d-gpu's vLLM on an Intel GPU,
-    `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up`, and says it has not yet served end
-    to end on Arc: no release up to 0.1.93 serves with it, see
-    [the status](../../README.md#vllm-backends-for-discrete-arc-battlemage)),
+    k3d-gpu bakes; the message points at k3d-gpu's vLLM on an Intel GPU,
+    `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up`, with k3d-gpu 0.1.94 or later: no
+    release up to 0.1.93 serves with it, and 0.1.94 served it end to end on an Arc Pro
+    B70, see [the status](../../README.md#vllm-backends-for-discrete-arc-battlemage)),
     `deploy_kata_containers=on` (Kata needs `/dev/kvm`, which a k3d
     node lacks) and `rack_scale_mode=on` (it builds its own cluster from
     `rack-profile.yaml`: netplan, BGP, the NVIDIA GPU operator). None of these has
