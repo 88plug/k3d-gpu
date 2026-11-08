@@ -1,0 +1,68 @@
+From: Andrew Mello <andrew@88plug.com>
+Date: Fri, 6 Nov 2026 23:30:00 -0800
+Subject: [PATCH] redis_stack validate: keep the Redis password off redis-cli's
+ command line
+
+Cut against enterprise-agent-toolkit release-2.0.0 (7b827e2d, the commit EAS
+v1.2.0 pins; 036b6623, the commit EAS main 97f6157 pins, has the same
+validate.yaml).
+
+The validate action reads the password from redis-stack-server-credentials
+and runs `redis-cli -a <password> --no-auth-warning PING` (and MODULE LIST)
+in the Redis pod through k8s_exec, which execs the command's argv as a
+process in the container (kubernetes.core 6.3.0
+plugins/modules/k8s_exec.py#L192-L198: shlex.split, stdin=False). redis-cli
+keeps -a in its argv for its whole run (redis-cli 7.4.7, the
+redis/redis-stack-server:7.4.0-v8 image's, src/redis-cli.c#L2700-L2703), so
+any user on the node can read the password with ps; on a k3d cluster the
+node is a container on the host, so the host's ps lists it too. no_log keeps
+it out of Ansible's output only.
+
+redis-cli reads the password from REDISCLI_AUTH when -a is absent
+(src/redis-cli.c#L3058-L3061). The chart sets REDIS_PASSWORD in the pod from
+the same Secret whenever auth is on (charts/redis-stack/charts/
+redis-stack-server/templates/redis-stack-server.yaml#L55-L65), and
+redis-server's requirepass comes from it, so a shell in the pod hands that
+value to redis-cli through its environment. The task that read the password
+into Ansible is no longer needed.
+---
+--- a/roles/redis_stack/tasks/validate.yaml
++++ b/roles/redis_stack/tasks/validate.yaml
+@@ -17,20 +17,17 @@
+     _val_pods.resources | default([]) | length == 0 or
+     _val_pods.resources | selectattr('status.phase', 'eq', 'Running') | list | length == 0
+ 
+-- name: "redis_stack | validate | Get Redis password from secret"
+-  ansible.builtin.shell: |
+-    kubectl get secret -n {{ redis_stack_namespace }} redis-stack-server-credentials -o jsonpath='{.data.REDIS_PASSWORD}' 2>/dev/null | base64 -d 2>/dev/null || \
+-    kubectl exec -n {{ redis_stack_namespace }} pod/{{ _val_pods.resources[0].metadata.name }} -- printenv REDIS_PASSWORD 2>/dev/null || echo ""
+-  register: _redis_pass
+-  changed_when: false
+-  no_log: true
+-  ignore_errors: true
+-
++# redis-cli takes the password from REDISCLI_AUTH when -a is absent (redis-cli 7.4.7,
++# the image's, src/redis-cli.c#L3058-L3061). The chart sets REDIS_PASSWORD in the pod from
++# redis-stack-server-credentials whenever auth is on, the value redis-server's requirepass
++# came from, so a shell in the pod hands it over and no argument list holds it: a
++# process's arguments are readable by every user on the node (ps).
+ - name: "redis_stack | validate | Check Redis PING"
+   kubernetes.core.k8s_exec:
+     namespace: "{{ redis_stack_namespace }}"
+     pod: "{{ _val_pods.resources[0].metadata.name }}"
+-    command: "redis-cli {{ ('-a ' ~ (_redis_pass.stdout | trim | quote) ~ ' --no-auth-warning ') if (_redis_pass.stdout | default('') | trim | length > 0) else '' }}PING"
++    command: >-
++      /bin/sh -c '[ -z "$REDIS_PASSWORD" ] || export REDISCLI_AUTH="$REDIS_PASSWORD"; exec redis-cli PING'
+   register: _val_ping
+   failed_when: false
+   changed_when: false
+@@ -48,7 +45,8 @@
+   kubernetes.core.k8s_exec:
+     namespace: "{{ redis_stack_namespace }}"
+     pod: "{{ _val_pods.resources[0].metadata.name }}"
+-    command: "redis-cli {{ ('-a ' ~ (_redis_pass.stdout | trim | quote) ~ ' --no-auth-warning ') if (_redis_pass.stdout | default('') | trim | length > 0) else '' }}MODULE LIST"
++    command: >-
++      /bin/sh -c '[ -z "$REDIS_PASSWORD" ] || export REDISCLI_AUTH="$REDIS_PASSWORD"; exec redis-cli MODULE LIST'
+   register: _val_modules
+   failed_when: false
+   changed_when: false

@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# Node topology — soft affinity for workload placement (label-based, no taints)
+# =============================================================================
+# Active only in custom_inventory mode (multi-node). In localhost mode this
+# is a no-op.
+#
+# Effect (SOFT AFFINITY - no hard enforcement):
+#   - Control-plane nodes get label: workload-class=platform
+#   - Worker nodes get label: workload-class=inference
+#
+# How pods are placed (via preferredDuringSchedulingIgnoredDuringExecution):
+#   - Platform pods (Keycloak, PostgreSQL, Envoy, cert-manager):
+#       Prefer workload-class=platform → land on control-plane
+#   - Inference pods (vLLM, model serving):
+#       Prefer workload-class=inference → land on workers
+#
+# Benefits:
+#   - Resource isolation (platform vs inference workloads)
+#   - NUMA optimization (workers dedicated to model serving)
+#   - Control plane stability (masters not overloaded)
+#   - Soft preferences allow flexibility (no hard failures)
+#
+# Idempotent: re-runs are safe; kubernetes.core.k8s overwrites in place.
+# =============================================================================
+
+- name: "node-topology | Skip — single-node"
+  ansible.builtin.debug:
+    msg: "Single-node inventory — node topology not applied."
+  when: not (_k8s_needs_ssh | bool)
+
+- name: "node-topology | Apply (multi-node)"
+  when: _k8s_needs_ssh | bool
+  block:
+
+    - name: "node-topology | Discover worker nodes"
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: _topo_nodes
+
+    # Build control-plane and worker node lists
+    - name: "node-topology | Build control-plane list"
+      vars:
+        _cp_query: '[?type(metadata.labels."node-role.kubernetes.io/control-plane") != ''null''].metadata.name'
+      ansible.builtin.set_fact:
+        _topo_masters: "{{ _topo_nodes.resources | json_query(_cp_query) }}"
+
+    - name: "node-topology | Build worker list"
+      vars:
+        _worker_query: '[?type(metadata.labels."node-role.kubernetes.io/control-plane") == ''null''].metadata.name'
+      ansible.builtin.set_fact:
+        _topo_workers: "{{ _topo_nodes.resources | json_query(_worker_query) }}"
+
+    - name: "node-topology | Detected topology"
+      ansible.builtin.debug:
+        msg:
+          - "Control-plane nodes ({{ _topo_masters | length }}): {{ _topo_masters | join(', ') }}"
+          - "Worker nodes ({{ _topo_workers | length }}): {{ _topo_workers | join(', ') }}"
+
+    - name: "node-topology | Skip — no workers found"
+      ansible.builtin.debug:
+        msg: "No worker nodes found (only control-plane present) — soft affinity disabled."
+      when: _topo_workers | length == 0
+
+    # Label control-plane nodes for platform workloads
+    - name: "node-topology | Label control-plane nodes (workload-class=platform)"
+      kubernetes.core.k8s:
+        state: patched
+        kind: Node
+        name: "{{ item }}"
+        definition:
+          metadata:
+            labels:
+              workload-class: platform
+      loop: "{{ _topo_masters }}"
+      loop_control:
+        label: "{{ item }}"
+      when: _topo_masters | length > 0
+
+    # Label worker nodes for inference workloads
+    - name: "node-topology | Label worker nodes (workload-class=inference)"
+      kubernetes.core.k8s:
+        state: patched
+        kind: Node
+        name: "{{ item }}"
+        definition:
+          metadata:
+            labels:
+              workload-class: inference
+      loop: "{{ _topo_workers }}"
+      loop_control:
+        label: "{{ item }}"
+      when: _topo_workers | length > 0
+
+    - name: "node-topology | Done (soft affinity enabled)"
+      ansible.builtin.debug:
+        msg:
+          - "Node topology applied (soft affinity, no taints):"
+          - "  Control-plane ({{ _topo_masters | length }}): label workload-class=platform"
+          - "  Workers ({{ _topo_workers | length }}): label workload-class=inference"
+          - ""
+          - "Platform pods will prefer control-plane nodes."
+          - "Inference pods will prefer worker nodes."
+          - "Scheduler may override if resources are constrained."
+      when: _topo_workers | length > 0

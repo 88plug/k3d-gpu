@@ -1,0 +1,16 @@
+# load typical: started typical on 20-23 (3 containers, ttl 1500s)
+[33mWARN[0m[0000] Image 'python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f' is not a file and couldn't be found in the container runtime 
+# setup done at 106 s
+meta,k3s=v1.37.1+k3s1,snapshotter=overlayfs,pyimg=python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f,N=8,MiB=1024,order=CTTCCT,levels=typical,load_cpus=20-23,node_cpus=0-15,kernel=6.6.156-2-MANJARO,cpu=13th Gen Intel(R) Core(TM) i7-13700
+# pod,arm,round,i,ready_ms,rss_kB,pss_kB,shared_clean_kB,own_file_resident_pages,podcg_memory_current_B,podcg_file_B,kind,level
+# round,arm,round,cold_pages_left,model_resident_kB,dCached_kB,dAnon_kB,swapout_kB,load1,swap_used_kB,throttle_count,pkgW,kind,level
+pod,C,0,1,3715,1057956,1053236,5464,262144,1242542080,1203425280,warmup,typical
+pod,C,0,2,3698,1057996,1053205,5520,262144,1265614848,1226424320,warmup,typical
+pod,C,0,3,3691,1058076,1053236,5608,262144,1222828032,1183744000,warmup,typical
+pod,C,0,4,3695,1057932,1053228,5468,262144,1291407360,1252175872,warmup,typical
+pod,C,0,5,3691,1058000,1053241,5528,262144,1273270272,1234079744,warmup,typical
+pod,C,0,6,3695,1057904,1053160,5448,262144,1175126016,1136156672,warmup,typical
+pod,C,0,7,3724,1057916,1053161,5460,262144,1214783488,1175719936,warmup,typical
+pod,C,0,8,3685,1058032,1053209,5552,262144,1294069760,1254809600,warmup,typical
+round,C,0,0,9437184,9427684,123768,0,4.65,0,0,34,warmup,typical
+# r1 pod_cpus=0-15 settle: settled after 5 s

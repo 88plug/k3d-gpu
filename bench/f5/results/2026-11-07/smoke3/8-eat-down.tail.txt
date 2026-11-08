@@ -1,0 +1,14 @@
+
+PLAY RECAP *********************************************************************
+localhost                  : ok=237  changed=87   unreachable=0    failed=0    skipped=55   rescued=0    ignored=0   
+
+
+╭────────────────────────────────────────────────────────────────────────────────╮
+│ TEARDOWN COMPLETE                                                              │
+│                                                                                │
+│ Target:  platform                                                              │
+│ Env:     k3d-gpu                                                               │
+│ Log:     /eas-state/eas/env/k3d-gpu/logs/teardown-platform-20261107-053658.log │
+╰────────────────────────────────────────────────────────────────────────────────╯
+
+==> EAS removed from 'k3dgpu-f5-smoke'; the cluster stays ('k3d-gpu down' deletes it)

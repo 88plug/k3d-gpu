@@ -1,0 +1,26 @@
+== campaign start (attempt 1 of 3) at 1ed9f91c8b00f974c8a06d201758c9a5b6f85043 2026-11-07T07:32:58Z
+== setup lock taken 2026-11-07T07:32:58Z
+== setup host gate passed 2026-11-07T07:32:58Z
+== setup guests 2026-11-07T07:33:10Z
+== setup guest-a (cap 2700 s) and guest-b (cap 7200 s) 2026-11-07T07:33:55Z
+== setup guest-a exit 0, guest-b exit 0 2026-11-07T08:13:54Z
+== setup setup done: both arms serve 2026-11-07T08:14:36Z
+== smoke lock taken; step 1 in VM b 2026-11-07T08:14:36Z
+== smoke validate exit 0, eat-check exit 0 2026-11-07T08:15:36Z
+== smoke step 2: H62r-smoke 2026-11-07T08:15:36Z
+== smoke hold exit 0, warm-ups answered 2 of 2, pairs 0 2026-11-07T08:19:58Z
+== smoke wiring smoke passed 2026-11-07T08:19:58Z
+== campaign hold 1: 24 pair(s) left 2026-11-07T08:19:58Z
+== H62r-hold1 waiting for the lock 2026-11-07T08:19:58Z
+== H62r-hold1 lock taken 2026-11-07T08:19:58Z
+== H62r-hold1 busy (load1 25.47, aiperf 0): waiting 120 s 2026-11-07T08:19:59Z
+== H62r-hold1 start: env LIVE_MODE=pairs LIVE_CAP=2370 LIVE_HOLD=1 LIVE_PAIRS_DIR=/home/devcloud/k3dgpu-bench/results/H62r/pairs LIVE_PAIRS_GUARD=600 LIVE_MODEL_SET=gemma4 LIVE_MODELS=/home/devcloud/k3dgpu-bench/models LIVE_BLUEPRINT=/home/devcloud/k3dgpu-bench/eab LIVE_PY=/home/devcloud/k3dgpu-bench/mafvenv/bin/python LIVE_REMOTE_A=/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm-A1 LIVE_REMOTE_B=/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm-B5 H62R_STATE=/home/devcloud/k3dgpu-bench/h62r PATH=/home/devcloud/k3dgpu-bench/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin bash /home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/../eatflow/live.sh H62r /home/devcloud/k3dgpu-bench/results/H62r/hold1 2026-11-07T08:21:59Z
+/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/../eatflow/crescent/hold.sh: line 151: 3657077 Killed                     ( while kill -0 "${cp}" 2> /dev/null; do
+    sleep 30; if [ "$(disk)" -gt 97 ]; then
+        echo "disk $(disk)% at $(date -u +%FT%TZ)" > "${R}/disk-abort"; kill -TERM "$$"; break;
+    fi;
+done ) 7>&- 8>&- 9>&-
+== H62r-hold1 rc=0; clusters deleted: none; containers removed: none; now:   2026-11-07T08:48:15Z
+== campaign hold 1 exit 0 2026-11-07T08:48:15Z
+== campaign pairs-report exit 0 2026-11-07T08:48:15Z
+== campaign teardown exit 0 2026-11-07T08:50:04Z

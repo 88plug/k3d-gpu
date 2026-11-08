@@ -1,0 +1,87 @@
+00:54:53 +0s H34 probe -> /home/andrew/k3dgpu-bench-wildct/runs/H34w/out (levels='typical', pairs=12, level budget 1200s)
+a825757982ac08ec75d71e378f7b1e4a9106a8a9fab6127566f9fad8f4901962  /home/andrew/k3dgpu-bench-wildct/repo/bench/hetero-spec/prompts.jsonl
+00:56:49 +116s server warm
+00:56:49 +116s level typical: start load (started typical on 20-23 (3 containers, ttl 1500s))
+00:59:33 +280s level typical: pair 1 done (A B)
+01:00:29 +336s level typical: pair 2 done (B A)
+01:01:26 +393s level typical: pair 3 done (A B)
+01:02:24 +451s level typical: pair 4 done (B A)
+01:03:22 +509s level typical: pair 5 done (A B)
+01:04:18 +565s level typical: pair 6 done (B A)
+01:05:16 +623s level typical: pair 7 done (A B)
+01:06:16 +683s level typical: pair 8 done (B A)
+01:07:14 +741s level typical: pair 9 done (A B)
+01:08:09 +796s level typical: pair 10 done (B A)
+01:09:06 +853s level typical: pair 11 done (A B)
+01:10:01 +908s level typical: pair 12 done (B A)
+01:10:02 +909s level typical: done, load stopped
+{
+  "headline_level": "typical",
+  "levels": {
+    "typical": {
+      "arm_A": {
+        "j_per_token_median": 3.219,
+        "tps_max": 11.909,
+        "tps_median": 11.568,
+        "tps_min": 10.596
+      },
+      "arm_B": {
+        "j_per_token_median": 3.124,
+        "tps_max": 13.783,
+        "tps_median": 12.075,
+        "tps_min": 11.101
+      },
+      "b_cheaper_pairs": 7,
+      "b_faster_pairs": 8,
+      "confidence": null,
+      "dropped_requests": 0,
+      "greedy_identical_pairs": 11,
+      "j_ratio_ci95": [
+        0.848,
+        1.0253
+      ],
+      "j_ratio_median": 0.951,
+      "load_matched": true,
+      "load_per_arm": {
+        "busy_pct": {
+          "A": 50.168,
+          "B": 50.423
+        },
+        "load1": {
+          "A": 8.789,
+          "B": 8.918
+        },
+        "pkg_w": {
+          "A": 35.241,
+          "B": 35.174
+        },
+        "swap_delta_mib": {
+          "A": 0.0,
+          "B": 0.0
+        },
+        "swap_used_mib": {
+          "A": 0.0,
+          "B": 0.0
+        },
+        "throttle_per_min": {
+          "A": 0.0,
+          "B": 0.0
+        }
+      },
+      "load_verdict": "MATCHED",
+      "n_pairs": 12,
+      "outcome": "effect size not resolved by the CIs",
+      "sign_p_j": 0.774414,
+      "sign_p_tps": 0.387695,
+      "tps_ratio_ci95": [
+        0.9842,
+        1.2077
+      ],
+      "tps_ratio_median": 1.0637,
+      "verdict": "INCONCLUSIVE"
+    }
+  },
+  "outcome": "effect size not resolved by the CIs",
+  "verdict": "INCONCLUSIVE"
+}
+01:10:02 +909s deleting cluster k3dgpu-w-h34

@@ -1,0 +1,70 @@
+# wildct, 2026-11-07 (UTC; the journal prints the host's local time, UTC-5): why the H28w hold (hold 6)
+# ended rc 143, and the trial of the fix (wildct amendment R9). Read-only reads as andrew; the trial
+# started two sleeps and stopped its own by PID.
+
+== logind (read 2026-11-07T07:44Z)
+#KillUserProcesses=no
+KillUserProcesses=yes
+b true
+Linger=yes
+
+== journal, 07:36Z-07:45Z: sshd, logind and session-scope lines
+2026-11-07T02:37:04.580943-05:00 wildct sshd-session[55069]: Accepted password for andrew from 100.65.179.24 port 47632 ssh2
+2026-11-07T02:37:04.581913-05:00 wildct sshd-session[55069]: pam_unix(sshd:session): session opened for user andrew(uid=1000) by andrew(uid=0)
+2026-11-07T02:37:04.599497-05:00 wildct systemd-logind[1004]: New session '27' of user 'andrew' with class 'user' and type 'tty'.
+2026-11-07T02:40:54.087752-05:00 wildct systemd-logind[1004]: Watching system buttons on /dev/input/event31 (RustDesk UInput Keyboard)
+2026-11-07T02:42:21.790606-05:00 wildct sshd-session[55164]: Connection closed by 100.65.179.24 port 47632
+2026-11-07T02:42:21.790901-05:00 wildct sshd-session[55069]: pam_unix(sshd:session): session closed for user andrew
+2026-11-07T02:42:21.793543-05:00 wildct systemd[1]: session-27.scope: Killing process 9482 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793580-05:00 wildct systemd[1]: session-27.scope: Killing process 10000 (python3) with signal SIGTERM.
+2026-11-07T02:42:21.793614-05:00 wildct systemd[1]: session-27.scope: Killing process 10004 (timeout) with signal SIGTERM.
+2026-11-07T02:42:21.793644-05:00 wildct systemd[1]: session-27.scope: Killing process 10005 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793679-05:00 wildct systemd[1]: session-27.scope: Killing process 10007 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793708-05:00 wildct systemd[1]: session-27.scope: Killing process 10013 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793739-05:00 wildct systemd[1]: session-27.scope: Killing process 10057 (flock) with signal SIGTERM.
+2026-11-07T02:42:21.793776-05:00 wildct systemd[1]: session-27.scope: Killing process 10058 (tee) with signal SIGTERM.
+2026-11-07T02:42:21.793811-05:00 wildct systemd[1]: session-27.scope: Killing process 10059 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793851-05:00 wildct systemd[1]: session-27.scope: Killing process 10087 (timeout) with signal SIGTERM.
+2026-11-07T02:42:21.793885-05:00 wildct systemd[1]: session-27.scope: Killing process 10088 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.793923-05:00 wildct systemd[1]: session-27.scope: Killing process 35216 (sleep) with signal SIGTERM.
+2026-11-07T02:42:21.794069-05:00 wildct systemd[1]: session-27.scope: Killing process 35694 (python3) with signal SIGTERM.
+2026-11-07T02:42:21.794106-05:00 wildct systemd[1]: session-27.scope: Killing process 38392 (bash) with signal SIGTERM.
+2026-11-07T02:42:21.794142-05:00 wildct systemd[1]: session-27.scope: Killing process 38393 (kubectl) with signal SIGTERM.
+2026-11-07T02:42:21.794171-05:00 wildct systemd[1]: session-27.scope: Killing process 38394 (awk) with signal SIGTERM.
+2026-11-07T02:42:21.794388-05:00 wildct systemd[1]: Stopping Session 27 of User andrew...
+2026-11-07T02:42:25.568679-05:00 wildct sshd-session[38769]: Accepted password for andrew from 100.65.179.24 port 37156 ssh2
+2026-11-07T02:42:25.569830-05:00 wildct sshd-session[38769]: pam_unix(sshd:session): session opened for user andrew(uid=1000) by andrew(uid=0)
+2026-11-07T02:42:25.739886-05:00 wildct systemd-logind[1004]: New session '28' of user 'andrew' with class 'user' and type 'tty'.
+2026-11-07T02:42:30.558317-05:00 wildct systemd[1]: session-27.scope: Deactivated successfully.
+2026-11-07T02:42:30.590192-05:00 wildct systemd[1]: Stopped Session 27 of User andrew.
+2026-11-07T02:42:30.590305-05:00 wildct systemd[1]: session-27.scope: Consumed 1min 7.796s CPU time over 5min 25.918s wall clock time, 1.2G memory peak.
+2026-11-07T02:42:30.590715-05:00 wildct systemd-logind[1004]: Removed session 27.
+
+== the trial (07:46:49Z): one session, over a second controller connection, starts two detached sleeps
+0::/user.slice/user-1000.slice/session-29.scope
+plain pid=2320 cg=0::/user.slice/user-1000.slice/session-29.scope
+scoped pid=$ cg=0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-racf1bb86287d41b5a2ffb04f7ba31cc2.scope
+(the scoped pid file read '$': systemd-run expanded $$ in its command line; see the last part)
+
+== after that connection closed (07:47:03Z): which survived
+scoped pid=$ GONE
+2026-11-07T02:42:21-05:00 wildct systemd[1]: session-27.scope: Killing process 38392 (bash) with signal SIGTERM.
+2026-11-07T02:42:21-05:00 wildct systemd[1]: session-27.scope: Killing process 38393 (kubectl) with signal SIGTERM.
+2026-11-07T02:42:21-05:00 wildct systemd[1]: session-27.scope: Killing process 38394 (awk) with signal SIGTERM.
+2026-11-07T02:42:25-05:00 wildct systemd-logind[1004]: New session '28' of user 'andrew' with class 'user' and type 'tty'.
+2026-11-07T02:42:30-05:00 wildct systemd-logind[1004]: Removed session 27.
+2026-11-07T02:46:49-05:00 wildct systemd-logind[1004]: New session '29' of user 'andrew' with class 'user' and type 'tty'.
+2026-11-07T02:47:03-05:00 wildct systemd[1]: session-29.scope: Killing process 2320 (sleep) with signal SIGTERM.
+2026-11-07T02:47:03-05:00 wildct systemd-logind[1004]: Removed session 29.
+
+== the scoped sleep, found by its command line
+pid 2321 cg=0::/user.slice/user-1000.slice/user@1000.service/app.slice/run-racf1bb86287d41b5a2ffb04f7ba31cc2.scope
+systemd 261 (261.2-1-manjaro)
+  run-racf1bb86287d41b5a2ffb04f7ba31cc2.scope                     loaded active running [systemd-run] /usr/bin/bash -c "echo \$\$ > /home/andrew/k3dgpu-bench-wildct/diag/h28w-spike/scoped.pid; cat /proc/self/cgroup > /home/andrew/k3dgpu-bench-wildct/diag/h28w-spike/scoped.cg; exec sleep 601"
+
+== the scoped sleep stopped by its PID; the same start with --expand-environment=no
+grep rc=1 (1 = none left)
+run rc=0
+pid file: 7333
+arg=$HOME
+spike dir removed

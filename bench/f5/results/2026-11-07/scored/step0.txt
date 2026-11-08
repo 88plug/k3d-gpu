@@ -1,0 +1,6 @@
+[2026-11-07T05:41:12+00:00] step 0: k3d-gpu 3babfc2d4e5d8549b1c10cbd2a2df40f6e22e782 (0 local changes)
+ls-remote eas intel/enterprise-ai-solutions v1.2.0: a051f00fcb2dd473fe763610471cd509db82c433 pin a051f00fcb2dd473fe763610471cd509db82c433 (tag = pin)
+ls-remote ei intel/enterprise-inference v1.1.0: d035b1ef1981fbf5084ff05c9a337e620478bb87 pin d035b1ef1981fbf5084ff05c9a337e620478bb87 (tag = pin)
+ls-remote eat intel/enterprise-agent-toolkit release-2.0.0: 7b827e2d95cec826a20c7e3f5a30eb4818ed2992 pin 7b827e2d95cec826a20c7e3f5a30eb4818ed2992 (tag = pin)
+node image cryptoandcoffee/k3d-gpu:0.1.90: sha256:b026d679cd41afd1b35c85c011ebf9f5ab620c2ec68781cc0f49fcfee511cd6f cryptoandcoffee/k3d-gpu@sha256:b026d679cd41afd1b35c85c011ebf9f5ab620c2ec68781cc0f49fcfee511cd6f
+[2026-11-07T05:41:18+00:00] step 0 wall=6s

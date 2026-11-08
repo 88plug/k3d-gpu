@@ -1,0 +1,5 @@
+download-qwen2-5-coder-14b-hdlp5 downloader=500m/40 
+qwen2-5-coder-14b-kserve-659d794c8-g52t9 main=40/40 
+qwen2-5-coder-14b-kserve-router-scheduler-57f7c454bf-w6sgw main=256m/ tokenizer=256m/ 
+qwen3guard-kserve-74499665b4-jxnw2 main=8/8 
+qwen3guard-kserve-router-scheduler-7df99fd889-95jrs main=256m/ tokenizer=256m/ 

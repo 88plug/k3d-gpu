@@ -1,0 +1,3 @@
+# k3d-gpu eas-config: keys to set in env/k3d-gpu/global_config.yaml, where
+# _resolve_kubeconfig reads existing_kubernetes (not from extra vars)
+existing_kubernetes: "/kube/config"

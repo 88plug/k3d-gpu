@@ -1,0 +1,20 @@
+# start 2026-11-07T05:47:58+00:00
+uptime:  05:47:58 up 52 days,  7:02, 11 users,  load average: 1.78, 2.92, 4.12
+MemTotal:       527767144 kB
+MemAvailable:   506654620 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+running containers: 15
+oom_kill: 124
+inotify: 128 1048576
+disk /: /dev/nvme0n1p1  3.4T  1.1T  2.3T  33% /
+# end 2026-11-07T06:19:14+00:00
+uptime:  06:19:14 up 52 days,  7:33, 11 users,  load average: 3.32, 3.28, 3.21
+MemTotal:       527767144 kB
+MemAvailable:   506052348 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+running containers: 13
+oom_kill: 124
+inotify: 128 1048576
+disk /: /dev/nvme0n1p1  3.4T  1.1T  2.3T  33% /

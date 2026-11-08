@@ -2,13 +2,21 @@
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
 pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6 and R7, and the
-"H52w run", "H18w run" and "H25w run" sections). This file changes no rule. Run it top to bottom,
-except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct predates
-`bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check passes.
+"H52w run", "H18w run", "H25w run" and "H34w run" sections). This file changes no rule. Run it top
+to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
+predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check
+passes.
 
-## Where things stand (2026-11-07, after H25w)
+## Where things stand (2026-11-07, after H34w)
 
-- **Next: row 4, `H34w` (step 6).** Holds used: 3 of at most 12.
+- **Next: row 5, `H28w-prep` (step 6), then row 6, `H28w`.** Holds used: 4 of at most 12.
+- **Row 4, `H34w`,** ran on 2026-11-07 (05:54:52Z to 06:10:05Z, rc 0; `out/verdict.json` written
+  by `h34.py`, 12 of 12 pairs) and is scored INCONCLUSIVE, effect size not resolved by the CIs
+  (EXPERIMENTS.md "H34w run"; records in `results/2026-11-07/runs/H34w/`, the host before and
+  after in `results/2026-11-07/host/h34w.txt`). It ran from the archive H25w used
+  (`repo-ce4ff16c47ee`); step 3b did not run again. The host's containers, start times, restart
+  counts, port codes and firewall rules read the same before and after it, and nothing of the
+  hold was left.
 - **Row 3, `H25w`,** ran on 2026-11-07 (05:18:20Z to 05:36:58Z, rc 0; `out/typical/score.json`
   written) and is scored SUPPORTED (EXPERIMENTS.md "H25w run"; records in
   `results/2026-11-07/runs/H25w/`, the host before and after in `results/2026-11-07/host/h25w.txt`).
@@ -86,8 +94,8 @@ except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `H18w*`, `H25w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the earlier ones
-      renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
+      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
+      earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
       `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
@@ -362,12 +370,16 @@ whose `runs/` entry exists.
 ```bash
 # launch NAME CAP NEED ROW [ARGS]: one hold, detached from the ssh session. row.sh runs every check
 # of the row first (IMAGE, the row's arguments, H57w's mode and arms, the k3d shim): a usage error
-# inside the hold would be a failed hold, which counts.
+# inside the hold would be a failed hold, which counts. wildct's logind runs KillUserProcesses=yes:
+# when the ssh connection that started a hold closes, systemd kills every process of that session,
+# setsid or not (H28w, 2026-11-07, amendment R9). systemd-run moves hold.sh into a transient scope
+# of the user manager (linger is on), which outlives the session; --expand-environment=no keeps
+# systemd-run from expanding `$` in the command line.
 launch() {
     [ ! -e "$W/runs/$1" ] || { echo "runs/$1 exists: use a new NAME"; return 1; }
     IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_CHECK=1 bash "$R/bench/wildct/row.sh" "${@:4}" \
         || { echo "row.sh ${*:4}: not a row it runs; nothing launched"; return 1; }
-    IMAGE=$(cat $W/runs/IMAGE) setsid nohup bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
+    IMAGE=$(cat $W/runs/IMAGE) setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
         bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
     echo "launched $1"
 }
@@ -472,6 +484,17 @@ Notes on the holds:
 - **H28w's model images.** `hold.sh` deletes every `h28-model` image after a command that ran and
   did not end 0, as the H28w row registers. A failed `H28w-prep` or `H28w` therefore leaves none,
   so a repeat of `H28w` needs `H28w-prep` again first (a hold, counted toward the 12).
+- **H28w's repeat (amendment R9).** The `H28w` hold of 2026-11-07 (hold 6) ended rc 143 when its
+  ssh session closed. Its repeat is two holds, from the archive `H28w-prep` and `H28w` ran
+  (`repo-fd822b337155`, amendment R8's merge), with the `launch` above:
+
+  ```bash
+  launch H28w-prep-r2 900 35 h28w-prep     # hold 7; pass: docker images 'h28-model' lists r0-r6
+  launch H28w-r2 1500 35 h28w              # hold 8; pass: as row 6, in runs/H28w-r2/out
+  ```
+
+  `hold_wait` takes the same NAMEs and CAPs. Then 4 of the 12 holds are left: `H57w-1` to
+  `H57w-4`, with no room for a spare `H57w-5`.
 - **H57w's inner gate.** H57d's own `hold.sh` re-checks `load1` <= 12, `/` >= 15 GB and
   MemAvailable >= 20 GiB. A busy inner wait eats the outer 4600 s cap. A hold the cap cuts
   counts as failed.

@@ -1,0 +1,277 @@
+Name:               k3d-k3dgpu-f5-eat-server-0
+Roles:              control-plane
+Labels:             beta.kubernetes.io/arch=amd64
+                    beta.kubernetes.io/instance-type=k3s
+                    beta.kubernetes.io/os=linux
+                    experimental.k3d-gpu.io/dra=true
+                    experimental.k3d-gpu.io/image-volume=true
+                    feature.node.kubernetes.io/cpu-cpuid.ADX=true
+                    feature.node.kubernetes.io/cpu-cpuid.AESNI=true
+                    feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true
+                    feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true
+                    feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true
+                    feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX10_128=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX10_256=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX10_512=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX10_VERSION=1
+                    feature.node.kubernetes.io/cpu-cpuid.AVX2=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512BITALG=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512BW=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512CD=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512DQ=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512F=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512FP16=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512IFMA=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512VBMI=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512VBMI2=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512VL=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVX512VPOPCNTDQ=true
+                    feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true
+                    feature.node.kubernetes.io/cpu-cpuid.BHI_CTRL=true
+                    feature.node.kubernetes.io/cpu-cpuid.CETIBT=true
+                    feature.node.kubernetes.io/cpu-cpuid.CETSS=true
+                    feature.node.kubernetes.io/cpu-cpuid.CLDEMOTE=true
+                    feature.node.kubernetes.io/cpu-cpuid.CMPSB_SCADBS_SHORT=true
+                    feature.node.kubernetes.io/cpu-cpuid.CMPXCHG8=true
+                    feature.node.kubernetes.io/cpu-cpuid.ENQCMD=true
+                    feature.node.kubernetes.io/cpu-cpuid.FLUSH_L1D=true
+                    feature.node.kubernetes.io/cpu-cpuid.FMA3=true
+                    feature.node.kubernetes.io/cpu-cpuid.FSRM=true
+                    feature.node.kubernetes.io/cpu-cpuid.FXSR=true
+                    feature.node.kubernetes.io/cpu-cpuid.FXSROPT=true
+                    feature.node.kubernetes.io/cpu-cpuid.GFNI=true
+                    feature.node.kubernetes.io/cpu-cpuid.HRESET=true
+                    feature.node.kubernetes.io/cpu-cpuid.IA32_ARCH_CAP=true
+                    feature.node.kubernetes.io/cpu-cpuid.IA32_CORE_CAP=true
+                    feature.node.kubernetes.io/cpu-cpuid.IBPB=true
+                    feature.node.kubernetes.io/cpu-cpuid.IDPRED_CTRL=true
+                    feature.node.kubernetes.io/cpu-cpuid.LAHF=true
+                    feature.node.kubernetes.io/cpu-cpuid.MCDT_NO=true
+                    feature.node.kubernetes.io/cpu-cpuid.MD_CLEAR=true
+                    feature.node.kubernetes.io/cpu-cpuid.MOVBE=true
+                    feature.node.kubernetes.io/cpu-cpuid.MOVDIR64B=true
+                    feature.node.kubernetes.io/cpu-cpuid.MOVDIRI=true
+                    feature.node.kubernetes.io/cpu-cpuid.MOVSB_ZL=true
+                    feature.node.kubernetes.io/cpu-cpuid.OSXSAVE=true
+                    feature.node.kubernetes.io/cpu-cpuid.PCONFIG=true
+                    feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_CYCLES=true
+                    feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_INSTRUCTIONS=true
+                    feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_REFCYCLES=true
+                    feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_TOPDOWN_SLOTS=true
+                    feature.node.kubernetes.io/cpu-cpuid.PREFETCHI=true
+                    feature.node.kubernetes.io/cpu-cpuid.PSFD=true
+                    feature.node.kubernetes.io/cpu-cpuid.RRSBA_CTRL=true
+                    feature.node.kubernetes.io/cpu-cpuid.SERIALIZE=true
+                    feature.node.kubernetes.io/cpu-cpuid.SHA=true
+                    feature.node.kubernetes.io/cpu-cpuid.SPEC_CTRL_SSBD=true
+                    feature.node.kubernetes.io/cpu-cpuid.STIBP=true
+                    feature.node.kubernetes.io/cpu-cpuid.STOSB_SHORT=true
+                    feature.node.kubernetes.io/cpu-cpuid.SYSCALL=true
+                    feature.node.kubernetes.io/cpu-cpuid.SYSEE=true
+                    feature.node.kubernetes.io/cpu-cpuid.TME=true
+                    feature.node.kubernetes.io/cpu-cpuid.TSXLDTRK=true
+                    feature.node.kubernetes.io/cpu-cpuid.VAES=true
+                    feature.node.kubernetes.io/cpu-cpuid.VMX=true
+                    feature.node.kubernetes.io/cpu-cpuid.VPCLMULQDQ=true
+                    feature.node.kubernetes.io/cpu-cpuid.WAITPKG=true
+                    feature.node.kubernetes.io/cpu-cpuid.WBNOINVD=true
+                    feature.node.kubernetes.io/cpu-cpuid.X86_64_V1=true
+                    feature.node.kubernetes.io/cpu-cpuid.X86_64_V2=true
+                    feature.node.kubernetes.io/cpu-cpuid.X86_64_V3=true
+                    feature.node.kubernetes.io/cpu-cpuid.X86_64_V4=true
+                    feature.node.kubernetes.io/cpu-cpuid.X87=true
+                    feature.node.kubernetes.io/cpu-cpuid.XGETBV1=true
+                    feature.node.kubernetes.io/cpu-cpuid.XSAVE=true
+                    feature.node.kubernetes.io/cpu-cpuid.XSAVEC=true
+                    feature.node.kubernetes.io/cpu-cpuid.XSAVEOPT=true
+                    feature.node.kubernetes.io/cpu-cpuid.XSAVES=true
+                    feature.node.kubernetes.io/cpu-cstate.enabled=true
+                    feature.node.kubernetes.io/cpu-hardware_multithreading=true
+                    feature.node.kubernetes.io/cpu-model.family=6
+                    feature.node.kubernetes.io/cpu-model.hypervisor=none
+                    feature.node.kubernetes.io/cpu-model.id=173
+                    feature.node.kubernetes.io/cpu-model.vendor_id=Intel
+                    feature.node.kubernetes.io/cpu-pstate.scaling_governor=performance
+                    feature.node.kubernetes.io/cpu-pstate.status=active
+                    feature.node.kubernetes.io/cpu-pstate.turbo=true
+                    feature.node.kubernetes.io/kernel-config.NO_HZ=true
+                    feature.node.kubernetes.io/kernel-config.NO_HZ_FULL=true
+                    feature.node.kubernetes.io/kernel-version.full=7.0.0-31-generic
+                    feature.node.kubernetes.io/kernel-version.major=7
+                    feature.node.kubernetes.io/kernel-version.minor=0
+                    feature.node.kubernetes.io/kernel-version.revision=0
+                    feature.node.kubernetes.io/memory-nv.present=true
+                    feature.node.kubernetes.io/pci-0300_1a03.present=true
+                    feature.node.kubernetes.io/pci-0300_8086.present=true
+                    feature.node.kubernetes.io/pci-0300_8086.sriov.capable=true
+                    feature.node.kubernetes.io/pci-0b40_8086.present=true
+                    feature.node.kubernetes.io/pci-0b40_8086.sriov.capable=true
+                    feature.node.kubernetes.io/storage-nonrotationaldisk=true
+                    feature.node.kubernetes.io/system-os_release.ID=ubuntu
+                    feature.node.kubernetes.io/system-os_release.VERSION_ID=26.04
+                    feature.node.kubernetes.io/system-os_release.VERSION_ID.major=26
+                    feature.node.kubernetes.io/system-os_release.VERSION_ID.minor=04
+                    gpu.intel.com/device-id.0300-e223.count=4
+                    gpu.intel.com/device-id.0300-e223.present=true
+                    gpu.intel.com/family=B_Series
+                    gpu.intel.com/media-vcs=2
+                    gpu.intel.com/media-vecs=2
+                    gpu.intel.com/product=Arc_Pro_B70
+                    gpu.intel.com/xmx=true
+                    intel.feature.node.kubernetes.io/gpu=true
+                    kubernetes.io/arch=amd64
+                    kubernetes.io/hostname=k3d-k3dgpu-f5-eat-server-0
+                    kubernetes.io/os=linux
+                    node-role.kubernetes.io/control-plane=true
+                    node.kubernetes.io/instance-type=k3s
+                    nri.intel.com/balloons-enabled=true
+                    nri.intel.com/max-tp=1
+                    nri.intel.com/numa-nodes=1
+                    nri.intel.com/physical-cpus=48
+                    nvidia.com/gpu.present=false
+Annotations:        alpha.kubernetes.io/provided-node-ip: 172.19.0.2
+                    flannel.alpha.coreos.com/backend-data: {"VNI":1,"VtepMAC":"96:aa:23:f8:11:4d"}
+                    flannel.alpha.coreos.com/backend-type: vxlan
+                    flannel.alpha.coreos.com/kube-subnet-manager: true
+                    flannel.alpha.coreos.com/public-ip: 172.19.0.2
+                    k3s.io/hostname: k3d-k3dgpu-f5-eat-server-0
+                    k3s.io/internal-ip: 172.19.0.2
+                    k3s.io/node-args:
+                      ["server","--disable","traefik","--disable","intel-gpu-dra","--disable","nri-balloons","--node-label","feature.node.kubernetes.io/cpu-cpui...
+                    k3s.io/node-config-hash: ZI4GP5LMVU2JLDWYG474MYZAOD2JJF5MLRIE3I4QWEQA3VW3KEJA====
+                    k3s.io/node-env: {"K3S_KUBECONFIG_OUTPUT":"/output/kubeconfig.yaml","K3S_TOKEN":"********"}
+                    nfd.node.kubernetes.io/feature-labels:
+                      cpu-cpuid.ADX,cpu-cpuid.AESNI,cpu-cpuid.AVX,cpu-cpuid.AVX10_128,cpu-cpuid.AVX10_256,cpu-cpuid.AVX10_512,cpu-cpuid.AVX10_VERSION,cpu-cpuid....
+                    node.alpha.kubernetes.io/ttl: 0
+                    volumes.kubernetes.io/controller-managed-attach-detach: true
+CreationTimestamp:  Sat, 07 Nov 2026 05:48:08 +0000
+Taints:             <none>
+Unschedulable:      false
+Lease:
+  HolderIdentity:  k3d-k3dgpu-f5-eat-server-0
+  AcquireTime:     <unset>
+  RenewTime:       Sat, 07 Nov 2026 06:14:19 +0000
+Conditions:
+  Type             Status  LastHeartbeatTime                 LastTransitionTime                Reason                       Message
+  ----             ------  -----------------                 ------------------                ------                       -------
+  MemoryPressure   False   Sat, 07 Nov 2026 06:14:09 +0000   Sat, 07 Nov 2026 05:48:08 +0000   KubeletHasSufficientMemory   kubelet has sufficient memory available
+  DiskPressure     False   Sat, 07 Nov 2026 06:14:09 +0000   Sat, 07 Nov 2026 05:48:08 +0000   KubeletHasNoDiskPressure     kubelet has no disk pressure
+  PIDPressure      False   Sat, 07 Nov 2026 06:14:09 +0000   Sat, 07 Nov 2026 05:48:08 +0000   KubeletHasSufficientPID      kubelet has sufficient PID available
+  Ready            True    Sat, 07 Nov 2026 06:14:09 +0000   Sat, 07 Nov 2026 05:48:08 +0000   KubeletReady                 kubelet is posting ready status
+Addresses:
+  InternalIP:  172.19.0.2
+  Hostname:    k3d-k3dgpu-f5-eat-server-0
+Capacity:
+  cpu:                96
+  ephemeral-storage:  3724393213952
+  gpu.intel.com/xe:   4
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             527767144Ki
+  pods:               110
+Allocatable:
+  cpu:                96
+  ephemeral-storage:  3538173550480
+  gpu.intel.com/xe:   4
+  hugepages-1Gi:      0
+  hugepages-2Mi:      0
+  memory:             527767144Ki
+  pods:               110
+System Info:
+  Machine ID:                 
+  System UUID:                00000000-0000-0000-0000-7cc255947e5f
+  Boot ID:                    d40bd344-edb4-4aee-85a8-20b25e4305e8
+  Kernel Version:             7.0.0-31-generic
+  OS Image:                   Ubuntu 26.04.1 LTS
+  Operating System:           linux
+  Architecture:               amd64
+  Container Runtime Version:  containerd://2.3.4-k3s1
+  Kubelet Version:            v1.37.1+k3s1
+PodCIDR:                      10.42.0.0/24
+PodCIDRs:                     10.42.0.0/24
+ProviderID:                   k3s://k3d-k3dgpu-f5-eat-server-0
+Non-terminated Pods:          (60 in total)
+  Namespace                   Name                                                               CPU Requests  CPU Limits  Memory Requests  Memory Limits  Age
+  ---------                   ----                                                               ------------  ----------  ---------------  -------------  ---
+  agent-sandbox-system        agent-sandbox-controller-576d7f5f44-zglfr                          0 (0%)        0 (0%)      0 (0%)           0 (0%)         56s
+  agent-sandbox-system        python-pool-6d6zh                                                  250m (0%)     1 (1%)      256Mi (0%)       1Gi (0%)       19s
+  agent-sandbox-system        python-pool-cpzwq                                                  250m (0%)     1 (1%)      256Mi (0%)       1Gi (0%)       19s
+  agent-sandbox-system        python-pool-d7jz2                                                  250m (0%)     1 (1%)      256Mi (0%)       1Gi (0%)       19s
+  agent-sandbox-system        python-pool-m6r2h                                                  250m (0%)     1 (1%)      256Mi (0%)       1Gi (0%)       19s
+  agent-sandbox-system        python-pool-tr94x                                                  250m (0%)     1 (1%)      256Mi (0%)       1Gi (0%)       19s
+  agent-sandbox-system        sandbox-router-deployment-5d657b79d9-flgnw                         250m (0%)     1 (1%)      512Mi (0%)       1Gi (0%)       42s
+  agent-sandbox-system        sandbox-router-deployment-5d657b79d9-h4bmz                         250m (0%)     1 (1%)      512Mi (0%)       1Gi (0%)       31s
+  cert-manager                cert-manager-675d9f8758-mshdt                                      0 (0%)        0 (0%)      0 (0%)           0 (0%)         25m
+  cert-manager                cert-manager-cainjector-6b55c849f6-m6q99                           0 (0%)        0 (0%)      0 (0%)           0 (0%)         25m
+  cert-manager                cert-manager-istio-csr-8698d54667-shqll                            0 (0%)        0 (0%)      0 (0%)           0 (0%)         24m
+  cert-manager                cert-manager-webhook-777c75d4cc-g8z72                              0 (0%)        0 (0%)      0 (0%)           0 (0%)         25m
+  cnpg-system                 cnpg-cloudnative-pg-76c784646c-5zhrc                               0 (0%)        0 (0%)      0 (0%)           0 (0%)         23m
+  envoy-ai-gateway-system     ai-gateway-controller-6d4f9f6cc-kq28c                              0 (0%)        0 (0%)      0 (0%)           0 (0%)         17m
+  envoy-gateway-system        envoy-envoy-gateway-system-eg-gateway-b87277ac-vz9c7               110m (0%)     0 (0%)      544Mi (0%)       0 (0%)         23m
+  envoy-gateway-system        envoy-gateway-754cc6c65-n7d57                                      100m (0%)     0 (0%)      256Mi (0%)       1Gi (0%)       23m
+  envoy-gateway-system        envoy-llm-inference-ai-gateway-62f06ddf-69f5bdb894-2nx25           110m (0%)     0 (0%)      544Mi (0%)       0 (0%)         16m
+  istio-system                istio-cni-node-2ppbr                                               100m (0%)     0 (0%)      100Mi (0%)       0 (0%)         24m
+  istio-system                istiod-77864bd5fb-r2s9t                                            500m (0%)     0 (0%)      2Gi (0%)         0 (0%)         24m
+  istio-system                ztunnel-hhlqd                                                      200m (0%)     0 (0%)      512Mi (0%)       0 (0%)         24m
+  kserve                      kserve-controller-manager-5757d8c6b4-2mn6h                         200m (0%)     200m (0%)   600Mi (0%)       600Mi (0%)     15m
+  kserve                      llmisvc-controller-manager-588c6877c9-8qpbt                        100m (0%)     100m (0%)   300Mi (0%)       300Mi (0%)     15m
+  kube-system                 coredns-577d995dff-bldj8                                           100m (0%)     0 (0%)      70Mi (0%)        170Mi (0%)     26m
+  kube-system                 intel-gpu-plugin-hwpzd                                             40m (0%)      100m (0%)   45Mi (0%)        115Mi (0%)     26m
+  kube-system                 local-path-provisioner-6858d854cf-r2jzp                            0 (0%)        0 (0%)      0 (0%)           0 (0%)         26m
+  kube-system                 metrics-server-778c4649b4-c6fpq                                    100m (0%)     0 (0%)      70Mi (0%)        0 (0%)         26m
+  kube-system                 nri-resource-policy-balloons-x9kc7                                 500m (0%)     0 (0%)      512Mi (0%)       0 (0%)         17m
+  kube-system                 svclb-envoy-envoy-gateway-system-eg-gateway-b87277ac-a130b5ks7t    0 (0%)        0 (0%)      0 (0%)           0 (0%)         23m
+  langfuse                    langfuse-clickhouse-shard0-0                                       500m (0%)     750m (0%)   512Mi (0%)       768Mi (0%)     11m
+  langfuse                    langfuse-redis-primary-0                                           100m (0%)     150m (0%)   128Mi (0%)       192Mi (0%)     11m
+  langfuse                    langfuse-web-7ccb7bd8f8-ghg8k                                      2 (2%)        4 (4%)      2Gi (0%)         4Gi (0%)       11m
+  langfuse                    langfuse-worker-65844cf695-rpkkl                                   2 (2%)        4 (4%)      2Gi (0%)         4Gi (0%)       11m
+  litellm                     litellm-5cf48fd75-7pph8                                            1 (1%)        4 (4%)      2Gi (0%)         4Gi (0%)       10m
+  litellm                     litellm-redis-primary-0                                            250m (0%)     1 (1%)      512Mi (0%)       1Gi (0%)       13m
+  llm-inference               qwen2-5-coder-14b-kserve-659d794c8-klgng                           40 (41%)      40 (41%)    96Gi (19%)       96Gi (19%)     3m15s
+  llm-inference               qwen2-5-coder-14b-kserve-router-scheduler-57f7c454bf-6j8l8         512m (0%)     0 (0%)      1000Mi (0%)      0 (0%)         3m15s
+  llm-inference               qwen3guard-kserve-74499665b4-hgv5b                                 8 (8%)        8 (8%)      16Gi (3%)        16Gi (3%)      9m20s
+  llm-inference               qwen3guard-kserve-router-scheduler-7df99fd889-zlz2k                512m (0%)     0 (0%)      1000Mi (0%)      0 (0%)         9m19s
+  lws-system                  lws-controller-manager-7bf48d7b64-m8qzx                            1 (1%)        0 (0%)      1Gi (0%)         0 (0%)         15m
+  monitoring                  alertmanager-kube-prometheus-stack-alertmanager-0                  0 (0%)        0 (0%)      200Mi (0%)       0 (0%)         20m
+  monitoring                  kube-prometheus-stack-grafana-5444d66bdc-9l8ld                     0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  kube-prometheus-stack-kube-state-metrics-56bdcf5fdd-dm8wh          0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  kube-prometheus-stack-operator-54bb847d75-dgndl                    0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  kube-prometheus-stack-prometheus-node-exporter-qpnx2               0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  loki-0                                                             0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  loki-canary-6xvw8                                                  0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  opentelemetry-collector-agent-k2mdv                                0 (0%)        0 (0%)      0 (0%)           0 (0%)         18m
+  monitoring                  prometheus-adapter-698c99d78c-4mxk5                                0 (0%)        0 (0%)      0 (0%)           0 (0%)         18m
+  monitoring                  prometheus-kube-prometheus-stack-prometheus-0                      0 (0%)        0 (0%)      0 (0%)           0 (0%)         20m
+  monitoring                  telemetry-seaweedfs-filer-0                                        0 (0%)        0 (0%)      0 (0%)           0 (0%)         22m
+  monitoring                  telemetry-seaweedfs-master-0                                       0 (0%)        0 (0%)      0 (0%)           0 (0%)         22m
+  monitoring                  telemetry-seaweedfs-s3-6f7f76b4b9-pzwgr                            0 (0%)        0 (0%)      0 (0%)           0 (0%)         22m
+  monitoring                  telemetry-seaweedfs-volume-0                                       0 (0%)        0 (0%)      0 (0%)           0 (0%)         22m
+  monitoring                  tempo-0                                                            0 (0%)        0 (0%)      0 (0%)           0 (0%)         19m
+  node-feature-discovery      nfd-gc-8d4595cbc-xts6m                                             10m (0%)      0 (0%)      128Mi (0%)       1Gi (0%)       26m
+  node-feature-discovery      nfd-master-74b44b767d-czssf                                        100m (0%)     0 (0%)      128Mi (0%)       4Gi (0%)       26m
+  node-feature-discovery      nfd-worker-hpbbx                                                   5m (0%)       0 (0%)      64Mi (0%)        512Mi (0%)     26m
+  pgvector                    pgvector-0                                                         250m (0%)     2 (2%)      512Mi (0%)       2Gi (0%)       88s
+  postgresql                  postgresql-1                                                       0 (0%)        0 (0%)      0 (0%)           0 (0%)         22m
+  redis                       redis-stack-server-0                                               0 (0%)        0 (0%)      0 (0%)           0 (0%)         103s
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests        Limits
+  --------           --------        ------
+  cpu                60149m (62%)    71300m (74%)
+  memory             133945Mi (25%)  146017Mi (28%)
+  ephemeral-storage  100Mi (0%)      4Gi (0%)
+  hugepages-1Gi      0 (0%)          0 (0%)
+  hugepages-2Mi      0 (0%)          0 (0%)
+  gpu.intel.com/xe   0               0
+Events:
+  Type    Reason                          Age   From                   Message
+  ----    ------                          ----  ----                   -------
+  Normal  NodeReady                       26m   kubelet                Node k3d-k3dgpu-f5-eat-server-0 status is now: NodeReady
+  Normal  CertificateExpirationOK         26m   k3s-cert-monitor       Node and Certificate Authority certificates managed by k3s are OK
+  Normal  Synced                          26m   cloud-node-controller  Node synced successfully
+  Normal  NodePasswordValidationComplete  26m   k3s-supervisor         Deferred node password secret validation complete
+  Normal  RegisteredNode                  26m   node-controller        Node k3d-k3dgpu-f5-eat-server-0 event: Registered Node k3d-k3dgpu-f5-eat-server-0 in Controller

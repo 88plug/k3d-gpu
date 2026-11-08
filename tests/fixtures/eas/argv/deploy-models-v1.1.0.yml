@@ -1,0 +1,32 @@
+# EI v1.1.0 (d035b1e, the commit EAS v1.2.0 pins) roles/llm_services/tasks/deploy_models.yaml,
+# the two tasks that carry the LiteLLM master key, for tests/eas_test.sh section argv; at
+# v1.1.0 both are keyed on auth_provider (litellm) where 3e8a244 read auth_type:
+#   L82-L91   the Secret read (kubernetes.core.k8s_info replaced by library/k8s_secret_stub.py,
+#             which returns a Secret holding ARGV_FAKE_KEY)
+#   L204-L231 the model deploy with its MM_LITELLM_MASTER_KEY line verbatim (L231); the
+#             `./model-manager deploy` command replaced by a sleep that records whether
+#             the task hands over a value
+# https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/llm_services/tasks/deploy_models.yaml#L82-L91
+# https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/llm_services/tasks/deploy_models.yaml#L204-L231
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    auth_provider: litellm
+  tasks:
+    - name: "Deploy models | Load LiteLLM master key (when auth_provider=litellm)"
+      k8s_secret_stub:
+        api_version: v1
+        kind: Secret
+        name: litellm-master-key
+        namespace: "{{ litellm_namespace | default('litellm') }}"
+      register: _deploy_litellm_secret
+      failed_when: false
+      no_log: true
+      when: auth_provider | default('keycloak') == 'litellm'
+
+    - name: Deploy each catalog model
+      shell: |
+        if [ -n "$MM_LITELLM_MASTER_KEY" ]; then echo set; else echo empty; fi > "{{ argv_out }}/key"; sleep 4
+      environment:
+        MM_LITELLM_MASTER_KEY: "{{ (_deploy_litellm_secret.resources[0].data.master_key | b64decode) if (auth_provider | default('keycloak') == 'litellm' and _deploy_litellm_secret.resources | default([]) | length > 0) else '' }}"

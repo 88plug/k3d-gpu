@@ -1,0 +1,96 @@
+00:54:53 +0s H34 probe -> /home/andrew/k3dgpu-bench-wildct/runs/H34w/out (levels='typical', pairs=12, level budget 1200s)
+a825757982ac08ec75d71e378f7b1e4a9106a8a9fab6127566f9fad8f4901962  /home/andrew/k3dgpu-bench-wildct/repo/bench/hetero-spec/prompts.jsonl
+removed 0 container(s)
+[32m==>[0m opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel); not deployed, not advertised
+[32m==>[0m Accelerators: hybrid
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-w-h34' with image cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-w-h34'           
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-w-h34-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-w-h34-tools'       
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-w-h34-server-0'    
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-w-h34'              
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-w-h34-server-0'    
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-w-h34' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-w-h34)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/runs/H34w/out/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-w-h34-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+node/k3d-k3dgpu-w-h34-server-0 annotated
+[32m==>[0m hybrid device plugin auto-deployed by k3s.
+balloonspolicy.config.nri/default patched
+[32m==>[0m Verifying accelerators are schedulable...
+daemon set "nri-resource-policy-balloons" successfully rolled out
+[32m==>[0m Accelerators schedulable: hybrid=1. Try: k3d-gpu test
+namespace/spec-decode-cpu created
+configmap/graphs created
+pod/ovms created
+pod/ovms condition met
+NAME   READY   STATUS    RESTARTS   AGE   IP           NODE                        NOMINATED NODE   READINESS GATES
+ovms   1/1     Running   0          23s   10.42.0.10   k3d-k3dgpu-w-h34-server-0   <none>           <none>
+Forwarding from 127.0.0.1:18034 -> 8000
+Forwarding from [::1]:18034 -> 8000
+Handling connection for 18034
+Handling connection for 18034
+00:56:49 +116s server warm
+00:56:49 +116s level typical: start load (started typical on 20-23 (3 containers, ttl 1500s))
+Handling connection for 18034
+Handling connection for 18034
+Handling connection for 18034
+Handling connection for 18034
+00:59:33 +280s level typical: pair 1 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:00:29 +336s level typical: pair 2 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+01:01:26 +393s level typical: pair 3 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:02:24 +451s level typical: pair 4 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+01:03:22 +509s level typical: pair 5 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:04:18 +565s level typical: pair 6 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+01:05:16 +623s level typical: pair 7 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:06:16 +683s level typical: pair 8 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+01:07:14 +741s level typical: pair 9 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:08:09 +796s level typical: pair 10 done (B A)
+Handling connection for 18034
+Handling connection for 18034
+01:09:06 +853s level typical: pair 11 done (A B)
+Handling connection for 18034
+Handling connection for 18034
+01:10:01 +908s level typical: pair 12 done (B A)
+removed 3 container(s)
+01:10:02 +909s level typical: done, load stopped
+removed 0 container(s)
+01:10:02 +909s deleting cluster k3dgpu-w-h34
+[36mINFO[0m[0000] Deleting cluster 'k3dgpu-w-h34'              
+[36mINFO[0m[0001] Deleting cluster network 'k3d-k3dgpu-w-h34'  
+[36mINFO[0m[0001] Deleting 1 attached volumes...               
+[36mINFO[0m[0001] Removing cluster details from default kubeconfig... 
+[36mINFO[0m[0001] Removing standalone kubeconfig file (if there is one)... 
+[36mINFO[0m[0001] Successfully deleted cluster k3dgpu-w-h34!   
