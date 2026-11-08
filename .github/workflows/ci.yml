@@ -243,6 +243,8 @@ jobs:
       - run: tests/bench_test.sh
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
+      # F3's reproduce runner (F3 note N1): one lock on a lasting path; lockrun.sh stays the record.
+      - run: tests/f3_reproduce_test.sh
 
   fit-tests:
     name: k3d-gpu fit and guard tests
@@ -309,8 +311,6 @@ jobs:
       - run: python3 bench/admission/test_ctl.py
       - run: python3 bench/admission/test_analyze.py
       - run: bash bench/admission/test_run.sh
-      # F3's lock runner (F3 note N1): one lock, K3DGPU_LIVE_LOCK or ~/k3dgpu-bench.lock.
-      - run: bash bench/f3/test_lockrun.sh
 
   mcp-tests:
     name: MCP server tests

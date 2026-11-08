@@ -13500,35 +13500,40 @@ Not scored:
   bastion, inotify at 1024 instances, EAS #71 at teardown, and other tenants' memory) did not
   stop any step on this run.
 
-### F3 note N1: one bench lock on a path that outlives a session (2026-11-07)
+### F3 note N1: a reproduce runner on a lock path that outlives a session (2026-11-07)
 
 Written 2026-11-07, after the F3 run. It changes no step, ceiling, grade or prediction and no
-recorded result: the run above took both locks as amendment R1 says, and its records are
-unchanged.
+recorded result. The run above took both locks as amendment R1 says, and its records,
+`lockrun.sh` and `launch.sh` are unchanged.
 
-- **The fault.** `bench/f3/lockrun.sh` named R1's second lock, `<scratchpad>/live.lock`, by its
+- **The fault.** `bench/f3/lockrun.sh` names R1's second lock, `<scratchpad>/live.lock`, by its
   full path inside one session's scratchpad directory, which is on tmpfs. That directory is gone
-  after a reboot or once the session is cleaned up, and then `flock` cannot open the file. In a
-  mount namespace with an empty `/tmp`, the committed runner exited 66 ("cannot open lock file
-  ... No such file or directory") before `run.sh` started, so a reproduce of F3 from the
-  committed files stops there. H57dp amendment R2 retired the same path for H57dp.
-- **The change.** `lockrun.sh` takes one lock, `K3DGPU_LIVE_LOCK`, by default
-  `~/k3dgpu-bench.lock`, still with `flock -o -w 36000`, and the 180 min cap counts from the
-  moment it is held. The variable and its default are those of H55's runner
-  (`bench/admission/run.sh`), and the H54 and H57dp holds take the same path. R1 took two locks
-  because a hold on the scratchpad `live.lock` alone did not exclude a hold on
-  `~/k3dgpu-bench.lock` alone. The probe headers that named the scratchpad path or a placeholder
-  (`bench/amx-autoquant/probe.sh`, `bench/joule-pack/probe.sh`, `bench/hetero-spec/probe.sh` and
-  `bench/hetero-spec/h34.sh`) now name `~/k3dgpu-bench.lock`, so one lock covers F3, those probes
-  and the desktop holds. `bench/thermal-resource/run.sh` and `bench/uncore-phase/run.sh` still
-  default to `/tmp/k3d-gpu-live.lock`; F3 excludes them only when they run with `LOCK` set to
-  `~/k3dgpu-bench.lock`.
-- **Records.** A reproduce's `lock.txt` now reads `waiting for <lock>`, `lock taken` and `lock
-  released` where the run's reads `waiting for locks`, `locks taken` and `locks released`. The
-  committed `lockrun.sh` and `launch.sh` now differ from the files that ran (`runner.sha256`) by
-  this change too. `bench/f3/test_lockrun.sh` checks the runner against a stub `run.sh` under a
-  temporary `HOME`, the probe headers, and that no bench script names a session's scratchpad
-  path.
+  after a reboot or once the session is cleaned up, and then `flock` cannot open the file. With
+  an empty `/tmp` (a user and mount namespace), the committed `lockrun.sh` exits 66 ("cannot
+  open lock file ... No such file or directory") before `run.sh` starts, so a reproduce of F3
+  from the committed files stops there. H57dp amendment R2 retired the same path for H57dp.
+- **The record stays.** `lockrun.sh` is the file that ran: its sha256 equals the `lockrun.sh`
+  line of `runner.sha256`, and `pins/classes` keeps `bench/f3/**` historical. It is not edited.
+- **The reproduce runner.** `bench/f3/reproduce.sh` takes `lockrun.sh`'s four arguments and
+  calls `run.sh` with the same line: the same backstop timeout, the cap counted from the moment
+  the lock is held. It takes one lock, `K3DGPU_LIVE_LOCK`, by default `~/k3dgpu-bench.lock`, with
+  `flock -o -w 36000`. That is R1's first lock and the desktop holds' lock; the variable and
+  default are those of H55's runner (`bench/admission/run.sh`). R1 took the scratchpad lock
+  second only to exclude a hold on that path alone. A reproduce runs `step0.sh`, then
+  `reproduce.sh <src> k3dgpu-f3-eas <out> 180` in place of `lockrun.sh`, with `launch.sh`'s
+  environment. Its `lock.txt` reads `waiting for <lock>`, `lock taken` and `lock released` where
+  the run's reads `waiting for locks`, `locks taken` and `locks released`. With an empty `/tmp`
+  it runs `run.sh`.
+- **Probe headers.** `bench/amx-autoquant/probe.sh` (H27, H27x), `bench/hetero-spec/probe.sh` and
+  `bench/hetero-spec/h34.sh` (H22, H34, H34x, H34w) name `<scratchpad>/live.lock` as the lock
+  their runs took. Those rows have verdicts and the files are historical, so they stay; a new
+  run of one of them names its lock in its own pre-registration or amendment.
+- **Test.** `tests/f3_reproduce_test.sh` (CI's Bench harness tests) runs `reproduce.sh` against a
+  stub `run.sh` under a temporary `HOME`: the default lock is held while `run.sh` runs and free
+  after, `run.sh` holds no descriptor on it, a run waits while another hold has
+  `~/k3dgpu-bench.lock`, `K3DGPU_LIVE_LOCK` overrides the path, and three arguments are a usage
+  error. It also checks that `lockrun.sh` still matches `runner.sha256` and that every bench file
+  outside a results directory that names a session's scratchpad path is historical.
 
 ### F5 pre-registration (Xeon 6741P, 2026-11-06)
 
