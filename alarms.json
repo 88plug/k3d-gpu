@@ -14,5 +14,13 @@
     "updated_at": "2026-11-08T10:45:31Z",
     "notified_at": "2026-11-08T10:45:31Z",
     "acked": false
+  },
+  "red:canary.yml": {
+    "title": "scheduled run failure",
+    "body": "The latest scheduled run of `canary.yml` failed.\n\nRun: https://github.com/88plug/k3d-gpu/actions/runs/42472404707\nConclusion: **failure**, created 2026-11-08T10:40:19Z, commit 172655f6d8c852c1c5c8d5c27f30d3c3d2e64466\nFailed jobs: Node image, Report\nHint: no known signature matched\n\n<details><summary>Last 16 lines of the failed log</summary>\n\n```text\nNode image canary/node.sh ﻿2026-11-08T10:40:32.7967645Z ##[group]Run canary/node.sh\nNode image canary/node.sh 2026-11-08T10:40:32.7968019Z ^[[36;1mcanary/node.sh^[[0m\nNode image canary/node.sh 2026-11-08T10:40:32.8016405Z shell: /usr/bin/bash -e {0}\nNode image canary/node.sh 2026-11-08T10:40:32.8016639Z env:\nNode image canary/node.sh 2026-11-08T10:40:32.8016857Z   CANARY_OUT_DIR: /home/runner/work/_temp/canary-out\nNode image canary/node.sh 2026-11-08T10:40:32.8017136Z ##[endgroup]\nNode image canary/node.sh 2026-11-08T10:40:32.8776783Z canary node: docker buildx build --load -t k3d-gpu-canary:node .\nNode image canary/node.sh 2026-11-08T10:45:02.2654305Z canary node: fail: k3d v5.9.0 did not download\nNode image canary/node.sh 2026-11-08T10:45:02.2707425Z ##[error]Process completed with exit code 1.\nReport Green only when every selected engine passed ﻿2026-11-08T10:45:15.7777699Z ##[group]Run exit \"${RC:-1}\"\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7778050Z ^[[36;1mexit \"${RC:-1}\"^[[0m\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7822229Z shell: /usr/bin/bash -e {0}\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7822555Z env:\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7822801Z   RC: 1\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7823048Z ##[endgroup]\nReport Green only when every selected engine passed 2026-11-08T10:45:15.7890088Z ##[error]Process completed with exit code 1.\n```\n</details>\n\nRe-dispatched `canary.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.\n<!-- watchdog:dispatched=42472404707 -->",
+    "opened_at": "2026-11-08T10:45:49Z",
+    "updated_at": "2026-11-08T10:45:49Z",
+    "notified_at": "2026-11-08T10:45:49Z",
+    "acked": false
   }
 }

@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-08T10:45:39Z. 2 open.
+Updated 2026-11-08T10:45:49Z. 3 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -86,6 +86,42 @@ Merge one auto-eligible bot PR, batch the release UNKNOWN STEP 2026-11-08T07:20:
 
 Re-dispatched `bot-sweep.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=42458223055 -->
+
+## `red:canary.yml`: scheduled run failure
+
+Opened 2026-11-08T10:45:49Z, updated 2026-11-08T10:45:49Z.
+
+The latest scheduled run of `canary.yml` failed.
+
+Run: https://github.com/88plug/k3d-gpu/actions/runs/42472404707
+Conclusion: **failure**, created 2026-11-08T10:40:19Z, commit 172655f6d8c852c1c5c8d5c27f30d3c3d2e64466
+Failed jobs: Node image, Report
+Hint: no known signature matched
+
+<details><summary>Last 16 lines of the failed log</summary>
+
+```text
+Node image canary/node.sh ﻿2026-11-08T10:40:32.7967645Z ##[group]Run canary/node.sh
+Node image canary/node.sh 2026-11-08T10:40:32.7968019Z ^[[36;1mcanary/node.sh^[[0m
+Node image canary/node.sh 2026-11-08T10:40:32.8016405Z shell: /usr/bin/bash -e {0}
+Node image canary/node.sh 2026-11-08T10:40:32.8016639Z env:
+Node image canary/node.sh 2026-11-08T10:40:32.8016857Z   CANARY_OUT_DIR: /home/runner/work/_temp/canary-out
+Node image canary/node.sh 2026-11-08T10:40:32.8017136Z ##[endgroup]
+Node image canary/node.sh 2026-11-08T10:40:32.8776783Z canary node: docker buildx build --load -t k3d-gpu-canary:node .
+Node image canary/node.sh 2026-11-08T10:45:02.2654305Z canary node: fail: k3d v5.9.0 did not download
+Node image canary/node.sh 2026-11-08T10:45:02.2707425Z ##[error]Process completed with exit code 1.
+Report Green only when every selected engine passed ﻿2026-11-08T10:45:15.7777699Z ##[group]Run exit "${RC:-1}"
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7778050Z ^[[36;1mexit "${RC:-1}"^[[0m
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7822229Z shell: /usr/bin/bash -e {0}
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7822555Z env:
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7822801Z   RC: 1
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7823048Z ##[endgroup]
+Report Green only when every selected engine passed 2026-11-08T10:45:15.7890088Z ##[error]Process completed with exit code 1.
+```
+</details>
+
+Re-dispatched `canary.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
+<!-- watchdog:dispatched=42472404707 -->
 
 ## `stale:bot-sweep.yml`: no successful scheduled run within 7 h
 
