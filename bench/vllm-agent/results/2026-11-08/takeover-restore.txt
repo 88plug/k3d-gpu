@@ -1,0 +1,23 @@
+2026-11-08T05:51:59Z vram before: card1 15.67;card2 14.97;card3 15.67;card4 14.97;
+2026-11-08T05:53:41Z qwen38-a-hr POST lines in the last 10 min: 0
+2026-11-08T05:55:21Z qwen38-b-hr POST lines in the last 10 min: 0
+2026-11-08T05:55:21Z baseline port=30000 http=200 total_s=0.154155 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop"}
+2026-11-08T05:55:21Z baseline port=30001 http=200 total_s=0.152700 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop"}
+2026-11-08T05:55:21Z aiperf010 stop begin
+2026-11-08T05:57:21Z aiperf010 stop took 120s: status=exited exit=137 restart=no
+2026-11-08T05:57:21Z qwen38-b-hr stop begin
+2026-11-08T05:57:27Z qwen38-b-hr stop took 6s: status=exited exit=0 restart=no
+2026-11-08T05:57:27Z qwen38-a-hr stop begin
+2026-11-08T05:57:31Z qwen38-a-hr stop took 4s: status=exited exit=0 restart=no
+2026-11-08T05:57:42Z vram after: card1 0.00;card2 0.00;card3 0.00;card4 0.00;
+2026-11-08T06:29:04Z qwen38-a-hr start rc=0
+2026-11-08T06:29:05Z qwen38-b-hr start rc=0
+2026-11-08T06:29:05Z aiperf010 start rc=0
+2026-11-08T06:30:05Z OK qwen38-a-hr port=30000 http=200 total_s=0.386094 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop","usage":{"prompt_tokens":24,"total_tokens":26,"completion_tokens":2,"prompt_tokens_details":null,"reasoning_tokens":0}} after 60s
+2026-11-08T06:30:06Z OK qwen38-b-hr port=30001 http=200 total_s=0.374647 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop","usage":{"prompt_tokens":24,"total_tokens":26,"completion_tokens":2,"prompt_tokens_details":null,"reasoning_tokens":0}} after 0s
+2026-11-08T06:30:11Z aiperf010 status=running started=2026-11-08T06:29:05.053702422Z restart=no
+2026-11-08T06:30:16Z vram after restore: card1 26.46;card2 15.09;card3 26.46;card4 15.09;
+2026-11-08T06:30:16Z restore rc=0
+aiperf010
+qwen38-b-hr
+qwen38-a-hr

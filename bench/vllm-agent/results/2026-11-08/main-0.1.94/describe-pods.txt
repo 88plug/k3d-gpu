@@ -1,0 +1,110 @@
+Name:             vllm-6d68b9c67c-whhxr
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-gpu-server-0/172.19.0.2
+Start Time:       Sun, 08 Nov 2026 05:58:36 +0000
+Labels:           app=vllm
+                  pod-template-hash=6d68b9c67c
+Annotations:      k3d-gpu.io/agent-backend: vllm
+                  k3d-gpu.io/agent-device: GPU
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/vllm-6d68b9c67c
+Containers:
+  vllm:
+    Container ID:  containerd://2d911db9881fc20ac33e5c206b1eb7597540c5f686b1e2239a21d6dbeffb78b6
+    Image:         vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c
+    Image ID:      docker.io/vllm/vllm-openai-xpu@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      Qwen/Qwen3-4B
+      --revision=1cfa9a7208912126459214e8b04321603b3df60c
+      --served-model-name=Qwen3-4B
+      --port=8000
+      --dtype=float16
+      --block-size=64
+      --max-model-len=8192
+      --max-num-batched-tokens=2048
+      --gpu-memory-utilization=0.9
+      --enforce-eager
+      --no-enable-prefix-caching
+      --tensor-parallel-size=1
+      --enable-auto-tool-choice
+      --tool-call-parser=hermes
+      --reasoning-parser=qwen3
+    State:          Running
+      Started:      Sun, 08 Nov 2026 06:00:49 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      gpu.intel.com/xe:  1
+    Requests:
+      cpu:               2
+      gpu.intel.com/xe:  1
+      memory:            8Gi
+    Readiness:           http-get http://:http/health delay=0s timeout=1s period=5s successThreshold=1 failureThreshold=3
+    Environment:
+      VLLM_NO_USAGE_STATS:            1
+      DO_NOT_TRACK:                   1
+      VLLM_WORKER_MULTIPROC_METHOD:   spawn
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN:  1
+      VLLM_TARGET_DEVICE:             xpu
+      ZE_FLAT_DEVICE_HIERARCHY:       FLAT
+      ONEAPI_DEVICE_SELECTOR:         level_zero:*
+      ZE_ENABLE_PCI_ID_DEVICE_ORDER:  1
+      SYCL_CACHE_PERSISTENT:          1
+      ZES_ENABLE_SYSMAN:              1
+      HF_HUB_DISABLE_XET:             1
+      HF_HUB_ENABLE_HF_TRANSFER:      0
+      CCL_PROCESS_LAUNCHER:           none
+      CCL_WORKER_OFFLOAD:             0
+      CCL_WORKER_AFFINITY:            
+      CCL_ZE_IPC_EXCHANGE:            pidfd
+      CCL_ALLREDUCE:                  ring
+      HF_HOME:                        /models/huggingface
+      XDG_CACHE_HOME:                 /models/.cache
+      TRITON_CACHE_DIR:               /models/.triton
+      TRITON_HOME:                    /models/.triton
+    Mounts:
+      /dev/shm from shm (rw)
+      /models from models (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-zf6cf (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  vllm-models
+    ReadOnly:   false
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  2Gi
+  kube-api-access-zf6cf:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                 From               Message
+  ----     ------     ----                ----               -------
+  Normal   Scheduled  4m8s                default-scheduler  Successfully assigned k3d-gpu-agent/vllm-6d68b9c67c-whhxr to k3d-gpu-server-0
+  Normal   Pulling    4m8s                kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c"
+  Normal   Pulled     116s                kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c" in 2m12.498s (2m12.498s including waiting). Image size: 5181851385 bytes.
+  Normal   Created    116s                kubelet            spec.containers{vllm}: Container created
+  Normal   Started    116s                kubelet            spec.containers{vllm}: Container started
+  Warning  Unhealthy  7s (x25 over 116s)  kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.11:8000/health": dial tcp 10.42.0.11:8000: connect: connection refused

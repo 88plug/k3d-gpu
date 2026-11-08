@@ -1,0 +1,16 @@
+total 146588
+drwxrwxr-x 2 devcloud devcloud     4096 Nov  8 05:51 .
+drwxrwxr-x 6 devcloud devcloud     4096 Sep 23 07:50 ..
+-rw-rw-r-- 1 devcloud devcloud      328 Jul 31 00:11 env
+-rw-rw-r-- 1 devcloud devcloud      165 Jul 31 00:11 env.fish
+-rwxr-xr-x 1 devcloud devcloud 24887458 Nov  8 05:51 k3d
+-rwxr-xr-x 1 devcloud devcloud 61890722 Nov  8 05:51 kubectl
+-rwxrwxr-x 1 devcloud devcloud  7842312 Sep 23 07:50 py-spy
+-rwxr-xr-x 1 devcloud devcloud 55110904 Jul 28 18:37 uv
+-rwxr-xr-x 1 devcloud devcloud   345952 Jul 28 18:37 uvx
++-- Desired=Unknown/Install/Remove/Purge/Hold
+|+- Status=Not/Inst/Conf-files/Unpacked/halF-conf/Half-inst/trig-aWait/Trig-pend
+||+ Err?=(none)/Reinst-required (Status,Err: uppercase=bad)
+||| Name           Version      Architecture Description
++++-==============-============-============-===========================================
+ii  k3d-gpu        0.1.94-1     all          Bootstrap GPU-ready k3d clusters on Docker.

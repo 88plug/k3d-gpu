@@ -1,0 +1,63 @@
+==> k3d-gpu 0.1.94: k3d-gpu_0.1.94-1_all.deb
+==> sha256 ok: 60a1dc5bbc5e6f2a439c34c9ec19dc2c916dcd35c5bec9d46752ee2ebcfd8dec
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Solving dependencies...
+The following packages were automatically installed and are no longer required:
+  libopenipmi0t64 libsnmp-base libsnmp40t64 libxpum1 openipmi pollinate
+Use 'sudo apt autoremove' to remove them.
+The following NEW packages will be installed:
+  k3d-gpu
+0 upgraded, 1 newly installed, 0 to remove and 83 not upgraded.
+Need to get 0 B/685 kB of archives.
+After this operation, 2688 kB of additional disk space will be used.
+Get:1 /tmp/tmp.5Pr8hESDWe/k3d-gpu_0.1.94-1_all.deb k3d-gpu all 0.1.94-1 [685 kB]
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+debconf: unable to initialize frontend: Teletype
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Noninteractive
+Selecting previously unselected package k3d-gpu.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 220026 files and directories currently installed.)
+Preparing to unpack .../k3d-gpu_0.1.94-1_all.deb ...
+Unpacking k3d-gpu (0.1.94-1) ...
+Setting up k3d-gpu (0.1.94-1) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+debconf: unable to initialize frontend: Teletype
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Noninteractive
+
+The processor microcode seems to be up-to-date.
+
+Restarting services...
+
+Service restarts being deferred:
+ /etc/needrestart/restart.d/dbus.service
+ systemctl restart networkd-dispatcher.service
+ systemctl restart systemd-logind.service
+ systemctl restart unattended-upgrades.service
+
+No containers need to be restarted.
+
+User sessions running outdated binaries:
+ devcloud @ session #1624: python3[965970]
+ devcloud @ session #4446: python3[1307983]
+ devcloud @ session #9941: tmux: server[2186548]
+ devcloud @ user manager: (sd-pam)[656124]
+ devcloud @ user service: dbus.service[2186553]
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+==> k3d: https://github.com/k3d-io/k3d/releases/download/v5.9.0/k3d-linux-amd64
+==> kubectl: https://dl.k8s.io/release/v1.37.2/bin/linux/amd64/kubectl
+==> add /home/devcloud/.local/bin to PATH: export PATH="/home/devcloud/.local/bin:$PATH"
+==> next: k3d-gpu doctor, then k3d-gpu quickstart
