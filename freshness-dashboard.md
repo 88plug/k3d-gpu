@@ -1,47 +1,48 @@
 # Freshness dashboard
 
-Updated 2026-11-09 07:07 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-09 22:50 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-red:canary.yml
-stale:canary.yml
+stale:freshness.yml
+stale:watchdog.yml
 
 ## Pins behind (21)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 3d |
-| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 1d |
-| docs-build | `docs-pymdown-extensions` | `12.3` | `13.0` | major | 2026-11-08 | 16h |
-| examples | `examples-crewai` | `1.15.37` | `1.15.39` | patch | 2026-11-09 | 5h |
-| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.2` | `v1.108.2` | `v1.108.3` | patch | ? | ? |
-| hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 3d |
+| cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 4d |
+| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 2d |
+| docs-build | `docs-pymdown-extensions` | `12.3` | `13.0` | major | 2026-11-08 | 1d |
+| examples | `examples-openai` | `3.46.0` | `3.48.0` | minor | 2026-11-09 | 6h |
+| hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 4d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 2d |
-| hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 9d |
-| host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 5d |
-| host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 13d |
+| hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 10d |
+| host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 6d |
+| host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 14d |
 | host-intel | `linux-tools` | `7.3.1` | `7.3.3` | patch | ? | ? |
 | images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 11d |
 | images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.15` | patch | 2026-11-06 | 3d |
-| k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 5d |
+| k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 6d |
 | nri | `nri-balloons` | `v0.15.0` | `v0.15.1` | patch | ? | ? |
-| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 2d |
-| opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.3` | minor | 2026-11-08 | 7h |
-| packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.12` | patch | ? | ? |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.4` | `2.35.4` | `2.35.5` | patch | 2026-11-08 | 16h |
-| packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 6d |
+| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 3d |
+| opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.3` | minor | 2026-11-08 | 23h |
+| packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.13` | patch | ? | ? |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.4` | `2.35.4` | `2.35.5` | patch | 2026-11-08 | 1d |
+| packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 7d |
+| tools | `ci-chrome` | `157.0.8103.38` | `157.0.8103.50` | patch | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 7d |
 
 ### Not resolved (1)
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (12)
+## Open bot PRs (13)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #368 | examples | auto | - |
+| #371 | tools | auto | - |
+| #370 | examples | auto | - |
 | #366 | docs-build | review | a human approval at the head |
 | #365 | nri | auto | - |
 | #357 | vllm-xpu | review | a human approval at the head |
@@ -177,4 +178,44 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          env:
            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
          with:
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -503,7 +503,7 @@
+       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+       - name: Tool versions (hack/ci-tools.env)
+         run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
+-      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
++      - uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+         with:
+           version: ${{ env.HELM4_VERSION }}
+       - name: Install kubeconform and PyYAML
+--- a/.github/workflows/freshness.yml
++++ b/.github/workflows/freshness.yml
+@@ -210,7 +210,7 @@
+ 
+       - name: Open or update the bump PR
+         if: steps.s.outputs.changed == 'true'
+-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
++        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+         with:
+           branch: autobump/${{ matrix.group }}
+           delete-branch: true
+@@ -255,7 +255,7 @@
+ 
+       - name: Open or update the workaround removal PR
+         if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
+-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
++        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+         with:
+           branch: autobump/ki-${{ steps.s.outputs.followup }}
+           base: autobump/${{ matrix.group }}
+@@ -427,7 +427,7 @@
+         run: hack/autobump-branch-reset "autobump/amend-${ROW}"
+ 
+       - name: Open or update the amendment PR
+-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
++        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+         with:
+           path: pr
+           branch: autobump/amend-${{ inputs.propose_amendment }}
 ```
