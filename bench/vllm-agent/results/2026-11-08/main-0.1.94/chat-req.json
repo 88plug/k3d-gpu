@@ -1,0 +1,11 @@
+{
+  "model": "Qwen3-4B",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is 17 times 23?"
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 4096
+}

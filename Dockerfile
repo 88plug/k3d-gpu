@@ -1,5 +1,5 @@
-ARG K3S_TAG="v1.37.1-k3s1"
-ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d"
+ARG K3S_TAG="v1.37.2-k3s1"
+ARG K3S_DIGEST="sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332"
 #https://hub.docker.com/r/rancher/k3s/tags  (multi-arch index digest of K3S_TAG;
 # rancher stopped publishing per-arch "-amd64" tags after v1.34.1-k3s1)
 ARG UBUNTU_IMAGE="ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c"
@@ -18,8 +18,8 @@ FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 # through the node on a host that lacks it. Version and sha256 from
 # https://www.kernel.org/releases.json and cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc.
 FROM ${UBUNTU_IMAGE} AS isst
-ARG LINUX_TOOLS_VERSION="7.3.1"
-ARG LINUX_TOOLS_SHA256="fa595aad93734f829c963c2a90ef7c3673224fd7fdae7b49406e397cde2de231"
+ARG LINUX_TOOLS_VERSION="7.3.3"
+ARG LINUX_TOOLS_SHA256="79c66dde66cd96877fcde8f7d36aec946b1f423d2b97b5a7b1751b75c764f3d1"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils make gcc libc6-dev \
       pkg-config libnl-3-dev libnl-genl-3-dev \
     && curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v$(echo "${LINUX_TOOLS_VERSION}" | cut -d. -f1).x/linux-${LINUX_TOOLS_VERSION}.tar.xz" \
@@ -43,7 +43,7 @@ FROM ${UBUNTU_IMAGE}
 # (https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages); the
 # nightly check job bumps both. The toolkit, its base and the libnvidia-container
 # libraries share one version; nvidia-container-runtime is a meta package with its own.
-ARG NVIDIA_CTK_VERSION="1.20.1-1"
+ARG NVIDIA_CTK_VERSION="1.20.2-1"
 ARG NVIDIA_CONTAINER_RUNTIME_VERSION="3.14.0-1"
 
 # Install the NVIDIA container toolkit (distro-agnostic stable/deb repo — the

@@ -1,0 +1,6 @@
+/home/devcloud/.local/bin/k3d
+/home/devcloud/.local/bin/kubectl
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+Client Version: v1.37.2
+Kustomize Version: v5.8.1

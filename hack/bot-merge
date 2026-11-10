@@ -29,7 +29,11 @@
 #      input is known-issue:<id> only) to regenerate the branch from main: at most 3
 #      per group per UTC day, counted from today's dispatched freshness runs whose
 #      title names the group (a title naming no group counts for every group), and
-#      never while such a freshness run is queued or running.
+#      never while such a freshness run is queued or running. A policy (a) that fails
+#      while not base_ok SHA regenerates the same way (no human's latest review
+#      requesting changes), the group read from the branch autobump/<group> and present
+#      in main's pins/registry.toml: the head's tree can predate a site main's
+#      registry reads.
 #   e. Circuit breaker: the newest completed ci.yml run on main (push or dispatch)
 #      succeeded, and no open alarm's key starts with ci-main, ci-missing, release: or
 #      red:canary (hack/ci_alarm list --json: the ci-alarm issues, or with Issues
@@ -226,8 +230,28 @@ while read -r c <&3; do
   if ! mb=$(git merge-base origin/main "$sha"); then
     why "no merge-base of main and $sha"; RC=1; continue
   fi
+  # human reviews: each human's latest deciding review
+  gh api --paginate "repos/$R/pulls/$n/reviews?per_page=100" --jq '.[]' > "$D/reviews" \
+    || { why "cannot read reviews"; RC=1; continue; }
+  jq -s '[.[] | select(.user.type == "User" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
+                       and (.state | IN("APPROVED", "CHANGES_REQUESTED", "DISMISSED")))]
+         | group_by(.user.login) | map(max_by(.submitted_at))' "$D/reviews" > "$D/latest"
+  approver=$(jq -r --arg sha "$sha" '[.[] | select(.state == "APPROVED" and .commit_id == $sha) | .user.login] | first // empty' "$D/latest")
+  changes=$(jq -r '[.[] | select(.state == "CHANGES_REQUESTED") | "@" + .user.login] | join(", ")' "$D/latest")
+  [ -n "$changes" ] && why "changes requested by $changes"
+
   if ! "$HERE/pins" policy "$mb" "$sha" > "$D/policy" 2> "$D/policy.err"; then
-    why "hack/pins policy failed: $(tail -1 "$D/policy.err")"; continue
+    why "hack/pins policy failed: $(tail -1 "$D/policy.err")"
+    # main moved under code since the head was cut: its tree can predate a site main's
+    # registry reads, so regenerate the branch's group (autobump/<group>)
+    if [ -z "$BREAKER" ] && [ -z "$changes" ] && ! base_ok "$sha"; then
+      g=${br#autobump/}
+      if ! python3 -c 'import sys, tomllib; sys.exit(sys.argv[1] not in tomllib.load(open("pins/registry.toml", "rb")).get("groups", {}))' "$g" 2>/dev/null; then
+        why "main moved under code since $sha was cut, and main's pins/registry.toml has no group $g to regenerate"
+      elif msg=$(regen "$g"); then why "main moved under code since $sha was cut; $msg"
+      else why "main moved under code since $sha was cut; $msg"; RC=1; fi
+    fi
+    continue
   fi
   if ! jq -e '.verdict == "auto" or .verdict == "review"' "$D/policy" >/dev/null 2>&1; then
     why "hack/pins policy gave no auto or review verdict"; continue
@@ -240,16 +264,6 @@ while read -r c <&3; do
   engines=$(jq -c .canary "$D/policy")
   review=()
   [ "$verdict" = review ] && review+=("policy: $(jq -r '.reasons // [] | join("; ") | if . == "" then "review" else . end' "$D/policy")")
-
-  # human reviews: each human's latest deciding review
-  gh api --paginate "repos/$R/pulls/$n/reviews?per_page=100" --jq '.[]' > "$D/reviews" \
-    || { why "cannot read reviews"; RC=1; continue; }
-  jq -s '[.[] | select(.user.type == "User" and (.author_association | IN("OWNER", "MEMBER", "COLLABORATOR"))
-                       and (.state | IN("APPROVED", "CHANGES_REQUESTED", "DISMISSED")))]
-         | group_by(.user.login) | map(max_by(.submitted_at))' "$D/reviews" > "$D/latest"
-  approver=$(jq -r --arg sha "$sha" '[.[] | select(.state == "APPROVED" and .commit_id == $sha) | .user.login] | first // empty' "$D/latest")
-  changes=$(jq -r '[.[] | select(.state == "CHANGES_REQUESTED") | "@" + .user.login] | join(", ")' "$D/latest")
-  [ -n "$changes" ] && why "changes requested by $changes"
 
   # canary
   curl_=

@@ -1,0 +1,8 @@
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS   IMAGES                                                                                                 SELECTOR
+deployment.apps/vllm   1/1     1            1           4m14s   vllm         vllm/vllm-openai-xpu:v0.32.0@sha256:20509fabe50dda62c09c0786d1a6effa299d3dbdddcc49331b93e65144652a8c   app=vllm
+
+NAME                        READY   STATUS    RESTARTS   AGE     IP           NODE               NOMINATED NODE   READINESS GATES
+pod/vllm-6d68b9c67c-whhxr   1/1     Running   0          4m14s   10.42.0.11   k3d-gpu-server-0   <none>           <none>
+
+NAME           TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE     SELECTOR
+service/vllm   ClusterIP   10.43.197.185   <none>        8000/TCP   4m14s   app=vllm

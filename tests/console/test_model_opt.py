@@ -151,6 +151,124 @@ class Classify(unittest.TestCase):
         self.assertEqual(f["card_sampling"]["thinking"]["values"]["top_k"], 20)
 
 
+# The card lines of two Qwen3.5 cards (tests/fixtures/hf-cards, each README at
+# the commit recorded in it). Line 577 of both ends a value with a sentence
+# period ("temperature=1.0. All other ...") and mixes three settings in one
+# line; lines 705 and 707 hold the recommended text-task sampling.
+CARD_DIR = os.path.join(REPO, "tests", "fixtures", "hf-cards")
+QWEN35_NOTHINK = {"temperature": 1.0, "top_p": 1.0, "top_k": 20, "min_p": 0.0, "presence_penalty": 2.0, "repetition_penalty": 1.0}
+QWEN35_THINK = {"temperature": 1.0, "top_p": 0.95, "top_k": 20, "min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0}
+
+
+def card(model):
+    with open(os.path.join(CARD_DIR, model.replace("/", "__") + ".json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
+class CardSampling(unittest.TestCase):
+    def test_qwen35_small_cards(self):
+        for model in ("Qwen/Qwen3.5-0.8B", "Qwen/Qwen3.5-2B"):
+            lines = card(model)["card_lines"]
+            self.assertIn("temperature=1.0. All other", next(x["text"] for x in lines if x["line"] == 577), model)
+            s = mo.card_sampling(lines)
+            self.assertEqual((s["non_thinking"]["line"], s["non_thinking"]["values"]), (705, QWEN35_NOTHINK), model)
+            self.assertEqual((s["thinking"]["line"], s["thinking"]["values"]), (707, QWEN35_THINK), model)
+
+    def test_model_facts_on_qwen35_card(self):
+        rec = copy.deepcopy(bundle(QWEN)["repos"][QWEN])
+        rec["card_lines"] = card("Qwen/Qwen3.5-0.8B")["card_lines"]
+        f = mo.model_facts(rec, "Qwen/Qwen3.5-0.8B")
+        self.assertEqual(f["card_sampling"]["non_thinking"]["values"], QWEN35_NOTHINK)
+
+    def test_value_before_sentence_period(self):
+        s = mo.card_sampling([{"line": 3, "text": "For non-thinking mode, use top_p=0.8, top_k=20 and temperature=0.7."}])
+        self.assertEqual(s["non_thinking"]["values"], {"top_p": 0.8, "top_k": 20, "temperature": 0.7})
+
+    def test_line_that_sets_a_key_twice_is_skipped(self):
+        text = "Thinking mode used top_p=0.95, top_k=20, temperature=0.6; non-thinking mode used top_p=0.8, top_k=20, temperature=0.7."
+        self.assertEqual(mo.card_sampling([{"line": 9, "text": text}]), {})
+
+
+# Parser pairs for model types whose vLLM recipes run on k3d-gpu hardware
+# (the recipes mark them verified on Arc Pro B60/B70 or Xeon 6), written from
+# the recipes at vllm@d90f5573 (recipes/models/<org>/<name>.yaml):
+#   qwen3_5_moe     Qwen/Qwen3.5-35B-A3B.yaml:37,42, Qwen/Qwen3.6-35B-A3B.yaml:44,49
+#   gemma4_unified  Google/gemma-4-12B-it.yaml:45,52
+#   diffusion_gemma Google/diffusiongemma-26B-A4B-it.yaml:43,50
+#   muse_glimmer    meta-models/Muse-Glimmer-30B.yaml:61,66
+#   gpt_oss         openai/gpt-oss-20b.yaml:38, openai/gpt-oss-120b.yaml:35 (no reasoning parser)
+#   qwen2           Qwen/QwQ-32B.yaml:31 (hermes; its deepseek_r1 is QwQ-only, see below)
+NEW_FAMILIES = {
+    "qwen3_5_moe": ("qwen3_coder", "qwen3"),
+    "gemma4_unified": ("gemma4", "gemma4"),
+    "diffusion_gemma": ("gemma4", "gemma4"),
+    "muse_glimmer": ("muse_glimmer", "muse_glimmer"),
+    "gpt_oss": ("openai", None),
+    "qwen2": ("hermes", None),
+}
+# Reasoning parsers registered in vLLM v0.32.0 (vllm/reasoning/__init__.py
+# _REASONING_PARSERS_TO_REGISTER, tag 5df63a72); `serve --help` does not list them.
+VLLM_032_REASONING = {
+    "deepseek_r1", "deepseek_v3", "deepseek_v4", "deepseek_v41", "poolside_v1", "cohere_command3", "cohere_command4",
+    "ernie45", "gemma4", "glm45", "glm47", "ling3", "openai_gptoss", "granite", "granite_thinking_parser", "hf", "holo2",
+    "hunyuan_a13b", "hy_v3", "hy_v4", "kimi_k2", "kimi_k3", "k2_horizon", "mimo", "minicpmv", "minimax_m2",
+    "minimax_m2_append_think", "minimax_m3", "mistral", "nemotron_v3", "olmo3", "plamo3", "muse_glimmer", "qwen3",
+    "seed_oss", "step3", "step3p5", "inkling",
+}
+
+
+def vllm_032_tool_parsers():
+    """The built-in --tool-call-parser choices of the pinned vLLM v0.32.0."""
+    path = os.path.join(REPO, "tests", "fixtures", "canary", "help", "vllm-0.32.0-cpu-serve-help-all.txt")
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if line.strip().startswith("--tool-call-parser {"):
+                return set(line.split("{", 1)[1].split("}", 1)[0].split(","))
+    raise AssertionError("no --tool-call-parser choices in " + path)
+
+
+class FamilyParsers(unittest.TestCase):
+    def test_new_families(self):
+        for mt, pair in NEW_FAMILIES.items():
+            self.assertEqual(mo.FAMILY_PARSERS[mt]["vllm"], pair, mt)
+            # OVMS keeps detecting parsers from the chat template for these.
+            self.assertNotIn("ovms", mo.FAMILY_PARSERS[mt], mt)
+            self.assertIn("recipes/models/", mo.FAMILY_PARSERS[mt]["source"], mt)
+
+    def test_existing_families_unchanged(self):
+        want = {"qwen3": (("hermes", "qwen3"), ("hermes3", "qwen3")), "qwen3_moe": (("hermes", "qwen3"), ("hermes3", "qwen3")),
+                "qwen3_5": (("qwen3_coder", "qwen3"), ("qwen3coder", "qwen3")), "gemma4": (("gemma4", "gemma4"), ("gemma4", "gemma4"))}
+        for mt, (v, o) in want.items():
+            self.assertEqual((mo.FAMILY_PARSERS[mt]["vllm"], mo.FAMILY_PARSERS[mt]["ovms"]), (v, o), mt)
+
+    def test_every_vllm_parser_is_registered_in_v0_32_0(self):
+        tools = vllm_032_tool_parsers()
+        for mt, fam in mo.FAMILY_PARSERS.items():
+            tool, reasoning = fam["vllm"]
+            self.assertTrue(tool is None or tool in tools, (mt, tool))
+            self.assertTrue(reasoning is None or reasoning in VLLM_032_REASONING, (mt, reasoning))
+
+    def test_nemotron_h_has_no_family_entry(self):
+        # Its recipes split: Nano-9B-v2 names nemotron_json, a plugin parser
+        # (NVIDIA-Nemotron-Nano-9B-v2.yaml:36); Nano 3 names the nano_v3 plugin
+        # reasoning parser (NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.yaml:42).
+        self.assertNotIn("nemotron_h", mo.FAMILY_PARSERS)
+
+    def test_optimizer_uses_them(self):
+        for mt, (tool, reasoning) in NEW_FAMILIES.items():
+            b = copy.deepcopy(bundle(QWEN))
+            b["repos"][QWEN]["config"]["model_type"] = mt
+            d = mo.optimize(b, "vllm", "GPU")
+            self.assertEqual((d["tool_parser"], d["reasoning_parser"]), (tool, reasoning), mt)
+            lines = mo.shell_lines(d)
+            self.assertIn("OPT_TOOL_PARSER='%s'" % tool, lines, mt)
+            self.assertIn("OPT_REASONING_PARSER='%s'" % (reasoning or ""), lines, mt)
+            d = mo.optimize(b, "ovms", "GPU")
+            self.assertEqual((d["tool_parser"], d["reasoning_parser"]), (None, None), mt)
+            self.assertIn("OVMS detects tool and reasoning parsers from the chat template",
+                          [c["choice"] for c in d["choices"] if c["fact"] == "model family %s" % mt], mt)
+
+
 class Decisions(unittest.TestCase):
     def test_zero_flag_table(self):
         for (model, engine, device), want in sorted(DECISIONS.items()):
