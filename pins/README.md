@@ -10,7 +10,7 @@ updates them: Dependabot keeps only the GitHub Actions SHAs, and the old nightly
 | Class | Who may change it |
 |---|---|
 | ours | Freshness PRs, policy-gated (below) |
-| eat-stock | Freshness PRs, always reviewed; it follows Intel EAT's latest release |
+| eat-stock | Freshness PRs, always reviewed; it follows Intel's latest EAS release for EAT 2.x (pin `eas-release`) and EAT's newest 1.x release for `integrations/eat` |
 | arm (a ledger path whose row is PENDING) | only a dated ledger amendment in the same PR; never a bumper |
 | historical | never |
 | `.github/**` | never by a bot |

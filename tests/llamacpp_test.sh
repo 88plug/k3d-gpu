@@ -45,6 +45,11 @@ case "$*" in
     "apply -f -") cat > "${STUB_APPLIED:-/dev/null}" ;;
     *'@.type=="Complete"'*) printf '%s' "${STUB_JOB:-}" ;;
     "create --raw "*chat/completions*) cat > "${STUB_BODY:-/dev/null}"; printf '%s' "${STUB_REPLY:-}" ;;
+    # the warm-up from inside the pod (OVMS, vLLM): curl's -d argument is the body
+    *" exec "*chat/completions*)
+        prev=""
+        for a in "$@"; do [ "${prev}" = -d ] && printf '%s' "${a}" > "${STUB_BODY:-/dev/null}"; prev=${a}; done
+        printf '%s' "${STUB_REPLY:-}" ;;
     *chat/completions*) printf '%s' "${STUB_REPLY:-}" ;;
 esac
 exit 0
@@ -310,8 +315,8 @@ up_served() {
     local -a envs=()
     while [ "$1" != -- ]; do envs+=("$1"); shift; done
     shift
-    rm -f "${WORK}/${name}.body"
-    env STUB_APPLIED="${WORK}/${name}.yaml" STUB_BODY="${WORK}/${name}.body" STUB_JOB=True K3D_GPU_AGENT_GUARD=off \
+    rm -f "${WORK}/${name}.body" "${WORK}/${name}.calls"
+    env STUB_APPLIED="${WORK}/${name}.yaml" STUB_BODY="${WORK}/${name}.body" STUB_LOG="${WORK}/${name}.calls" STUB_JOB=True K3D_GPU_AGENT_GUARD=off \
         STUB_REPLY='{"choices":[{"message":{"role":"assistant","content":"A language model."}}]}' \
         ${envs[@]+"${envs[@]}"} bash "${K3D_GPU}" agent up "$@" > "${WORK}/${name}.out" 2>&1
 }
@@ -343,6 +348,16 @@ if up_served upst "${XEON_ENV[@]}" K3D_GPU_MODEL_OPT=off -- --model google/gemma
     && [ "$(served_name upst)" = gemma-4-26B-A4B-it ]; then
     ok "K3D_GPU_MODEL_OPT=off agent up --model google/gemma-4-26B-A4B-it (OVMS -> vLLM TP2 in the fit): warmed up and named as --served-model-name"
 else fail "K3D_GPU_MODEL_OPT=off agent up names the served model" "$(cat "${WORK}/upst.out"; echo "body: $(cat "${WORK}/upst.body" 2>/dev/null)")"; fi
+# The warm-up goes where the served backend reads it: llama-server through the service
+# proxy, vLLM from inside its pod with a JSON Content-Type (`kubectl create --raw` sends none).
+if grep -q '^kubectl create --raw /api/v1/namespaces/k3d-gpu-agent/services/llamacpp:http/proxy/v1/chat/completions -f -$' "${WORK}/upfn.calls" \
+    && ! grep -q ' exec .*chat/completions' "${WORK}/upfn.calls"; then
+    ok "llama.cpp warms up through the service proxy"
+else fail "llama.cpp warms up through the service proxy" "$(cat "${WORK}/upfn.calls" 2>/dev/null)"; fi
+if grep -q ' exec deployment/vllm -c vllm -- curl .*http://127\.0\.0\.1:8000/v1/chat/completions -H Content-Type: application/json' "${WORK}/upst.calls" \
+    && ! grep -q '^kubectl create --raw' "${WORK}/upst.calls"; then
+    ok "vLLM (the fit's switch from OVMS) warms up inside its pod with a JSON Content-Type"
+else fail "vLLM (the fit's switch from OVMS) warms up inside its pod with a JSON Content-Type" "$(cat "${WORK}/upst.calls" 2>/dev/null)"; fi
 
 rm -f "${WORK}/kubectl.log"
 if STUB_LOG="${WORK}/kubectl.log" bash "${K3D_GPU}" agent down > /dev/null 2>&1 \

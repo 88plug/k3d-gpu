@@ -1,0 +1,6 @@
+k3d-gpu commit: 0a18b5655daaf3f7ae0e7f3816a4c44130b648e0 (0 local changes)
+k3d-gpu version: k3d-gpu 0.1.89
+node image: default sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+HF_TOKEN: unset
+tools: k3d version v5.9.0; Client Version: v1.37.2; docker 29.8.0
+lock taken: 2026-11-07T04:46:01+00:00  cap: 180 min

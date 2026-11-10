@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+# A stand-in for the Redis pod's redis-cli, for tests/eas_test.sh section rediscli: a Redis
+# whose requirepass is REDIS_PASSWORD in the "pod" environment (k8s_exec.py sets it).
+#   the password   from -a/--pass, else REDISCLI_AUTH (redis-cli 7.4.0 src/redis-cli.c
+#                  #L2700-L2703, #L3058-L3061); each call appends "<argv|env|none> <ok|bad>"
+#                  to REDISCLI_STATE/auth
+#   PING           PONG
+#   MODULE LIST    the module list of redis-stack-server, search among them
+# Each call lasts 1 s, so a ps sample can see its argv (a real redis-cli exits within
+# milliseconds; its argv holds what it was given for that long).
+import os
+import sys
+import time
+
+a = sys.argv[1:]
+password, source = None, "none"
+for flag in ("-a", "--pass"):
+    if flag in a:
+        i = a.index(flag)
+        password, source = a[i + 1], "argv"
+        del a[i:i + 2]
+if password is None and "REDISCLI_AUTH" in os.environ:
+    password, source = os.environ["REDISCLI_AUTH"], "env"
+if "--no-auth-warning" in a:
+    a.remove("--no-auth-warning")
+good = password == os.environ.get("REDIS_PASSWORD")
+with open(os.path.join(os.environ["REDISCLI_STATE"], "auth"), "a") as f:
+    f.write("%s %s\n" % (source, "ok" if good else "bad"))
+time.sleep(1)
+if not good:
+    print("NOAUTH Authentication required." if password is None else "AUTH failed: WRONGPASS")
+    sys.exit(0)
+if a == ["PING"]:
+    print("PONG")
+elif [x.upper() for x in a] == ["MODULE", "LIST"]:
+    for name in ("timeseries", "search", "ReJSON", "bf", "redisgears_2"):
+        print("name\n%s\nver\n1\npath\n/opt/redis-stack/lib/%s.so\nargs" % (name, name))
+else:
+    print("ERR unknown command %r" % a)

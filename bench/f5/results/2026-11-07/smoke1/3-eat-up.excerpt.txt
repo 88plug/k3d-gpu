@@ -1,0 +1,18 @@
+467:TASK [istio : istio | Install Gateway API CRDs] ********************************
+468-[ERROR]: Task failed: Module failed: Failed to patch object: b'{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"customresourcedefinitions.apiextensions.k8s.io \\"gatewayclasses.gateway.networking.k8s.io\\" is forbidden: ValidatingAdmissionPolicy \'safe-upgrades.gateway.networking.k8s.io\' with binding \'safe-upgrades.gateway.networking.k8s.io\' denied request: Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions.","reason":"Invalid","details":{"name":"gatewayclasses.gateway.networking.k8s.io","group":"apiextensions.k8s.io","kind":"customresourcedefinitions","causes":[{"message":"ValidatingAdmissionPolicy \'safe-upgrades.gateway.networking.k8s.io\' with binding \'safe-upgrades.gateway.networking.k8s.io\' denied request: Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions."}]},"code":422}\n'
+469-Origin: /eas-state/eas/roles/istio/tasks/install.yaml:70:7
+470-
+471-68       when: istio_enabled | default(true) | bool
+472-69
+473:70     - name: "istio | Install Gateway API CRDs"
+474-         ^ column 7
+475-
+476-fatal: [localhost]: FAILED! => 
+477-    changed: false
+478-    msg: 'Failed to patch object: b''{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"customresourcedefinitions.apiextensions.k8s.io
+479-        \\"gatewayclasses.gateway.networking.k8s.io\\" is forbidden: ValidatingAdmissionPolicy
+480-        \''safe-upgrades.gateway.networking.k8s.io\'' with binding \''safe-upgrades.gateway.networking.k8s.io\''
+481-        denied request: Installing CRDs with version before v1.5.0 is prohibited by default.
+482-        Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to
+PLAY RECAP *********************************************************************
+localhost                  : ok=92   changed=15   unreachable=0    failed=1    skipped=27   rescued=0    ignored=0   

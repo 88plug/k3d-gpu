@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# Istio — Upgrade
+# =============================================================================
+
+- name: "istio | Install Gateway API CRDs"
+  kubernetes.core.k8s:
+    state: present
+    src: "{{ istio_gateway_api_crds_url }}"
+
+- name: "istio | Upgrade Helm chart"
+  kubernetes.core.helm:
+    name: "{{ istio_helm_release_name }}"
+    chart_ref: "{{ istio_helm_chart_directory }}"
+    release_namespace: "{{ istio_namespace }}"
+    values_files: "{{ [istio_helm_default_values_file] }}"
+    dependency_update: true
+    wait: "{{ helm_wait }}"
+    timeout: "{{ istio_wait_timeout }}"
+  register: helm_install_result
+  until: helm_install_result is succeeded
+  retries: "{{ helm_retries }}"
+  delay: 15

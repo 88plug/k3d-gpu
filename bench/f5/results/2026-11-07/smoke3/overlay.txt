@@ -1,0 +1,8 @@
+# overlay at eas@a051f00 (HEAD), kubernetes_cpu_policy=nri-balloons, nodes=1
+0002 variant a applies -> apply 0002-eas-istio-global-platform.patch [eas@a051f00 configs/defaults/global_config.yaml:62]
+0003 variant a applies -> apply 0003-eas-pin-nri-balloons-chart.patch [eas@a051f00 roles/nri_cpu_balloons/defaults/main.yaml:27]
+0004 nodes=1, needed only on more than one node -> skip [overlay.json 0004 needed_when=multi_node]
+0005 documentation only -> skip [overlay.json 0005 needed_when=never]
+0006 variant a does not apply, variant b does -> apply 0006-release-1.2-envoy-control-plane-affinity.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:194]
+0007 variant a applies -> apply 0007-release-1.2-istio-keep-newer-gateway-api.patch [eas@a051f00 roles/istio/tasks/install.yaml:70]
+0008 variant a applies -> apply 0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:23]

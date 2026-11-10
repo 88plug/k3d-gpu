@@ -8,7 +8,12 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 
 > **Intel platforms:** one `k3d-gpu up` detects and schedules `i915` Intel GPUs
 > and pins pods to P-cores or E-cores on hybrid CPUs; both have run on a real
-> i9-13900T host. On a Xeon 6741P with 4x Arc Pro B70, a plain `up` found the
+> i9-13900T host. On a second client host, an i7-13700 whose owner opts its GPUs
+> out, a plain `up` found the hybrid P/E cores and the ISA extensions the launcher
+> labels and nothing the host lacks [ledger:H52w], and `k3d-gpu sandbox up` kept
+> agent sandboxes on its E-cores behind default-deny egress [ledger:H18w]. There,
+> OVMS's shipped prefix caching gave an added agent its first chunk 14.3x sooner [ledger:H25w].
+> On a Xeon 6741P with 4x Arc Pro B70, a plain `up` found the
 > B70s (`xe`), AMX and AVX-512 [ledger:H52]. In a second run there, `xe` advertised
 > 2 of the 4 B70s: a serving workload held about half the VRAM of each card, and
 > `up`'s busy-card filter (a card is left out when host processes hold half its
@@ -895,7 +900,7 @@ is deleted.
 | `K3D_GPU_AGENT_DEVICE` | `auto` | `auto`: a Gaudi, else the GPU only on an XMX node, else CPU. `CPU`, `GPU`, `NPU` or `HPU` (any case) to force one; forcing a device the cluster does not advertise, or an Intel GPU the firmware gatekeeper refuses, fails |
 | `K3D_GPU_AGENT_MODEL` | `OpenVINO/Qwen3-4B-int4-ov` | Hugging Face model in OpenVINO IR format |
 | `K3D_GPU_AGENT_MODEL_NAME` | last part of the model id | name clients send as `model` |
-| `K3D_GPU_AGENT_DRAFT` | unset | OVMS Fast Draft speculative decoding. Unset: a CPU target serving an OpenVINO Qwen3 model drafts with `OpenVINO/Qwen3-0.6B-int4-ov` on the CPU when an `EXPERIMENTS.md` row of the H34 family measured a win on that CPU class, as on the i9-13900T (1.39x decode tok/s, 0.75x package J/token under matched background load [ledger:H34]). A class that a replication refutes (H34x, the Xeon 6741P), or that no row names, gets no draft, and `agent up` names the row that decided. Any other target has no draft. `off` disables it; `auto` drafts on the target's device; `CPU`, `GPU` or `NPU` name the draft device |
+| `K3D_GPU_AGENT_DRAFT` | unset | OVMS Fast Draft speculative decoding. Unset: a CPU target serving an OpenVINO Qwen3 model drafts with `OpenVINO/Qwen3-0.6B-int4-ov` on the CPU when an `EXPERIMENTS.md` row of the H34 family measured a win on that CPU class, as on the i9-13900T (1.39x decode tok/s, 0.75x package J/token under matched background load [ledger:H34]). A class that a replication refutes (H34x, the Xeon 6741P) gets no draft, and so does a class no row decides: one that no row names, or the i7-13700, whose H34w is INCONCLUSIVE. `agent up` names the row that decided. Any other target has no draft. `off` disables it; `auto` drafts on the target's device; `CPU`, `GPU` or `NPU` name the draft device |
 | `K3D_GPU_AGENT_DRAFT_MODEL` | `OpenVINO/Qwen3-0.6B-int4-ov` | draft model; a non-default draft model is used only with an explicit `K3D_GPU_AGENT_DRAFT` |
 | `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` | `hermes3` / `qwen3` for the default model, unset otherwise | unset lets OVMS detect them from the chat template; empty turns one off |
 | `K3D_GPU_AGENT_CPUS` | see above | CPU request (balloon size on hybrid nodes) |
@@ -1427,23 +1432,31 @@ the in-process stub in `bench/test_agent_trace.py`.
 node through EAT's own brownfield path, on a non-Xeon client CPU. Its vLLM pod
 joins the hybrid balloons policy's `performance` balloon through EAT's own chart
 annotation, so EAT's CPU balloons stay off and `hybrid` stays on. It deploys the
-pinned tag `release-1.1.0`, the latest, with its guardrail, vLLM Semantic Router,
+pinned tag `release-1.1.0`, the newest EAT 1.x release, with its guardrail, vLLM Semantic Router,
 OpenShell, Kata and rack-scale mode off. That path is pre-registered as F4 and has
 not run yet; the previous pin, `release-1.0.3-hotfix`, passed end to end
 [ledger:H1b]. See [docs/platforms.md](docs/platforms.md#intel-enterprise-agent-toolkit-eat).
 
 EAT 2.0 installs through Intel's AI for Enterprise Solutions (EAS) installer instead.
-`k3d-gpu eas up --agent-toolkit` runs it against the k3d-gpu cluster in EAS's
-bring-your-own-cluster mode, choosing each k3d setting from the cluster and applying the
-k3d patches EAS has not merged yet. It covers EAS's platform, inference and agent-toolkit
-layers on the Xeon CPU path, where EAS and EAT ship them today; EAS's Enterprise RAG
-layer is not wired in yet, and an Arc or Gaudi card stays with `k3d-gpu agent up`. F3 ran
-it once end to end on the i9-13900T and is REFUTED
-([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check` and the
-teardown passed, but enterprise-inference's Keycloak step put the Keycloak admin password on a
-process command line, where the run's secret scan found it.
-The commands are `k3d-gpu eas up` (`--agent-toolkit`, `--dry-run`, `--explain`), `eas status`,
-`eas check` and `eas down`. See [docs/intel/eas.md](docs/intel/eas.md), and
+Intel released EAT `release-2.0.0` with EAS `v1.2.0` and enterprise-inference `v1.1.0` on
+2026-11-06, the default pins here. `k3d-gpu eat up` (`k3d-gpu eas up --agent-toolkit`)
+runs it against the k3d-gpu cluster in EAS's bring-your-own-cluster mode, choosing each k3d
+setting from the cluster and applying the k3d patches EAS has not merged yet. It covers
+EAS's platform, inference and agent-toolkit layers on the Xeon CPU path, where EAS and EAT
+ship them today; EAS's Enterprise RAG layer is not wired in yet, and an Arc or Gaudi card
+stays with `k3d-gpu agent up`. F3 ran it once end to end on EAS `main` on the i9-13900T and
+is REFUTED ([EXPERIMENTS.md](EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas
+check` and the teardown passed, but enterprise-inference's Keycloak step put the Keycloak
+admin password on a process command line, where the run's secret scan found it. F5 ran it
+at the GA tags on the Xeon 6741P and is SUPPORTED
+([EXPERIMENTS.md](EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0` and
+no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. H62r ran Intel's own
+documented install of the same tags in a KVM guest on that Xeon: with EAS's documented
+`nri_reserved_cpu_list` it finished, and inside EAT's banking flow it delivered as many tasks
+within the turn budget as k3d-gpu's CPU stack, 21 of 24 each
+([EXPERIMENTS.md](EXPERIMENTS.md#h62r-run-xeon-6741p-2026-11-07)). The commands are `k3d-gpu eat up` (`--dry-run`,
+`--explain`; `--legacy` runs EAT 1.x), `eat status`, `eat check` and `eat down`, or `k3d-gpu
+eas` with the layer named. See [docs/intel/eas.md](docs/intel/eas.md), and
 [docs/intel.md](docs/intel.md#upstream-findings) for the upstream findings and issue drafts.
 
 ### Experimental features (auto-adapting)
@@ -1573,7 +1586,7 @@ What works on k3d, and what does not:
 | Piece | On k3d-gpu |
 |-------|------------|
 | Controller, Sandbox, SandboxTemplate, SandboxClaim, SandboxWarmPool | Yes. Plain manifests, no webhook or cert-manager. |
-| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
+| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18], also on a second hybrid host [ledger:H18w]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
 | gVisor / Kata (`runtimeClassName`) | Not available. The node image ships neither, and Kata needs `/dev/kvm` in the node container. Sandboxes run under runc, hardened instead: non-root, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp, no service-account token. That is container isolation, not a VM or user-space kernel boundary. |
 | sandbox-router, sandboxd | Not installed. Upstream publishes them only as staging `latest-main` images, which cannot be pinned to a release. Clients reach a sandbox by pod IP (from a `k3d-gpu.io/sandbox-client=true` pod) or `kubectl port-forward`, which containerd opens inside the pod's network namespace, so the policy does not block it. |
 

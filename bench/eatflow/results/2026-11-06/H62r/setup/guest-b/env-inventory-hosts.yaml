@@ -1,0 +1,81 @@
+# Kubespray-compatible inventory — edit for your deployment mode.
+# Only ONE section should be uncommented at a time.
+#
+# TIP: For multi-node deployments, you can define nodes in nodes.yaml instead
+# of editing this file directly. The installer will auto-generate this file.
+# See: configs/defaults/nodes.yaml → nodes_control_plane / nodes_workers
+#
+# ─── Option A: Localhost (default, single-node PoC) ─────────────────────
+all:
+    hosts:
+        localhost:
+            ansible_connection: local
+            ansible_python_interpreter: "{{ ansible_playbook_python }}"
+    children:
+        kube_control_plane:
+            hosts: { localhost: {} }
+        kube_node:
+            hosts: { localhost: {} }
+        etcd:
+            hosts: { localhost: {} }
+        calico_rr:
+            hosts: {}
+
+# ─── Option B: Single remote node (install K8s on a remote machine) ─────
+# all:
+#     hosts:
+#         server1:
+#             ansible_host: 10.0.0.10
+#             ansible_user: deploy
+#             ansible_ssh_private_key_file: ~/.ssh/id_rsa
+#     children:
+#         kube_control_plane:
+#             hosts: { server1: {} }
+#         kube_node:
+#             hosts: { server1: {} }
+#         etcd:
+#             hosts: { server1: {} }
+#         nfs_server:
+#             hosts: { server1: {} }
+#         k8s_cluster:
+#             children:
+#                 kube_control_plane:
+#                 kube_node:
+#             vars:
+#                 ansible_become: true
+#                 ansible_connection: ssh
+#         calico_rr:
+#             hosts: {}
+
+# ─── Option C: Multi-node cluster ──────────────────────────────────────
+# all:
+#     hosts:
+#         cp1:
+#             ansible_host: 10.0.0.10
+#             ansible_user: deploy
+#         worker1:
+#             ansible_host: 10.0.0.11
+#             ansible_user: deploy
+#         worker2:
+#             ansible_host: 10.0.0.12
+#             ansible_user: deploy
+#     children:
+#         kube_control_plane:
+#             hosts: { cp1: {} }
+#         kube_node:
+#             hosts:
+#                 worker1: {}
+#                 worker2: {}
+#         etcd:
+#             children:
+#                 kube_control_plane:
+#         k8s_cluster:
+#             children:
+#                 kube_control_plane:
+#                 kube_node:
+#             vars:
+#                 ansible_become: true
+#                 ansible_ssh_private_key_file: ~/.ssh/id_rsa
+#                 ansible_connection: ssh
+#         calico_rr:
+#             hosts: {}

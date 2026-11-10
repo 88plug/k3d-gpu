@@ -1,0 +1,55 @@
+# Copyright (C) 2024-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# =============================================================================
+# Istio Role Defaults
+# =============================================================================
+
+istio_namespace: "istio-system"
+
+istio_mtls_mode: "STRICT"
+
+# Only the CA exception lives here — istio-csr bootstraps in istio_csr_namespace, a
+# genuine istio-role dependency. Every other mesh-edge / webhook exception is owned by
+# the component that creates the workload (its own role applies its PeerAuthentication
+# next to its ambient-label task), so nothing is pre-defined that may not be installed.
+istio_mtls_permissive_exceptions:
+  - name: default
+    namespace: "{{ istio_csr_namespace }}"
+
+# Gateway API CRDs must be installed before istiod starts (required since Istio 1.22).
+# Version must be compatible with the Istio release (Istio 1.27.x → Gateway API v1.2.x).
+istio_gateway_api_crds_version: "v1.2.1"
+istio_gateway_api_crds_url: "https://github.com/kubernetes-sigs/gateway-api/releases/download/{{ istio_gateway_api_crds_version }}/standard-install.yaml"
+
+# Helm
+istio_helm_repo_name: "istio"
+istio_helm_repo_url: "https://istio-release.storage.googleapis.com/charts"
+istio_helm_chart_name: "istio"
+istio_helm_chart_directory: "{{ playbook_dir }}/../charts/istio"
+istio_helm_release_name: "istio"
+istio_helm_default_values_file: "{{ istio_helm_chart_directory }}/values.yaml"
+istio_wait_timeout: "300s"
+
+# =============================================================================
+# cert-manager-istio-csr
+# =============================================================================
+# istio-csr acts as a gRPC CA server so istiod delegates workload cert signing
+# to cert-manager instead of Citadel. Deployed as part of the istio role.
+
+istio_csr_namespace: "cert-manager"
+istio_csr_helm_repo_name: "jetstack"
+istio_csr_helm_repo_url: "https://charts.jetstack.io"
+istio_csr_helm_chart_name: "cert-manager-istio-csr"
+istio_csr_helm_release_name: "cert-manager-istio-csr"
+istio_csr_helm_chart_version: "0.15.1"
+istio_csr_wait_timeout: "300s"
+
+# ClusterIssuer that signs the istio-ca Certificate.
+istio_csr_root_issuer_name: "selfsigned-root"
+
+# Intermediate CA Certificate issued to istiod; cert-manager renews it automatically.
+istio_csr_ca_cert_name: "istio-ca"
+istio_csr_ca_cert_duration: "43800h"    # ~5 years
+istio_csr_ca_cert_renew_before: "720h"  # 30 days

@@ -1,0 +1,9 @@
+NS                       POD                                       IMAGE_ID
+k3d-gpu-agent            ovms-7597d978d4-pb8fs                     docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+kube-system              coredns-577d995dff-8879z                  docker.io/rancher/mirrored-coredns-coredns@sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286
+kube-system              helm-install-gateway-api-crd-fdh5d        docker.io/rancher/klipper-helm@sha256:5425a2b4613d2458dbdff99218e8d487ebb59c20e7a941f061c0777070f0aac1
+kube-system              local-path-provisioner-6858d854cf-dbr5f   docker.io/rancher/local-path-provisioner@sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f
+kube-system              metrics-server-778c4649b4-5pcwn           docker.io/rancher/mirrored-metrics-server@sha256:d9862115e7c7881280d3d75ca26bda8ffc0fc213315979575bf23ce9826205c0
+node-feature-discovery   nfd-gc-7d6955597d-ct57n                   registry.k8s.io/nfd/node-feature-discovery@sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2
+node-feature-discovery   nfd-master-74b6cfb7df-kbf7b               registry.k8s.io/nfd/node-feature-discovery@sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2
+node-feature-discovery   nfd-worker-8z97p                          registry.k8s.io/nfd/node-feature-discovery@sha256:2fa1c99ad09bdf2c8ad97706a4ad2fd548c84d5ecd70ba32a6152c667b96c4d2

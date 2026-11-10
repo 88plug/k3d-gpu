@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""Print the pins of integrations/eas/pins.json's release profile from Intel's latest EAS release.
+
+EAS (intel/enterprise-ai-solutions) releases its installer with the enterprise-inference (EI)
+and Enterprise Agent Toolkit (EAT) commits its configs/repos/repos.agent-toolkit.yaml pins.
+This reads, for the latest stable EAS release: its tag, commit and date; that manifest at the
+commit; and for EI and EAT the manifest's rev, the tag the release notes link for it, that
+tag's date, and the manifest line the rev is on. It prints them as the eas-release pin's values
+(pins/registry.toml, source kind cmd, parse kv):
+
+  v=v1.2.0  commit=<sha>  date=2026-11-06
+  ei=v1.1.0  ei_commit=<sha>  ei_date=...  ei_line=16
+  eat=release-2.0.0  eat_commit=<sha>  eat_date=...  eat_line=25
+
+It refuses (exit 1, nothing printed) a release that is a prerelease or a draft, a manifest
+rev that is not a full commit SHA (a branch moves), release notes that link no release of EI
+or EAT, and a rev that is not the commit the linked tag points at.
+
+Usage: hack/eas-release-pins       (PINLIB_FIXTURES serves recorded responses, as for every pin)
+"""
+
+import importlib.util
+import os
+import re
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "hack"))
+
+from pinlib import http  # noqa: E402
+
+EAS = "intel/enterprise-ai-solutions"
+REPOS = {"ei": ("inference", "intel/enterprise-inference"), "eat": ("agent-toolkit", "intel/enterprise-agent-toolkit")}
+GH = "https://api.github.com/"
+
+
+def die(msg):
+    print("eas-release-pins: " + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def gh(path):
+    return http.get_json(GH + path)
+
+
+def manifest_rows(text):
+    spec = importlib.util.spec_from_file_location("eas_config", os.path.join(ROOT, "integrations", "eas", "eas-config.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    try:
+        return mod.manifest_rows(text)
+    except mod.InputError as e:
+        die("configs/repos/repos.agent-toolkit.yaml: %s" % e)
+
+
+def main():
+    try:
+        rel = gh("repos/%s/releases/latest" % EAS)
+        if rel.get("prerelease") or rel.get("draft") or not re.fullmatch(r"v\d+\.\d+\.\d+", rel.get("tag_name", "")):
+            die("EAS's latest release %r is not a stable vX.Y.Z release" % rel.get("tag_name"))
+        tag, notes = rel["tag_name"], rel.get("body") or ""
+        commit = gh("repos/%s/commits/%s" % (EAS, tag))["sha"]
+        text = http.get_text("https://raw.githubusercontent.com/%s/%s/configs/repos/repos.agent-toolkit.yaml" % (EAS, commit))
+        out = {"v": tag, "commit": commit, "date": (rel.get("published_at") or "")[:10]}
+        rows = manifest_rows(text)
+        lines = text.splitlines()
+        for key, (layer, repo) in REPOS.items():
+            hits = [r for r in rows if r[0] == layer and r[1] == "https://github.com/" + repo]
+            if len(hits) != 1:
+                die("repos.agent-toolkit.yaml at %s has %d entries for %s" % (tag, len(hits), repo))
+            rev = hits[0][2]
+            if not re.fullmatch(r"[0-9a-f]{40}", rev):
+                die("repos.agent-toolkit.yaml at %s pins %s at %r, not a commit SHA" % (tag, repo, rev))
+            linked = re.findall(r"https://github\.com/%s/releases/tag/([A-Za-z0-9._-]+)" % re.escape(repo), notes)
+            if len(set(linked)) != 1:
+                die("EAS %s's release notes link %s release(s) of %s, want one" % (tag, len(set(linked)), repo))
+            ctag = linked[0]
+            csha = gh("repos/%s/commits/%s" % (repo, ctag))["sha"]
+            if csha != rev:
+                die("%s %s is %s, but repos.agent-toolkit.yaml at %s pins %s" % (repo, ctag, csha[:7], tag, rev[:7]))
+            crel = gh("repos/%s/releases/tags/%s" % (repo, ctag))
+            line = next(i + 1 for i, ln in enumerate(lines) if rev in ln and re.match(r"^\s*rev:", ln))
+            out.update({key: ctag, key + "_commit": rev, key + "_date": (crel.get("published_at") or "")[:10],
+                        key + "_line": str(line)})
+    except http.HTTPError as e:
+        die(str(e))
+    for k, v in out.items():
+        if not v:
+            die("no %s" % k)
+        print("%s=%s" % (k, v))
+
+
+if __name__ == "__main__":
+    main()

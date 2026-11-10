@@ -1,0 +1,22 @@
+--- config.agent-toolkit.yaml
++++ config.agent-toolkit.yaml
+@@ -32,7 +32,7 @@
+ # --- Default model (inference layer, applied only where this layer is provisioned) ---
+ # Deployed on install.
+ # Set [] to install without a chat model; deploy others with ./model-manager deploy <name>.
+-llm_services_autodeploy_models: ["qwen2-5-coder-14b"]
++llm_services_autodeploy_models: ["gemma-4-26b"]
+ 
+ # --- vLLM Semantic Router dashboard (inference layer; applies only with vllm_sr_enabled) ---
+ # Served at https://vllm-sr.<base_domain_name>/
+--- models.yaml
++++ models.yaml
+@@ -358,7 +358,7 @@
+       HF_HOME: "/tmp/.cache/huggingface"
+ 
+   - name: gemma-4-26b
+-    model_id: google/gemma-4-26B-A4B-it
++    model_id: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized
+     category: llm
+     runtime: vllm
+     server_version: "0.28.0"

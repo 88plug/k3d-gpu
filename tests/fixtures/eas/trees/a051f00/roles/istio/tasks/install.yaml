@@ -1,0 +1,122 @@
+---
+# =============================================================================
+# Istio — Install via Helm
+# =============================================================================
+
+- name: "istio | Check for existing Helm release"
+  kubernetes.core.helm_info:
+    name: "{{ istio_helm_release_name }}"
+    release_namespace: "{{ istio_namespace }}"
+  register: _istio_release
+  failed_when: false
+
+- name: "istio | Already installed — skipping"
+  ansible.builtin.debug:
+    msg: "Istio release already deployed in {{ istio_namespace }} — skipping install."
+  when: _istio_release.status is defined and _istio_release.status is not none
+
+- name: "istio | Install"
+  when: _istio_release.status is not defined or _istio_release.status is none
+  block:
+    - name: "istio | Add Helm repository"
+      kubernetes.core.helm_repository:
+        name: "{{ istio_helm_repo_name }}"
+        repo_url: "{{ istio_helm_repo_url }}"
+      register: helm_repo_add_result
+      until: helm_repo_add_result is succeeded
+      retries: "{{ helm_retries }}"
+      delay: 15
+
+    - name: "istio | Ensure namespace exists"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ istio_namespace }}"
+
+    - name: "istio | Label namespace — Istio"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ istio_namespace }}"
+            labels:
+              istio.io/dataplane-mode: ambient
+
+    - name: "istio | Label namespace — PSS"
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ istio_namespace }}"
+            labels:
+              # Ambient mode needs istio-cni (NET_ADMIN, SYS_ADMIN, hostPath) and
+              # ztunnel (hostNetwork).
+              pod-security.kubernetes.io/enforce: "privileged"
+              pod-security.kubernetes.io/audit: "privileged"
+              pod-security.kubernetes.io/warn: "privileged"
+      when: enforce_pss | default(false) | bool
+
+    - name: "istio | Bootstrap cert-manager-istio-csr (CA bridge)"
+      ansible.builtin.include_tasks: install_csr.yaml
+      when: istio_enabled | default(true) | bool
+
+    - name: "istio | Install Gateway API CRDs"
+      kubernetes.core.k8s:
+        state: present
+        src: "{{ istio_gateway_api_crds_url }}"
+
+    - name: "istio | Install Helm chart"
+      kubernetes.core.helm:
+        name: "{{ istio_helm_release_name }}"
+        chart_ref: "{{ istio_helm_chart_directory }}"
+        release_namespace: "{{ istio_namespace }}"
+        create_namespace: true
+        values_files: "{{ [istio_helm_default_values_file] }}"
+        dependency_update: true
+        wait: "{{ helm_wait }}"
+        timeout: "{{ istio_wait_timeout }}"
+      register: helm_install_result
+      until: helm_install_result is succeeded
+      retries: "{{ helm_retries }}"
+      delay: 15
+
+# Applied outside the install block so it is reconciled on every run (self-healing).
+- name: "istio | Allow plaintext at mesh-edge exceptions (STRICT overrides)"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: security.istio.io/v1
+      kind: PeerAuthentication
+      metadata:
+        name: "{{ item.name }}"
+        namespace: "{{ item.namespace }}"
+      spec:
+        selector: "{{ {'matchLabels': item.selector} if item.selector | default(false) else omit }}"
+        mtls:
+          mode: PERMISSIVE
+  loop: "{{ istio_mtls_permissive_exceptions }}"
+  loop_control:
+    label: "{{ item.namespace }}/{{ item.name }}"
+  when: istio_enabled | default(true) | bool
+
+# Mesh-wide mTLS is applied outside the install block so it is reconciled on every run (self-healing).
+- name: "istio | Enforce mesh-wide mutual TLS ({{ istio_mtls_mode }})"
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: security.istio.io/v1
+      kind: PeerAuthentication
+      metadata:
+        name: default
+        namespace: "{{ istio_namespace }}"
+      spec:
+        mtls:
+          mode: "{{ istio_mtls_mode }}"
+  when: istio_enabled | default(true) | bool
