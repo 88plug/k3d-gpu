@@ -5,11 +5,11 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-10T19:07:21Z. 1 open.
+Updated 2026-11-10T19:09:15Z. 1 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
-Opened 2026-11-10T11:43:16Z, updated 2026-11-10T19:07:21Z.
+Opened 2026-11-10T11:43:16Z, updated 2026-11-10T19:07:21Z, acknowledged.
 
 These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
 
