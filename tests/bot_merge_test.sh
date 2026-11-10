@@ -377,6 +377,31 @@ run freshness.yml schedule "$(rgit rev-parse origin/main)" main in_progress '' "
 if [ "$(disp freshness.yml)" -eq 0 ] && [ "$(merges)" -eq 0 ]; then ok "regen_in_flight: no second dispatch"
 else fail "regen_in_flight: $(show)"; fi
 
+# 11c. main moved under code (its registry gained a site the head's tree predates) and the
+#      policy cannot read the head: regenerate the branch's group, autobump/<group>, when
+#      main's registry has that group...
+fx policy_stale; mkpr 1; rm "$FIX/policy/$SHA.json"; main_commit 10 pins/registry.toml $'[groups.g1]\n'; run_bm
+if [ "$RC" -eq 0 ] && [ "$(merges)" -eq 0 ] && [ "$(disp '^freshness.yml ref=main group=g1$')" -eq 1 ] \
+   && comment 1 | grep -q 'policy failed' && comment 1 | grep -q 'regeneration dispatched'; then
+  ok "policy_stale: regeneration dispatched"
+else fail "policy_stale: $(show) comment=$(comment 1)"; fi
+# ...and not when it has none...
+fx policy_stale_nogroup; mkpr 1; rm "$FIX/policy/$SHA.json"; main_commit 10 pins/registry.toml $'[groups.g2]\n'; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$(disp freshness.yml)" -eq 0 ] && comment 1 | grep -q 'no group g1'; then
+  ok "policy_stale_nogroup: no regeneration"
+else fail "policy_stale_nogroup: $(show) comment=$(comment 1)"; fi
+# ...nor when a maintainer requested changes (as 5b)...
+fx policy_stale_changes; mkpr 1; rm "$FIX/policy/$SHA.json"; main_commit 10 pins/registry.toml $'[groups.g1]\n'
+review 1 88plug User OWNER CHANGES_REQUESTED "$SHA"; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$(disp freshness.yml)" -eq 0 ] && comment 1 | grep -q 'changes requested'; then
+  ok "policy_stale_changes: no regeneration"
+else fail "policy_stale_changes: $(show) comment=$(comment 1)"; fi
+# ...nor when main moved only in the ledger: that policy failure is no staleness.
+fx policy_fail_ledger; mkpr 1; rm "$FIX/policy/$SHA.json"; main_commit 15 docs/provenance.md $'ledger\n'; run_bm
+if [ "$(merges)" -eq 0 ] && [ "$(disp freshness.yml)" -eq 0 ] && comment 1 | grep -q 'policy failed'; then
+  ok "policy_fail_ledger: no regeneration"
+else fail "policy_fail_ledger: $(show) comment=$(comment 1)"; fi
+
 # 12. main moved only by release commits (and the ledger): merges without regeneration.
 fx base_moved_release; mkpr 1
 main_commit 20 scripts/k3d-gpu $'#!/bin/sh\nVERSION="0.1.80"\n' 88plug-bot 'release: aur-v0.1.80 [skip release]'
