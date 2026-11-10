@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-10T20:10:13Z. 2 open.
+Updated 2026-11-10T20:48:47Z. 1 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -17,14 +17,4 @@ These autobump PRs are open over 72 h and their head SHA has no successful ci.ym
 - https://github.com/88plug/k3d-gpu/pull/350 chore(hf-console-fallback): hf-gemma4-26b-int4-ov 7b3cbc98e24a9946e561f82c752ae26cd53fc660, hf-qwen3.8-27b 37561816e66b5b9153b1b64c10968c18c1e6f4a0, hf-qwen3.8-27b-int4-ov d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e (`autobump/hf-console-fallback`, open since 2026-11-07T11:16:40Z): ci.yml at 48596f4552a6: pull_request action_required
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
-
-## `stale:watchdog.yml`: no successful scheduled run within 7 h
-
-Opened 2026-11-10T20:10:13Z, updated 2026-11-10T20:10:13Z.
-
-`watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
-
-Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/42820550958 at 2026-11-10T13:00:12Z
-
-A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
