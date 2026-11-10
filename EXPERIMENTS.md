@@ -107,7 +107,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H56 | Two measurement holds in disjoint cpuset slices of the Xeon 6741P do not perturb each other: an A1 B24 agent block in slice 0 (CPUs 0-23,48-71) behaves equivalently, in per-attempt time, within-budget success and tasks completed, alone and with a concurrent identical A1 hold in slice 1 (CPUs 24-47,72-95), without an all-core clock drop on slice 0 and with the package below its power limit. It decides whether crescent may run two A1-or-lighter holds at once ([adoption rule](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20)); it is not a k3d-gpu product claim. | Written 2026-10-20, before any run; predictions unchanged by the 2026-10-21 revision, priors updated to its narrower bands. Geometric-mean W/A time ratio 1.04 (0.99-1.09); paired success W - A -0.01 (-0.06 to +0.04); completion W/A 0.97 (0.90-1.00); own-slice MHz W/A 0.97; W package 0.75 PL1 (0.55-0.95), A package 0.5 PL1; time pairs 80 (50-96). Batch-1 int4 decode is DRAM-bound, and the sibling's decode and its stream load share DRAM, L3 and package power. Verdict priors: SUPPORTED 0.30, INCONCLUSIVE 0.45, REFUTED 0.25. | Stage 0 first, read-only: `bench/eatflow/crescent/lockwait.py` over both campaigns' `campaign.log`; if lock wait our slots could remove is under 0.10 of hold time, stage 1 is not run and the row stays PENDING (`h56.sh` refuses through `h56.py gate`). [Amendment S0](#h56-pre-registration-parallel-slice-holds-on-crescent-2026-10-20) (2026-10-21, before any stage-1 hold, stage-0 reading disclosed): the share is pooled lock wait over hold time across every campaign log on crescent, nothing netted out; bar 0.10 unchanged. Then one W wiring smoke, which must show slice-0 setup <= 900 s and >= 3 tasks in 120 s. Stage 1: `bench/eatflow/crescent/h56.sh N` for N = 1..8, order A W W A A W W A, one condition-hold per exclusive campaign lock (slot locks first). A: slice 0 alone, slice 1 idle. W: the sibling in slice 1 first (cap 3000 s, budget 1800 s), slice 0 from the sibling's run budget on (cap 2400 s, budget 720 s, the same as A). Hold pairs (1,2) (4,3) (5,6) (8,7), tasks by id; 90% two-stage bootstrap CIs (hold pairs, then tasks; 10,000, seed 56; TOST at alpha 0.05). SUPPORTED: all 8 positions filled, time CI inside [1/1.05, 1.05], success CI inside [-1/24, +1/24], completion W/A >= 1/1.05, >= 60 time pairs, own-slice MHz W/A >= 0.95, W package < 0.95 PL1 and PL1 read. REFUTED: the time CI wholly outside its band, the success CI wholly outside its band, or the completion CI wholly below 1/1.05. Otherwise INCONCLUSIVE. VOID holds are replaced, at most 2. `bench/eatflow/crescent/h56.py score`. Stage 0 under amendment S0 (`lockwait.json`, 62fdf617): pooled share 0.9987 (16081 s of lock wait over 16102 s held, 21 holds, 4 logs), so stage 1 ran; smoke-W passed `h56.py gate` (slice-0 setup 225 s, 15 tasks in 120 s). Stage 1 run 2026-10-21, holds 1-8 in order, every rc 0, none gate-flagged ([H56 run](#h56-run-stage-1-xeon-6741p-2026-10-21)): `h56.py score` reads "4 VOID condition-holds > 2; position 2 missing; position 3 missing; position 6 missing; position 7 missing". Every W hold is VOID on one rule, slice 0's block window not inside the sibling's: a B24 block ends at its 24th task, not at its run budget, and took 178-190 s, so the sibling's block (1800 s budget) ended 27-32 s after slice 0's began and covered 0.15-0.17 of it. No time, success, completion, MHz or power statistic is scored. The 4 A holds are valid (22/24 passed in each). A VOID replacement cannot lift the verdict (4 VOID > 2) and would VOID by the same timing, so no further H56 hold is owed; crescent rows stay K=1 (adoption rule 1). | INCONCLUSIVE |
 | H59 | Engine choice by evidence on the Xeon 6741P (crescent; AMX, CPU only, no card): with Gemma 4 26B-A4B QAT at agent concurrency N=4, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter (L, `agent up` with the llama.cpp backend of PR #182) decodes at least 1.2x faster than OVMS int4 (O, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`, the model optimizer's current pick), with GSM8K quality within 2 of 50. SUPPORTED makes llama.cpp the optimizer's CPU engine default for this CPU class (`console/ledger-rules.json`, H59 family); otherwise OVMS stays. | Written 2026-10-21, before any H59 measurement. Informed by H54a's descriptive N=1 numbers on this host (Lg-mtp 54.52, A1g 23.25 tok/s, not a verdict): N=1 L/O 2.2 (1.6-2.8) (0.6); N=4 per-request decode L/O 1.6 (1.1-2.3) (0.55), with MTP's gain smaller at N=4 than at N=1 (0.65); N=16 L/O < N=4 L/O (0.6); prefix-reuse added-agent TTFT O < L (0.55); GSM8K both >= 46/50 (0.7). SUPPORTED (0.55), REFUTED (0.3), INCONCLUSIVE (0.15). | [H59 pre-registration](#h59-pre-registration-engine-choice-per-cpu-class-2026-10-21): arms O and L at their best documented settings, one serving at a time on the CPU, 3 performance holds in rotated order (N=1: 8, N=4: 16, N=16: 32 requests, 256 tokens, greedy), a TTFT and a prefix-reuse phase per arm, 1 quality hold (GSM8K 0-49), RAPL J/token. Statistic: ratio of L's to O's median per-request decode tok/s at N=4 over the pooled holds, 95% bootstrap CI (H54's `boot_ratio`). SUPPORTED: CI lower bound >= 1.2 and L's GSM8K >= O's - 2. REFUTED: CI upper bound < 1.2, or the quality gate fails. Otherwise INCONCLUSIVE (also: an arm not deliverable, load unmatched). Scorer: `bench/h59/h59.py`, [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28) (2026-10-28, before any H59 measurement). O serves base-model int4 (OVB), not QAT weights, so a verdict compares the two stacks as shipped (S1's description fixes); SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59 measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59 measurement). Its model check names OVB's language-model files: [H59 amendment R3](#h59-amendment-r3-the-model-check-names-ovbs-language-model-files-2026-11-01) (2026-11-01, before any H59 hold). L's render also carries `--cache-ram 0` and `-ctxcp 4`, both read at the pin: [H59 amendment R4](#h59-amendment-r4-ls-render-also-carries---cache-ram-0-and--ctxcp-4-2026-11-01) (2026-11-01, before any H59 hold). Result ([H59 run](#h59-run-xeon-6741p-2026-11-01)): 4 holds, every arm measured, no spare, no void phase, load matched. N=4 L/O 3.499 (95% CI 3.422-3.612), L faster in each performance hold (3.29, 3.68, 3.48); GSM8K L 49/50, O 50/50, gate passed; so SUPPORTED. Not gated: N=1 L/O 2.10, N=16 2.09; 1,000-token TTFT L 2.87 s, O 4.76 s; added-agent prefix TTFT L 0.82 s, O 0.63 s; N=4 J/output token gross L 2.98, O 9.81. | SUPPORTED |
 | H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59d measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59d measurement). Result ([H59d run](#h59d-run-i9-13900t-2026-11-01)): 4 holds, no spare. L was not deliverable in holds 1 and 3: each time it followed O in the hold, its server was OOMKilled 7 times at the fit's 45Gi pod limit (4 x 262,144 tokens) and never answered within 900 s. The same render served in holds 2 and 4, where L ran first. So INCONCLUSIVE (L not deliverable in two holds). Not gated, from hold 2 only: N=4 L/O 1.05, N=1 1.19; GSM8K L 50/50, O 49/50; the idle-window load read matched (L 2.14, O 2.01 CPU-s/s). | INCONCLUSIVE |
-| H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59w measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59w measurement). | PENDING |
+| H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59w measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59w measurement). H59w's wiring smoke, the archive it and the holds run from, and the cap its holds count against: [H59 amendment R5](#h59-amendment-r5-h59ws-wiring-smoke-its-archive-and-its-holds-on-wildct-2026-11-10) (2026-11-10, before any H59w hold or wiring smoke). | PENDING |
 
 ## Falsification log
 
@@ -17013,6 +17013,97 @@ prompt states shared across slots. It does not change `cache_prompt` (`common/co
 true), the per-slot reuse that R1 reads as "the server's prompt cache on". So the registered
 setting holds as R1 reads it. The N=4 phase sends unique prompts, so it reuses nothing either way.
 The prefix phase, which is reported and not gated, runs under this setting.
+
+### H59 amendment R5: H59w's wiring smoke, its archive and its holds on wildct (2026-11-10)
+
+Recorded 2026-11-10, before any H59w hold or wiring smoke. Mechanics only: no row's arms, model
+files, statistic, quality gate, 1.2 bar, load rule, cap or prediction changes. `h59w-prep`
+(amendment R1's `prep.sh`, not a hold) started on wildct at 17:40:59Z, before this text was
+written; it measures nothing.
+
+**What was found.** [Wildct amendment R6](#wildct-amendment-r6-the-outage-release-0189-and-smoke5-2026-11-07)
+reported it: `row.sh h59w` takes holds 1-6 only, so it has no path for the wiring smoke that
+amendment R1 runs before a row's first hold. `row.sh h59w smoke` exits 2. `bench/h59/hold.sh` and
+`run.py hold smoke` already run the smoke for every host profile.
+
+**Runner change.** `row.sh h59w smoke` runs `bench/h59/hold.sh wildct smoke` with the environment
+of the row's holds (`G`, `LOCK`, `K3D_REAL`, `H59_IMAGE`) and the same k3d shim check. On wildct it
+runs as `bench/wildct/hold.sh H59w-smoke 4600 40 bench/wildct/row.sh h59w smoke`: rule W1's lock,
+with W3 to W6, as the holds run. The smoke is amendment R1's: hold 1's arms (O, then L), one
+16-token request and one `chat_template_kwargs` chat each. It sends no scored request, is
+discarded and disclosed in the run section, and is not a hold. Test: `tests/wildct_hold_test.sh`
+(the smoke's printed environment equals hold 1's, line for line; check mode accepts `h59w smoke`
+and refuses it with another argument), in CI.
+
+**The archive the smoke and the holds run from.** Rule W7 has `hold.sh` refuse a hold (exit 7)
+when the shipped archive's `scripts/k3d-gpu` differs from the installed release's apart from the
+version line. The campaign's release is 0.1.89, frozen by W7 since `H52w`. Main's launcher has
+changed since 0.1.89: #337, #334, #339 and #361, first in release 0.1.92. So this amendment's
+merge commit cannot be shipped to wildct, and neither can a later main.
+
+- The smoke and the holds run from the archive on wildct now, `repo-fd822b337155` (main at
+  `fd822b33`, wildct amendment R8's merge). `H28w-prep-r2` and `H28w-r2` ran from it. Its
+  launcher and `share/` equal 0.1.89's apart from the version line
+  ([wildct amendment R9](#wildct-amendment-r9-the-h28w-hold-its-ssh-session-ended-and-holds-launched-outside-it-2026-11-07)).
+- Every file H59w runs is the same there as on main when this was written, `f5a73bca`. A diff of
+  `fd822b33` against `f5a73bca` lists no change under `bench/h59`, `bench/h57d`, `bench/h54`,
+  `bench/apb`, `bench/shared-prefix`, `bench/llm_load.py`, `bench/energy.sh`, `share` or
+  `bench/wildct`, apart from `RESUME.md` and run records. Main's `share/` has moved since (#377:
+  nri-balloons v0.15.1 and agent-sandbox), which W7 keeps off wildct too; the runner files above
+  have not.
+- Its `console/ledger-rules.json` differs in H34w's verdict only. H34-family rows decide OVMS's
+  CPU Fast Draft, which `run.py check` rules out for O in any case. Its `EXPERIMENTS.md` has H59
+  SUPPORTED for the 6741P, H59d INCONCLUSIVE and H59w PENDING, as main does, so no H59-family row
+  matches the i7-13700 and O renders OVMS, as R1 registers.
+- The archive's `row.sh` has no `smoke` path: its `h59w` branch is main's before this change. So
+  on wildct the smoke runs the command that `row.sh h59w smoke` runs at this amendment, written
+  out, with the archive's own files:
+
+```text
+bash ~/k3dgpu-bench-wildct/repo/bench/wildct/hold.sh H59w-smoke 4600 40 \
+  env G=~/k3dgpu-bench-wildct/h59 LOCK=~/k3dgpu-bench-wildct/inner.lock \
+      K3D_REAL=~/k3dgpu-bench-wildct/bin/k3d H59_IMAGE=<runs/IMAGE> \
+  bash ~/k3dgpu-bench-wildct/repo/bench/h59/hold.sh wildct smoke
+```
+
+It is launched the way wildct amendment R9's `launch` starts a hold (`setsid nohup systemd-run
+--user --scope --quiet --collect --expand-environment=no`), by hand, since `launch` checks its row
+with the archive's `row.sh`. Holds 1 to 4 run amendment R1's `row.sh h59w <n>`, which the archive
+has, through `launch` (`launch H59w-<n> 4600 40 h59w <n>`).
+
+**H59w's node image.** `H59_IMAGE` is 0.1.89's,
+`cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4`.
+Amendment R1 asks for a release whose launcher is R1's commit's or later. 0.1.89 was cut from main
+at `85a7bc86` on 2026-11-07, after amendments R1 and R4. Its launcher pins the images `run.py
+check` requires: `server-b11960@sha256:8052c13e...`, `full-b11960@sha256:7afc81bf...` with the
+conversion's pins (`transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3
+safetensors==0.8.0`), and OVMS `a928903f...`. The row's first hold records it.
+
+**Where H59w sits, and what its holds count against.** The registrations do not decide this, so
+the reading taken is recorded here.
+
+- The wildct pre-registration's order and caps list its own rows (H52w, H18w, H25w, H34w, H28w,
+  H57wb's reading, H57wa and H57wm) and allow "at most 12 holds in all". H59w is not among them:
+  the H59 pre-registration registered it on 2026-10-21, a day later.
+- The H59 pre-registration gives each row its own cap, "at most 6 holds (holds 1-3 performance,
+  hold 4 quality, 2 spares ...)". From the wildct pre-registration it takes the host's "shared
+  lock, hold length and disk rules". Amendment R1 runs H59w's holds through `bench/wildct/hold.sh`
+  (W1's lock, the GPU opt-out, W3, W4's RAPL reader, W5's sampler and W6's floor). Wildct amendment
+  P1 names H59w among the rows W7's pins govern.
+- Neither says whether H59w's holds count toward the 12, or where H59w sits in the order.
+  `RESUME.md` lists H59w as not in its pack.
+
+The reading: H59w's holds count against H59's cap of 6 per row (`H59w-1` to `H59w-4`, and a spare
+only where R1 allows one), not against the 12. The 12 stay with the wildct pre-registration's rows.
+After the H28w repeat, 8 are used and the 4 left are `H57w-1` to `H57w-4` (wildct amendment R9);
+H59w takes none of them. H59w runs outside the pack's order. The pack stays stopped where wildct
+amendment R10 (#345) stops it, at row 7 (H57wb), and H57wa, H57wm and H57wb stay PENDING. H59w
+neither starts them nor waits for them. Its holds take W1's lock, so no H59w hold overlaps another
+hold on wildct. The wiring smoke and `h59w-prep` are not holds. This reading adds no hold to the
+12 and none to H59w's 6. If the owner reads the 12 as counting every hold on wildct, H59w's holds
+go past it; a later amendment would then record that.
+
+`RESUME.md`'s H59w line now points here.
 
 ### H59 run (Xeon 6741P, 2026-11-01)
 
