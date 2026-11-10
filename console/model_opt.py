@@ -100,6 +100,7 @@ VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.32.0/docs/features
 VLLM_GAUDI_SD = "https://github.com/vllm-project/vllm-gaudi/blob/v0.30.0/docs/features/supported_features.md (L25, L27)"
 LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 -md)"
 LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
+RECIPES = "https://github.com/vllm-project/vllm/blob/d90f5573a3bc6e7f31051841552ee4b78a95d023/recipes/models/"
 
 # Tool and reasoning parsers by model family (config model_type), per engine.
 # OVMS detects both from the chat template when unset (docs/parameters.md
@@ -115,6 +116,31 @@ FAMILY_PARSERS = {
     "gemma4": {"vllm": ("gemma4", "gemma4"), "ovms": ("gemma4", "gemma4"),
                "source": "https://recipes.vllm.ai/Google/gemma-4-26B-A4B-it (--tool-call-parser gemma4 --reasoning-parser gemma4); "
                          "OVMS v2026.4.1 src/llm/io_processing/output_parser.cpp (gemma4 tool + reasoning)"},
+    # vLLM only, from the recipes the vLLM repo marks verified on Arc Pro B60/B70
+    # or Xeon 6, each parser built into v0.32.0 (vllm/tool_parsers/__init__.py,
+    # vllm/reasoning/__init__.py). OVMS keeps detecting these from the template.
+    # recipes/models/Qwen/Qwen3.5-35B-A3B.yaml:37,42; Qwen/Qwen3.6-35B-A3B.yaml:44,49
+    "qwen3_5_moe": {"vllm": ("qwen3_coder", "qwen3"),
+                    "source": RECIPES + "Qwen/Qwen3.5-35B-A3B.yaml#L37-L42 (--tool-call-parser qwen3_coder --reasoning-parser qwen3)"},
+    # recipes/models/Google/gemma-4-12B-it.yaml:45,52
+    "gemma4_unified": {"vllm": ("gemma4", "gemma4"),
+                       "source": RECIPES + "Google/gemma-4-12B-it.yaml#L45-L52 (--tool-call-parser gemma4 --reasoning-parser gemma4)"},
+    # recipes/models/Google/diffusiongemma-26B-A4B-it.yaml:43,50
+    "diffusion_gemma": {"vllm": ("gemma4", "gemma4"),
+                        "source": RECIPES + "Google/diffusiongemma-26B-A4B-it.yaml#L43-L50 (--tool-call-parser gemma4 --reasoning-parser gemma4)"},
+    # recipes/models/meta-models/Muse-Glimmer-30B.yaml:61,66
+    "muse_glimmer": {"vllm": ("muse_glimmer", "muse_glimmer"),
+                     "source": RECIPES + "meta-models/Muse-Glimmer-30B.yaml#L61-L66 (--tool-call-parser muse_glimmer --reasoning-parser muse_glimmer)"},
+    # recipes/models/openai/gpt-oss-20b.yaml:38; openai/gpt-oss-120b.yaml:35 (neither names a reasoning parser)
+    "gpt_oss": {"vllm": ("openai", None),
+                "source": RECIPES + "openai/gpt-oss-20b.yaml#L38 (--tool-call-parser openai, no reasoning parser)"},
+    # recipes/models/Qwen/QwQ-32B.yaml:31 (hermes). Its --reasoning-parser deepseek_r1
+    # (L36) is left out: qwen2 is also every Qwen2.5 model, and that parser fails
+    # to start without <think>/</think> in the vocabulary (v0.32.0
+    # vllm/reasoning/basic_parsers.py L61-64).
+    "qwen2": {"vllm": ("hermes", None),
+              "source": RECIPES + "Qwen/QwQ-32B.yaml#L31 (--tool-call-parser hermes); "
+                        "vLLM v0.32.0 docs/features/tool_calling.md (L362-365: hermes for Qwen2.5 and QwQ)"},
 }
 
 # Architectures an engine documents as unsupported on Intel devices.
@@ -541,11 +567,13 @@ def card_sampling(lines):
     out = {}
     for x in lines or []:
         text = x["text"]
-        vals = {}
-        for k, v in re.findall(r"`?(%s)\s*=\s*([0-9.]+)`?" % "|".join(SAMPLING_KEYS), text):
-            vals[k] = float(v) if "." in v else int(v)
-        if len(vals) < 3:
+        # A number ends at its last digit, so "temperature=1.0." reads 1.0.
+        pairs = re.findall(r"`?(%s)\s*=\s*([0-9]+(?:\.[0-9]+)?)`?" % "|".join(SAMPLING_KEYS), text)
+        keys = [k for k, _ in pairs]
+        # A line that sets a key twice describes more than one setting.
+        if len(set(keys)) < 3 or len(set(keys)) != len(keys):
             continue
+        vals = {k: float(v) if "." in v else int(v) for k, v in pairs}
         low = text.lower()
         mode = "non_thinking" if ("non-thinking" in low or "instruct" in low) else "thinking" if "thinking" in low else None
         if mode and mode not in out:
@@ -911,7 +939,7 @@ def optimize(bundle, engine, device, opts=None):
 
     # Parsers by model family.
     fam = FAMILY_PARSERS.get(facts["model_type"] or "")
-    if fam and engine in ("vllm", "ovms"):
+    if fam and engine in ("vllm", "ovms") and engine in fam:
         tool, reasoning = fam[engine]
         doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning
         if tool or reasoning:
