@@ -1,5 +1,5 @@
-ARG K3S_TAG="v1.37.1-k3s1"
-ARG K3S_DIGEST="sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d"
+ARG K3S_TAG="v1.37.2-k3s1"
+ARG K3S_DIGEST="sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332"
 #https://hub.docker.com/r/rancher/k3s/tags  (multi-arch index digest of K3S_TAG;
 # rancher stopped publishing per-arch "-amd64" tags after v1.34.1-k3s1)
 ARG UBUNTU_IMAGE="ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c"
