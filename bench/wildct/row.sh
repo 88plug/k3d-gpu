@@ -24,7 +24,8 @@
 #   h57wb        H57wb's start reading (/ available, MemAvailable) and its decision; not a hold
 #   h59w HOLD [REPEATS]  H59w: bench/h59/hold.sh wildct (inner lock; H59 amendment R1): holds 1-3
 #                perf and 4 quality in their registered orders; a spare 5 or 6 names the failed
-#                hold it repeats
+#                hold it repeats; HOLD smoke is amendment R1's wiring smoke, with the holds'
+#                environment (H59 amendment R5): hold 1's arms, no scored request, not a hold
 #   h59w-prep    bench/h59/prep.sh wildct: the downloads, then the drafter conversion under the
 #                host lock; not in a hold
 # Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h52w and h57wb)
@@ -116,8 +117,8 @@ case ${row} in
     h59w)
         need_image
         case ${2:-}:${3:-}:$# in
-            [1234]::2 | [56]:[1234]:3) ;;
-            *) echo "row.sh: h59w ${*:2}: holds 1-3 perf and 4 quality take no other argument; a spare 5 or 6 names the hold it repeats" >&2; exit 2 ;;
+            [1234]::2 | [56]:[1234]:3 | smoke::2) ;;
+            *) echo "row.sh: h59w ${*:2}: holds 1-3 perf, 4 quality and smoke take no other argument; a spare 5 or 6 names the hold it repeats" >&2; exit 2 ;;
         esac
         E=(G="${W}/h59" LOCK="${W}/inner.lock" K3D_REAL="${W}/bin/k3d" H59_IMAGE="${IMAGE}")
         ARGV=(bash "${REPO}/bench/h59/hold.sh" wildct "${@:2}")

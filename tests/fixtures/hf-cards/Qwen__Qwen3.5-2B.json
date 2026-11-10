@@ -1,0 +1,108 @@
+{
+ "model": "Qwen/Qwen3.5-2B",
+ "sha": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+ "source": "https://huggingface.co/Qwen/Qwen3.5-2B/blob/15852e8c16360a2fea060d615a32b45270f8a8fc/README.md",
+ "note": "card_lines() of the model card at this commit: the README lines `model_opt.py fetch` keeps. Saved 2026-11-10.",
+ "card_lines": [
+  {
+   "line": 63,
+   "text": "- MTP: trained with multi-steps"
+  },
+  {
+   "line": 286,
+   "text": "* Experimental settings: top_p=0.95, top_k=20, presence_penalty=1.5, and temperature=1.0 were used.<br>"
+  },
+  {
+   "line": 577,
+   "text": "* Experimental settings: For the Video benchmarks, we used top_p=0.95, top_k=20, presence_penalty=1.5, and temperature=1.0. All other benchmarks adopted the same hyperparameter configuration but with temperature=0.6 under the thinking mode. Under the no-thinking mode, the inference hyperparameters w"
+  },
+  {
+   "line": 624,
+   "text": "python -m sglang.launch_server --model-path Qwen/Qwen3.5-2B --port 8000 --tp-size 1 --mem-fraction-static 0.8 --context-length 262144 --tool-call-parser qwen3_coder"
+  },
+  {
+   "line": 627,
+   "text": "- **Multi-Token Prediction (MTP)**: The following command is recommended for MTP:"
+  },
+  {
+   "line": 649,
+   "text": "vllm serve Qwen/Qwen3.5-2B --port 8000 --tensor-parallel-size 1 --max-model-len 262144"
+  },
+  {
+   "line": 655,
+   "text": "vllm serve Qwen/Qwen3.5-2B --port 8000 --tensor-parallel-size 1 --max-model-len 262144 --enable-auto-tool-choice --tool-call-parser qwen3_coder"
+  },
+  {
+   "line": 658,
+   "text": "- **Multi-Token Prediction (MTP)**: The following command is recommended for MTP:"
+  },
+  {
+   "line": 661,
+   "text": "vllm serve Qwen/Qwen3.5-2B --port 8000 --tensor-parallel-size 1 --max-model-len 262144 --speculative-config '{\"method\":\"qwen3_next_mtp\",\"num_speculative_tokens\":2}'"
+  },
+  {
+   "line": 667,
+   "text": "vllm serve Qwen/Qwen3.5-2B --port 8000 --tensor-parallel-size 1 --max-model-len 262144 --language-model-only"
+  },
+  {
+   "line": 705,
+   "text": "> - Non-thinking mode for text tasks: `temperature=1.0, top_p=1.00, top_k=20, min_p=0.0, presence_penalty=2.0, repetition_penalty=1.0`"
+  },
+  {
+   "line": 706,
+   "text": "> - Non-thinking mode for VL tasks: `temperature=0.7, top_p=0.80, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0`"
+  },
+  {
+   "line": 707,
+   "text": "> - Thinking mode for text tasks: `temperature=1.0, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0`"
+  },
+  {
+   "line": 708,
+   "text": "> - Thinking mode for VL or precise coding (e.g. WebDev) tasks : `temperature=0.6, top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, repetition_penalty=1.0`"
+  },
+  {
+   "line": 727,
+   "text": "temperature=1.0,"
+  },
+  {
+   "line": 766,
+   "text": "temperature=0.7,"
+  },
+  {
+   "line": 811,
+   "text": "temperature=0.7,"
+  },
+  {
+   "line": 844,
+   "text": "temperature=1.0,"
+  },
+  {
+   "line": 849,
+   "text": "\"enable_thinking\": True,"
+  },
+  {
+   "line": 882,
+   "text": "temperature=1.0,"
+  },
+  {
+   "line": 923,
+   "text": "#    'chat_template_kwargs': {'enable_thinking': True}"
+  },
+  {
+   "line": 969,
+   "text": "`temperature=1.0`, `top_p=1.00`, `top_k=20`, `min_p=0.0`, `presence_penalty=2.0`, `repetition_penalty=1.0`"
+  },
+  {
+   "line": 971,
+   "text": "`temperature=0.7`, `top_p=0.80`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+  },
+  {
+   "line": 973,
+   "text": "`temperature=1.0`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, `repetition_penalty=1.0`"
+  },
+  {
+   "line": 975,
+   "text": "`temperature=0.6`, `top_p=0.95`, `top_k=20`, `min_p=0.0`, `presence_penalty=0.0`, `repetition_penalty=1.0`"
+  }
+ ]
+}

@@ -839,7 +839,7 @@ The device comes from what the cluster advertises, not from the host alone:
 
 | Cluster has | Device | Pod gets |
 |-------------|--------|----------|
-| allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM (see [vLLM on Gaudi](#vllm-on-gaudi)) |
+| allocatable `habana.ai/gaudi` | `HPU` | one Gaudi, served by vLLM, not yet run on Gaudi hardware (see [vLLM on Gaudi](#vllm-on-gaudi)) |
 | allocatable `gpu.intel.com/xe`, else `gpu.intel.com/i915`, on a node labelled `gpu.intel.com/xmx=true`, skipping a driver labelled `k3d-gpu.io/xmx.<driver>=false` | `GPU` | one GPU, a `gpu.intel.com/xmx: "true"` node selector; the host render group is added as a supplemental group |
 | anything else, including an Intel GPU without XMX (or with `xmx` unknown) | `CPU` | no device; the P-cores on a hybrid node; on a node labelled `...cpu-cpuid.AMXTILE=true` it is pinned there |
 | `npu.intel.com/accel`, only with `K3D_GPU_AGENT_DEVICE=NPU` | `NPU` | the NPU and its accel node's group |
@@ -978,8 +978,8 @@ OpenAI API at `/v1` from `svc/vllm`:
 
 | Backend | Image (pinned by digest) | Notes |
 |---------|--------------------------|-------|
-| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); v0.32.0 not yet run here on an Arc B-series card |
-| `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70 |
+| `vllm` | `vllm/vllm-openai-xpu:v0.32.0` | upstream vLLM for Intel GPUs (Data Center GPU and Arc, per [vLLM's XPU guide](https://github.com/vllm-project/vllm/blob/v0.32.0/docs/getting_started/installation/gpu.xpu.inc.md)); served end to end here on an Arc Pro B70 at release 0.1.94 (status below) |
+| `llm-scaler` | `intel/llm-scaler-vllm:1.5` (vLLM 0.26.0-b2) | Intel's build for Arc B60/B70; not yet run here on hardware (status below) |
 
 ```bash
 K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up
@@ -1001,9 +1001,39 @@ other backend first so its GPU is free; `agent down` and `agent status` cover bo
 The chat UI below and other clients that use `svc/ovms` at `/v3` need
 `http://vllm.k3d-gpu-agent.svc:8000/v1` instead.
 
-Not yet run on Arc hardware here: serving end to end and tensor parallelism
-above 1 (`CCL_ZE_IPC_EXCHANGE=pidfd`; oneCCL calls `prctl(PR_SET_PTRACER, getppid())`,
-so sibling workers should need no `CAP_SYS_PTRACE` under yama `ptrace_scope=1`).
+**Status: `vllm` is verified end to end on an Arc Pro B70 at release 0.1.94.** On
+2026-11-08, release 0.1.94, installed by the public `packaging/install.sh`, ran
+`k3d-gpu up` and `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up` with the defaults and no
+patching: `vllm/vllm-openai-xpu:v0.32.0` (vLLM 0.32.0, digest `sha256:20509fab...`)
+serving `Qwen/Qwen3-4B` at revision `1cfa9a72`. The pod was Ready on one card
+(`gpu.intel.com/xe: 1`) and the launcher's warm-up was answered. Through the
+port-forward `agent up` prints, "What is 17 times 23?" came back 391, and the `hermes`
+parser returned the tool call. The host was a Xeon 6741P with 4x Arc Pro B70 (`xe`,
+kernel 7.0.0-31, Ubuntu 26.04.1). The same checks passed in the same hold on the
+`v0.33.0` bump's head ([#357](https://github.com/88plug/k3d-gpu/pull/357)). Record, with
+every version and file:
+[bench/vllm-agent/results/2026-11-08](bench/vllm-agent/results/2026-11-08/README.md).
+
+Releases 0.1.21 (2026-10-16) through 0.1.93 do not serve with vLLM, on Arc or on a
+Gaudi, and neither does `agent up --model` when the fit picks vLLM. The hardware canary
+for the `v0.33.0` bump ([#326](https://github.com/88plug/k3d-gpu/pull/326)) found two
+causes on an Arc Pro B70 on 2026-11-07; the `v0.32.0` image exits there on the first one
+too:
+
+- The Service is named `vllm`, so Kubernetes gives the pod
+  `VLLM_PORT=tcp://<cluster IP>:8000`. vLLM reads `VLLM_PORT` as its own port and exits
+  at engine start ("appears to be a URI"), and the pod crash-loops.
+- The warm-up posts through the API server's service proxy with no `Content-Type`, and
+  vLLM answers such a request with 400.
+
+[#339](https://github.com/88plug/k3d-gpu/pull/339) fixed both in 0.1.94: the pod spec
+sets `enableServiceLinks: false`, and the warm-up runs curl inside the pod with
+`Content-Type: application/json`. llm-scaler and the Gaudi image are built on vLLM 0.26
+and 0.30, whose upstream source has both checks, and they get the same pod spec and
+warm-up; neither has run on hardware yet. Tensor parallelism above 1 has not run on
+Arc hardware either (`CCL_ZE_IPC_EXCHANGE=pidfd`; oneCCL calls
+`prctl(PR_SET_PTRACER, getppid())`, so sibling workers should need no `CAP_SYS_PTRACE`
+under yama `ptrace_scope=1`).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -1040,7 +1070,11 @@ for tensor parallelism and Qwen models, `SYS_NICE`, an 8 GiB memory-backed
 bounds the HPU warm-up, which runs on every start and takes minutes;
 `K3D_GPU_AGENT_TIMEOUT` (1800 s) bounds it.
 
-Not yet run on Gaudi hardware here: serving end to end. The device plugin runs
+Not yet run on Gaudi hardware here: serving end to end. Releases up to 0.1.93 do not
+serve it: the Gaudi pod shares the Arc pod spec and warm-up, and with them the
+[two faults above](#vllm-backends-for-discrete-arc-battlemage) that
+[#339](https://github.com/88plug/k3d-gpu/pull/339) fixed in 0.1.94, whose end-to-end
+check ran on an Arc Pro B70 only. The device plugin runs
 without Intel's `habana-container-runtime` hook (see `share/gaudi-device-plugin.yml`),
 so whether vLLM opens the HPU with only the plugin's device nodes and environment
 is unverified. vllm-gaudi validates `Qwen3-0.6B`, not `Qwen3-4B`, and tensor
@@ -1671,9 +1705,9 @@ release's packages.
 
 | Component | Ubuntu 24.04 / 26.04 | Fedora | Arch / Manjaro |
 |-----------|----------------------|--------|----------------|
-| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.35.39758.10, IGC 2.41.5; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
+| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.40.40196.8, IGC 2.42.6; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
 | Level Zero loader | 24.04: GitHub `libze1` 1.34.0 .deb, sha256-checked. 26.04: none pinned (level-zero publishes 22.04/24.04 .debs only); `host-setup` says so and names the archive's `libze1` 1.28.2 | `oneapi-level-zero` | `level-zero-loader` |
-| Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned media driver 26.3.5, libva 2.24.1, gmmlib 22.10.2 | `libva-intel-media-driver` | `intel-media-driver libva` |
+| Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned media driver 26.4.1, libva 2.24.1, gmmlib 22.10.2 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
 | NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
 | DSA / IAA user work queues | `accel-config` from the release's universe (24.04: 4.1.6, 26.04: 4.1.9) when no `accel-config` binary is found, then per disabled device: 1 engine, 1 group, 1 user WQ (shared with user PASID, else dedicated) | `accel-config`, same steps | no package: build intel/idxd-config accel-config-v4.1.9; the plan leaves DSA/IAA out until then |
@@ -1710,8 +1744,8 @@ These are Docker **build args** (not runtime env):
 
 | Build arg    | Default               | Description                                  |
 |--------------|-----------------------|----------------------------------------------|
-| `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
-| `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
+| `K3S_TAG`    | `v1.37.2-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `K3S_DIGEST` | `sha256:21ea6e0f…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
 | `UBUNTU_2404_IMAGE` | `ubuntu:24.04@sha256:…` | the pinned 24.04 base; the release passes it as `UBUNTU_IMAGE` for the `ubuntu24.04` image |
 
@@ -1762,8 +1796,9 @@ Freshness workflow (`pins/registry.toml`, group `nri`) runs `--latest` for the
 components and opens one PR for them (branch `autobump/nri`); merging it changes `share/`,
 so auto-release cuts a launcher release and the node image is rebuilt for it. GITHUB_TOKEN opens these PRs, so
 their own pull_request CI runs wait for approval; `hack/bot-ci-dispatch` runs `ci.yml` on
-the branch by workflow_dispatch instead, and that run is the PR's CI. The hourly bot sweep
-(`hack/bot-merge`) merges one such PR at a time when its pins policy says auto (or a
+the branch by workflow_dispatch instead, and that run is the PR's CI. The bot sweep
+(`hack/bot-merge`), which each such CI or canary run starts as it ends (its hourly cron is
+the backstop), merges one such PR at a time when its pins policy says auto (or a
 maintainer approved its head), its CI and canary are green, its base is current and main's
 CI is green; it then dispatches CI on main and a batched release. Any other bot PR stays
 open with one comment that says what blocks it.
@@ -1873,6 +1908,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | K3s Tag             | NVIDIA Plugin | Intel GPU Plugin | Gaudi Plugin |
 |------------|---------------------|---------------|------------------|--------------|
+| 2026-11-10 | v1.37.2-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-17 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-16 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-09-30 | v1.34.1-k3s1-amd64 | v0.20.1 | — | — |

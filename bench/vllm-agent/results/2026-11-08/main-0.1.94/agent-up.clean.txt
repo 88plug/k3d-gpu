@@ -1,0 +1,14 @@
+==> agent: vllm serving Qwen/Qwen3-4B as 'Qwen3-4B' on 1x gpu.intel.com/xe, 2 CPU(s)
+namespace/k3d-gpu-agent created
+persistentvolumeclaim/vllm-models created
+deployment.apps/vllm created
+service/vllm created
+==> Waiting for the model to download and load (first run fetches it into the PVC; up to 1800s)...
+Waiting for deployment "vllm" rollout to finish: 0 of 1 updated replicas are available...
+deployment "vllm" successfully rolled out
+==> warm-up reply (2s): I am a large language model developed by Alibaba Cloud.
+==> model Qwen/Qwen3-4B at revision 1cfa9a7208912126459214e8b04321603b3df60c
+==> OpenAI API ready, model 'Qwen3-4B':
+       KUBECONFIG=/home/devcloud/.local/state/k3d-gpu/kubeconfig-gpu kubectl -n k3d-gpu-agent port-forward svc/vllm 8000:8000
+       curl http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
+         -d '{"model":"Qwen3-4B","messages":[{"role":"user","content":"hi"}]}'

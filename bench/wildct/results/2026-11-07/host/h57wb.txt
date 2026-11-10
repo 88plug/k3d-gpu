@@ -1,0 +1,199 @@
+# wildct around H57wb's reading, 2026-11-07 (UTC). Read-only reads as andrew, except the firewall
+# dumps (iptables-save, ip6tables-save and nft list ruleset), as root.
+# The production snapshot: running containers, published-port HTTP codes from the host, and each
+# running container's StartedAt and RestartCount.
+# The reading is RESUME.md step 6's row 7 (not a hold): bash $R/bench/wildct/row.sh h57wb, run
+# from the archive H28w-r2 ran (repo-fd822b337155), whose row.sh equals main's.
+
+== production snapshot before the reading (2026-11-07T09:26:08Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== state before the reading (pre.sh)
+## date 2026-11-07T09:26:38Z
+## uptime 2026-10-29 05:11:09 kernel 6.6.156-2-MANJARO
+## repo fd822b337155f102b9076e2ee79fe133a67e3b7b -> repo-fd822b337155
+## row.sh sha256 f62125ca07a760d253ba6f455f5a269394582f057d3f4112a82cb31b44d976a4
+## release
+VERSION="0.1.89"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4
+LAUNCHER-MATCH
+share diff done
+containers-before.txt dl.log dl.sh images-before.txt networks-before.txt pull.log pull.sh verify-h57.log volumes-before.txt 
+## node image
+cryptoandcoffee/k3d-gpu@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 sha256:5811390ea98da96ebe01a3338291d4f462bb8c16e0063c99939944190547b8c8
+## other k3d-gpu node images
+cryptoandcoffee/k3d-gpu:0.1.89 5811390ea98d
+## tools
+k3d version v5.9.0
+k3s version v1.35.5-k3s1 (default)
+v4.3.1+gc0d08d0
+Client Version: v1.37.2
+## lock
+lock-free
+## our processes
+none
+## user scopes (run-*)
+none
+## clusters
+
+clusters rc=0
+## our containers
+ours grep rc=1 (1 = none)
+## runs
+H18w H18w.out H25w H25w.out H28w H28w-gpuread H28w-prep H28w-prep-r2 H28w-prep-r2.out H28w-prep.out H28w-r2 H28w-r2-gpuread H28w-r2.out H28w.out H34w H34w.out H52w H52w.out IMAGE campaign.log convert diag-smoke2 diag-smoke2.out h57w-convert install-0.1.79.log install-0.1.81.log install-0.1.89.log resume-health.txt resume-health.txt.20261029T182800Z resume-health.txt.20261029T212146Z resume-health.txt.20261029T212151Z resume-health.txt.20261030T050953Z resume-health.txt.20261107T033004Z setup-images-20261029T183449Z.log smoke1 smoke1.cmd smoke1.out smoke2 smoke2.out smoke3 smoke3-node-excerpt.txt smoke3-node.log smoke3.out smoke4 smoke4-live.txt smoke4.out smoke5 smoke5.out 
+## runs/H57wb
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/runs/H57wb': No such file or directory
+## h57 results
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/h57/results/': No such file or directory
+ls: cannot access '/home/andrew/k3dgpu-bench-wildct/h57/results/H57w': No such file or directory
+## campaign.log tail
+== H28w-prep-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:06:34Z
+== H28w-r2 waiting for the lock 2026-11-07T09:07:05Z
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+== H28w-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:11:42Z
+## load/disk/mem
+0.45 0.61 0.98 1/3704 59910
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemTotal:       131524088 kB
+MemAvailable:   119142956 kB
+SwapTotal:      402653176 kB
+SwapFree:       402653176 kB
+
+== the reading (row.sh h57wb, run under flock -n on live.lock so that no hold runs during it)
+## start 2026-11-07T09:26:53Z
+2026-11-07T09:26:53Z root_avail_gb=191 (need >= 85) mem_available_gib=113.6 (need >= 100): gates met: H57wb has no runner on this host; stop and register one before any H57w hold
+row rc=0
+## reading.txt
+2026-11-07T09:26:53Z root_avail_gb=191 (need >= 85) mem_available_gib=113.6 (need >= 100): gates met: H57wb has no runner on this host; stop and register one before any H57w hold
+## context (not gating): 0.69 0.66 0.99 3/3704 61413
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemTotal:       131524088 kB
+MemAvailable:   119131752 kB
+lock-free
+## end 2026-11-07T09:26:53Z
+
+== production snapshot after the reading (2026-11-07T09:27:48Z)
+bmd-telemetry-jaeger-1|Up
+bmd-telemetry-prometheus-1|Up
+feed-my-algorithm-app-1|Up
+feed-my-algorithm-controller-1|Up(healthy)
+feed-my-algorithm-db-1|Up(healthy)
+feed-my-algorithm-redroid-1|Up
+feed-my-algorithm-worker-1|Up
+know-my-neighbor-db-1|Up(healthy)
+proxmox-dc-manager|Up(healthy)
+searxng-core|Up
+searxng-valkey|Up(healthy)
+state-of-my-town-app|Up
+state-of-my-town-archivebox|Up(healthy)
+state-of-my-town-postgres|Up(healthy)
+tos-rate-calculator|Up(healthy)
+webapp-adminer-1|Up
+webapp-db-1|Up(healthy)
+webapp-web-1|Up
+port 3000 200
+port 3080 200
+port 3100 200
+port 4317 000
+port 5433 000
+port 5434 000
+port 5544 000
+port 5565 000
+port 8010 404
+port 8443 301
+port 8888 404
+port 8890 200
+port 9090 302
+port 13133 404
+port 16686 200
+/bmd-telemetry-jaeger-1 2026-10-29T09:11:27.91961244Z 0
+/bmd-telemetry-prometheus-1 2026-10-29T09:11:27.949546379Z 0
+/feed-my-algorithm-app-1 2026-10-29T09:11:27.936156879Z 0
+/feed-my-algorithm-controller-1 2026-10-29T09:11:27.939661363Z 0
+/feed-my-algorithm-db-1 2026-10-29T09:11:27.932636735Z 0
+/feed-my-algorithm-redroid-1 2026-10-29T09:11:27.907167381Z 0
+/feed-my-algorithm-worker-1 2026-10-29T09:11:27.938381448Z 0
+/know-my-neighbor-db-1 2026-10-29T09:11:27.946670984Z 0
+/proxmox-dc-manager 2026-10-29T09:11:27.95058685Z 0
+/searxng-core 2026-10-29T09:11:27.943106017Z 0
+/searxng-valkey 2026-10-29T09:11:27.920115646Z 0
+/state-of-my-town-app 2026-10-29T09:11:27.933239949Z 0
+/state-of-my-town-archivebox 2026-10-29T09:11:27.915974301Z 0
+/state-of-my-town-postgres 2026-10-29T09:11:27.948938903Z 0
+/tos-rate-calculator 2026-10-29T09:11:27.934425305Z 0
+/webapp-adminer-1 2026-10-29T09:11:27.945114439Z 0
+/webapp-db-1 2026-10-29T09:11:27.950054666Z 0
+/webapp-web-1 2026-10-29T09:11:27.947765425Z 0
+firewall line counts: iptables-save 180, ip6tables-save 53, nft list ruleset 286
+
+== comparison (packet counters stripped from the firewall dumps)
+iptables rules identical
+ip6tables rules identical
+nft ruleset identical
+production snapshot identical
+
+== after the reading
+## 2026-11-07T09:28:07Z
+## user scopes left (run-*)
+none
+## our processes
+none
+
+clusters rc=0
+ours grep rc=1 (1 = none)
+lock-free
+0.51 0.60 0.95 4/3703 5079
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119151060 kB
