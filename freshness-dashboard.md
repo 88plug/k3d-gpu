@@ -1,65 +1,33 @@
 # Freshness dashboard
 
-Updated 2026-11-10 18:29 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-10 19:59 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 bot-pr-stuck
+stale:freshness.yml
 
-## Pins behind (26)
+## Pins behind (5)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 4d |
-| docs-build | `docs-mkdocs-material` | `9.8.0` | `9.8.1` | patch | 2026-11-07 | 3d |
-| docs-build | `docs-pymdown-extensions` | `12.3` | `13.0` | major | 2026-11-08 | 2d |
-| examples | `examples-langchain-core` | `1.7.6` | `1.7.7` | patch | 2026-11-10 | 14h |
-| examples | `examples-openai` | `3.46.0` | `3.49.0` | minor | 2026-11-10 | 11h |
-| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.3` | `v1.108.3` | `v1.108.4` | patch | ? | ? |
-| flake | `nixpkgs` | `c56a87d8e41ce69bd2af57eb35dcc117a9dfca33` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | revision | 2026-11-08 | 1d |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 5d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 3d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 11d |
-| host-intel | `compute-runtime` | `26.35.39758.10` | `26.40.40196.8` | minor | 2026-11-03 | 7d |
-| host-intel | `level-zero` | `1.34.0` | `1.35.0` | minor | 2026-10-26 | 14d |
-| host-intel | `linux-tools` | `7.3.1` | `7.3.3` | patch | ? | ? |
-| images | `image:images:busybox:1.37` | `1.37` | `1.38` | line | 2026-10-28 | 12d |
-| images | `image:images:ollama/ollama:0.40.13` | `0.40.13` | `0.40.16` | patch | 2026-11-09 | 19h |
-| k3s | `k3s` | `v1.37.1-k3s1` | `v1.37.2-k3s1` | patch | 2026-11-03 | 7d |
-| nri | `nri-balloons` | `v0.15.0` | `v0.15.1` | patch | ? | ? |
-| nvctk | `nvctk` | `1.20.1-1` | `1.20.2-1` | patch | ? | ? |
-| opt-in-manifests | `agent-sandbox` | `v1.0.8` | `v1.0.10` | patch | 2026-11-06 | 3d |
-| opt-in-manifests | `open-webui` | `v0.12.2` | `v0.13.3` | minor | 2026-11-08 | 1d |
-| packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.11` | `7.0.11` | `7.0.13` | patch | ? | ? |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.4` | `2.35.4` | `2.35.6` | patch | 2026-11-10 | 9h |
-| packaging-images | `packaging-fedora` | `44` | `45` | line | 2026-11-02 | 7d |
-| ppa | `ppa-media` | `26.3.5-1~ppa1` | `26.4.1-1~ppa1` | minor | ? | ? |
-| tools | `ci-chrome` | `157.0.8103.38` | `157.0.8103.50` | patch | ? | ? |
-| vllm-xpu | `vllm-xpu` | `v0.32.0` | `v0.33.0` | minor | 2026-11-02 | 8d |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.5` | `2.35.5` | `2.35.6` | patch | 2026-11-10 | 10h |
 
-### Not resolved (1)
+### Not resolved (2)
 
+- `linux-tools` (host-intel): linux-tools: https://cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc lists no sha256 for linux-7.3.4.tar.xz
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (16)
+## Open bot PRs (3)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #374 | ppa | review | a human approval at the head |
-| #373 | nvctk | auto | - |
-| #372 | flake | review | a human approval at the head |
-| #371 | tools | auto | - |
-| #370 | examples | auto | - |
-| #366 | docs-build | review | a human approval at the head |
-| #365 | nri | auto | - |
-| #357 | vllm-xpu | review | a human approval at the head |
-| #355 | packaging-images | review | a human approval at the head |
-| #354 | opt-in-manifests | review | a human approval at the head |
-| #353 | k3s | auto | - |
-| #352 | images | review | a human approval at the head |
-| #351 | host-intel | review | a human approval at the head |
+| #378 | packaging-images | auto | - |
 | #350 | hf-console-fallback | review | a human approval at the head |
-| #347 | digests | review | a human approval at the head |
 | #346 | cuda-test | review | a human approval at the head |
 
 ## EAT stock (always review)
@@ -97,14 +65,14 @@ A PENDING row's arm pins move only by a dated amendment pushed before it runs. P
 known-issues: 8 issue(s), 12 site(s), 10 marker(s)
 report ledger H54a bench/h54/h54.py: vllm-openai-cpu 0.24.0 is inside vllm-45844's affected range <0.25.0, fixed in 0.25.0 (informational; the ledger changes only by amendment)
 report ledger H53 bench/eatflow/live.sh: vllm-openai-cpu 0.24.0 is inside vllm-45844's affected range <0.25.0, fixed in 0.25.0 (informational; the ledger changes only by amendment)
-report ours console/model_opt.py: vllm 0.32.0 is inside vllm-pr-51493's affected range *, no fixed release known
+report ours console/model_opt.py: vllm 0.33.0 is inside vllm-pr-51493's affected range *, no fixed release known
 report ours scripts/k3d-gpu: linux-npu-driver 1.38.0 is inside linux-npu-driver-56's affected range *, no fixed release known
 report ours examples/kserve/install.sh: kserve 0.21.0 is inside kserve-4592's affected range *, no fixed release known
 report eat-stock integrations/eat/eat-up.sh: enterprise-agent-toolkit release-1.1.0 is inside eat-9's affected range *, no fixed release known
 report eat-stock integrations/eat/gateway-values.yaml: litellm 1.83.14 is inside litellm-1.83.14-advisories's affected range <1.100.4 || >=1.101.0,<1.101.3 || >=1.102.0,<1.102.2 || >=1.103.0,<1.103.1 || >=1.104.0rc1,<1.104.0rc2, fixed in 1.100.4
 report eat-stock examples/agents/litellm-gateway/requirements.txt: litellm 1.83.14 is inside litellm-1.83.14-advisories's affected range <1.100.4 || >=1.101.0,<1.101.3 || >=1.102.0,<1.102.2 || >=1.103.0,<1.103.1 || >=1.104.0rc1,<1.104.0rc2, fixed in 1.100.4
 report eat-stock examples/agents/litellm-gateway/constraints.txt: litellm 1.83.14 is inside litellm-1.83.14-advisories's affected range <1.100.4 || >=1.101.0,<1.101.3 || >=1.102.0,<1.102.2 || >=1.103.0,<1.103.1 || >=1.104.0rc1,<1.104.0rc2, fixed in 1.100.4
-report ours console/model_opt.py: vllm 0.32.0 is inside vllm-0.32-num-spec-tokens's affected range >=0.32.0, no fixed release known
+report ours console/model_opt.py: vllm 0.33.0 is inside vllm-0.32-num-spec-tokens's affected range >=0.32.0, no fixed release known
 known-issues: ok
 
 ## Ledger re-measure queue
@@ -114,7 +82,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | # | Row | Why first | Reason | Suggested row |
 |---|-----|-----------|--------|---------------|
 | 1 | H57dm | ledger-rules (drives optimizer defaults) | llama.cpp b11749 -> b11960 (minor) | H57r |
-| 2 | H6 | cited by a docs claim | rancher/k3s v1.34.1+k3s1 -> v1.37.1-k3s1 (minor) | H6r |
+| 2 | H6 | cited by a docs claim | rancher/k3s v1.34.1+k3s1 -> v1.37.2-k3s1 (minor) | H6r |
 | 3 | H30 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H30r |
 | 4 | H31 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H31r |
 | 5 | H32 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H32r |
@@ -145,7 +113,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.95; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.1-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.32.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.97; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
