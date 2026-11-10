@@ -1,0 +1,4 @@
+== H28w-prep-r2 waiting for the lock 2026-11-07T09:05:37Z
+== H28w-prep-r2 lock taken 2026-11-07T09:05:37Z
+== H28w-prep-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T09:05:37Z
+== H28w-prep-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:06:34Z

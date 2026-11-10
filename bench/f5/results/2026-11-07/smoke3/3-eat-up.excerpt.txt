@@ -1,0 +1,19 @@
+10:containerd CNI bin_dirs ["/usr/bin"] -> istio_platform: k3d (needs overlay 0002) [88plug/k3d-gpu@d997ea8 docs/intel/upstream-eat.md:222]
+11-ServiceLB on (no --disable servicelb in k3s.io/node-args) -> metallb_enabled: false [intel/enterprise-ai-solutions@a051f00 roles/metallb/tasks/install.yaml:23-31]
+13:kubernetes_cpu_policy nri-balloons -> overlay 0003: needed (pins the nri-plugins chart EAS installs unpinned) [intel/enterprise-ai-solutions@a051f00 roles/nri_cpu_balloons/tasks/install_advanced.yaml:197-205]
+14-DaemonSet node-feature-discovery/nfd-worker from k3s addon node-feature-discovery -> nfd_enabled: false (EI would install a second NFD) [intel/enterprise-inference@d035b1e roles/nfd/tasks/install.yaml:15-25]
+32:# overlay at eas@a051f00 (HEAD), kubernetes_cpu_policy=nri-balloons, nodes=1
+33-0002 variant a applies -> apply 0002-eas-istio-global-platform.patch [eas@a051f00 configs/defaults/global_config.yaml:62]
+35:0004 nodes=1, needed only on more than one node -> skip [overlay.json 0004 needed_when=multi_node]
+36:0005 documentation only -> skip [overlay.json 0005 needed_when=never]
+37-0006 variant a does not apply, variant b does -> apply 0006-release-1.2-envoy-control-plane-affinity.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:194]
+40:applied 0002-eas-istio-global-platform.patch 0003-eas-pin-nri-balloons-chart.patch 0006-release-1.2-envoy-control-plane-affinity.patch 0007-release-1.2-istio-keep-newer-gateway-api.patch 0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch to /eas-state/eas
+41-init: env=k3d-gpu  layer=agent-toolkit  →  /eas-state/eas/env/k3d-gpu
+204:        Target: agent-toolkit
+205-        Components: kubernetes, storage, cert_manager, istio, envoy_gateway, postgresql, object_store, seaweedfs, observability, nri_cpu_balloons, envoy_ai_gateway, kserve, litellm, langfuse, llm_services, redis_stack, pgvector, agent_sandbox
+2585:PLAY RECAP *********************************************************************
+2586-localhost                  : ok=550  changed=168  unreachable=0    failed=0    skipped=138  rescued=0    ignored=0   
+2590:│ INSTALLATION COMPLETE                                                              │
+2591-│                                                                                    │
+2592:│ Target:  agent-toolkit                                                             │
+2593-│ Env:     k3d-gpu                                                                   │

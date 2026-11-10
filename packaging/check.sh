@@ -35,7 +35,7 @@ done
 for f in vs.py llm_load.py competitors.lock; do
     test "$(sha256sum < "/src/bench/$f")" = "$(sha256sum < "/usr/share/k3d-gpu/bench/$f")"
 done
-for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eas/patches/ei/* /src/integrations/eat/upstream/patches/*.patch; do
+for f in /src/integrations/eas/* /src/integrations/eas/patches/* /src/integrations/eas/patches/ei/* /src/integrations/eas/patches/eat/* /src/integrations/eat/upstream/patches/*.patch; do
     [ -d "$f" ] || test "$(sha256sum < "$f")" = "$(sha256sum < "/usr/share/k3d-gpu/${f#/src/}")"
 done
 test -x /usr/share/k3d-gpu/integrations/eas/eas.sh

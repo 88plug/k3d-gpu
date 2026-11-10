@@ -603,5 +603,113 @@ got=$(ki_case none '' '[]' | tr '\n' ';')
 if [ -z "${got}" ]; then ok "bot-sweep known-issues: nothing newly fixed, no dispatch"
 else fail "bot-sweep known-issues with nothing to do: ${got}"; fi
 
+# ─── GitHub's "Latest" release ───────────────────────────────────────────────
+# /releases/latest leads users to the packages, so "Latest" is the newest aur-v*
+# package release (.deb, .rpm, SHA256SUMS). An image release (<k3s>-ndp<plugin>,
+# build-and-push.yml) has no assets and never takes it. GitHub marks a new release
+# "Latest" when the call names no flag, so every release a workflow or hack/ script
+# creates names it: make_latest for softprops/action-gh-release, --latest for gh.
+if out=$(python3 - "${ROOT}" <<'PY'
+import glob, os, re, sys, yaml
+root = sys.argv[1]
+bad = []
+for p in sorted(glob.glob(os.path.join(root, ".github", "workflows", "*.yml"))):
+    f = os.path.basename(p)
+    for jn, job in (yaml.safe_load(open(p)).get("jobs") or {}).items():
+        for s in job.get("steps") or []:
+            if str(s.get("uses", "")).startswith("softprops/action-gh-release@"):
+                ml = str((s.get("with") or {}).get("make_latest", "")).lower()
+                if ml not in ("true", "false"):
+                    bad.append("%s/%s: action-gh-release without make_latest" % (f, jn))
+                elif f == "build-and-push.yml" and ml != "false":
+                    bad.append("%s/%s: the image release has make_latest %s" % (f, jn, ml))
+files = glob.glob(os.path.join(root, ".github", "workflows", "*.yml")) + \
+    [p for p in glob.glob(os.path.join(root, "hack", "**", "*"), recursive=True) if os.path.isfile(p)]
+for p in sorted(files):
+    try:
+        text = open(p).read().replace("\\\n", " ")
+    except UnicodeDecodeError:
+        continue
+    for ln in text.splitlines():
+        if re.search(r"\bgh release create\b", ln) and not re.search(r"\s--latest(=|\s|$)", ln):
+            bad.append("%s: gh release create without --latest" % os.path.relpath(p, root))
+print("; ".join(bad))
+sys.exit(1 if bad else 0)
+PY
+); then
+    ok "every release a workflow creates names its Latest flag; the image release has make_latest false"
+else fail "Latest flag: ${out}"; fi
+# packages.yml marks its aur-v release "Latest" when it is the highest aur-v* tag on
+# origin (an older release that publishes late leaves "Latest" alone), on create and
+# on a rerun over an existing release. Run its publish step against a local origin
+# and a fake gh.
+python3 - "${WF}/packages.yml" > "${T}/publish_step.sh" <<'PY'
+import sys, yaml
+steps = yaml.safe_load(open(sys.argv[1]))["jobs"]["deb-rpm"]["steps"]
+print(next(s["run"] for s in steps if s.get("name") == "Publish to the GitHub release"))
+PY
+# $1/origin.git: aur-v0.1.9 and aur-v0.1.10 (sort -V, not sort), an image release
+# tag, and aur-v0.1.10 annotated: ls-remote also lists the highest tag as a peeled
+# refs/tags/aur-v0.1.10^{} line, which must not count as a version.
+release_origin() {
+    (
+        set -e
+        export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+        export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+        git init -q --bare -b main "$1/origin.git"
+        git init -q -b main "$1/seed"
+        cd "$1/seed"
+        git commit -q --allow-empty -m one
+        git tag aur-v0.1.9
+        git commit -q --allow-empty -m two
+        git tag -a -m note aur-v0.1.10
+        git tag v1.37.1-k3s1-ndpv0.20.1
+        git push -q "$1/origin.git" main --tags
+    )
+}
+release_origin "${T}/rel"; rc=$?
+[ "${rc}" -eq 0 ] || fail "packages.yml publish: seeding the local origin exited ${rc}"
+publish_case() {  # publish_case <name> <version> <new|existing> [origin url]: the gh calls made
+    local d="${T}/publish-$1" ver=$2
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 git clone -q "${T}/rel/origin.git" "${d}"
+    [ -z "${4:-}" ] || git -C "${d}" remote set-url origin "$4"
+    mkdir -p "${d}/dist" "${d}/.bin"
+    : > "${d}/dist/k3d-gpu_${ver}-1_all.deb"
+    : > "${d}/dist/k3d-gpu-${ver}-1.noarch.rpm"
+    cat > "${d}/.bin/gh" <<GH
+#!/usr/bin/env bash
+echo "\$*" >> "${d}/calls"
+[ "\$1 \$2" != "release view" ] || [ "$3" = existing ]
+GH
+    chmod +x "${d}/.bin/gh"
+    # GitHub runs a run: block with no shell: key as bash -e (no pipefail).
+    (cd "${d}" && PATH="${d}/.bin:${PATH}" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+        GH_TOKEN=x TAG="aur-v${ver}" VER="${ver}" \
+        bash --noprofile --norc -e "${T}/publish_step.sh" > "${d}/log" 2>&1) || echo "step-failed"
+    grep -v '^release view ' "${d}/calls" 2>/dev/null | sed 's/ --title .*//'
+}
+latest_true='(^| )--latest(=true)?( |$)'
+got=$(publish_case new-highest 0.1.10 new)
+if grep -q '^release create aur-v0.1.10 ' <<< "${got}" && grep -Eq "${latest_true}" <<< "${got}"; then
+    ok "packages.yml: a new release of the highest aur-v* tag is created as Latest"
+else fail "packages.yml new highest release: ${got}"; fi
+got=$(publish_case existing-highest 0.1.10 existing)
+if grep -q '^release upload aur-v0.1.10 .* --clobber$' <<< "${got}" \
+   && grep -Eq "^release edit aur-v0.1.10 --latest(=true)?$" <<< "${got}"; then
+    ok "packages.yml: a rerun over the existing highest release marks it Latest"
+else fail "packages.yml existing highest release: ${got}"; fi
+got=$(publish_case new-older 0.1.9 new)
+if grep -q '^release create aur-v0.1.9 .* --latest=false' <<< "${got}"; then
+    ok "packages.yml: a new release below the highest aur-v* tag is created with --latest=false"
+else fail "packages.yml new older release: ${got}"; fi
+got=$(publish_case existing-older 0.1.9 existing)
+if [ "$(printf '%s' "${got}" | cut -d' ' -f1-3)" = "release upload aur-v0.1.9" ]; then
+    ok "packages.yml: a rerun over an older release uploads and leaves Latest alone"
+else fail "packages.yml existing older release: ${got}"; fi
+got=$(publish_case no-origin 0.1.10 new "${T}/missing.git")
+if [ "${got}" = step-failed ]; then
+    ok "packages.yml: an unreadable origin fails the publish before any release call"
+else fail "packages.yml with an unreadable origin: ${got}"; fi
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

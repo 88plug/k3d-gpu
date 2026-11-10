@@ -1,0 +1,4 @@
+0006 variant a does not apply, variant b does -> apply 0006-release-1.2-envoy-control-plane-affinity.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:194]
+/home/devcloud/k3dgpu-bench/k3d-gpu-f5/integrations/eas/eas.sh: line 118: yq: command not found
+ERROR: configs/repos/repos.agent-toolkit.yaml: global_config is not a map of plain values
+ERROR: the overlay stops at this EAS commit (above); nothing was changed

@@ -79,7 +79,9 @@ EOF
 chmod +x "${WORK}/bin/kubectl"
 STUB_PATH="${WORK}/bin:${PATH}"
 
-run() { env PATH="${STUB_PATH}" K3D_GPU_TUNE_DIR="${WORK}/profiles" "$@"; }
+# TMPDIR inside WORK: the workdirs a real 'tune run' keeps go when the test ends.
+mkdir -p "${WORK}/tmp"
+run() { env PATH="${STUB_PATH}" K3D_GPU_TUNE_DIR="${WORK}/profiles" TMPDIR="${WORK}/tmp" "$@"; }
 
 echo "== fingerprint"
 h1=$(host h1 "13th Gen Intel(R) Core(TM) i9-13900T" 0-15 16-31)
@@ -123,7 +125,10 @@ out=$(envout)
 [ -z "${out}" ] && ok "a tampered profile exports nothing" || bad "tampered profile" "${out}"
 
 echo "== search space from cluster facts"
-out=$(run env K3D_GPU_SYSROOT="${h1}" "${K3D_GPU}" tune space --n0 12 2>&1)
+# A private TMPDIR: 'tune space' and a refused 'tune run' must leave nothing in it.
+space_tmp="${WORK}/space-tmp"
+mkdir -p "${space_tmp}"
+out=$(run env K3D_GPU_SYSROOT="${h1}" TMPDIR="${space_tmp}" "${K3D_GPU}" tune space --n0 12 2>&1)
 if grep -q '^search space: [0-9]* configs on this host; first rung tries 12 + the default' <<< "${out}" \
    && grep -q 'K3D_GPU_AGENT_DEVICE=GPU' <<< "${out}" && grep -q 'K3D_GPU_AGENT_DEVICE=CPU' <<< "${out}" \
    && grep -q 'K3D_GPU_AGENT_CORES=performance' <<< "${out}"; then
@@ -132,6 +137,17 @@ else
     bad "space" "${out}"
 fi
 ! grep -q 'INFERENCE_PRECISION_HINT":"bf16' <<< "${out}" && ok "no bf16 hint on an AVX2 host" || bad "bf16 on AVX2"
+left=$(ls -A "${space_tmp}")
+[ -z "${left}" ] && ok "space leaves no temp dir behind" || bad "space left ${left} in TMPDIR"
+for sub in space run; do
+    out=$(run env K3D_GPU_SYSROOT="${h1}" TMPDIR="${space_tmp}" "${K3D_GPU}" tune "${sub}" --devices NPU 2>&1); rc=$?
+    left=$(ls -A "${space_tmp}")
+    if [ "${rc}" -ne 0 ] && grep -q -- '--devices NPU: the cluster does not schedule it' <<< "${out}" && [ -z "${left}" ]; then
+        ok "a refused 'tune ${sub}' leaves no temp dir behind"
+    else
+        bad "refused 'tune ${sub}' (exit ${rc}, left '${left}')" "${out}"
+    fi
+done
 
 echo "== trials"
 BENCH="${K3D_GPU_BENCH:-${ROOT}/bench}"

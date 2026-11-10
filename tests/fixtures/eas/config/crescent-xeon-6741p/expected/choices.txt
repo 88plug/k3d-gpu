@@ -1,0 +1,27 @@
+# k3d-gpu eas-config: profile release, layer agent-toolkit, cluster k3dgpu-f5-eat
+# eas intel/enterprise-ai-solutions a051f00fcb2dd473fe763610471cd509db82c433
+# ei intel/enterprise-inference d035b1ef1981fbf5084ff05c9a337e620478bb87
+# eat intel/enterprise-agent-toolkit 7b827e2d95cec826a20c7e3f5a30eb4818ed2992
+# each line: <fact> -> <choice> [<source>]; --explain prints each source as a permalink
+cluster k3dgpu-f5-eat, kubeconfig mounted read-only at /kube/config -> existing_kubernetes: /kube/config [intel/enterprise-ai-solutions@a051f00 es_auto_installer.sh:1378-1394]
+containerd CNI bin_dirs ["/usr/bin"] -> istio_platform: k3d (needs overlay 0002) [88plug/k3d-gpu@d997ea8 docs/intel/upstream-eat.md:222]
+ServiceLB on (no --disable servicelb in k3s.io/node-args) -> metallb_enabled: false [intel/enterprise-ai-solutions@a051f00 roles/metallb/tasks/install.yaml:23-31]
+no NRI policy on the node, containerd NRI on -> kubernetes_cpu_policy: nri-balloons (EAS installs the balloons policy) [intel/enterprise-ai-solutions@a051f00 configs/defaults/global_config.yaml:91-96]
+kubernetes_cpu_policy nri-balloons -> overlay 0003: needed (pins the nri-plugins chart EAS installs unpinned) [intel/enterprise-ai-solutions@a051f00 roles/nri_cpu_balloons/tasks/install_advanced.yaml:197-205]
+DaemonSet node-feature-discovery/nfd-worker from k3s addon node-feature-discovery -> nfd_enabled: false (EI would install a second NFD) [intel/enterprise-inference@d035b1e roles/nfd/tasks/install.yaml:15-25]
+node k3d-k3dgpu-f5-eat-server-0 labelled feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -> defaults.require_amx: true [intel/enterprise-inference@d035b1e model_manager/models.yaml:20]
+no --cluster-cidr in k3s.io/node-args -> kubernetes_cluster_cidr: 10.42.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:137-141]
+no --service-cidr in k3s.io/node-args -> kubernetes_service_cidr: 10.43.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:142-146]
+bring-your-own cluster -> kata_containers_enabled: false [intel/enterprise-ai-solutions@a051f00 roles/kata_containers/tasks/install.yaml:9-22]
+EI's model deploy passes the LiteLLM master key through ansible environment: (a /bin/sh -c argument while each model deploys) -> _deploy_litellm_secret: "" (model-manager reads Secret litellm/litellm-master-key itself) [intel/enterprise-inference@d035b1e roles/llm_services/tasks/deploy_models.yaml:231]
+no accelerator resources -> kubernetes_accelerator: cpu [intel/enterprise-ai-solutions@a051f00 configs/defaults/global_config.yaml:98]
+no agent-sandbox CRD -> agent_sandbox_enabled: true (EAT installs agent-sandbox v0.5.0) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:56]
+node memory 503.2 GiB; qwen2-5-coder-14b needs 131 GiB and k3d-gpu fit says it fits -> llm_services_autodeploy_models: [qwen2-5-coder-14b] [intel/enterprise-agent-toolkit@7b827e2 docs/single-node-deployment.md:84]
+k3d-gpu fit Qwen/Qwen2.5-Coder-14B-Instruct --engine vllm --device cpu sizes the KV cache at 64 GiB -> qwen2-5-coder-14b env.VLLM_CPU_KVCACHE_SPACE: 40 as shipped (fit only lowers it: the pod's memory limit is the catalog's 96Gi, not the host) [intel/enterprise-inference@d035b1e model_manager/models.yaml:302-311]
+host CPUs: 96 logical, 2 thread(s) per core, 1 NUMA node(s) -> EAS's balloons policy reserves its 48 SMT siblings (profile siblings); EI's cpu: auto gives qwen2-5-coder-14b about 40 (one NUMA node, less the reserve and Qwen3Guard's 8) [intel/enterprise-ai-solutions@a051f00 roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh:252-270]
+node allocatable 96 CPUs: qwen2-5-coder-14b 40, Qwen3Guard 8, about 14 for the pods outside the balloons (EAT's sandbox router among them) fit -> qwen2-5-coder-14b cpu: auto as shipped [intel/enterprise-inference@d035b1e model_manager/core/nri_policy.py:569-591]
+EAT default -> guardrails_enabled: on (Qwen3Guard, 16 GiB of the budget) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:25-26]
+EAT default -> hybrid_router_enabled: on (2 GiB of the budget) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:27-28]
+pin ei v1.1.0 (profile release) -> repos.agent-toolkit.yaml inference rev: d035b1ef1981fbf5084ff05c9a337e620478bb87 [intel/enterprise-ai-solutions@a051f00 configs/repos/repos.agent-toolkit.yaml:16]
+pin eat release-2.0.0 (profile release) -> repos.agent-toolkit.yaml agent-toolkit rev: 7b827e2d95cec826a20c7e3f5a30eb4818ed2992 [intel/enterprise-ai-solutions@a051f00 configs/repos/repos.agent-toolkit.yaml:25]
+WARN: fs.inotify.max_user_instances 128 < 8192 -> raise on the host: sudo sysctl -w fs.inotify.max_user_instances=8192 [intel/enterprise-agent-toolkit@7b827e2 docs/prerequisites.md:22-32]

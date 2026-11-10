@@ -16,7 +16,8 @@ Kinds (the `source` table of a pins/registry.toml entry)
   hf              model (the main revision; files classified by hf_diff)
   apt-index       url, package, also = [packages that must carry the same version]
   eat             what = tag | image; for image: file, repository (Intel EAT's chart
-                  values at its latest release)
+                  values at its latest release, or with below = <tag> at the newest
+                  stable release below that tag)
   llama           repo; releases/latest vX.Y.Z and the bNNNNN tag built from its commit
   habana          image (vault.habana.ai/gaudi-docker/<ver>/<os>/habanalabs/vllm-*)
   json            url, path (dotted), [regex with group v]: kernel.org releases.json,
@@ -333,11 +334,21 @@ def apt_index(pin, current):
 
 
 EAT_REPO = "intel/enterprise-agent-toolkit"
+EAT_TAG = re.compile(r"^release-\d+\.\d+\.\d+(-[a-z0-9]+)?$")
 
 
-def eat_release():
+def eat_release(below=None):
+    """EAT's latest release, or with below the newest stable release-X.Y.Z under it."""
+    if below:
+        found = {r["tag_name"]: r for r in _gh_releases(EAT_REPO)
+                 if not r.get("prerelease") and not r.get("draft") and EAT_TAG.match(r["tag_name"])
+                 and _below("eat", r["tag_name"], below)}
+        best = _newest("eat", found)
+        if best is None:
+            raise SourceError("EAT has no stable release-X.Y.Z release below %s" % below)
+        return found[best]
     rel = _gh("repos/%s/releases/latest" % EAT_REPO)
-    if rel.get("prerelease") or rel.get("draft") or not re.match(r"^release-\d+\.\d+\.\d+(-[a-z0-9]+)?$", rel["tag_name"]):
+    if rel.get("prerelease") or rel.get("draft") or not EAT_TAG.match(rel["tag_name"]):
         raise SourceError("EAT's latest release %r is not a release-X.Y.Z tag" % rel.get("tag_name"))
     return rel
 
@@ -359,7 +370,7 @@ def values_tag(text, repository):
 
 def eat(pin, current):
     src = pin["source"]
-    rel = eat_release()
+    rel = eat_release(src.get("below"))
     tag = rel["tag_name"]
     if src.get("what", "image") == "tag":
         if not V.is_stable(pin["scheme"], tag):

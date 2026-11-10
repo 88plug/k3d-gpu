@@ -1,0 +1,38 @@
+# gpuread.sh (runs on wildct, detached; N = the hold's NAME, default H28w): wildct amendment R8's one
+# read-only look at H28w's cluster.
+# Waits until the level's two baseline windows are written, then reads the pods, DaemonSets and the
+# node once with the run's scratch kubeconfig. A GPU device plugin pod, or a pod the GPU scan calls
+# DIRTY, stops the hold (TERM to hold.sh, whose cleanup deletes the cluster).
+W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
+N=${N:-H28w}
+O=$W/runs/$N-gpuread; mkdir -p "$O"
+B=$W/runs/$N/out/typical/baseline.jsonl
+K=$W/runs/$N/out/kubeconfig
+log() { echo "$(date -u +%FT%T.%3NZ) $*" >> "$O/log.txt"; }
+log "waiting for 2 baseline windows in $B"
+end=$(( $(date +%s) + 1700 ))
+while :; do
+  [ -f "$B" ] && [ "$(wc -l < "$B")" -ge 2 ] && break
+  [ -f "$W/runs/$N/rc" ] && { log "hold ended (rc $(cat $W/runs/$N/rc)) before the baseline windows: no read"; exit 0; }
+  [ "$(date +%s)" -lt "$end" ] || { log "no baseline windows within 1700 s: no read"; exit 0; }
+  sleep 1
+done
+log "baseline windows written; reading"
+timeout -k 5 30 kubectl --kubeconfig "$K" get pods -A -o json > "$O/pods.json" 2> "$O/pods.err"; log "get pods -o json rc=$?"
+log "read done"
+timeout -k 5 30 kubectl --kubeconfig "$K" get pods -A -o wide > "$O/pods.txt" 2>&1; log "get pods -o wide rc=$?"
+timeout -k 5 30 kubectl --kubeconfig "$K" get ds -A > "$O/ds.txt" 2>&1; log "get ds rc=$?"
+timeout -k 5 30 kubectl --kubeconfig "$K" get node -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{.metadata.labels}{"\n"}{.spec.taints}{"\n"}{.status.allocatable}{"\n"}{end}' > "$O/node.txt" 2>&1; log "get node rc=$?"
+python3 "$R/bench/wildct/gpu_scan.py" < "$O/pods.json" > "$O/gpu-scan.txt" 2>&1; log "gpu_scan rc=$? $(tail -1 "$O/gpu-scan.txt")"
+plug=$(grep -E 'nvidia-device-plugin|intel-gpu|habanalabs|gaudi|intel-npu|intel-dsa|intel-iaa|intel-qat' "$O/pods.txt")
+if [ -n "$plug" ] || grep -q '^GPU-SCAN DIRTY' "$O/gpu-scan.txt"; then
+  log "GPU device plugin pod or GPU-SCAN DIRTY: stopping the hold"
+  log "plugin pods: ${plug:-none}"
+  kill -TERM "$(cat "$W/runs/$N/pid")" 2>> "$O/log.txt"; log "kill rc=$?"
+  echo STOPPED > "$O/verdict.txt"
+elif grep -qx 'GPU-SCAN clean' "$O/gpu-scan.txt"; then
+  echo "clean: no GPU device plugin pod, GPU-SCAN clean" > "$O/verdict.txt"
+else
+  echo "no verdict: the read did not give a scan (see pods.err, gpu-scan.txt)" > "$O/verdict.txt"
+fi
+log "done: $(cat "$O/verdict.txt")"

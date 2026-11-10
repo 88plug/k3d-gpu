@@ -1,0 +1,12 @@
+NAME                     STATUS        AGE
+cert-manager             Terminating   29m
+cnpg-system              Active        28m
+default                  Active        30m
+habana-system            Active        30m
+istio-system             Terminating   29m
+keycloak                 Active        27m
+kube-node-lease          Active        30m
+kube-public              Active        30m
+kube-system              Active        30m
+monitoring               Terminating   27m
+node-feature-discovery   Active        30m

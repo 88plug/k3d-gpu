@@ -1,0 +1,610 @@
+{
+  "agent_sandbox": null,
+  "cluster": "k3dgpu-f5-eat",
+  "containerd_cni_bin_dirs": [
+    "/usr/bin"
+  ],
+  "daemonsets": [
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5STT2/UMBDFvwqac/6wmzTdRkICASegQqzgUvUwsWcTs45t2ZPQ1SrfHTlpy1aibLk5cubNz+/NHAGd+kE+KGugBnQu5OMKEtgrI6GGD0i9NVtiSKAnRomMUB8BjbGMrKwJ8dM2P0lwIM68splAZk2ZsrmKGpA8e29/GfJpO+6hhn0RTm7GVfLqkzLyzTsprTkrYbAnqKHFQapU0qgEpU4PrXpZaXAoYv1+aCgNh8DUw5SAxob0Px/YYeighvXrK7EqRLNpqCjLUoiLy12JVBSbQhZXYl3RqtpVV5dR9B61wwYNamzCU95UzpaH2fJTtqXghC44EpEtkCbB1sdzjyy6z4/YZ3sFmKYEmHqnkWlWOElZ/6/QA5KwhlEZ8gHqmyOoHttYLq3Yk58HwzDp/C9x1atsXWbrtNys3oYO1xdVXWwqqhoS6w2cd0+whwQCicErPry3humOI5LzalSaWpJQsx9oSmC0eujpix0ML5x9PH5FjpHmI/pcqyaPM6GJ8yd9wh+Up9M23U63CRgraXsSy4KboVqenDlPgQxDDRElhum8sjOxxhCuF+Ul6jSKpcIrVgI1JMBWk3/YvZsj0G5HImpd263oSA6a4gLT4dGnx8ZxGVwsjljw8U4FDhCBFysWvc6GexOO4F5mxvS8G1MCg5PItGWPTO0hyvLBxZ+/Wa2Vab/P9zBN0+8AAAD//+PWCKePBAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "gaudi-device-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "objectset.rio.cattle.io/hash": "209c13cb8be3444cc57f4ae3383d39c26e16f697"
+      },
+      "name": "habanalabs-device-plugin-daemonset",
+      "namespace": "habana-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RUXW/jNhD8K8U+y19RbCcCCjRockDRxDHiXl8OQbAiVzZrimTJpS5GoP9eUHZtJ62T3JNEkLM7OzPkC6BTf5IPyhooAJ0Lg2YEGayVkVDANVJtzYIYMqiJUSIjFC+AxlhGVtaEtLTlXyQ4EPe9sn2BzJr6yg5UqgHZyX373ZDvLZs1FLDOw9FOM8p++l0Z+fOVlNZ8WMJgTVCAMky6JwP2nI5L9TlccCgSeB1L6oVNYKqhzUBjSbqbDp37sdorDCsooLo4m5RiKkbVMJ9OqvwCRY7DqszHlzldlmfn4pIm5/lF6nZ6gHcoBkciEQykSbD16b9GFqvbj7i3bQZMtdPI1KGOvP1w8PaoNUa2tY2GF+QbJehKiLT6w67JQFGhDpSBsIZRGfIBim8vQKbpvruZZ/fXN0+zq7sbyKBBHemLt3WqXSnS8oGq/f8cOemaeveNlTRLBdq2fcxA1bjcCzh4S7kY9vNpf/RLWOHZeFLQdDLN5bA8r3AylBfnk3Ja0jCfXo5z2JWaR63nViuxgQJ+q2aW554CGYb3vPIUbPSCOvW0qhV3f8JFKGA0HNbdNaqtT1Un4zuVXPT0d6RwfHL8+uBZdzCJTiJ6xZtfrWF65k5/re33uVeN0rSkmyBQd9fyoD06LJVWrLaspLcOim9wdXsLj113lPdGbx6s5S9K0y5dBftIqeOtMvH53u2vOm9cGn5v6ZOk5PvTVoMnhi1PYWs397ZSmo5QD9GwqumaKoyau5kaq2NNdyk023R0ado5PZDUDGTAg+iSmirAgfaWaJv9D06s0B+AaSWp+QQ2bMKgjOF137AJn+nboB9oVQ7SRdXEg604u4CEQ7ndfrBiTRygfUwZTpFeHF3lLmD9ipCjpy7w/YTzhphCemcSwwISkfRiv9pCLxIhrOXkPFnivLJddDSGMNvPxFT3UuGe8IqVQA3/OrI1Y2XDbrYXcG88ad+YksQ4db7zov2vGacwxx60b0w4hflA+/Yd8dsMopPItGCPTMtNquut1sosv3Yb26f1eRF9emaGWVp8Ndig0limjI/Si7pL+Stg27b/BAAA//+LN+fsZgcAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-dsa-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-dsa-plugin",
+        "objectset.rio.cattle.io/hash": "f826bc7c1f0376f38ac3a0fb3593e9b24c9e6438"
+      },
+      "name": "intel-dsa-plugin",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RUX28iNxD/KtU8LywcC6ErVWp0yalRE4LCXV9O0WmwZ8HFa7v2eO9QtN+98kKB3F1C+sQae34zvz/2E6BTf5EPyhooAZ0LeTOEDDbKSCjhCqm2ZkEMGdTEKJERyidAYywjK2tCWtrl3yQ4EPe9sn2BzJr6yuYqYUD24r79asj3Vs0GStiMwslOM8x++VMZ+dullNachTBYE5SgDJPurVzsOR1X6m11waFIxZu4pF7YBqYa2gw0Lkl37NC5/4e9xrCGEkiOinFFk6qYTkaT8XK0rOQUB9OBeIeykuNKFjT6dSxTt5cJvDJicCTSgIE0CbY+fdfIYn17bva2zYCpdhqZuqoTb88Sb09aY2Rb22h4Qb5Rgi6FSKuPdkMGygp1oAyENYzKkA9Qfn4CMk33u+c8u7+6/jK7vLuGDBrUkT54WyfsSpGWD1QdvufISdfUu2+spFkCaNs2O2D9cb/4+OVm/mYkRo6hv7aBb+YJ6TEDVePqYEX+Pfly0B9d9Ie/hzW+G0/KwaCYFMPlu3FxIcfTakgoBY2nxcWogj3UPGo9t1qJLZRwU80szz0FMgyvue4p2OgFdT5oVSvuvoSLUMJwMKi7C1lbn1CHw/GdSoHw9E+kcHq0eH6y6A4m/0hEr3j73hqmb9xZqbX9OveqUZpWdB0E6u6GH21Eh0ulFavdWNJbB+VnuLy9hceuO8p7o7cP1vIHpWkf1JJ9pK6jsLWbe1sp3YWOty6xf4iGVU1XVGHU3E3XWB1ruktJ2kWmi9jetFxSk0uvjvpJaqoAxwF2LVMsntWFbciFxhBy6etjddiGKuz+OQPQoM+1WubpGmriNIgStDctHBH3+8GKDXGAn+L4aHIhT0gIqVzabx9TClO8FyfXOkF6Q0whPTDoRQLCWk6K5LvzynZuJnazAy2mupeAesIrVgI1/CftTtWU+91MT+B+EHdvz5Xy3RTbe//eU3ov2u+ET/x+BvVc7/ZHwV8qPKNz+5rQL+Ed9X4DrxMv2gyik8i0YI9Mq20C9lZrZVafuo3dq/ttEX16NwZZWnwy2KDSuExJH7aHpg/PCtu2/TcAAP//y72Fy4EHAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-gpu-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-gpu-plugin",
+        "objectset.rio.cattle.io/hash": "ed345fe6f486365b3bfd8a080c2adfd5fd4e395d"
+      },
+      "name": "intel-gpu-plugin",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/6RWW2/jNhP9Kx/mWb7Itux8AhZosN5FF91NjHi3L0WwGJMjmzVFqiSlxA3034uRHF+S2DHaN0nknDOXc0g9ARbqd3JeWQMpYFH4XhVDBGtlJKQwRcqtmVOACHIKKDEgpE+AxtiAQVnj+dUu/iQRPIWuU7YrMARNXWV7ijEgOrluHwy5zrJaQwrroT9YqeLof78pIz9cS2nNuxAGc4IUlAmkO8ui7Dx43Sl0uVSXxfoCBQOsywV1/MYHyqGOQOOCdFMhFsURfovNNGfwV+hXkMIQJyhpIUbZJBsNEzES4yyLxehqMpRjMUCJA5yMB8iMrwo5IjqTqi9IcKKeNIlgHT/nGMTq6yU11HUEgfJCY6Am8mDWFzWhPkgBy2BzW5owJ1cpQddC8Nt3uyYDaYbaUwTCmoDKkPOQ/vEE6Jb8AA3YfQRkqub7th83t9NPP2+uv32CCCrUJX12NmeuTJGWd5TtnmcYuOecS9dYSTcMUNd1tMP69Xb+/eeX2cVIAUPpuyvrw5cZI91HoHJc7sbUe9mQtN8dTrrxL36Fg2Sc9vuj8SheDJLRRCZXWUwoBSVXo8kwgy3UrNR6ZrUSG0jhS3Zjw8yRJxPgpCIgAkfelk5QMxutchWaJ1GUkELc7+eNaXPrGDWOk2+KheLor5L84dbR8c5Rs5HnSaJ0Kmw+WhPoMTSj1do+zJyqlKYlffICdXMK7MeKBS6UVkG1aUlnC57r9devcN+wo7w1enNnbfisNG0FnAZXUsMobF7MnM2UboQYNgVXf1eaoHKaUoalDk12ldVlTt9YWa2EGslth9aTVPWkU/v+SaoyD/sEWkqWxVGc3/ie0Oh9T7p8H+03PvPtl3cAKnQ9rRY9tqemwIkoQduh+T3idt1bsabg4U0cV5qekAdFCKkKXj/Jqqki/Tc5u4/ZfWqpXsc2rXpcHrWK3+t73rozZvVhANHOn6ccsGN7YQKSWX84uRrHMhFjcbWIE5yMMfn/v3LAYZVnTZC88EC/f8oDg+RoZ9I/7YH3JF4820M+y/qc6N9V8n8Zbenb2P3tASk8eK3Vgsd7HwEfkfODK2M9lNxivr34Cl02zeE8+Z+gXJAzFMjzMjrBHJjL8Qjasm3TKXbPzc42gfIOk3SEU0EJ5ETagtta+Vxt032C4pV5t/afKtdkuLl1Hx3xHVW/MDaX/hbUsZ/r14Y+FfiOj+tzRj6Ft/fzBXUdep3yImymiidUn53+W8zHIriA+VkgJ/D258UW6+MK3bRpz/FYtodIHUFZSAw0Dw4DLTcM5qzWyix/NAvtv8rjvHR8pvQjfvlhsEKlccH3QFzvyO6OAuu6/icAAP//EhPYy8MKAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-gpu-wsl-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-gpu-plugin-wsl",
+        "objectset.rio.cattle.io/hash": "3a7adebc4f7f435c4c6ff1c4873d6c2ada2a762a"
+      },
+      "name": "intel-gpu-plugin-wsl",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RUXW/jNhD8K8U+y5Y/zspZQIEGTQ4omjhG3OvLIQjW5MpmTZEqudTFCPTfC9Ku7aTnJH2SCHJmZ3eGfAZs1J/kvLIGSsCm8Xk7hAw2ykgo4QqptmZBDBnUxCiREcpnQGMsIytrfFza5V8k2BP3nbJ9gcya+srmKnJAdnbffjfkeqt2AyVsxv5kpx1mP/2ujPz5Ukpr3qUwWBOUoAyT7inEXqPDSn0M5xsUEbwJS+r5rWeqoctA45J06g6b5v9xr9GvoYTloBpNPo0nk+lkSMW4ENVITIspiWKKg+FAFkKOEQcYq51v4A2JviERBXrSJNi6+F8ji/XNe9q7LgOmutHIlFAn3r7beHdSGgPb2gbDC3KtEnQpRFz9YTdkoKxQe8pAWMOoDDkP5bdnINOm777n2d3V9ePs8vYaMmhRB/ribB25K0Va3lN1+J8jx7nG2n1jJc0iQdd1DxmoGleHAeavJZeD/viiP/zFr3E0KcpiPB1KIcfLUTUW+OnzRXExmQzG9HkygD3VPGg9t1qJLZTwWzWzPHfkyTC85ZUjb4MTlKanVa04/YkmQAnD0aBO16i2LrIWk1sVXXT0dyB/erJ4eXCUDsahkwhO8fZXa5ieOM1fa/t97lSrNK3o2gvU6VoeZ48NLpVWrHaqpLMNlN/g8uYGHlJ1lHdGb++t5S9K0z5dJbtAseKNMuHprjlcdd42sfmDpY+Sou+Puxk8Mux0Cls3c2crpekEdR8Mq5quqMKgOfXUWh1quo2h2aUjpWnvdC6pzRU+HYcuqa08HGXvhHbZD3Bije4IjCtJ7QewfuvzZfC59JjvmvNHGr/1H6nfosu1WubxwmriPc8+KCd0+31vxYbYQ/cQsxyjvTi50ilo/YqQg6MU/H7EOUNMPj2ziFBCFBJf7hdb6EQUhLUsPkVrGqdsipBG72eHnpjqXiTuCadYCdTwrzM7U9bW73t7huaVN90rc+Iwzp1PnnT/NeUc5kdedK/MOId9x4PuDRO6DEIjkWnBDplW28jrrNbKrL6mjd1T+7QILj47gywuvhpsUWlcxswP4wu7T/0LYNd1/wQAAP//dSDzVXYHAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-iaa-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-iaa-plugin",
+        "objectset.rio.cattle.io/hash": "b0f254355951e636cf2c969ec69a010d6cd3aa0a"
+      },
+      "name": "intel-iaa-plugin",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RU0W7jNhD8lWKfZVuyHd9VQIEGTQ4omjhG3OvLIQhW1MpmTZEqudTFCPTvxcqu47hJ3D5ZNLnDmdnhPgM2+g/yQTsLOWDThFGbQQIbbUvI4QqpdnZJDAnUxFgiI+TPgNY6RtbOBlm64k9SHIiHXruhQmZDQ+1GWjAgeXfffbfkB6t2AzlsJuFop82SH37TtvzpsiydPQthsSbIQVsmM7BNHDQmrvR/qwsNKinexIIGYRuYaugSMFiQ6dVh0/w/7DWGNeSQTcfZjD5TNSmykqZFls6KQk1xkmZpmY4/peMfi3E6Hstt7wv4gGJoSAnBQIYUOy/fNbJa35zj3nUJMNWNQaa+6qi3Z4V3R1djZFe7aHlJvtWKLpWS1e9uQxbyCk2gBJSzjNqSD5B/ewaybf+71zy/u7p+nF/eXkMCLZpIX7yrBbvSZMp7qg7fC2TxVe4eWlfSXAC6rntIQNe4Ohg4OqWcp8PJp2H2c1jj+GKWq1JVs2qqZrOxSsuMaEqTSn2eZngBe6hFNGbhjFZbyOHXau544SmQZfioV56Ci15R757Rteb+SzVR4pCmdf+MaucFNcsubrW00dNfkcLx0enrk9P+oLhOKnrN21+cZXrivgHGuO8Lr1ttaEXXQaHp3+WL+dhgoY1mvaNVetdA/g0ub27gob8dyztrtvfO8RdtaB+vnH0kufFG2/h01xzeOm8bUX/o6WNJ0vjHnQmPDDueytXNwrtKGzqquo+WdU1XVGE03GtqnYk13UpqdvHo47Rv9aikdoRKkXnxvaS2CvBCfEe1S04qwzaMlMEQTuvDNlThn//OgLToR0YXI3l4hni007pveHjB3O8HpzbEAboHyaREdHn0NPvADCtCjp76AA+lzltiCjI3bN98ISIT+NUWeiWEsC5nU3G48dr1SRCF84MwpnogwAPlNWuFInFn8M7btQt7bc/Q/Mvi7sRjseOtilNru7e8fa/4jKXdB552CcSmRKYle2RabQXXO2O0XX3tN3YT8GkZvUyDNJHFV4staoOFJDGTwbfP4qvCruv+DgAA//9AS1r5DQcAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-npu-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-npu-plugin",
+        "objectset.rio.cattle.io/hash": "14216e8ef3b1de4b106bbc4a3010d027029b2022"
+      },
+      "name": "intel-npu-plugin",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RUX2/jthP8Kj/ss2xJsS1fBBzwC5ocUDR/jKTXlyIIVuTKYU2RCrnU2Qj03QtKvsTJ5ZLrk0iQM5zdGe0jYKv+IueVNVACtq1PuxwS2CgjoYRTpMaaG2JIoCFGiYxQPgIaYxlZWePj1lb/kGBPPHXKTgUya5oqm6rIAclPz+03Q26y7jZQwmbmD066PPnfH8rIzydSWvMhhcGGoARlmPTkAXnS6rBWv4bzLYoI3oSKJn7nmRroE9BYkR6qw7b9b9z36O+hhDybyTrLskVNx/J4KY5yms2Xn7IaZSbzfLE4LmpZFVl87ecFvCPRtySiQE+aBFsX1w2yuD//SHvfJ8DUtBqZBtSBtx8W3h88jYFtY4PhG3KdEnQiRNz9aTdkoKxRe0pAWMOoDDkP5d+PgG4dFzDZkDOkJ109kU515Pzn+Xa77epkfpQN32LciiJ+4DYBMt1AsW/X5dXp2d3lycUZJNChDvTF2SbKqhVpeU3103qFHC2JsqfGSrqMBH3f3yagGlw/9T59XW2ZTWfLaf5/f49Hi6KcLxf5Mivy4pMsZEZ5llExO85pVlWwp1oFrVdWK7GDEn6vLy2vHHkyDO/Z7Mjb4AQNjdeqUTysRBtikuZZM/yBjXWRdZFdqBgARw+B/OHN5cuL+SJejH6RCE7x7jdrmLY8WKe1/bZyqlOa1nTmBerhj362DVuslFasRlXS2Tb6dnJ+DrfD6yivjN5dW8tflKZ9MEt2geKL58qE7VX7NCV418bin9JwJylG5m7swR3DqFPYpl05WytNB6jrYFg1dEo1Bs1DTZ3VoaGLmLcxWEMQ906nkrq0q5V97rqkTioHz8JHqX3yCul3Ph2jmUqqwvqQoQrr2v8ySxV82gr1TNAKFcE/XO7QpVpVafzBNXE6dmafDv+M3597KzbEHvrbGOCY55uDETCka1oTcnA0pH0acc4Qk4/z6QEZSoiq46R/cYROREHYyGIe/WidskNuNHp/OYoYfZ5E4olwipVADd/tGJ24t35f2yO0rw3pXzsS2/EW4gcj+receA/93YD+LQfeAn1gRP+OE30CoZXIdMMOmda7yOus1sqsvw4H43ze3gQXB06WxM1Xgx0qjVVMex7H8j7vL4B93/8bAAD//16mVcyrBwAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "intel-qat-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "intel-qat-plugin",
+        "objectset.rio.cattle.io/hash": "103df0005fe9d97c21e34780fad0d115596fdb60"
+      },
+      "name": "intel-qat-plugin",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/5RUYY/iNhD9K9V8DiTAhbuLVKmoRyVUyp3g2i+n1WriTIKLY7v2JAdC+e+VE5aC1KVb8QE7nnl5781zzoBW/kHOS6MhA7TWx+0EIjhIXUAGn5Bqo3fEEEFNjAUyQnYG1NowsjTah63J/yTBnnjspBkLZFY0liaWAQOiV8/Nd01uVLUHyOAw8zcn7ST64Vepix8XRWH0f0JorAky0K0sJI4KaqWgkVVNJd/W6y2KAHBochr5k2eqoYtAYU7qocI9+j1kkKd5miTJbJpS+T4p89m8TN/RbF4S4cdZ+o6Qph9EkQTQB1xHRe+37/1+wMtbEoGVJ0WCjQvrGlns11fCD9/ioesiYKqtQqa++2a46v+AvFDBspRa8qlvMwUtbvaO/mqko+JT46SudmJPRaOkrlaVNtfHyyOJhvscDgi7i7iv5GoP2beLxOXROvJ+iN63MxzodKU4FqaOK9uMQwnp4KKx5LC3CDaGVyEOLaqGQjOUqDzBUxd+QYwwmlFqcgM06bb/v9jwy2K1fv68eV5tVl+fl9vt5+0LGGQXqO4pAlljNbgmXIjIQC0+fPD3DmZtMp4m48lPfo/TdJ5N34tJPk3TGc4/JgJn8Dgqgh1E4Ek0TvLpZ6OZjtxPQinz/YuTrVRU0dILVDj42nOMQKDFXCrJkvopF87Y4MZivYanYENrVFPTb6bRfDE+LL8gh6jHLbpYyTwOmVTE8R0t/w/r+1sYPI7AOml6ugq93wx1Q6xHYeQj4SRLgQoicI1mWdNt5eADRMBGhaleM0BlSYL7EV/SReEb9i/JuE/E8ig9+35qg+YBbm/8Re0Z7NtUd6/L7iJobIFMO3bIVPVXgk82FG+NChfh9/4cuq77OwAA////AqwjkQUAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "nvidia-device-plugin",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "objectset.rio.cattle.io/hash": "b5b5000325ef70fb36f54e36feea9354eae28cd0"
+      },
+      "name": "nvidia-device-plugin-daemonset",
+      "namespace": "kube-system"
+    },
+    {
+      "annotations": {
+        "deprecated.daemonset.template.generation": "1",
+        "objectset.rio.cattle.io/applied": "H4sIAAAAAAAA/7SWbW/bNhDHv8pwryU/xHFqCxiwoG62YoljtHt4URgDTZ4szhSp8ShlXqHvPpxkJW4idw62vaOPvN898H+UP4Mo9C/oSTsLCYiioGE1hgh22ipIYCEwd/YjBoggxyCUCAKSzyCsdUEE7SzxT7f5HWUgDAOv3UCKEAwOtBtqZkB0ct89WPTxttpBArsJHe1U4+ibH7VV314r5ew/IqzIERKwTmGcogilx1hpkq5Cvz/LmwohGbErNxjTngLmUEdgxAZNU6MoCo6Qqq/gMkEZJLAZTcV8Msb0zUxcjuZvRDqajuZqOk0vLy7HM3U1T2dqMplwgC7zVMUPzu/QQ2vr8jlRUh0BFSg5MUKDMjjP61wEmd2+zLlj13UEAfPCiIDN+aM77Sn12K0LJ50NQlv0BMkn/pnngrXy6dhhHQHaqjlwKHB5v3j32/L67h1EUAlT4o13OfNSjUZ9wPRxvRKBm8jxBlz9kgF1XUePrNX94lWorsqB7UX9/H7xalKpFYPWEehcbJnkcasp+P1gNyPWgk3VsP/ykmo0uBgNxt9RJi6mV8lVKqdyDgfUqjRm5YyWe0jgfbp0YeWR0PIIGl2hRaKVd5vm/rIQiu8x8LJoMxxmKEzI/oIICucDJM0Z1ou2OmhhFmjE/iNKZxVBMh5FUKDXTh2ZTsiSed2lHzSwakLMRrPRo0sbbh2BR6H0F9mmQpvS40+ZR8qcUW34f13DtL8Ej+RKL7GRtNG5DtRKPneeezsdX9xpaA7+USK1u7IoeStv3rvDwatLPscjgLL0OuzfOhvwzyZjYYx7WHldaYNbfEdSmOZZhCQVhjACKQqx0UYH3SaivCt4WK5vb2Fdt126t2b/wblwow0enp4k+BIj8KW9pqWzvNva6ggqZ8oc71xpD9eR83LV9c5RiDd8/ulKjkxdvI7W541BPnN2FHs0KAjPRNCeniFayzm+hXdySA+ieI7gjbjbOIdUkh8avXmGKcnHrfUcxkv/s3wxyCF/S7zFgHTiJRgeLDRQw6cgnTFW/1EY6JnnWDqbvuSveXKVpccX6K0pKaC/0Z7CrzpkPzgKy+b/AKGvtMRrKTmhZc+D0Qq11Sh3rk36acx3ExVvi7Lp8/Cgz7AvmLPQvvmo7e/9W4/8tap75Mzt6AMfKag+KaFTzl9k1Y7CuUkdjckpOo9B/XIyzkqmFd65yXQy/x/QX8O+Xvh1n/IZzxLV2ztRML9fwXG+S8N8Nn+TXfX+m2plXq/ruq7/DgAA//+W2q497QoAAA",
+        "objectset.rio.cattle.io/id": "",
+        "objectset.rio.cattle.io/owner-gvk": "k3s.cattle.io/v1, Kind=Addon",
+        "objectset.rio.cattle.io/owner-name": "node-feature-discovery",
+        "objectset.rio.cattle.io/owner-namespace": "kube-system"
+      },
+      "labels": {
+        "app": "nfd",
+        "objectset.rio.cattle.io/hash": "b05a931ef78a4097af0509d55f42418d69f8d333"
+      },
+      "name": "nfd-worker",
+      "namespace": "node-feature-discovery"
+    }
+  ],
+  "docker_rootless": false,
+  "fit": {
+    "Qwen/Qwen2.5-Coder-14B-Instruct": {
+      "arch": "qwen2",
+      "card_bytes": [],
+      "ckpt_bytes": 0,
+      "ctx": 32768,
+      "degraded": false,
+      "dram_tok_s": null,
+      "engine": "vllm",
+      "explain": [
+        "model Qwen/Qwen2.5-Coder-14B-Instruct: safetensors (qwen2) weights, 27.5 GiB to serve",
+        "  embed    1.5 GiB (lookup table)",
+        "  lm_head  1.5 GiB",
+        "  other    24.6 GiB",
+        "context cap: 32768 (max_position_embeddings)",
+        "host RAM: MemTotal 503.3 GiB, MemAvailable 482.3 GiB (others already hold 21.0 GiB)",
+        "host reserve = max(10% x MemTotal, 4.0 GiB) = 50.3 GiB",
+        "host budget = 482.3 GiB - 50.3 GiB = 432.0 GiB",
+        "GPUs:",
+        "  card1 (0000:12:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.2 GiB",
+        "  card2 (0000:48:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "  card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "  card4 (0000:96:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)",
+        "engine vllm: vllm: architecture qwen2 not checked",
+        "  KV cache (2 B per element):",
+        "    full attention: 48 layers x 2 (K, V) x 8 kv heads x 128 head dim x 2 B = 196608 B/token",
+        "placements, target: 4 seqs at >= 32768 tokens:",
+        "  vllm/cpu: FITS",
+        "    host budget / 1.10 slack 391.7 GiB - weights 27.5 GiB - activations 0.1 GiB - runtime 6.0 GiB = 358.2 GiB for KV",
+        "    KV: 59 seqs x 6144.0 MiB at 32768 tokens = 354.0 GiB",
+        "k8s: memory request = limit = ceil(387.6 GiB x 1.10) = 427Gi",
+        "guard rungs (seqs x context): 59x32768, 29x32768, 14x32768, 7x32768, 3x32768, 1x32768, 1x16384, 1x8192, 1x4096",
+        "engine flags: --max-model-len=32768 --max-num-seqs=59 VLLM_CPU_KVCACHE_SPACE=354"
+      ],
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=59",
+        "VLLM_CPU_KVCACHE_SPACE=354"
+      ],
+      "format": "safetensors",
+      "gpu_bytes": 0,
+      "gpus": 0,
+      "guard": {
+        "calm_samples": 60,
+        "calm_some_avg60": 5.0,
+        "cooldown_samples": 12,
+        "emergency_samples": 3,
+        "full_avg10": 5.0,
+        "host_bytes": 416146180096,
+        "mem_available_floor": 27021677772,
+        "placement": "cpu",
+        "rung_kv_bytes": [
+          380104605696,
+          186831077376,
+          90194313216,
+          45097156608,
+          19327352832,
+          6442450944,
+          3221225472,
+          2147483648,
+          1073741824
+        ],
+        "rung_memory_limit": [
+          "427Gi",
+          "229Gi",
+          "130Gi",
+          "84Gi",
+          "57Gi",
+          "44Gi",
+          "41Gi",
+          "40Gi",
+          "39Gi"
+        ],
+        "rungs": [
+          [
+            59,
+            32768
+          ],
+          [
+            29,
+            32768
+          ],
+          [
+            14,
+            32768
+          ],
+          [
+            7,
+            32768
+          ],
+          [
+            3,
+            32768
+          ],
+          [
+            1,
+            32768
+          ],
+          [
+            1,
+            16384
+          ],
+          [
+            1,
+            8192
+          ],
+          [
+            1,
+            4096
+          ]
+        ],
+        "some_avg10": 20.0
+      },
+      "host_bytes": 416146180096,
+      "host_reserve": 54043355545,
+      "k8s": {
+        "memory_limit": "427Gi",
+        "memory_request": "427Gi"
+      },
+      "kv_bytes": 380104605696,
+      "model": "Qwen/Qwen2.5-Coder-14B-Instruct",
+      "note": "vllm: architecture qwen2 not checked",
+      "placement": "cpu",
+      "schema": "k3d-gpu.fit/v1",
+      "seqs": 59,
+      "source": "Qwen/Qwen2.5-Coder-14B-Instruct@aedcc2d42b622764e023cf882b6652e646b95671",
+      "summary": "fit: Qwen/Qwen2.5-Coder-14B-Instruct on CPU (AMX) via vllm, context 32768 x 59 seqs, host 387.6 GiB (pod limit 427Gi), host reserve 50.3 GiB",
+      "tp": 1,
+      "weight_bytes": 29540067328
+    },
+    "Qwen/Qwen2.5-Coder-7B-Instruct": {
+      "arch": "qwen2",
+      "card_bytes": [],
+      "ckpt_bytes": 0,
+      "ctx": 32768,
+      "degraded": false,
+      "dram_tok_s": null,
+      "engine": "vllm",
+      "explain": [
+        "model Qwen/Qwen2.5-Coder-7B-Instruct: safetensors (qwen2) weights, 14.2 GiB to serve",
+        "  embed    1.0 GiB (lookup table)",
+        "  lm_head  1.0 GiB",
+        "  other    12.2 GiB",
+        "context cap: 32768 (max_position_embeddings)",
+        "host RAM: MemTotal 503.3 GiB, MemAvailable 482.3 GiB (others already hold 21.0 GiB)",
+        "host reserve = max(10% x MemTotal, 4.0 GiB) = 50.3 GiB",
+        "host budget = 482.3 GiB - 50.3 GiB = 432.0 GiB",
+        "GPUs:",
+        "  card1 (0000:12:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.2 GiB",
+        "  card2 (0000:48:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "  card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "  card4 (0000:96:00.0): VRAM 31.9 GiB, in use 0.0 GiB; reserve max(5%, 1.0 GiB) = 1.6 GiB; budget 30.3 GiB",
+        "CPU: Intel(R) Xeon(R) 6741P, AMX; DRAM bandwidth unknown, unknown (no STREAM run cached; SMBIOS needs root)",
+        "engine vllm: vllm: architecture qwen2 not checked",
+        "  KV cache (2 B per element):",
+        "    full attention: 28 layers x 2 (K, V) x 4 kv heads x 128 head dim x 2 B = 57344 B/token",
+        "placements, target: 4 seqs at >= 32768 tokens:",
+        "  vllm/cpu: FITS",
+        "    host budget / 1.10 slack 391.7 GiB - weights 14.2 GiB - activations 0.1 GiB - runtime 6.0 GiB = 371.4 GiB for KV",
+        "    KV: 212 seqs x 1792.0 MiB at 32768 tokens = 371.0 GiB",
+        "k8s: memory request = limit = ceil(391.3 GiB x 1.10) = 431Gi",
+        "guard rungs (seqs x context): 212x32768, 106x32768, 53x32768, 26x32768, 13x32768, 6x32768, 3x32768, 1x32768, 1x16384, 1x8192, 1x4096",
+        "engine flags: --max-model-len=32768 --max-num-seqs=212 VLLM_CPU_KVCACHE_SPACE=371"
+      ],
+      "fits": true,
+      "flags": [
+        "--max-model-len=32768",
+        "--max-num-seqs=212",
+        "VLLM_CPU_KVCACHE_SPACE=371"
+      ],
+      "format": "safetensors",
+      "gpu_bytes": 0,
+      "gpus": 0,
+      "guard": {
+        "calm_samples": 60,
+        "calm_some_avg60": 5.0,
+        "cooldown_samples": 12,
+        "emergency_samples": 3,
+        "full_avg10": 5.0,
+        "host_bytes": 420111928320,
+        "mem_available_floor": 27021677772,
+        "placement": "cpu",
+        "rung_kv_bytes": [
+          398358216704,
+          199715979264,
+          99857989632,
+          49392123904,
+          24696061952,
+          11811160064,
+          6442450944,
+          2147483648,
+          1073741824,
+          1073741824,
+          1073741824
+        ],
+        "rung_memory_limit": [
+          "431Gi",
+          "227Gi",
+          "125Gi",
+          "73Gi",
+          "48Gi",
+          "35Gi",
+          "29Gi",
+          "25Gi",
+          "24Gi",
+          "24Gi",
+          "24Gi"
+        ],
+        "rungs": [
+          [
+            212,
+            32768
+          ],
+          [
+            106,
+            32768
+          ],
+          [
+            53,
+            32768
+          ],
+          [
+            26,
+            32768
+          ],
+          [
+            13,
+            32768
+          ],
+          [
+            6,
+            32768
+          ],
+          [
+            3,
+            32768
+          ],
+          [
+            1,
+            32768
+          ],
+          [
+            1,
+            16384
+          ],
+          [
+            1,
+            8192
+          ],
+          [
+            1,
+            4096
+          ]
+        ],
+        "some_avg10": 20.0
+      },
+      "host_bytes": 420111928320,
+      "host_reserve": 54043355545,
+      "k8s": {
+        "memory_limit": "431Gi",
+        "memory_request": "431Gi"
+      },
+      "kv_bytes": 398358216704,
+      "model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+      "note": "vllm: architecture qwen2 not checked",
+      "placement": "cpu",
+      "schema": "k3d-gpu.fit/v1",
+      "seqs": 212,
+      "source": "Qwen/Qwen2.5-Coder-7B-Instruct@c03e6d358207e414f1eca0bb1891e29f1db0e242",
+      "summary": "fit: Qwen/Qwen2.5-Coder-7B-Instruct on CPU (AMX) via vllm, context 32768 x 212 seqs, host 391.3 GiB (pod limit 431Gi), host reserve 50.3 GiB",
+      "tp": 1,
+      "weight_bytes": 15231233024
+    },
+    "meta-llama/Llama-3.1-8B-Instruct": null
+  },
+  "host": {
+    "cpu": {
+      "logical": 96,
+      "numa_nodes": 1,
+      "threads_per_core": 2
+    },
+    "inotify_max_user_instances": 8192,
+    "inotify_max_user_watches": 1048576,
+    "mem_available_kib": 505706460
+  },
+  "namespaces": [
+    "default",
+    "habana-system",
+    "kube-node-lease",
+    "kube-public",
+    "kube-system",
+    "node-feature-discovery"
+  ],
+  "nodes": [
+    {
+      "allocatable": {
+        "cpu": "96",
+        "ephemeral-storage": "3538173550480",
+        "gpu.intel.com/xe": "4",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "527767144Ki",
+        "pods": "110"
+      },
+      "annotations": {
+        "alpha.kubernetes.io/provided-node-ip": "172.19.0.2",
+        "flannel.alpha.coreos.com/backend-data": "{\"VNI\":1,\"VtepMAC\":\"96:aa:23:f8:11:4d\"}",
+        "flannel.alpha.coreos.com/backend-type": "vxlan",
+        "flannel.alpha.coreos.com/kube-subnet-manager": "true",
+        "flannel.alpha.coreos.com/public-ip": "172.19.0.2",
+        "k3s.io/hostname": "k3d-k3dgpu-f5-eat-server-0",
+        "k3s.io/internal-ip": "172.19.0.2",
+        "k3s.io/node-args": "[\"server\",\"--disable\",\"traefik\",\"--disable\",\"intel-gpu-dra\",\"--disable\",\"nri-balloons\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETIBT=true\",\"--node-label\",\"nvidia.com/gpu.present=false\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.GFNI=true\",\"--node-label\",\"experimental.k3d-gpu.io/dra=true\",\"--node-label\",\"experimental.k3d-gpu.io/image-volume=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512F=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true\",\"--node-label\",\"gpu.intel.com/media-vecs=2\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.SHA=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXTILE=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.CETSS=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512BF16=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AVXVNNI=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXINT8=true\",\"--node-label\",\"gpu.intel.com/xmx=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.VAES=true\",\"--node-label\",\"feature.node.kubernetes.io/cpu-cpuid.AMXFP16=true\",\"--node-label\",\"gpu.intel.com/media-vcs=2\",\"--tls-san\",\"0.0.0.0\"]",
+        "k3s.io/node-config-hash": "ZI4GP5LMVU2JLDWYG474MYZAOD2JJF5MLRIE3I4QWEQA3VW3KEJA====",
+        "k3s.io/node-env": "{\"K3S_KUBECONFIG_OUTPUT\":\"/output/kubeconfig.yaml\",\"K3S_TOKEN\":\"********\"}",
+        "nfd.node.kubernetes.io/feature-labels": "cpu-cpuid.ADX,cpu-cpuid.AESNI,cpu-cpuid.AVX,cpu-cpuid.AVX10_128,cpu-cpuid.AVX10_256,cpu-cpuid.AVX10_512,cpu-cpuid.AVX10_VERSION,cpu-cpuid.AVX2,cpu-cpuid.AVX512BITALG,cpu-cpuid.AVX512BW,cpu-cpuid.AVX512CD,cpu-cpuid.AVX512DQ,cpu-cpuid.AVX512FP16,cpu-cpuid.AVX512IFMA,cpu-cpuid.AVX512VBMI,cpu-cpuid.AVX512VBMI2,cpu-cpuid.AVX512VL,cpu-cpuid.AVX512VPOPCNTDQ,cpu-cpuid.BHI_CTRL,cpu-cpuid.CLDEMOTE,cpu-cpuid.CMPSB_SCADBS_SHORT,cpu-cpuid.CMPXCHG8,cpu-cpuid.ENQCMD,cpu-cpuid.FLUSH_L1D,cpu-cpuid.FMA3,cpu-cpuid.FSRM,cpu-cpuid.FXSR,cpu-cpuid.FXSROPT,cpu-cpuid.HRESET,cpu-cpuid.IA32_ARCH_CAP,cpu-cpuid.IA32_CORE_CAP,cpu-cpuid.IBPB,cpu-cpuid.IDPRED_CTRL,cpu-cpuid.LAHF,cpu-cpuid.MCDT_NO,cpu-cpuid.MD_CLEAR,cpu-cpuid.MOVBE,cpu-cpuid.MOVDIR64B,cpu-cpuid.MOVDIRI,cpu-cpuid.MOVSB_ZL,cpu-cpuid.OSXSAVE,cpu-cpuid.PCONFIG,cpu-cpuid.PMU_FIXEDCOUNTER_CYCLES,cpu-cpuid.PMU_FIXEDCOUNTER_INSTRUCTIONS,cpu-cpuid.PMU_FIXEDCOUNTER_REFCYCLES,cpu-cpuid.PMU_FIXEDCOUNTER_TOPDOWN_SLOTS,cpu-cpuid.PREFETCHI,cpu-cpuid.PSFD,cpu-cpuid.RRSBA_CTRL,cpu-cpuid.SERIALIZE,cpu-cpuid.SPEC_CTRL_SSBD,cpu-cpuid.STIBP,cpu-cpuid.STOSB_SHORT,cpu-cpuid.SYSCALL,cpu-cpuid.SYSEE,cpu-cpuid.TME,cpu-cpuid.TSXLDTRK,cpu-cpuid.VMX,cpu-cpuid.VPCLMULQDQ,cpu-cpuid.WAITPKG,cpu-cpuid.WBNOINVD,cpu-cpuid.X86_64_V1,cpu-cpuid.X86_64_V2,cpu-cpuid.X86_64_V3,cpu-cpuid.X86_64_V4,cpu-cpuid.X87,cpu-cpuid.XGETBV1,cpu-cpuid.XSAVE,cpu-cpuid.XSAVEC,cpu-cpuid.XSAVEOPT,cpu-cpuid.XSAVES,cpu-cstate.enabled,cpu-hardware_multithreading,cpu-model.family,cpu-model.hypervisor,cpu-model.id,cpu-model.vendor_id,cpu-pstate.scaling_governor,cpu-pstate.status,cpu-pstate.turbo,gpu.intel.com/device-id.0300-e223.count,gpu.intel.com/device-id.0300-e223.present,gpu.intel.com/family,gpu.intel.com/product,intel.feature.node.kubernetes.io/gpu,kernel-config.NO_HZ,kernel-config.NO_HZ_FULL,kernel-version.full,kernel-version.major,kernel-version.minor,kernel-version.revision,memory-nv.present,pci-0300_1a03.present,pci-0300_8086.present,pci-0300_8086.sriov.capable,pci-0b40_8086.present,pci-0b40_8086.sriov.capable,storage-nonrotationaldisk,system-os_release.ID,system-os_release.VERSION_ID,system-os_release.VERSION_ID.major,system-os_release.VERSION_ID.minor",
+        "node.alpha.kubernetes.io/ttl": "0",
+        "volumes.kubernetes.io/controller-managed-attach-detach": "true"
+      },
+      "labels": {
+        "beta.kubernetes.io/arch": "amd64",
+        "beta.kubernetes.io/instance-type": "k3s",
+        "beta.kubernetes.io/os": "linux",
+        "experimental.k3d-gpu.io/dra": "true",
+        "experimental.k3d-gpu.io/image-volume": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.ADX": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AESNI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXBF16": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXFP16": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXINT8": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AMXTILE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX10_128": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX10_256": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX10_512": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX10_VERSION": "1",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX2": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512BF16": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512BITALG": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512BW": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512CD": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512DQ": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512F": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512FP16": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512IFMA": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512VBMI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512VBMI2": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512VL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512VNNI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVX512VPOPCNTDQ": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.AVXVNNI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.BHI_CTRL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.CETIBT": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.CETSS": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.CLDEMOTE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.CMPSB_SCADBS_SHORT": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.CMPXCHG8": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.ENQCMD": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.FLUSH_L1D": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.FMA3": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.FSRM": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.FXSR": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.FXSROPT": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.GFNI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.HRESET": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.IA32_ARCH_CAP": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.IA32_CORE_CAP": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.IBPB": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.IDPRED_CTRL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.LAHF": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MCDT_NO": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MD_CLEAR": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MOVBE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MOVDIR64B": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MOVDIRI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.MOVSB_ZL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.OSXSAVE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PCONFIG": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_CYCLES": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_INSTRUCTIONS": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_REFCYCLES": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PMU_FIXEDCOUNTER_TOPDOWN_SLOTS": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PREFETCHI": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.PSFD": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.RRSBA_CTRL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.SERIALIZE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.SHA": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.SPEC_CTRL_SSBD": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.STIBP": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.STOSB_SHORT": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.SYSCALL": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.SYSEE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.TME": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.TSXLDTRK": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.VAES": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.VMX": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.VPCLMULQDQ": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.WAITPKG": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.WBNOINVD": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.X86_64_V1": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.X86_64_V2": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.X86_64_V3": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.X86_64_V4": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.X87": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.XGETBV1": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.XSAVE": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.XSAVEC": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.XSAVEOPT": "true",
+        "feature.node.kubernetes.io/cpu-cpuid.XSAVES": "true",
+        "feature.node.kubernetes.io/cpu-cstate.enabled": "true",
+        "feature.node.kubernetes.io/cpu-hardware_multithreading": "true",
+        "feature.node.kubernetes.io/cpu-model.family": "6",
+        "feature.node.kubernetes.io/cpu-model.hypervisor": "none",
+        "feature.node.kubernetes.io/cpu-model.id": "173",
+        "feature.node.kubernetes.io/cpu-model.vendor_id": "Intel",
+        "feature.node.kubernetes.io/cpu-pstate.scaling_governor": "performance",
+        "feature.node.kubernetes.io/cpu-pstate.status": "active",
+        "feature.node.kubernetes.io/cpu-pstate.turbo": "true",
+        "feature.node.kubernetes.io/kernel-config.NO_HZ": "true",
+        "feature.node.kubernetes.io/kernel-config.NO_HZ_FULL": "true",
+        "feature.node.kubernetes.io/kernel-version.full": "7.0.0-31-generic",
+        "feature.node.kubernetes.io/kernel-version.major": "7",
+        "feature.node.kubernetes.io/kernel-version.minor": "0",
+        "feature.node.kubernetes.io/kernel-version.revision": "0",
+        "feature.node.kubernetes.io/memory-nv.present": "true",
+        "feature.node.kubernetes.io/pci-0300_1a03.present": "true",
+        "feature.node.kubernetes.io/pci-0300_8086.present": "true",
+        "feature.node.kubernetes.io/pci-0300_8086.sriov.capable": "true",
+        "feature.node.kubernetes.io/pci-0b40_8086.present": "true",
+        "feature.node.kubernetes.io/pci-0b40_8086.sriov.capable": "true",
+        "feature.node.kubernetes.io/storage-nonrotationaldisk": "true",
+        "feature.node.kubernetes.io/system-os_release.ID": "ubuntu",
+        "feature.node.kubernetes.io/system-os_release.VERSION_ID": "26.04",
+        "feature.node.kubernetes.io/system-os_release.VERSION_ID.major": "26",
+        "feature.node.kubernetes.io/system-os_release.VERSION_ID.minor": "04",
+        "gpu.intel.com/device-id.0300-e223.count": "4",
+        "gpu.intel.com/device-id.0300-e223.present": "true",
+        "gpu.intel.com/family": "B_Series",
+        "gpu.intel.com/media-vcs": "2",
+        "gpu.intel.com/media-vecs": "2",
+        "gpu.intel.com/product": "Arc_Pro_B70",
+        "gpu.intel.com/xmx": "true",
+        "intel.feature.node.kubernetes.io/gpu": "true",
+        "kubernetes.io/arch": "amd64",
+        "kubernetes.io/hostname": "k3d-k3dgpu-f5-eat-server-0",
+        "kubernetes.io/os": "linux",
+        "node-role.kubernetes.io/control-plane": "true",
+        "node.kubernetes.io/instance-type": "k3s",
+        "nvidia.com/gpu.present": "false"
+      },
+      "name": "k3d-k3dgpu-f5-eat-server-0"
+    }
+  ],
+  "nri_socket": true,
+  "schema": "k3d-gpu.eas-facts/v1",
+  "server_version": "v1.37.1+k3s1"
+}

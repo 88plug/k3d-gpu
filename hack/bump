@@ -222,6 +222,12 @@ def hook_render_latest(root, ctx):
                     if s["file"].startswith("hack/components/")})
     sh(root, os.path.join(root, "hack", "render-component"), "--latest", *names, capture=False,
        env=dict(os.environ, RENDER_ROOT=root))
+    # each component's OUTPUT is this bump's file too: the lock hook scopes images.lock to it
+    for name in names:
+        with open(os.path.join(root, "hack", "components", name, "component.conf"), encoding="utf-8") as f:
+            m = re.search(r"^OUTPUT=(\S+)$", f.read(), re.M)
+        if m:
+            ctx["touched"].add(m.group(1).strip("\"'"))
 
 
 def hook_ppa_write(root, ctx):
