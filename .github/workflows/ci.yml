@@ -243,6 +243,8 @@ jobs:
       - run: tests/bench_test.sh
       - run: tests/autoquant_test.sh
       - run: tests/bench_vs_test.sh
+      # F3's reproduce runner (F3 note N1): one lock on a lasting path; lockrun.sh stays the record.
+      - run: tests/f3_reproduce_test.sh
 
   fit-tests:
     name: k3d-gpu fit and guard tests
