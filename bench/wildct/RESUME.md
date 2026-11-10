@@ -149,9 +149,11 @@ passes.
 - **H57wb's start gates were met on 2026-11-07** (`/` 207 GB available, MemAvailable 114.5 GiB,
   at step 1), not a reading of the row. If they still are at step 6's row 7, the pack stops there:
   H57wb has no runner on this host.
-- **Not in this pack: H59w** (H59 amendment R1; `row.sh h59w` and `row.sh h59w-prep`).
-  `h59w-prep` has not run on wildct, and `row.sh h59w` has no path for the wiring smoke that
-  amendment R1 runs before a row's first hold (amendment R6).
+- **Not in this pack: H59w** (H59 amendments R1 and R5; `row.sh h59w` and `row.sh h59w-prep`).
+  H59 amendment R5 records where H59w sits: outside this pack's order, its holds counted against
+  H59's cap of 6 per row and not against the 12 here. Its wiring smoke is `row.sh h59w smoke`.
+  The archive on wildct (`repo-fd822b337155`, rule W7) predates that path, so R5 writes out the
+  smoke's command for that archive. Holds 1 to 4 run as R1 registers them.
 
 ## Ground rules (W1-W8; this pack adds none)
 

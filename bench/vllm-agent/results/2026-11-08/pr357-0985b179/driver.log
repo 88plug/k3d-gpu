@@ -1,0 +1,25 @@
+2026-11-08T06:23:01Z [pr357-0985b179] launcher /home/devcloud/k3dgpu-bench/k3d-gpu-pr357-0985b179/scripts/k3d-gpu: k3d-gpu 0.1.95
+2026-11-08T06:23:01Z [pr357-0985b179] vram pre: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-08T06:23:50Z [pr357-0985b179] up rc=0 in 49 s
+2026-11-08T06:23:50Z [pr357-0985b179] kubeconfig /home/devcloud/.local/state/k3d-gpu/kubeconfig-gpu
+2026-11-08T06:23:50Z [pr357-0985b179] allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+2026-11-08T06:28:08Z [pr357-0985b179] agent up rc=0 in 258 s
+2026-11-08T06:28:08Z [pr357-0985b179] launcher warm-up line: warm-up reply (2s): I am a large language model developed by Alibaba Cloud.
+2026-11-08T06:28:08Z [pr357-0985b179] pod Ready=True limits={"gpu.intel.com/xe":"1"}
+2026-11-08T06:28:08Z [pr357-0985b179] pod image vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086 docker.io/vllm/vllm-openai-xpu@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086 restarts=0
+2026-11-08T06:28:08Z [pr357-0985b179] pod enableServiceLinks=false
+2026-11-08T06:28:08Z [pr357-0985b179] pod render nodes: card1 renderD128 
+2026-11-08T06:28:08Z [pr357-0985b179] pod VLLM_PORT lines: 0
+2026-11-08T06:28:08Z [pr357-0985b179] vram serving: 0000:12:00.0 card1 27.30;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-08T06:28:08Z [pr357-0985b179] endpoint command: KUBECONFIG=/home/devcloud/.local/state/k3d-gpu/kubeconfig-gpu kubectl -n k3d-gpu-agent port-forward svc/vllm 8000:8000
+2026-11-08T06:28:11Z [pr357-0985b179] models: ["Qwen3-4B"]
+2026-11-08T06:28:33Z [pr357-0985b179] chat http=200 total_s=22.721185 finish=stop usage={"prompt_tokens":18,"total_tokens":1444,"completion_tokens":1426,"prompt_tokens_details":null,"completion_tokens_details":{"reasoning_tokens":1283}}
+2026-11-08T06:28:33Z [pr357-0985b179] chat content:   To calculate $ 17 \times 23 $, we can use the distributive property of multiplication:  $$ 17 \times 23 = 17 \times (20 + 3) = (17 \times 20) + (17 \times 3) $$  Now compute each part:  - $ 17 \times 20 = 340 $ - $ 17 \times 3 = 51 $  Add the results:  $$ 340 + 51 = 391 $$  Thus, the final answer is:  $$ \boxed{391} $$ 
+2026-11-08T06:28:33Z [pr357-0985b179] chat reasoning chars: 3593
+2026-11-08T06:28:35Z [pr357-0985b179] tool http=200 total_s=1.623996 finish=tool_calls tool_calls=[{"id":"chatcmpl-tool-8874486735506104","type":"function","function":{"name":"get_weather","arguments":"{\"city\": \"Paris\"}"}}]
+2026-11-08T06:28:35Z [pr357-0985b179] tool arguments parse: {"city":"Paris"}
+2026-11-08T06:28:35Z [pr357-0985b179] agent down rc=0
+2026-11-08T06:28:39Z [pr357-0985b179] down rc=0
+2026-11-08T06:28:44Z [pr357-0985b179] vram after: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-08T06:28:44Z [pr357-0985b179] k3d containers after: 0
+2026-11-08T06:28:44Z [pr357-0985b179] RESULT PASS

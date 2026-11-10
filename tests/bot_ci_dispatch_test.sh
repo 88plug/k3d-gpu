@@ -222,7 +222,7 @@ canary_repo() {
     echo base > f; git add f; git commit -qm base; git remote add origin "$FIX/origin.git"; git push -q origin main
     for b in a b c; do git switch -qc "autobump/$b" main; echo "$b" > f; git commit -qam "$b"; git push -q origin "autobump/$b"; done
     git switch -q main; git fetch -q origin
-    mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch; cp "$ROOT/hack/gh_retry.sh" hack/
+    mkdir -p hack policy; cp "$BCD" hack/bot-ci-dispatch; cp "$ROOT/hack/gh_retry.sh" "$ROOT/hack/gate_lib.sh" hack/
     printf '%s\n' '#!/usr/bin/env bash' \
       '[ "$1" = policy ] && git rev-parse -q --verify "$2^{commit}" >/dev/null && git cat-file -e "$3^{commit}" || exit 1' \
       'git merge-base --is-ancestor "$2" "$3" || { echo "pins: $2 is not an ancestor of $3" >&2; exit 1; }' \
@@ -259,6 +259,26 @@ echo "[$(pr 1 autobump/a "$SHA_A")]" > "$FIX/prs.json"; bcd_repo --workflow cana
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a canary.yml; then
   ok "canary_main_moved: policy from the merge-base, dispatched"
 else fail "canary_main_moved: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# main moved under code since a head was cut (a registry site its tree predates) and the
+# policy cannot read that head: the head is stale, so no canary and no error (the merge
+# job regenerates it). A policy that fails while main moved only in the ledger is still an
+# error.
+canary_repo canary_stale
+( cd "$CR" && export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+    GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t && mkdir -p pins && echo '[groups.c]' > pins/registry.toml \
+    && git add pins/registry.toml && git commit -qm registry && git push -q origin main && git fetch -q origin )
+echo "[$(pr 1 autobump/c "$SHA_C")]" > "$FIX/prs.json"; bcd_repo --workflow canary.yml
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/c [0-9a-f]*: stale, main moved under code' <<<"$OUT"; then
+  ok "canary_stale: main moved under code and the policy cannot read the head: no canary, no error"
+else fail "canary_stale: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+canary_repo canary_ledger_policy_fail
+( cd "$CR" && export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t \
+    GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t && echo ledger > EXPERIMENTS.md && git add EXPERIMENTS.md \
+    && git commit -qm ledger && git push -q origin main && git fetch -q origin )
+echo "[$(pr 1 autobump/c "$SHA_C")]" > "$FIX/prs.json"; bcd_repo --workflow canary.yml
+if [ "$RC" -eq 1 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/c [0-9a-f]*: error: hack/pins policy failed' <<<"$OUT"; then
+  ok "canary_ledger_policy_fail: main moved only in the ledger, a policy failure is an error"
+else fail "canary_ledger_policy_fail: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 # ci.yml never consults the policy, and its dispatch carries no inputs.
 canary_repo ci_no_policy; rm "$CR/hack/pins"
 echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 2 autobump/b "$SHA_B")]" > "$FIX/prs.json"
