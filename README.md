@@ -11,7 +11,8 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 > i9-13900T host. On a second client host, an i7-13700 whose owner opts its GPUs
 > out, a plain `up` found the hybrid P/E cores and the ISA extensions the launcher
 > labels and nothing the host lacks [ledger:H52w], and `k3d-gpu sandbox up` kept
-> agent sandboxes on its E-cores behind default-deny egress [ledger:H18w].
+> agent sandboxes on its E-cores behind default-deny egress [ledger:H18w]. There,
+> OVMS's shipped prefix caching gave an added agent its first chunk 14.3x sooner [ledger:H25w].
 > On a Xeon 6741P with 4x Arc Pro B70, a plain `up` found the
 > B70s (`xe`), AMX and AVX-512 [ledger:H52]. In a second run there, `xe` advertised
 > 2 of the 4 B70s: a serving workload held about half the VRAM of each card, and
@@ -1483,7 +1484,11 @@ check` and the teardown passed, but enterprise-inference's Keycloak step put the
 admin password on a process command line, where the run's secret scan found it. F5 ran it
 at the GA tags on the Xeon 6741P and is SUPPORTED
 ([EXPERIMENTS.md](EXPERIMENTS.md#f5-run-xeon-6741p-2026-11-07)): `eat up` with `failed=0` and
-no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. The commands are `k3d-gpu eat up` (`--dry-run`,
+no hand edit, `eat check`, a secret scan of 0 and `eat down` all passed. H62r ran Intel's own
+documented install of the same tags in a KVM guest on that Xeon: with EAS's documented
+`nri_reserved_cpu_list` it finished, and inside EAT's banking flow it delivered as many tasks
+within the turn budget as k3d-gpu's CPU stack, 21 of 24 each
+([EXPERIMENTS.md](EXPERIMENTS.md#h62r-run-xeon-6741p-2026-11-07)). The commands are `k3d-gpu eat up` (`--dry-run`,
 `--explain`; `--legacy` runs EAT 1.x), `eat status`, `eat check` and `eat down`, or `k3d-gpu
 eas` with the layer named. See [docs/intel/eas.md](docs/intel/eas.md), and
 [docs/intel.md](docs/intel.md#upstream-findings) for the upstream findings and issue drafts.
@@ -1615,7 +1620,7 @@ What works on k3d, and what does not:
 | Piece | On k3d-gpu |
 |-------|------------|
 | Controller, Sandbox, SandboxTemplate, SandboxClaim, SandboxWarmPool | Yes. Plain manifests, no webhook or cert-manager. |
-| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
+| NetworkPolicy | Enforced by k3s's embedded kube-router controller. The template allows ingress on 8888 only from pods labelled `k3d-gpu.io/sandbox-client=true` (and upstream's `sandbox-router`). Egress is limited to cluster DNS and public addresses. RFC1918, CGNAT `100.64.0.0/10` (tailscale) and link-local are blocked, so a sandbox cannot reach pods, services, the k3d docker network, tailnet peers or the host by those addresses. A blocked connect fails at once with `Connection refused` (kube-router rejects it), not a timeout [ledger:H18], also on a second hybrid host [ledger:H18w]. The host's public IPs stay reachable, so bind inference servers to a private address or firewall them. Ingress is gated on a pod label that any namespace can set: fine for a single-user dev cluster, not for a shared one. |
 | gVisor / Kata (`runtimeClassName`) | Not available. The node image ships neither, and Kata needs `/dev/kvm` in the node container. Sandboxes run under runc, hardened instead: non-root, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp, no service-account token. That is container isolation, not a VM or user-space kernel boundary. |
 | sandbox-router, sandboxd | Not installed. Upstream publishes them only as staging `latest-main` images, which cannot be pinned to a release. Clients reach a sandbox by pod IP (from a `k3d-gpu.io/sandbox-client=true` pod) or `kubectl port-forward`, which containerd opens inside the pod's network namespace, so the policy does not block it. |
 

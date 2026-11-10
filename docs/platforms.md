@@ -249,8 +249,12 @@ two ways, one per EAT generation. Its pins:
   F3 ran the `main` profile once end to end and is REFUTED
   ([EXPERIMENTS.md](../EXPERIMENTS.md#f3-run-i9-13900t-2026-11-01)): the install, `eas check`
   and the teardown passed, and the secret scan found the Keycloak admin password on a process
-  command line (enterprise-inference's `keycloak_config` role). H62r is pre-registered on the
-  GA tags.
+  command line (enterprise-inference's `keycloak_config` role). H62r ran Intel's own
+  documented install of the GA tags in a KVM guest on the Xeon 6741P: with EAS's documented
+  `nri_reserved_cpu_list` it finished, and in EAT's banking flow it delivered as many tasks
+  within the turn budget as k3d-gpu's CPU stack, 21 of 24 each. So H62r, which predicted
+  k3d-gpu's stack far ahead, is REFUTED
+  ([EXPERIMENTS.md](../EXPERIMENTS.md#h62r-run-xeon-6741p-2026-11-07)).
 - `docs/intel.md`, `contrib/eat/` and `integrations/eat/upstream/` read `main` at
   [`0ecf67a`](https://github.com/intel/enterprise-agent-toolkit/tree/0ecf67a8331e8b502ef41e08bf6d2881416178c5).
 
