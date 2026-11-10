@@ -220,7 +220,7 @@ Open EAS PRs that change a decision when they merge (`overlay.py --watch`, check
 
 | EAS PR | Effect on the overlay |
 |---|---|
-| [#50](https://github.com/intel/enterprise-ai-solutions/pull/50) and [#52](https://github.com/intel/enterprise-ai-solutions/pull/52) (OpenShift) | 0006 no longer applies: the selector moves into `_eg_k8s_provider`, still `control-plane: ""`. That is a STOP naming #50. Once a k3s vars file lands, 0006 becomes drop-fixed |
+| [#50](https://github.com/intel/enterprise-ai-solutions/pull/50) and [#52](https://github.com/intel/enterprise-ai-solutions/pull/52) (OpenShift) | 0006 no longer applies: the selector moves into `_eg_k8s_provider`, still `control-plane: ""`. That is a STOP naming #50. Once a k3s vars file lands, 0006 becomes drop-fixed. #50 merged into EAS `main` on 2026-11-02 and #52 is open (read 2026-11-07); neither is in `v1.2.0`, so only a move of the `main` profile past #50 meets the STOP |
 | [#61](https://github.com/intel/enterprise-ai-solutions/pull/61) (Headlamp SSO), merged 2026-10-30 | 0002 fails on its `global_config.yaml` hunk context: a STOP naming #61, so 0002 needs regenerating. 0004 (skipped on one node) and 0005 (docs, never applied) fail there too. 0006 still applies. EAS `main` is `0f7bc2b` since (read 2026-11-01); the pin stays `97f6157`, where the decisions above hold, and moving it past #61 needs 0002 regenerated first (read from #61's head, not re-checked on the merge) |
 
 ## Pins

@@ -1130,6 +1130,31 @@ class H62rTest(unittest.TestCase):
         pairs = live[live.index('if [ "${MODE}" = pairs ]; then'):]
         self.assertLess(pairs.index('[ "${ARM}" = H62r ] && DESIGN=H62'), pairs.index("case ${DESIGN} in"))
 
+    def test_ledger_quotes_each_guests_cpu_over_its_attempts(self):
+        # EXPERIMENTS.md "H62r run": each guest's CPU while its arm answered, from the committed
+        # records. The pod reads cover each attempt's own window (attempts.jsonl). A 10 s host
+        # sample (serving.jsonl) counts only when its whole window lies inside an attempt: one
+        # that only ends inside it also covers the idle pre-window before the attempt.
+        d = os.path.join(HERE, "results", "2026-11-06", "H62r")
+        att = PR.read_jsonl(os.path.join(d, "pairs", "attempts.jsonl"))
+        srv = [r for r in PR.read_jsonl(os.path.join(d, "runs", "H62r-hold1", "serving.jsonl")) if r.get("vm_cpu")]
+        vm = {"A1": ("VM a", "h62r-vm-a"), "B5": ("VM b", "h62r-vm-b")}
+        want = []
+        for arm, other in (("A1", "B5"), ("B5", "A1")):
+            mine = [a for a in att if a["arm"] == arm]
+            pod = sum(a["window"]["pod_cpu"][arm] for a in mine) / len(mine)
+            inside = [r for r in srv if any(a["t_start"] <= r["ts"] - r["seconds"] and r["ts"] <= a["t_end"] for a in mine)]
+            own, oth = (sum(r["vm_cpu"][vm[x][1]] for r in inside) / len(inside) for x in (arm, other))
+            want += [f"{arm}'s pod in {vm[arm][0]} {pod:.1f}",
+                     f"{vm[arm][0]} {own:.1f} and {vm[other][0]} {oth:.1f} in {arm}'s ({len(inside)} samples)"]
+        with open(os.path.join(HERE, "..", "..", "EXPERIMENTS.md")) as f:
+            led = f.read()
+        run = led[led.index("### H62r run"):]
+        bullet = run[run.index("- The serving covariate"):]
+        bullet = " ".join(bullet[:bullet.index("\n- ")].split())
+        for w in want:
+            self.assertIn(w, bullet)
+
 
 class B3RecordsTest(unittest.TestCase):
     """H50o amendment O1 item 2: the records of B3's pulled model that the pre-registration names
