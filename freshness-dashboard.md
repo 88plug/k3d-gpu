@@ -1,21 +1,21 @@
 # Freshness dashboard
 
-Updated 2026-11-10 19:59 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-10 23:26 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 bot-pr-stuck
-stale:freshness.yml
 
-## Pins behind (5)
+## Pins behind (6)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 4d |
+| cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 5d |
+| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.108.5` | patch | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 5d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 3d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 11d |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.5` | `2.35.5` | `2.35.6` | patch | 2026-11-10 | 10h |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.5` | `2.35.5` | `2.35.6` | patch | 2026-11-10 | 14h |
 
 ### Not resolved (2)
 
@@ -26,7 +26,7 @@ stale:freshness.yml
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #378 | packaging-images | auto | - |
+| #381 | packaging-images | auto | - |
 | #350 | hf-console-fallback | review | a human approval at the head |
 | #346 | cuda-test | review | a human approval at the head |
 
@@ -58,7 +58,6 @@ A PENDING row's arm pins move only by a dated amendment pushed before it runs. P
 - H57wa (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wa`
 - H57wb (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wb`
 - H57wm (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wm`
-- H59w (`bench/xhost/fetch_models.py`, `bench/h54/h54.py`, `bench/h54/test_h54.py`, `bench/h54/gsm8k-test-0-199.jsonl`, `bench/h57d/h57d.py`, `bench/h59/**`, `bench/wildct/**`, `bench/load/**`, `bench/shared-prefix/**`): `gh workflow run freshness.yml -f propose_amendment=H59w`
 
 ## Known issues and stale workarounds
 
@@ -113,7 +112,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.97; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.98; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
@@ -155,7 +154,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -503,7 +503,7 @@
+@@ -505,7 +505,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
