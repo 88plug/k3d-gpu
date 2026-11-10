@@ -1,0 +1,107 @@
+{
+ "source": {
+  "repo": "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+  "revision": "f1e06dc520982d9b9edd76859fdb7ab209449949"
+ },
+ "weights": "int4 sym, group 32, ratio 1.0",
+ "export_seconds": 361,
+ "command": [
+  "/home/devcloud/k3dgpu-gemma/ovenv/bin/optimum-cli",
+  "export",
+  "openvino",
+  "--model",
+  "/home/devcloud/k3dgpu-gemma/models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized",
+  "--task",
+  "image-text-to-text",
+  "--weight-format",
+  "int4",
+  "--sym",
+  "--group-size",
+  "32",
+  "--ratio",
+  "1.0",
+  "/home/devcloud/k3dgpu-gemma/models/k3dgpu/gemma-4-26b-a4b-it-qat-int4-sym-g32-ov"
+ ],
+ "files": {
+  "chat_template.jinja": {
+   "sha256": "ae53464bf3be25802b3a5b37def7fd89667067d7577049b3b2d74c4d8de4c6d4",
+   "bytes": 18683
+  },
+  "config.json": {
+   "sha256": "0bdc021081e0b6f4eaca6f0a4ccb50fd4a6b803f0385a2656a4d7f3f57c41ef4",
+   "bytes": 3810
+  },
+  "generation_config.json": {
+   "sha256": "4c2d18c072dc54cc2ee8f4a29e63525f56bc97a14a0e93c9a30755ba7b6b9014",
+   "bytes": 203
+  },
+  "openvino_config.json": {
+   "sha256": "dbdca34da1807f65a089a6d81d7ff5dc6634145ff58c01bc03284410555f22c4",
+   "bytes": 1393
+  },
+  "openvino_detokenizer.bin": {
+   "sha256": "461919bda7b546453e903052588c578e3e94e9e8215b7cec07cb00cb97459d13",
+   "bytes": 4413547
+  },
+  "openvino_detokenizer.xml": {
+   "sha256": "21dd767e165935ba365bcf5575b054ec119d625dae2798b0f7d8471637f9abfb",
+   "bytes": 29928
+  },
+  "openvino_language_model.bin": {
+   "sha256": "15516f615701908c71e334e664415516e9496d50993207075836fbb73eedb52e",
+   "bytes": 14519629844
+  },
+  "openvino_language_model.xml": {
+   "sha256": "3682b3bddc1926df96c106f87c85502eb301ce2042876a391a9a7686eaa06d2a",
+   "bytes": 5113419
+  },
+  "openvino_text_embeddings_model.bin": {
+   "sha256": "1808d6e3fbe2ae1179c22e20a8e5d2e2e68c74230b57a62ed9720932c0b1e7b0",
+   "bytes": 738721800
+  },
+  "openvino_text_embeddings_model.xml": {
+   "sha256": "c06d1c3f81b3338ed96976f3a2dfcc7845698d9b69038cdd7847bf84410538be",
+   "bytes": 7075
+  },
+  "openvino_text_embeddings_per_layer_model.bin": {
+   "sha256": "57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b",
+   "bytes": 20
+  },
+  "openvino_text_embeddings_per_layer_model.xml": {
+   "sha256": "22795a6cac6c8eadeef2a7b2f71884616055420ef3b68a626bf73c6176abb873",
+   "bytes": 4764
+  },
+  "openvino_tokenizer.bin": {
+   "sha256": "72cc61385a142c29a1ea37125b9d7a4c5775fe8386a5f6db1dd1108ea5ec1361",
+   "bytes": 17270350
+  },
+  "openvino_tokenizer.xml": {
+   "sha256": "2b4c6c46990ec715547077efcc0267e1a8c29b997c028a15280269a77e89f43a",
+   "bytes": 46897
+  },
+  "openvino_vision_embeddings_model.bin": {
+   "sha256": "87a4b947fe95ae9148c53990cb7e417f1963c9149a2fc8107e38a2e1a8b1443f",
+   "bytes": 573967772
+  },
+  "openvino_vision_embeddings_model.xml": {
+   "sha256": "df91d44c09dc951d095eb48f116535864164bd475725f50b942bb0d839f92c32",
+   "bytes": 3053576
+  },
+  "preprocessor_config.json": {
+   "sha256": "12476d626b89e273a9b2c6a493a6319ab02427ebfcd3635d92b29584b27c7249",
+   "bytes": 403
+  },
+  "processor_config.json": {
+   "sha256": "32bdf45d2ad4cc29a0822ddd157a182de76644f0419a6228d151495256e9813c",
+   "bytes": 1689
+  },
+  "tokenizer.json": {
+   "sha256": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f",
+   "bytes": 32169626
+  },
+  "tokenizer_config.json": {
+   "sha256": "b8045a4576903e86903291d5cbdd4adfc8859e9ce3c98621bdbd957f73ed394b",
+   "bytes": 3728
+  }
+ }
+}

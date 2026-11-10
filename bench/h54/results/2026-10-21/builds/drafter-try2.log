@@ -1,0 +1,29 @@
+lock 2026-10-21T03:13:34Z
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+5.5.4
+{%- if add_generation_prompt -%}
+    {%- if ns.prev_message_type != 'tool_response' and ns.prev_message_type != 'tool_call' -%}
+        {{- '<|turn>model\n' -}}
+        {%- if not enable_thinking -%}
+            {{- '<|channel>thought\n<channel|>' -}}
+        {%- endif -%}
+    {%- elif ns.prev_message_type == 'tool_response' and enable_thinking -%}
+        {{- '<|channel>thought\n' -}}
+    {%- endif -%}
+{%- endif -%}
+
+INFO:gguf.gguf_writer:Writing the following files:
+INFO:gguf.gguf_writer:/out/d-bf16.gguf: n_tensors = 49, total_size = 839.5M
+Writing:   0%|          | 0.00/839M [00:00<?, ?byte/s]Writing:  64%|██████▍   | 537M/839M [00:01<00:00, 405Mbyte/s]Writing:  70%|██████▉   | 587M/839M [00:01<00:00, 381Mbyte/s]Writing:  76%|███████▌  | 638M/839M [00:01<00:00, 390Mbyte/s]Writing:  82%|████████▏ | 688M/839M [00:01<00:00, 400Mbyte/s]Writing:  88%|████████▊ | 738M/839M [00:01<00:00, 412Mbyte/s]Writing:  94%|█████████▍| 789M/839M [00:01<00:00, 422Mbyte/s]Writing: 100%|██████████| 839M/839M [00:02<00:00, 428Mbyte/s]Writing: 100%|██████████| 839M/839M [00:02<00:00, 406Mbyte/s]
+INFO:hf-to-gguf:Model successfully exported to /out/d-bf16.gguf
+llama_model_quantize_impl: model size  =   800.57 MiB (16.00 BPW)
+llama_model_quantize_impl: quant size  =   291.21 MiB (5.82 BPW)
+
+llama_quantize: quantize time =  1657.00 ms
+llama_quantize:    total time =  1657.00 ms
+total 1148836
+drwxrwxr-x  2 devcloud devcloud      4096 Oct 21 03:13 .
+drwxrwxr-x 18 devcloud devcloud      4096 Oct 21 03:03 ..
+-rw-r--r--  1 devcloud devcloud 855247712 Oct 21 03:13 d-bf16.gguf
+-rw-r--r--  1 devcloud devcloud 321145696 Oct 21 03:13 d-q4_0.gguf
+done 2026-10-21T03:13:57Z

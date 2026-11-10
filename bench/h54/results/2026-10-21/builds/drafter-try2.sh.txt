@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Try: b11749 full image, its convert_hf_to_gguf.py, with transformers 5.5.4 (the OVQ export venv pin) in a throwaway container.
+set -euo pipefail
+FULL_IMAGE=ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e
+M=$HOME/k3dgpu-gemma/models
+O=$HOME/k3dgpu-gemma/scratch-drafter
+mkdir -p $O
+exec 9> $HOME/k3dgpu-bench.lock
+flock -w 21600 9
+echo "lock $(date -u +%FT%TZ)"
+docker run --rm -v $M:/models:ro -v $O:/out --entrypoint sh $FULL_IMAGE -c "pip install -q --break-system-packages transformers==5.5.4 2>&1 | tail -2; python3 -c \"import transformers;print(transformers.__version__)\"; python3 /app/convert_hf_to_gguf.py --outtype bf16 /models/google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant --outfile /out/d-bf16.gguf 2>&1 | tail -15"
+docker run --rm -v $O:/out $FULL_IMAGE --quantize /out/d-bf16.gguf /out/d-q4_0.gguf Q4_0 2>&1 | tail -5
+sudo chown -R $(id -u):$(id -g) $O
+ls -la $O
+echo "done $(date -u +%FT%TZ)"

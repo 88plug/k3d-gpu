@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+G=~/k3dgpu-gemma
+H=$G/.venv/bin/hf
+d=$G/models/Intel_gemma-4-26B-A4B-it-int4-AutoRound
+$H download Intel/gemma-4-26B-A4B-it-int4-AutoRound --revision edff62728a3c79ec541983b86a21674500e0f05b --local-dir $d
+echo edff62728a3c79ec541983b86a21674500e0f05b > $d/.pinned-revision
+mkdir -p $G/data
+$H download openai/gsm8k --repo-type dataset --revision 740312add88f781978c0658806c59bc2815b9866 --include "main/test-00000-of-00001.parquet" --local-dir $G/data/gsm8k
+echo 740312add88f781978c0658806c59bc2815b9866 > $G/data/gsm8k/.pinned-revision
+(cd $d && sha256sum *.safetensors) > $G/weights-autoround.sha256
+sha256sum $G/data/gsm8k/main/test-00000-of-00001.parquet
+df -P /

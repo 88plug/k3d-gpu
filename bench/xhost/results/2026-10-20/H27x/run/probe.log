@@ -1,0 +1,66 @@
+[   0s] preflight
+started typical on 24-47,72-95 (3 containers, ttl 1500s)
+3128eb9ad312 level=typical expires_in=1499s
+bfd7f6351fb4 level=typical expires_in=1499s
+dddf75b684fb level=typical expires_in=1499s
+[  61s] preflight swap-in over 60 s: 0 pages (recorded, not a gate)
+[  65s] int4 ready (cold load 4 s)
+[  70s] int8 ready (cold load 4 s)
+[  76s] fp16 ready (cold load 6 s)
+warmup W int4 ttft=2.2703580926172435 dec=37.74945977759452
+warmup W int8 ttft=2.5783247272484004 dec=19.278528389986015
+warmup W fp16 ttft=1.0250248899683356 dec=24.941430014322385
+probe P1 int4 ttft=0.25613793497905135 dec=40.1484159503623
+probe P1 int8 ttft=0.32171985879540443 dec=20.70736079590349
+probe P1 fp16 ttft=0.20633533503860235 dec=26.50124358029929
+[  97s] probe P1 wall 4 s (budget 60 s)
+reference R1 int4 ttft=0.468424741178751 dec=38.43399790428658
+reference R1 int8 ttft=0.5699050142429769 dec=19.369245897659535
+reference R1 fp16 ttft=0.37432060996070504 dec=25.27713249526477
+reference R1 int4' ttft=0.45940439868718386 dec=37.670240959902905
+reference R2 int4' ttft=0.4800283028744161 dec=38.292147505574206
+reference R2 fp16 ttft=0.3749510711058974 dec=25.360553945658946
+reference R2 int8 ttft=0.5445257662795484 dec=19.499686422964952
+reference R2 int4 ttft=0.5178899918682873 dec=37.39271967382461
+probe P2 fp16 ttft=0.20763488300144672 dec=25.989850696775683
+probe P2 int8 ttft=0.3542907820083201 dec=20.363217769345276
+probe P2 int4 ttft=0.23064286075532436 dec=41.11692639324425
+[ 254s] probe P2 wall 4 s (budget 60 s)
+reference R3 int4 ttft=0.494502826128155 dec=38.108980425441885
+reference R3 int8 ttft=0.5538597698323429 dec=19.124619979201288
+reference R3 fp16 ttft=0.3724510879255831 dec=24.16869922665614
+reference R3 int4' ttft=0.4587815599516034 dec=37.105042944340994
+reference R4 int4' ttft=0.45845844969153404 dec=38.3710272050056
+reference R4 fp16 ttft=0.3774956618435681 dec=24.646757366333084
+reference R4 int8 ttft=0.6104889120906591 dec=19.37003445498512
+reference R4 int4 ttft=0.5112275970168412 dec=37.93607919657207
+reference R5 int4 ttft=0.47183710988610983 dec=38.46290850266871
+reference R5 int8 ttft=0.603830830194056 dec=19.390237816203808
+reference R5 fp16 ttft=0.38099638605490327 dec=24.714563011375642
+reference R5 int4' ttft=0.4695150572806597 dec=37.67613889675696
+probe P3 int4 ttft=0.2821801658719778 dec=40.3946803195571
+probe P3 int8 ttft=0.34127892600372434 dec=20.327168140438165
+probe P3 fp16 ttft=0.21377220703288913 dec=26.41220733087546
+[ 488s] probe P3 wall 4 s (budget 60 s)
+[ 495s] background at the end of the timed part: 3 of 3 load containers running
+removed 3 container(s)
+[ 495s] load: MATCHED
+[ 495s] NLL pass
+[ 545s] NLL pass wall 50 s (quality cost, outside the 60 s probe budget)
+{
+  "reference_pick": "fp16",
+  "wins": 5,
+  "rounds": 5,
+  "probe_agree": 3,
+  "probe_repeats": 3,
+  "control_ratio": {
+    "R1": 1.0139767347181499,
+    "R2": 0.9681095113983423,
+    "R3": 1.010620396096142,
+    "R4": 0.9730867783218621,
+    "R5": 1.016743688179727
+  },
+  "notes": []
+}
+[ 545s] done in 545 s: /home/devcloud/k3dgpu-xhost/amx-autoquant/run-20261020T224624Z-typical/results.json
+[ 545s] cleanup: removed 4 container(s) this run started; background load stopped: 1

@@ -1,0 +1,9 @@
+0f887130aef63545d655ea2addab6168680efe9b6531cbc46c2e2fc599ac8abe  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_language_model.bin
+2d8dfbdcc2174aa6223621502dc566d9e881b7c3db3ff2e1e96a65cee7827edb  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_model.bin
+57fda7ab0340cda71819a3ecd5f9e52e346260fe840fddcc9c87d3614b5a815b  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_text_embeddings_per_layer_model.bin
+13c9d8ff37be9592e06e8a9f65e2b047bdc6b24d5bc905c022e4d18996b3c382  OpenVINO_gemma-4-26b-a4b-it-int4-ov/openvino_vision_embeddings_model.bin
+a359953a076b877db30c31dbbb4c6d93b4a6e017ee5db5784247e4d4c0dd4f3b  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B-it-mmproj.gguf
+3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d  google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf
+c082cc581c3ec90d70285c1a41c81544ff56cbc96650f16c900a280940655801  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant/model.safetensors
+d57e8bde0feda8b0ebf51a81d04b5d988f82fead7f9242d9231625929421453e  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00001-of-00002.safetensors
+e5e6e258f562a77be81b0f5136eb2ca71e0d973cf30c4291e4d2c7b1fd712f99  google_gemma-4-26B-A4B-it-qat-q4_0-unquantized/model-00002-of-00002.safetensors

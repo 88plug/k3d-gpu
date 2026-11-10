@@ -1,0 +1,17 @@
+#!/bin/bash
+set -uo pipefail
+cd ~/k3dgpu-gemma
+while pgrep -x dl.sh >/dev/null || pgrep -u devcloud -fx "/bin/bash /home/devcloud/k3dgpu-gemma/dl.sh" >/dev/null; do sleep 20; done
+echo "$(date -u +%FT%TZ) waiting for lock"
+exec 9>~/k3dgpu-bench.lock
+flock -w 21600 9 || { echo "LOCK TIMEOUT"; exit 1; }
+echo "$(date -u +%FT%TZ) lock acquired"
+p=$(df --output=pcent / | tail -1 | tr -dc 0-9); echo "df=$p%"; [ $p -gt 97 ] && { echo ABORT df; exit 2; }
+uptime; docker ps --format "{{.Names}}" | tr "\n" " "; echo
+for t in 48 96; do for rep in 1 2 3 4 5; do
+  echo "=== STREAM threads=$t rep=$rep"
+  OMP_NUM_THREADS=$t OMP_PROC_BIND=spread OMP_PLACES=threads ./stream/stream_400M | grep -E "^(Copy|Scale|Add|Triad):|Solution Validates|Number of Threads"
+done; done
+echo "=== MLC max_bandwidth"; ./mlc/Linux/mlc --max_bandwidth 2>&1 | tail -15
+echo "=== MLC idle_latency"; ./mlc/Linux/mlc --idle_latency 2>&1 | tail -5
+echo "$(date -u +%FT%TZ) done, releasing lock"

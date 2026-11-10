@@ -432,6 +432,8 @@ check "crescent (H56): live.sh slot 1 moves the cluster, ports and DevUI" \
     sh -c 'test "$(env -u LIVE_NODE_CPUS LIVE_SLOT=1 LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" A1 "$2/live-s")" = "cluster=k3dgpu-a-s1-a1 ports=18730,18740,18720,18700,18750,18760 devui=127.0.0.3 node_cpus="' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
 check "crescent (H56): live.sh refuses a slot outside agent mode and arm A1" \
     sh -c 'LIVE_SLOT=1 LIVE_MODE=pairs LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" H50 "$2/live-s"; test $? = 2 && { LIVE_SLOT=0 LIVE_PRINT_SLOT=1 LIVE_BLUEPRINT=/nonexistent LIVE_PY=python3 bash "$1" B1 "$2/live-s"; test $? = 2; }' _ "${ROOT}/bench/eatflow/live.sh" "${WORK}"
+check "records: logs under bench/*/results/ are not ignored, and every SHA256SUMS there verifies" \
+    "${ROOT}/tests/results_records_test.sh"
 check "xhost: hold.sh parses" bash -n "${ROOT}/bench/xhost/hold.sh"
 check "xhost: clusters.py selects only k3dgpu-x-* clusters" \
     sh -c 'test "$(printf "%s" "[{\"name\":\"k3dgpu-x-h25\"},{\"name\":\"k3dgpu-e-h50\"},{\"name\":\"k3dgpu-x-h28\"},{\"name\":\"k3dgpu-h52\"},{\"name\":\"xk3dgpu-x-a\"}]" | python3 "$1")" = "k3dgpu-x-h25 k3dgpu-x-h28"' _ "${ROOT}/bench/xhost/clusters.py"
