@@ -35,18 +35,17 @@ F3's Keycloak finding does not arise on this path; the inference layer on its ow
 8 E-cores, AVX-VNNI, no AVX-512 or AMX) with a UHD 770 iGPU and two NVIDIA cards. The box
 owner opts all three GPUs out, so its rows are CPU rows. Each ran on release 0.1.89 under the
 [wildct pre-registration](../../EXPERIMENTS.md#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20).
-Four rows there have a verdict, and three of them are SUPPORTED:
+Five rows there have a verdict, and four of them are SUPPORTED:
 
 - Detection: a plain `k3d-gpu up` found the hybrid P/E cores and the six ISA extensions the launcher labels, and nothing the host lacks. `k3d-gpu test` put its P-core pod on CPU 0 and its E-core pod on CPU 17, and `up` named both GPU vendors as detected and opted out [ledger:H52w].
 - Agent sandboxes, H18 replicated: in 3 of 3 runs `k3d-gpu sandbox up` kept the sandbox on an E-core behind default-deny egress. The host's tailscale and LAN addresses were refused from the sandbox, and PyPI was reachable [ledger:H18w].
 - Shared-prefix agents, H25 replicated: with OVMS's shipped prefix caching on, an added agent's first chunk arrived 14.3x sooner than with it off (CI 13.38-14.89), under matched `typical` load [ledger:H25w]. This measures an OVMS feature; k3d-gpu enables nothing.
+- Shared model page cache, H28 replicated: eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy (1.00x the model size on the node, against 9.00x for per-pod copies) and were ready in 0.339 of the copy arm's time (CI 0.329-0.363), under matched `typical` load [ledger:H28w].
 
-The fourth, H34w, is INCONCLUSIVE: with H34 replicated there under matched `typical` load,
+The fifth, H34w, is INCONCLUSIVE: with H34 replicated there under matched `typical` load,
 OVMS's CPU Fast Draft against the target alone resolved neither the pre-registered gain nor its
-exclusion, so the i7-13700 class gets no CPU draft by default. A fifth, H28w (H28's shared
-page cache for models mounted as image volumes), has run; its result is in review
-([#344](https://github.com/88plug/k3d-gpu/pull/344)) and not yet in the ledger. H57wa, H57wm,
-H57wb and the engine-choice row H59w are pre-registered and not yet run. Until a row for the
+exclusion, so the i7-13700 class gets no CPU draft by default. H57wa, H57wm, H57wb and the
+engine-choice row H59w are pre-registered and not yet run. Until a row for the
 i7-13700 class says otherwise, that class keeps OVMS as its CPU engine.
 
 **Intel's documented EAT 2.0 install, at the GA tags, finished in a KVM guest and served EAT's
@@ -151,8 +150,8 @@ All drafts are unsent and need a maintainer's approval before anything is filed.
 SUPPORTED rows, each scoped to its host:
 
 - On the Xeon 6741P: the CPU engine choice [ledger:H59], DRAM-resident serving of Qwen3.8-Flash-Next [ledger:H60], and H25 replicated [ledger:H25x].
-- On the i9-13900T: sixteen rows, among them EAT `release-1.0.3-hotfix` deployed and served on a default k3d-gpu cluster, n=1 [ledger:H1b], EAT's NRI balloons chart installing over a k3d-gpu cluster [ledger:H14], and agent sandboxes behind default-deny egress [ledger:H18]. The full list is in the [technical report](technical-report.md#supported-quotable-scoped-to-the-i9-13900t-h25x-h59-and-h60-to-the-xeon-6741p-h52w-h18w-and-h25w-to-wildcts-i7-13700).
-- On wildct, an i7-13700 client host: detection of its hybrid cores and ISA extensions with its GPUs opted out [ledger:H52w], H18 replicated, agent sandboxes on its E-cores behind default-deny egress [ledger:H18w], and H25 replicated, an added agent's first chunk 14.3x sooner with OVMS's shipped prefix caching on [ledger:H25w].
+- On the i9-13900T: sixteen rows, among them EAT `release-1.0.3-hotfix` deployed and served on a default k3d-gpu cluster, n=1 [ledger:H1b], EAT's NRI balloons chart installing over a k3d-gpu cluster [ledger:H14], and agent sandboxes behind default-deny egress [ledger:H18]. The full list is in the [technical report](technical-report.md#supported-quotable-scoped-to-the-i9-13900t-h25x-h59-and-h60-to-the-xeon-6741p-h52w-h18w-h25w-and-h28w-to-wildcts-i7-13700).
+- On wildct, an i7-13700 client host: detection of its hybrid cores and ISA extensions with its GPUs opted out [ledger:H52w], H18 replicated, agent sandboxes on its E-cores behind default-deny egress [ledger:H18w], H25 replicated, an added agent's first chunk 14.3x sooner with OVMS's shipped prefix caching on [ledger:H25w], and H28 replicated, eight pods sharing one page-cache copy of a model through an image volume and ready in 0.34x the time of per-pod copies [ledger:H28w].
 
 ## Three results that help EAT
 
@@ -168,7 +167,7 @@ Each is stated as the ledger graded it. Inside EAT's banking flow on the Xeon 67
 - **EAS's topology probe in a KVM guest.** H62r answered H62's question at the GA tags, with EAS's documented reserve list set. The probe's reading of a guest's threads as one per core is unchanged at `v1.2.0`, and we have not drafted an EAS issue for it yet. The `cpu: auto` issue draft stands for an install whose reserve leaves the pods outside the balloons too little CPU.
 - **The vLLM agent path on Arc and Gaudi.** Up to release 0.1.93, `k3d-gpu agent up` did not serve through vLLM. On an Arc Pro B70 the engine exited at start because the pod's Kubernetes service link set `VLLM_PORT` to a URI, and the warm-up request carried no JSON content type. [#339](https://github.com/88plug/k3d-gpu/pull/339) fixes both and ships in release 0.1.94. With its pod spec and warm-up request applied by hand, vLLM v0.33.0 served Qwen3-4B on one B70; 0.1.94 ships v0.32.0, and a full `agent up` run of a release on a B70 is not recorded yet. The Gaudi path shares the manifest and has not run on hardware. On Arc, `agent up` with no backend set serves OVMS, which this did not affect; with `--model`, the fit can pick vLLM.
 - **k3d-gpu gaps found on the Xeon.** `/dev/dri/by-path` for oneCCL across B70s (H53); the fit refusing rather than falling back to the CPU, and no DRAM bandwidth cached on a new host (H58); placing one-card arms on one card (H54b, H54c).
-- **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct rows H57wa, H57wm and H57wb; H28w's result is in review. H34 on the i7-13700 (H34w) is INCONCLUSIVE: the CPU Fast Draft's gain over the target alone was neither the pre-registered win nor ruled out, so that class keeps no default CPU draft. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
+- **Replications.** H59 on the i9-13900T (H59d) is INCONCLUSIVE: llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds, so no statistic was scored. H59 on the i7-13700 (H59w) is PENDING, as are the wildct rows H57wa, H57wm and H57wb. H34 on the i7-13700 (H34w) is INCONCLUSIVE: the CPU Fast Draft's gain over the target alone was neither the pre-registered win nor ruled out, so that class keeps no default CPU draft. Until a row is SUPPORTED for its class, those CPU classes keep OVMS.
 - **EAT 1.1.0 through `eat-up.sh`.** Pinned since 2026-10-29 and pre-registered as F4; not run yet.
 - **EAS upstream moves.** `k3d-gpu eas` defaults to the GA tags; the `main` profile (F3) and `v1.2.0-rc.1` (H62) stay as recorded. When Intel tags the next EAS release, the `eas-release` pin moves the default profile, and the overlay's verified cases and config goldens for the new tree still need a person to add them. EAS #61 merged on 2026-10-30 (EAS `main` `0f7bc2b`). The `main` profile stays at `97f6157`; moving past #61 needs patch 0002 regenerated. EAS #50 (OpenShift) merged into EAS `main` on 2026-11-02 and #52 is open (read 2026-11-07); neither is in `v1.2.0`, and moving the `main` profile past #50 needs 0006 reworked. EAS #71 (teardown hang) is open; `eas down` uses its workaround.
 - **ERAG and Arc under EAS.** EAS's Enterprise RAG layer is not wired into `k3d-gpu eas` yet, and EAS has no Intel GPU path on this branch; Arc and Gaudi stay with `k3d-gpu agent up` (see the vLLM item above).
