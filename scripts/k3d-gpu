@@ -7712,7 +7712,7 @@ HS_NPU_REL=v1.38.0
 HS_NPU_BUILD=1.38.0.20260910-34487311128
 HS_NVCTK=1.20.1-1
 # PPA builds with the Ubuntu release taken out (hs_ppa puts it back).
-HS_PPA_MEDIA=26.3.5-1~ppa1
+HS_PPA_MEDIA=26.4.1-1~ppa1
 HS_PPA_GMM=22.10.2-1~ppa1
 HS_PPA_LIBVA=2.24.1-1~ppa2
 HS_DIR="${K3D_GPU_SETUP_DIR:-${XDG_CACHE_HOME:-${HOME:-}/.cache}/k3d-gpu/host-setup}"
