@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-10T19:31:26Z. 2 open.
+Updated 2026-11-10T19:31:28Z. 3 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -93,4 +93,14 @@ Capacity oracle (schema, privacy, validator, fuzz, matrix, leaderboard, share) R
 Capacity oracle (schema, privacy, validator, fuzz, matrix, leaderboard, share) Run python3 oracle/test_adversarial.py 2026-11-10T19:08:14.9433037Z ##[error]Process completed with exit code 1.
 ```
 </details>
+
+## `stale:freshness.yml`: no successful scheduled run within 12 h
+
+Opened 2026-11-10T19:31:28Z, updated 2026-11-10T19:31:28Z.
+
+`freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).
+
+Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/42775671332 at 2026-11-10T07:29:48Z
+
+A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
