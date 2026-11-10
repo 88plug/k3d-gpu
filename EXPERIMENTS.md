@@ -16979,10 +16979,12 @@ merge commit cannot be shipped to wildct, and neither can a later main.
   `fd822b33`, wildct amendment R8's merge). `H28w-prep-r2` and `H28w-r2` ran from it. Its
   launcher and `share/` equal 0.1.89's apart from the version line
   ([wildct amendment R9](#wildct-amendment-r9-the-h28w-hold-its-ssh-session-ended-and-holds-launched-outside-it-2026-11-07)).
-- Every file H59w runs is the same there as at this amendment's parent, `f5a73bca`. A diff of
+- Every file H59w runs is the same there as on main when this was written, `f5a73bca`. A diff of
   `fd822b33` against `f5a73bca` lists no change under `bench/h59`, `bench/h57d`, `bench/h54`,
   `bench/apb`, `bench/shared-prefix`, `bench/llm_load.py`, `bench/energy.sh`, `share` or
-  `bench/wildct`, apart from `RESUME.md` and run records.
+  `bench/wildct`, apart from `RESUME.md` and run records. Main's `share/` has moved since (#377:
+  nri-balloons v0.15.1 and agent-sandbox), which W7 keeps off wildct too; the runner files above
+  have not.
 - Its `console/ledger-rules.json` differs in H34w's verdict only. H34-family rows decide OVMS's
   CPU Fast Draft, which `run.py check` rules out for O in any case. Its `EXPERIMENTS.md` has H59
   SUPPORTED for the 6741P, H59d INCONCLUSIVE and H59w PENDING, as main does, so no H59-family row
