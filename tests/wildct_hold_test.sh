@@ -620,6 +620,11 @@ row_envs_match_the_registration() {
     has h59w 2 -- "G=${HOME}/k3dgpu-bench-wildct/h59" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" \
         "K3D_REAL=${HOME}/k3dgpu-bench-wildct/bin/k3d" "H59_IMAGE=${IMG}" "bash ${ROOT}/bench/h59/hold.sh wildct 2" || return 1
     has h59w 5 3 -- "bash ${ROOT}/bench/h59/hold.sh wildct 5 3" || return 1
+    # H59w's wiring smoke (H59 amendment R5): hold 1's environment, line for line, and
+    # bench/h59/hold.sh's own smoke.
+    has h59w smoke -- "bash ${ROOT}/bench/h59/hold.sh wildct smoke" || return 1
+    [ "$(rowprint h59w smoke | sed '$d')" = "$(rowprint h59w 1 | sed '$d')" ] \
+        || { echo "h59w smoke's environment is not hold 1's"; diff <(rowprint h59w smoke) <(rowprint h59w 1); return 1; }
     has h59w-prep -- "G=${HOME}/k3dgpu-bench-wildct/h59" "LOCK=${HOME}/k3dgpu-bench-wildct/live.lock" \
         "bash ${ROOT}/bench/h59/prep.sh wildct" || return 1
     python3 -c 'import sys
@@ -763,11 +768,11 @@ row_guards() {
     done
     chk h59w 1; [ $? = 2 ] || { echo "check mode passed h59w without the k3d shim"; return 1; }
     install -D -m 0755 "${ROOT}/bench/h59/k3d-shim.sh" "${HOME}/k3dgpu-bench-wildct/h59/bin/k3d"
-    for a in 1 2 3 4 "5 1" "6 4"; do
+    for a in 1 2 3 4 "5 1" "6 4" smoke; do
         # shellcheck disable=SC2086 # the row's arguments, split on purpose
         chk h59w ${a} || { echo "check mode refused h59w ${a}: $(cat "${W}/chk.out")"; return 1; }
     done
-    for a in "" 5 7 0 "1 2" "5 5" "6 0" "1 perf" "5 1 O"; do
+    for a in "" 5 7 0 "1 2" "5 5" "6 0" "1 perf" "5 1 O" "smoke 1" "5 smoke" "Smoke"; do
         # shellcheck disable=SC2086 # the row's arguments, split on purpose
         chk h59w ${a}; [ $? = 2 ] || { echo "check mode passed h59w ${a}"; return 1; }
     done
