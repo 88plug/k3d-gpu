@@ -1,6 +1,6 @@
 # k3d-gpu on Intel hardware: technical report
 
-Status: working report, 2026-11-07. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of the H57dp, H54q, H53, H62, H58, H59, H60, H55, H59d, H52w, H18w, H25w, H34w, H62r and H28w runs (83 rows).
+Status: working report, 2026-11-10. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md), verdicts as of the H57dp, H54q, H53, H62, H58, H59, H60, H55, H59d, H52w, H18w, H25w, H34w, H62r, H28w and H59w runs (83 rows).
 
 ## Abstract
 
