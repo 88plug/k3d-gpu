@@ -1,0 +1,52 @@
+== arm H62r start 08:21:59 (+0s)
+== restart both servers 08:21:59 (+0s)
+== ready 08:24:36 (+157s)
+pod cgroups: A1 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh A1 cpustat /sys/fs/cgroup/system.slice/docker-ace15baef4b15528186b29499120d15815468a9d33d22c3ebaf5ecad10bb6bd1.scope/kubepods/burstable/podedbf35df-8c69-4076-859b-fe36b95c920e; B5 exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh B5 cpustat /sys/fs/cgroup/kubepods.slice/kubepods-pod3ccaf006_ff01_4518_bf3a_6e5b6a3eea46.slice
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18640 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 18641 after 0 ms: Could not connect to server
+served: A1=gemma-4-26b-a4b-it B5=gemma-4-26b
+curl: (7) Failed to connect to 127.0.0.1 port 8090 after 0 ms: Could not connect to server
+curl: (7) Failed to connect to 127.0.0.2 port 8090 after 0 ms: Could not connect to server
+== load typical 08:25:07 (+188s)
+== baseline typical 08:25:08 (+189s)
+== pairs hold 1, deadline +2250s 08:25:28 (+209s)
+agentbench: A1: agent http://127.0.0.1:8090, proxy 127.0.0.1:18620 -> http://127.0.0.1:18640, pod cgroup exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh A1 cpustat /sys/fs/cgroup/system.slice/docker-ace15baef4b15528186b29499120d15815468a9d33d22c3ebaf5ecad10bb6bd1.scope/kubepods/burstable/podedbf35df-8c69-4076-859b-fe36b95c920e
+agentbench: B5: agent http://127.0.0.2:8090, proxy 127.0.0.1:18621 -> http://127.0.0.1:18641, pod cgroup exec:/home/devcloud/k3dgpu-bench/k3d-gpu-h62r/bench/h62r/arm.sh B5 cpustat /sys/fs/cgroup/kubepods.slice/kubepods-pod3ccaf006_ff01_4518_bf3a_6e5b6a3eea46.slice
+agentbench: pair 0 B-T1-U1001: B5 pass_budget 11.1s, A1 pass_budget 10.1s
+agentbench: pair 1 B-T2-U1001: B5 pass_budget 5.1s, A1 pass_budget 6.3s
+agentbench: pair 2 B-T3-U1001: A1 pass_budget 21.2s, B5 pass_budget 22.3s
+agentbench: pair 3 B-T4-U1001: B5 pass_budget 7.8s, A1 pass_budget 6.9s
+agentbench: pair 4 B-T5-U1001: A1 pass_budget 11.1s, B5 pass_budget 14.6s
+agentbench: pair 5 B-T6-U1001: B5 pass_budget 15.6s, A1 pass_budget 21.2s
+agentbench: pair 6 B-T7-U1001: A1 pass_budget 12.4s, B5 pass_budget 12.4s
+agentbench: pair 7 B-T8-U1001: A1 pass_budget 12.8s, B5 pass_budget 10.0s
+agentbench: pair 8 B-T1-U1002: A1 pass_budget 14.5s, B5 pass_budget 13.4s
+agentbench: pair 9 B-T2-U1002: B5 pass_budget 5.4s, A1 pass_budget 6.4s
+agentbench: pair 10 B-T3-U1002: B5 pass_budget 15.4s, A1 pass_budget 13.7s
+agentbench: pair 11 B-T4-U1002: B5 pass_budget 8.0s, A1 pass_budget 9.5s
+agentbench: pair 12 B-T5-U1002: A1 pass_budget 13.8s, B5 pass_budget 12.8s
+agentbench: pair 13 B-T6-U1002: B5 pass_budget 14.5s, A1 pass_budget 16.3s
+agentbench: pair 14 B-T7-U1002: A1 fail_graded 12.4s, B5 pass_budget 11.7s
+agentbench: pair 15 B-T8-U1002: A1 pass_budget 14.5s, B5 pass_budget 14.9s
+agentbench: pair 16 B-T1-U1003: B5 pass_budget 12.4s, A1 pass_budget 9.3s
+agentbench: pair 17 B-T2-U1003: B5 pass_budget 7.2s, A1 pass_budget 5.5s
+agentbench: pair 18 B-T3-U1003: A1 pass_budget 10.8s, B5 pass_budget 12.8s
+agentbench: pair 19 B-T4-U1003: B5 fail_graded 5.9s, A1 fail_graded 5.4s
+agentbench: pair 20 B-T5-U1003: A1 pass_budget 9.9s, B5 pass_budget 8.6s
+agentbench: pair 21 B-T6-U1003: B5 fail_graded 6.6s, A1 pass_budget 17.7s
+agentbench: pair 22 B-T7-U1003: A1 fail_graded 7.0s, B5 fail_graded 7.1s
+agentbench: pair 23 B-T8-U1003: A1 pass_budget 11.2s, B5 pass_budget 15.2s
+agentbench: hold 1: 24 complete pair(s); next pair 24 of 24
+== finished 08:48:12 (+1573s)
+== cleanup 08:48:12 (+1573s)
+== done 08:48:12 (+1573s)

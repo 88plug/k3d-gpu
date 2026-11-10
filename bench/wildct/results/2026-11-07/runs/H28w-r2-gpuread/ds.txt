@@ -1,0 +1,11 @@
+NAMESPACE                NAME                                 DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR                                                        AGE
+habana-system            habanalabs-device-plugin-daemonset   0         0         0       0            0           habana.ai/gaudi.present=true                                         113s
+kube-system              intel-dsa-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/dsa=true,kubernetes.io/arch=amd64   113s
+kube-system              intel-gpu-plugin-wsl                 0         0         0       0            0           k3d-gpu.io/wsl-gpu=true,kubernetes.io/arch=amd64                     112s
+kube-system              intel-iaa-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/iaa=true,kubernetes.io/arch=amd64   112s
+kube-system              intel-npu-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/npu=true,kubernetes.io/arch=amd64   112s
+kube-system              intel-qat-plugin                     0         0         0       0            0           intel.feature.node.kubernetes.io/qat=true,kubernetes.io/arch=amd64   112s
+kube-system              nri-resource-policy-balloons         0         0         0       0            0           kubernetes.io/os=linux                                               109s
+kube-system              nvidia-device-plugin-daemonset       0         0         0       0            0           <none>                                                               106s
+kube-system              svclb-traefik-7aea1f9a               1         1         1       1            1           <none>                                                               87s
+node-feature-discovery   nfd-worker                           1         1         1       1            1           <none>                                                               112s

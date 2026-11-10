@@ -1,0 +1,22 @@
+{
+ "a1_host": {
+  "success": "19/24",
+  "attempt_median_s": 8.033
+ },
+ "a1_guest": {
+  "success": "21/24",
+  "attempt_median_s": 11.108
+ },
+ "attempt_median_guest_over_host": 1.383,
+ "b1_host": {
+  "success": "21/24",
+  "attempt_median_s": 11.981
+ },
+ "b5_guest": {
+  "success": "21/24",
+  "attempt_median_s": 11.725
+ },
+ "b_attempt_median_guest_over_host": 0.979,
+ "b_note": "B1 (EAT release-1.1.0's chart) and B5 (EAS's KServe deployment) share the vLLM image and weights, not the deployment: the guest and the deployment are read together",
+ "gated": false
+}
