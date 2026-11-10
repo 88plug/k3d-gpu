@@ -1705,9 +1705,9 @@ release's packages.
 
 | Component | Ubuntu 24.04 / 26.04 | Fedora | Arch / Manjaro |
 |-----------|----------------------|--------|----------------|
-| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.35.39758.10, IGC 2.41.5; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
+| Compute runtime (OpenCL + Level Zero GPU) | GitHub .debs, sha256-checked: compute-runtime 26.40.40196.8, IGC 2.42.6; with `libigdgmm12` from `ppa:kobuk-team/intel-graphics`, pinned gmmlib 22.10.2 (the .debs need 22.10+; the archives carry 22.3.17 and 22.9.0) | `intel-opencl intel-level-zero` | `intel-compute-runtime` |
 | Level Zero loader | 24.04: GitHub `libze1` 1.34.0 .deb, sha256-checked. 26.04: none pinned (level-zero publishes 22.04/24.04 .debs only); `host-setup` says so and names the archive's `libze1` 1.28.2 | `oneapi-level-zero` | `level-zero-loader` |
-| Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned media driver 26.3.5, libva 2.24.1, gmmlib 22.10.2 | `libva-intel-media-driver` | `intel-media-driver libva` |
+| Media driver + libva | `ppa:kobuk-team/intel-graphics`, pinned media driver 26.4.1, libva 2.24.1, gmmlib 22.10.2 | `libva-intel-media-driver` | `intel-media-driver libva` |
 | NPU driver + firmware | GitHub linux-npu-driver v1.38.0 archive, sha256-checked (includes `intel-fw-npu`) | `intel-npu-driver intel-npu-firmware` | `intel-npu-driver linux-firmware-intel` |
 | NVIDIA container toolkit | NVIDIA apt repo, pinned 1.20.1-1; CDI via `nvidia-cdi-refresh` | NVIDIA dnf repo, pinned 1.20.1-1 | `nvidia-container-toolkit`; CDI via `nvidia-cdi-refresh` (1.20.1-1+), else `nvidia-ctk cdi generate` |
 | DSA / IAA user work queues | `accel-config` from the release's universe (24.04: 4.1.6, 26.04: 4.1.9) when no `accel-config` binary is found, then per disabled device: 1 engine, 1 group, 1 user WQ (shared with user PASID, else dedicated) | `accel-config`, same steps | no package: build intel/idxd-config accel-config-v4.1.9; the plan leaves DSA/IAA out until then |
@@ -1744,8 +1744,8 @@ These are Docker **build args** (not runtime env):
 
 | Build arg    | Default               | Description                                  |
 |--------------|-----------------------|----------------------------------------------|
-| `K3S_TAG`    | `v1.37.1-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
-| `K3S_DIGEST` | `sha256:ca7f37d9…`    | index digest of `K3S_TAG` (auto-bumped with it) |
+| `K3S_TAG`    | `v1.37.2-k3s1`        | K3s image tag from `rancher/k3s` (auto-bumped) |
+| `K3S_DIGEST` | `sha256:21ea6e0f…`    | index digest of `K3S_TAG` (auto-bumped with it) |
 | `UBUNTU_IMAGE` | `ubuntu:26.04@sha256:…` | Ubuntu base image, pinned by digest (`26.04` default; `24.04` also published) |
 | `UBUNTU_2404_IMAGE` | `ubuntu:24.04@sha256:…` | the pinned 24.04 base; the release passes it as `UBUNTU_IMAGE` for the `ubuntu24.04` image |
 
@@ -1907,6 +1907,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | K3s Tag             | NVIDIA Plugin | Intel GPU Plugin | Gaudi Plugin |
 |------------|---------------------|---------------|------------------|--------------|
+| 2026-11-10 | v1.37.2-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-17 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-16 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-09-30 | v1.34.1-k3s1-amd64 | v0.20.1 | — | — |
