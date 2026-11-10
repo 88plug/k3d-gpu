@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-10T13:00:42Z. 2 open.
+Updated 2026-11-10T18:21:11Z. 1 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -23,14 +23,4 @@ These autobump PRs are open over 72 h and their head SHA has no successful ci.ym
 - https://github.com/88plug/k3d-gpu/pull/365 chore(nri): nri-balloons v0.15.1 (`autobump/nri`, open since 2026-11-07T12:30:50Z): ci.yml at d71288fc77d6: pull_request action_required
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
-
-## `stale:watchdog.yml`: no successful scheduled run within 7 h
-
-Opened 2026-11-10T11:42:56Z, updated 2026-11-10T11:42:56Z.
-
-`watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
-
-Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/42755292481 at 2026-11-10T04:21:00Z
-
-A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
