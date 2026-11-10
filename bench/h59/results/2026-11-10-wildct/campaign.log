@@ -1,0 +1,20 @@
+== H59w-holdsmoke waiting for the lock (mode perf, arms: O L) 2026-11-10T19:53:47Z
+== H59w-holdsmoke lock taken 2026-11-10T19:53:47Z
+== H59w-holdsmoke start: O L 2026-11-10T19:53:48Z
+== H59w-holdsmoke rc=0; clusters deleted: k3dgpu-w-h59-smoke; now:  2026-11-10T19:57:02Z
+== H59w-hold1 waiting for the lock (mode perf, arms: O L) 2026-11-10T19:58:57Z
+== H59w-hold1 lock taken 2026-11-10T19:58:57Z
+== H59w-hold1 start: O L 2026-11-10T19:58:57Z
+== H59w-hold1 rc=0; clusters deleted: k3dgpu-w-h59-1; now:  2026-11-10T20:33:55Z
+== H59w-hold2 waiting for the lock (mode perf, arms: L O) 2026-11-10T20:35:34Z
+== H59w-hold2 lock taken 2026-11-10T20:35:34Z
+== H59w-hold2 start: L O 2026-11-10T20:35:34Z
+== H59w-hold2 rc=0; clusters deleted: k3dgpu-w-h59-2; now:  2026-11-10T21:10:28Z
+== H59w-hold3 waiting for the lock (mode perf, arms: O L) 2026-11-10T21:12:20Z
+== H59w-hold3 lock taken 2026-11-10T21:12:20Z
+== H59w-hold3 start: O L 2026-11-10T21:12:21Z
+== H59w-hold3 rc=0; clusters deleted: k3dgpu-w-h59-3; now:  2026-11-10T21:47:11Z
+== H59w-hold4 waiting for the lock (mode quality, arms: L O) 2026-11-10T21:49:17Z
+== H59w-hold4 lock taken 2026-11-10T21:49:17Z
+== H59w-hold4 start: L O 2026-11-10T21:49:17Z
+== H59w-hold4 rc=0; clusters deleted: k3dgpu-w-h59-4; now:  2026-11-10T22:25:03Z

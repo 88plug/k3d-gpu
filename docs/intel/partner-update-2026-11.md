@@ -44,9 +44,10 @@ Five rows there have a verdict, and four of them are SUPPORTED:
 
 The fifth, H34w, is INCONCLUSIVE: with H34 replicated there under matched `typical` load,
 OVMS's CPU Fast Draft against the target alone resolved neither the pre-registered gain nor its
-exclusion, so the i7-13700 class gets no CPU draft by default. H57wa, H57wm, H57wb and the
-engine-choice row H59w are pre-registered and not yet run. Until a row for the
-i7-13700 class says otherwise, that class keeps OVMS as its CPU engine.
+exclusion, so the i7-13700 class gets no CPU draft by default. H57wa, H57wm and H57wb are
+pre-registered and not yet run. The engine-choice row H59w is REFUTED: at four
+concurrent requests llama.cpp decoded no faster per request than OVMS, so the i7-13700 class
+keeps OVMS as its CPU engine.
 
 **Intel's documented EAT 2.0 install, at the GA tags, finished in a KVM guest and served EAT's
 banking flow as well as k3d-gpu's CPU stack.** H62r repeated H62 at the GA tags: Intel's

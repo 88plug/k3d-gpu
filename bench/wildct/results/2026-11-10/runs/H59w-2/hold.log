@@ -1,0 +1,4 @@
+== H59w-hold2 waiting for the lock (mode perf, arms: L O) 2026-11-10T20:35:34Z
+== H59w-hold2 lock taken 2026-11-10T20:35:34Z
+== H59w-hold2 start: L O 2026-11-10T20:35:34Z
+== H59w-hold2 rc=0; clusters deleted: k3dgpu-w-h59-2; now:  2026-11-10T21:10:28Z
