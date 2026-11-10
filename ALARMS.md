@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-10T19:24:39Z. 2 open.
+Updated 2026-11-10T19:31:26Z. 2 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -19,7 +19,7 @@ A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_requ
 
 ## `ci-main`: ci.yml on main failure
 
-Opened 2026-11-10T19:24:39Z, updated 2026-11-10T19:24:39Z.
+Opened 2026-11-10T19:24:39Z, updated 2026-11-10T19:24:39Z, acknowledged.
 
 The latest completed ci.yml run on main failed.
 
