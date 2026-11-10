@@ -198,26 +198,26 @@
       "tag": "2026.4.1-gpu"
     },
     {
-      "digest": "sha256:ca7f37d993d82ef0dcdcfecb2e0e2618ea541dbaffc620c8cedebe01a82acd0d",
+      "digest": "sha256:21ea6e0fac4e3930c2ce8aa40ddd41a8b18cb3e9a0222c030dc005e7e88c4332",
       "name": "docker.io/rancher/k3s",
       "sources": [
         "Dockerfile"
       ],
-      "tag": "v1.37.1-k3s1"
+      "tag": "v1.37.2-k3s1"
     },
     {
-      "digest": "sha256:5425a2b4613d2458dbdff99218e8d487ebb59c20e7a941f061c0777070f0aac1",
+      "digest": "sha256:391ec9f4824d631c49b52c1e3d10e4a2ced37a784afd75852e34bb2a6c7309b1",
       "name": "docker.io/rancher/klipper-helm",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
-      "tag": "v0.13.3-build20260727"
+      "tag": "v0.13.3-build20261021"
     },
     {
       "digest": "sha256:910944bb0bd94f060a82a56ca1ea1c577d3e49b3473a093a47a985f32e92d94a",
       "name": "docker.io/rancher/klipper-lb",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "v0.4.17"
     },
@@ -225,7 +225,7 @@
       "digest": "sha256:e757967a5ec338f6a9b371c5a9688bedaa8c3578ea3dd4db329ea0084be0a86f",
       "name": "docker.io/rancher/local-path-provisioner",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "v0.0.37"
     },
@@ -233,7 +233,7 @@
       "digest": "sha256:7efd3c635b03efd68c4e8398fc45f0d993d0e9ab016f72c1cefb0fd6d01aa286",
       "name": "docker.io/rancher/mirrored-coredns-coredns",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "1.14.7"
     },
@@ -241,23 +241,23 @@
       "digest": "sha256:101b4afd76732482eff9b95cae5f94bcf295e521fbec4e01b69c5421f3f3f3e5",
       "name": "docker.io/rancher/mirrored-library-busybox",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "1.37.0"
     },
     {
-      "digest": "sha256:f86a2cab1b5c649070c49f883c743dd32d8485a56e3368c5f93b9e91f1e91259",
+      "digest": "sha256:0f6150202bc1fed72a7bd2107460eaa510e5b8a905f3fdb5b84f2c8619c33368",
       "name": "docker.io/rancher/mirrored-library-traefik",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
-      "tag": "3.7.13"
+      "tag": "3.7.15"
     },
     {
       "digest": "sha256:d9862115e7c7881280d3d75ca26bda8ffc0fc213315979575bf23ce9826205c0",
       "name": "docker.io/rancher/mirrored-metrics-server",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "v0.9.0"
     },
@@ -265,7 +265,7 @@
       "digest": "sha256:f548e0e8e3dc1896ca956272154dde3314e8cc4fde0a57577ee9fa1c63f5baf4",
       "name": "docker.io/rancher/mirrored-pause",
       "sources": [
-        "k3s-images.txt v1.37.1-k3s1"
+        "k3s-images.txt v1.37.2-k3s1"
       ],
       "tag": "3.10.2"
     },
@@ -455,6 +455,6 @@
       "tag": "1.24.2-481"
     }
   ],
-  "k3s_tag": "v1.37.1-k3s1",
+  "k3s_tag": "v1.37.2-k3s1",
   "schema": "k3d-gpu.images-lock/v1"
 }
