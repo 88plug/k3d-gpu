@@ -301,10 +301,9 @@ in its registered order. Each row is stated as the ledger graded it.
 | [ledger:H18w] | H18 replicated: `sandbox up` kept the sandbox on an E-core behind default-deny egress in 3 of 3 runs, with PyPI reachable ([run](../EXPERIMENTS.md#h18w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
 | [ledger:H25w] | H25 replicated: with OVMS's shipped prefix caching on, an added agent's first chunk arrived 14.3x sooner than with it off (CI 13.38-14.89), under matched `typical` load ([run](../EXPERIMENTS.md#h25w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
 | [ledger:H34w] | H34 replicated: OVMS's CPU Fast Draft against the 4B target alone under matched `typical` load. Neither the pre-registered gain nor its exclusion was resolved, so the i7-13700 class gets no CPU draft by default ([run](../EXPERIMENTS.md#h34w-run-wildct-i7-13700-2026-11-07)) | INCONCLUSIVE |
+| [ledger:H28w] | H28 replicated: eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy (1.00x the model size on the node, against 9.00x for per-pod copies) and were ready in 0.339 of the copy arm's time (CI 0.329-0.363), under matched `typical` load ([run](../EXPERIMENTS.md#h28w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
 
-H28w has run there; its result is in review
-([#344](https://github.com/88plug/k3d-gpu/pull/344)) and not yet in the ledger. H57wa, H57wm,
-H57wb and the engine-choice row H59w are pre-registered there and not yet run.
+H57wa, H57wm, H57wb and the engine-choice row H59w are pre-registered there and not yet run.
 
 Facts from `0ecf67a` that shape a k3d run:
 
