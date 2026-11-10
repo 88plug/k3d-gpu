@@ -1,0 +1,4 @@
+== H59w-holdsmoke waiting for the lock (mode perf, arms: O L) 2026-11-10T19:53:47Z
+== H59w-holdsmoke lock taken 2026-11-10T19:53:47Z
+== H59w-holdsmoke start: O L 2026-11-10T19:53:48Z
+== H59w-holdsmoke rc=0; clusters deleted: k3dgpu-w-h59-smoke; now:  2026-11-10T19:57:02Z

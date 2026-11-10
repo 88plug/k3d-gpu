@@ -302,8 +302,9 @@ in its registered order. Each row is stated as the ledger graded it.
 | [ledger:H25w] | H25 replicated: with OVMS's shipped prefix caching on, an added agent's first chunk arrived 14.3x sooner than with it off (CI 13.38-14.89), under matched `typical` load ([run](../EXPERIMENTS.md#h25w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
 | [ledger:H34w] | H34 replicated: OVMS's CPU Fast Draft against the 4B target alone under matched `typical` load. Neither the pre-registered gain nor its exclusion was resolved, so the i7-13700 class gets no CPU draft by default ([run](../EXPERIMENTS.md#h34w-run-wildct-i7-13700-2026-11-07)) | INCONCLUSIVE |
 | [ledger:H28w] | H28 replicated: eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy (1.00x the model size on the node, against 9.00x for per-pod copies) and were ready in 0.339 of the copy arm's time (CI 0.329-0.363), under matched `typical` load ([run](../EXPERIMENTS.md#h28w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
+| [ledger:H59w] | H59's engine choice re-run here, registered under H59 and run outside this pack's order (H59 amendment R5): at four concurrent requests, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter decoded Gemma 4 26B-A4B per request at 1.00x the rate of OVMS with OpenVINO's base-model int4 IR (CI 0.98-1.02), short of the pre-registered 1.2x, with GSM8K equal, so the i7-13700 class keeps OVMS ([run](../EXPERIMENTS.md#h59w-run-wildct-i7-13700-2026-11-10)) | REFUTED |
 
-H57wa, H57wm, H57wb and the engine-choice row H59w are pre-registered there and not yet run.
+H57wa, H57wm and H57wb are pre-registered there and not yet run.
 
 Facts from `0ecf67a` that shape a k3d run:
 
@@ -589,8 +590,9 @@ hardware, a recorded run.
   CPU engine choice [ledger:H59] and DRAM-resident serving of Qwen3.8-Flash-Next
   [ledger:H60]. The engine-choice replication on the i9-13900T (H59d) is INCONCLUSIVE:
   llama.cpp's arm was OOMKilled at the fit's pod limit and not deliverable in two holds.
-  Next: the replication on the i7-13700 (H59w), PENDING, and the B70 rows that
-  `/dev/dri/by-path` blocked (H53).
+  The replication on the i7-13700 (H59w) is REFUTED: at four concurrent requests llama.cpp
+  decoded per request at about OVMS's rate, short of the 1.2x bar, so that class keeps OVMS.
+  Next: the B70 rows that `/dev/dri/by-path` blocked (H53).
 - **EAT 1.1.0 run.** `eat-up.sh` deploys `release-1.1.0` since 2026-10-29, with the
   guardrail off and the vLLM CPU image re-pinned to `v0.28.0`
   ([platforms.md](platforms.md#intel-enterprise-agent-toolkit-eat)). The recorded

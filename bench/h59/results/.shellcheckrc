@@ -1,0 +1,5 @@
+# The prep job's convert.sh records (prep/drafter/convert.sh) are the script
+# the job ran as `bash /scripts/convert.sh`; it has no shebang, and the record
+# stays byte-for-byte as it ran. ShellCheck reads this file for every script
+# under bench/h59/results/.
+shell=bash

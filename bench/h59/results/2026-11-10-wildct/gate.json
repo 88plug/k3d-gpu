@@ -1,0 +1,23 @@
+{
+ "matched": true,
+ "spread": 0.015153846153846184,
+ "tolerance": 2.0,
+ "reason": "matched",
+ "means": {
+  "L": 0.2949230769230769,
+  "O": 0.3100769230769231
+ },
+ "rule": "H57d's load gate over each arm's 60 s idle window (H59 amendment R2)",
+ "n4": {
+  "matched": true,
+  "spread": 0.16399130204305934,
+  "tolerance": 2.0,
+  "reason": "matched",
+  "means": {
+   "L": 0.2550268817204301,
+   "O": 0.09103557967737075
+  },
+  "rule": "H57d's load gate over the N=4 phases",
+  "gates": false
+ }
+}

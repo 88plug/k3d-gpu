@@ -1,0 +1,18 @@
+2026-11-10T19:58:57Z
+ 14:58:57 up 12 days, 10:47,  2 users,  load average: 0.94, 1.34, 0.90
+               total        used        free      shared  buff/cache   available
+Mem:          128441       11193       68100        1421       51424      117247
+Swap:         393215           0      393215
+%CPU   PID USER     COMMAND
+ 2.6  1157 root     tailscaled
+ 2.5 35356 andrew   localsearch-ext
+ 2.1 35474 andrew   python3
+ 1.9 35419 root     sleep
+ 1.7 17900 10062    droid.launcher3
+ 1.4     1 root     systemd
+ 1.0  9906 911      python3
+ 0.9  1184 root     gdm
+ 0.7 35158 andrew   bash
+ 0.5  9806 andrew   WebExtensions
+/dev/nvme0n1p2  3844245864 3481537556 167356588      96% /
+/dev/nvme0n1p2  3844245864 3481537556 167356588      96% /

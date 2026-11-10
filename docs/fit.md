@@ -228,7 +228,7 @@ As of 2026-11-01 one row of the family is SUPPORTED: H59, for the Xeon 6741P's c
 (`6741p`) [ledger:H59]. On that class, with no backend set and no variant named,
 `agent up --model google/gemma-4-26B-A4B-it` serves llama.cpp with Google's QAT Q4_0 GGUF
 and the QAT MTP drafter. H59d (the i9-13900T) is INCONCLUSIVE and H59w (the i7-13700) is
-PENDING, so those classes, and every class with no row, keep OVMS.
+REFUTED, so those classes, and every class with no row, keep OVMS.
 
 ## The llama.cpp backend
 

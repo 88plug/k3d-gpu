@@ -153,7 +153,10 @@ passes.
   H59 amendment R5 records where H59w sits: outside this pack's order, its holds counted against
   H59's cap of 6 per row and not against the 12 here. Its wiring smoke is `row.sh h59w smoke`.
   The archive on wildct (`repo-fd822b337155`, rule W7) predates that path, so R5 writes out the
-  smoke's command for that archive. Holds 1 to 4 run as R1 registers them.
+  smoke's command for that archive. Holds 1 to 4 run as R1 registers them. H59w ran on
+  2026-11-10 (`h59w-prep`, the smoke, holds 1 to 4, no spare) and is REFUTED (EXPERIMENTS.md
+  "H59w run"; records in `results/2026-11-10/` and `bench/h59/results/2026-11-10-wildct/`). Its
+  models and the conversion image were removed after; the 12 here are unchanged.
 
 ## Ground rules (W1-W8; this pack adds none)
 

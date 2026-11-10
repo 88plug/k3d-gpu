@@ -1,0 +1,363 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "k3d-gpu.io/agent-device": "CPU",
+            "k3d-gpu.io/agent-fit": "cpu 5x65536"
+        },
+        "creationTimestamp": "2026-11-10T19:54:34Z",
+        "generateName": "ovms-85957fbfb8-",
+        "generation": 1,
+        "labels": {
+            "app": "ovms",
+            "k3d-gpu.io/cores": "performance",
+            "pod-template-hash": "85957fbfb8"
+        },
+        "name": "ovms-85957fbfb8-27pcs",
+        "namespace": "k3d-gpu-agent",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "ovms-85957fbfb8",
+                "uid": "ea81f5fe-ab5c-48e4-a7dd-0a4cbc2c8239"
+            }
+        ],
+        "resourceVersion": "884",
+        "uid": "24365534-7621-402c-a3e4-e63712ccda92"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "--rest_port=8000",
+                    "--model_path=/models/OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+                    "--model_name=gemma",
+                    "--cache_dir=/models/.ov_cache",
+                    "--log_level=INFO"
+                ],
+                "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "ovms",
+                "ports": [
+                    {
+                        "containerPort": 8000,
+                        "name": "http",
+                        "protocol": "TCP"
+                    }
+                ],
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/v2/health/ready",
+                        "port": "http",
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 5,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "memory": "94Gi"
+                    },
+                    "requests": {
+                        "cpu": "16",
+                        "memory": "94Gi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-zgp5m",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": true,
+        "initContainers": [
+            {
+                "args": [
+                    "--pull",
+                    "--source_model=OpenVINO/gemma-4-26b-a4b-it-int4-ov",
+                    "--model_repository_path=/models",
+                    "--model_name=gemma",
+                    "--task=text_generation",
+                    "--target_device=CPU",
+                    "--tool_parser=gemma4",
+                    "--reasoning_parser=gemma4",
+                    "--max_num_seqs=5",
+                    "--cache_size=69"
+                ],
+                "image": "openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "pull",
+                "resources": {},
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-zgp5m",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "nodeName": "k3d-k3dgpu-w-h59-smoke-server-0",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "fsGroup": 5000,
+            "runAsGroup": 5000,
+            "runAsUser": 5000
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "hostPath": {
+                    "path": "/var/apb-models",
+                    "type": "Directory"
+                },
+                "name": "models"
+            },
+            {
+                "name": "kube-api-access-zgp5m",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "cpu": "16",
+            "memory": "94Gi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-10T19:54:34Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-10T19:54:47Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-10T19:55:28Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-10T19:55:28Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-10T19:54:34Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "16",
+                    "memory": "94Gi"
+                },
+                "containerID": "containerd://9734b9935b55feb729a9826b34df3dd37dcc3fe5d1d6aa210e1eced07ca02aa3",
+                "image": "sha256:6348136997e05a7ee2c2b08e47bb15deb6e5096c62ab3fb821907ded7e2afd7c",
+                "imageID": "docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "lastState": {},
+                "name": "ovms",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "memory": "94Gi"
+                    },
+                    "requests": {
+                        "cpu": "16",
+                        "memory": "94Gi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-11-10T19:54:47Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 5000,
+                        "supplementalGroups": [
+                            39,
+                            44,
+                            5000
+                        ],
+                        "uid": 5000
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-zgp5m",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.19.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.19.0.2"
+            }
+        ],
+        "initContainerStatuses": [
+            {
+                "containerID": "containerd://617f69df0f2d302675a9a6338aeab7e0d331b712965786c3dc083f4479003108",
+                "image": "sha256:6348136997e05a7ee2c2b08e47bb15deb6e5096c62ab3fb821907ded7e2afd7c",
+                "imageID": "docker.io/openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58",
+                "lastState": {},
+                "name": "pull",
+                "ready": true,
+                "resources": {},
+                "restartCount": 0,
+                "started": false,
+                "state": {
+                    "terminated": {
+                        "containerID": "containerd://617f69df0f2d302675a9a6338aeab7e0d331b712965786c3dc083f4479003108",
+                        "exitCode": 0,
+                        "finishedAt": "2026-11-10T19:54:47Z",
+                        "reason": "Completed",
+                        "startedAt": "2026-11-10T19:54:46Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 5000,
+                        "supplementalGroups": [
+                            39,
+                            44,
+                            5000
+                        ],
+                        "uid": 5000
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-zgp5m",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.42.0.10",
+        "podIPs": [
+            {
+                "ip": "10.42.0.10"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "94Gi"
+            },
+            "requests": {
+                "cpu": "15978m",
+                "memory": "94Gi"
+            }
+        },
+        "startTime": "2026-11-10T19:54:34Z"
+    }
+}

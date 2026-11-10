@@ -1,0 +1,4 @@
+== H59w-smoke waiting for the lock 2026-11-10T19:53:46Z
+== H59w-smoke lock taken 2026-11-10T19:53:46Z
+== H59w-smoke start: env G=/home/andrew/k3dgpu-bench-wildct/h59 LOCK=/home/andrew/k3dgpu-bench-wildct/inner.lock K3D_REAL=/home/andrew/k3dgpu-bench-wildct/bin/k3d H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 bash /home/andrew/k3dgpu-bench-wildct/repo/bench/h59/hold.sh wildct smoke 2026-11-10T19:53:46Z
+== H59w-smoke rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T19:57:08Z

@@ -1,0 +1,10 @@
+NAMESPACE                NAME                                      READY   STATUS      RESTARTS   AGE     IP           NODE                              NOMINATED NODE   READINESS GATES
+k3d-gpu-agent            llamacpp-5f689575bb-r7wz7                 1/1     Running     0          44s     10.42.0.11   k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+kube-system              coredns-577d995dff-42zj4                  1/1     Running     0          2m40s   10.42.0.2    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+kube-system              helm-install-gateway-api-crd-96c7h        0/1     Completed   0          2m41s   10.42.0.5    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+kube-system              local-path-provisioner-6858d854cf-mpg44   1/1     Running     0          2m40s   10.42.0.8    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+kube-system              metrics-server-778c4649b4-8wtzj           1/1     Running     0          2m40s   10.42.0.9    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+kube-system              nri-resource-policy-balloons-d4dpc        1/1     Running     0          2m41s   10.42.0.4    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+node-feature-discovery   nfd-gc-8d4595cbc-bmlj5                    1/1     Running     0          2m40s   10.42.0.7    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+node-feature-discovery   nfd-master-74b44b767d-2c6s2               1/1     Running     0          2m40s   10.42.0.6    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>
+node-feature-discovery   nfd-worker-hvh8t                          1/1     Running     0          2m41s   10.42.0.3    k3d-k3dgpu-w-h59-smoke-server-0   <none>           <none>

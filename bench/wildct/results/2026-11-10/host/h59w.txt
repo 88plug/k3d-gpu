@@ -1,0 +1,189 @@
+## h59w-prod-before-prep
+2026-11-10T17:40:55Z
+ 12:40:55 up 12 days,  8:29,  2 users,  load average: 0.38, 0.48, 0.48
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119877768 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-before-smoke
+2026-11-10T19:53:45Z
+ 14:53:45 up 12 days, 10:42,  2 users,  load average: 0.47, 0.50, 0.47
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   119706116 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-before-h1
+2026-11-10T19:58:55Z
+ 14:58:55 up 12 days, 10:47,  2 users,  load average: 0.93, 1.34, 0.90
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   120102056 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-before-h2
+2026-11-10T20:35:32Z
+ 15:35:32 up 12 days, 11:24,  2 users,  load average: 2.35, 9.60, 9.58
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   120104700 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-before-h3
+2026-11-10T21:12:18Z
+ 16:12:18 up 12 days, 12:01,  2 users,  load average: 1.41, 6.06, 8.40
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   120056804 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-before-h4
+2026-11-10T21:49:15Z
+ 16:49:15 up 12 days, 12:38,  2 users,  load average: 1.82, 8.89, 9.93
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   119957408 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h59w-prod-after-h4
+2026-11-10T22:26:09Z
+ 17:26:09 up 12 days, 13:14,  2 users,  load average: 2.45, 7.03, 9.07
+/dev/nvme0n1p2             3667G 3321G      160G      96% /
+MemAvailable:   120075348 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
