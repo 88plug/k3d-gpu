@@ -603,6 +603,140 @@ got=$(ki_case none '' '[]' | tr '\n' ';')
 if [ -z "${got}" ]; then ok "bot-sweep known-issues: nothing newly fixed, no dispatch"
 else fail "bot-sweep known-issues with nothing to do: ${got}"; fi
 
+# ─── Hand-off to the bot sweep ───────────────────────────────────────────────
+# GitHub delivers bot-sweep.yml's hourly cron every 4 to 10 h on this repository,
+# and a run dispatched with GITHUB_TOKEN (every bot PR's CI and canary, and the CI
+# the sweep dispatches on main) starts no workflow_run, so nothing else follows it.
+# ci.yml (dispatched on autobump/* or main) and canary.yml (dispatched on
+# autobump/*) therefore end with job sweep: after every other job, never failing,
+# actions: write only, it dispatches bot-sweep.yml on main with after_run set to
+# its own run id. The sweep's ci-fill job first waits (5 min at most) for that run
+# to complete, so the run it reads as evidence is finished.
+python3 - "${WF}" "${T}" > "${T}/handoff.out" 2>&1 <<'PY'
+import os, sys, yaml
+wf, out = sys.argv[1], sys.argv[2]
+def on(d):
+    v = d.get("on", d.get(True))
+    return v if isinstance(v, dict) else {}
+texts = {}
+for f, refs in (("ci.yml", ("refs/heads/autobump/", "refs/heads/main")), ("canary.yml", ("refs/heads/autobump/",))):
+    jobs = yaml.safe_load(open(os.path.join(wf, f)))["jobs"]
+    job = jobs.get("sweep")
+    if not job:
+        print("FAIL %s has no job sweep" % f); continue
+    needs = job.get("needs") or []
+    needs = [needs] if isinstance(needs, str) else needs
+    cond = str(job.get("if", ""))
+    steps = job.get("steps") or []
+    env = (steps[0].get("env") or {}) if len(steps) == 1 else {}
+    others = set(jobs) - {"sweep"}
+    print(("ok %s job sweep needs every other job" % f) if set(needs) == others and len(needs) == len(others)
+          else "FAIL %s job sweep needs %s, not every other job (missing %s)" % (f, sorted(needs), sorted(others - set(needs))))
+    want = ["!cancelled()", "github.event_name == 'workflow_dispatch'"] + ["'%s'" % r for r in refs]
+    extra = "refs/heads/main" in cond and "refs/heads/main" not in refs
+    print(("ok %s job sweep runs, unless cancelled, on a dispatch on %s" % (f, " or ".join(refs)))
+          if all(w in cond for w in want) and not extra else "FAIL %s job sweep if: %s" % (f, cond))
+    good = (job.get("continue-on-error") is True and isinstance(job.get("timeout-minutes"), int)
+            and job.get("permissions") == {"actions": "write"} and len(steps) == 1 and "run" in steps[0]
+            and env == {"GH_TOKEN": "${{ github.token }}", "GH_REPO": "${{ github.repository }}",
+                        "RUN_ID": "${{ github.run_id }}"})
+    print(("ok %s job sweep: continue-on-error, timeout, actions: write only, one step, no checkout" % f) if good
+          else "FAIL %s job sweep: %s" % (f, yaml.safe_dump(job).replace("\n", " ")))
+    if good:
+        texts[f] = steps[0]["run"]
+if len(texts) == 2:
+    print(("ok ci.yml and canary.yml hand off with the same step") if len(set(texts.values())) == 1
+          else "FAIL ci.yml and canary.yml hand off with different steps")
+    open(os.path.join(out, "handoff_step.sh"), "w").write(texts["ci.yml"])
+bs = yaml.safe_load(open(os.path.join(wf, "bot-sweep.yml")))
+inp = ((on(bs).get("workflow_dispatch") or {}).get("inputs") or {}).get("after_run") or {}
+print(("ok bot-sweep.yml takes the dispatch input after_run (string, default empty)")
+      if inp.get("type") == "string" and inp.get("default") == "" else "FAIL bot-sweep.yml input after_run: %s" % inp)
+steps = (bs["jobs"].get("ci-fill") or {}).get("steps") or []
+wait = [i for i, s in enumerate(steps) if (s.get("env") or {}).get("AFTER_RUN") == "${{ inputs.after_run }}"]
+fill = [i for i, s in enumerate(steps) if "hack/bot-ci-dispatch" in s.get("run", "")]
+if len(wait) == 1 and fill and wait[0] < min(fill) and "run" in steps[wait[0]] \
+        and (steps[wait[0]].get("env") or {}).get("GH_TOKEN") == "${{ github.token }}" \
+        and (steps[wait[0]].get("env") or {}).get("GH_REPO") == "${{ github.repository }}":
+    print("ok bot-sweep.yml ci-fill waits for the after_run run before it dispatches CI")
+    open(os.path.join(out, "wait_step.sh"), "w").write(steps[wait[0]]["run"])
+else:
+    print("FAIL bot-sweep.yml ci-fill has no wait step on AFTER_RUN before hack/bot-ci-dispatch")
+PY
+while IFS= read -r line; do
+    case "${line}" in "ok "*) ok "${line#ok }" ;; *) fail "${line#FAIL }" ;; esac
+done < "${T}/handoff.out"
+# The two steps run as Actions runs them (bash -eo pipefail) against a fake gh that
+# logs each call and gives the Nth call the Nth answer of a script (the last one
+# repeats): fail (a 502), ok (exit 0, no output) or a line to print. sleep is a no-op.
+mkdir -p "${T}/hbin"
+cat > "${T}/hbin/gh" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$HD/calls"
+n=$(wc -l < "$HD/calls")
+a=$(sed -n "${n}p" "$HD/answers"); [ -n "$a" ] || a=$(tail -n 1 "$HD/answers")
+case $a in fail) echo "HTTP 502: Bad Gateway" >&2; exit 1;; ok) exit 0;; *) echo "$a";; esac
+STUB
+printf '#!/bin/sh\nexit 0\n' > "${T}/hbin/sleep"
+chmod +x "${T}/hbin/gh" "${T}/hbin/sleep"
+# step_case NAME STEPFILE ANSWERS VAR=VALUE...: runs the step; sets HRC, HOUT and HCALLS.
+step_case() {
+    local name=$1 step=$2 answers=$3; shift 3
+    HD="${T}/step-${name}"; export HD; mkdir -p "$HD"; : > "$HD/calls"
+    printf '%b' "$answers" > "$HD/answers"
+    HOUT=$(env PATH="${T}/hbin:$PATH" GH_TOKEN=t GH_REPO=o/r "$@" \
+           bash --noprofile --norc -eo pipefail "$step" 2>&1); HRC=$?
+    HCALLS=$(cat "$HD/calls")
+}
+# The repository's GITHUB_TOKEN gets 1,000 REST requests an hour, shared by every
+# workflow, and a sweep reads about 10 per open bot PR: the hand-off reads the
+# budget first (GET /rate_limit costs none) and leaves the run to the cron when
+# fewer than 500 remain.
+if [ -f "${T}/handoff_step.sh" ]; then
+    step_case hand-ok "${T}/handoff_step.sh" '999\nok\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && [ "$(sed -n 1p <<<"$HCALLS")" = "api rate_limit --jq .resources.core.remaining" ] \
+       && [ "$(sed -n '2,$p' <<<"$HCALLS")" = "workflow run bot-sweep.yml --ref main -f after_run=4242" ]; then
+        ok "hand-off: reads the token budget, then dispatches bot-sweep.yml on main with after_run=<this run>"
+    else fail "hand-off ok: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case hand-retry "${T}/handoff_step.sh" '999\nfail\nok\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && [ "$(grep -c '^workflow run bot-sweep.yml' <<<"$HCALLS")" -eq 2 ] && ! grep -q '::warning::' <<<"$HOUT"; then
+        ok "hand-off: a failed dispatch is sent again"
+    else fail "hand-off retry: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case hand-down "${T}/handoff_step.sh" '999\nfail\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && [ "$(grep -c '^workflow run bot-sweep.yml' <<<"$HCALLS")" -eq 3 ] && grep -q '^::warning::' <<<"$HOUT"; then
+        ok "hand-off: 3 failed dispatches warn and exit 0 (the run's result stands)"
+    else fail "hand-off down: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case hand-low "${T}/handoff_step.sh" '499\nok\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && ! grep -q '^workflow run' <<<"$HCALLS" && grep -q '^::notice::.*499' <<<"$HOUT"; then
+        ok "hand-off: under 500 requests left this hour, no dispatch (a notice; the cron sweeps)"
+    else fail "hand-off low budget: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case hand-edge "${T}/handoff_step.sh" '500\nok\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && [ "$(grep -c '^workflow run bot-sweep.yml' <<<"$HCALLS")" -eq 1 ]; then
+        ok "hand-off: exactly 500 left still dispatches"
+    else fail "hand-off 500 left: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case hand-unread "${T}/handoff_step.sh" 'fail\nok\n' RUN_ID=4242
+    if [ "$HRC" -eq 0 ] && [ "$(grep -c '^workflow run bot-sweep.yml' <<<"$HCALLS")" -eq 1 ]; then
+        ok "hand-off: an unreadable budget still dispatches"
+    else fail "hand-off unreadable budget: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+else fail "hand-off step not extracted, its behaviour is untested"; fi
+if [ -f "${T}/wait_step.sh" ]; then
+    step_case wait-none "${T}/wait_step.sh" 'completed\n' AFTER_RUN=
+    if [ "$HRC" -eq 0 ] && [ -z "$HCALLS" ]; then ok "sweep wait: no after_run (the cron, a manual dispatch) waits for nothing"
+    else fail "sweep wait none: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case wait-bad "${T}/wait_step.sh" 'completed\n' 'AFTER_RUN=4242;id'
+    if [ "$HRC" -ne 0 ] && [ -z "$HCALLS" ] && grep -q '^::error::' <<<"$HOUT"; then ok "sweep wait: an after_run that is not a run id fails the step"
+    else fail "sweep wait bad: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case wait-done "${T}/wait_step.sh" 'in_progress\nfail\nqueued\ncompleted\n' AFTER_RUN=4242
+    if [ "$HRC" -eq 0 ] && [ "$(grep -c '^run view 4242 ' <<<"$HCALLS")" -eq 4 ] && [ "$(wc -l <<<"$HCALLS")" -eq 4 ] \
+       && ! grep -q '::warning::' <<<"$HOUT"; then
+        ok "sweep wait: polls the run (through a failed read) until it completes"
+    else fail "sweep wait done: rc=$HRC calls=$(tr '\n' ';' <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+    step_case wait-ceiling "${T}/wait_step.sh" 'in_progress\n' AFTER_RUN=4242
+    if [ "$HRC" -eq 0 ] && [ "$(wc -l <<<"$HCALLS")" -eq 60 ] && grep -q '^::warning::.*4242' <<<"$HOUT"; then
+        ok "sweep wait: a run still open after 60 reads warns and the sweep goes on"
+    else fail "sweep wait ceiling: rc=$HRC reads=$(wc -l <<<"$HCALLS") out=$(tr '\n' ';' <<<"$HOUT")"; fi
+else fail "sweep wait step not extracted, its behaviour is untested"; fi
+
 # ─── GitHub's "Latest" release ───────────────────────────────────────────────
 # /releases/latest leads users to the packages, so "Latest" is the newest aur-v*
 # package release (.deb, .rpm, SHA256SUMS). An image release (<k3s>-ndp<plugin>,

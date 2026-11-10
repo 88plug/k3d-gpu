@@ -649,6 +649,54 @@ jobs:
           persist-credentials: false
       - run: tests/bot_merge_test.sh
 
+  # ─── Hand-off to the bot sweep ───────────────────────────────────────────
+  # A run dispatched on autobump/* (a bot PR's CI) or on main (the CI the sweep or the
+  # watchdog dispatches) is evidence bot-sweep.yml acts on, and a run dispatched with
+  # GITHUB_TOKEN starts no workflow_run, so the sweep would wait for its hourly cron,
+  # which GitHub starts hours apart here (bot-sweep.yml). After every other job this
+  # one dispatches the sweep with after_run set to this run's id; the sweep waits for
+  # this run to complete before it reads it. It never fails CI (continue-on-error,
+  # exit 0).
+  # needs lists every other job (tests/ci_wiring_test.sh checks it).
+  sweep:
+    name: Hand off to the bot sweep
+    needs: [shellcheck, actionlint, detect-tests, quickstart-tests, fuzz-props, remote-tests, telemetry-tests,
+            agent-manifests, intel-gpu-dra-manifests, share-manifests, console-tests, images-lock, report-html,
+            oracle, claims-check, bench-tests, fit-tests, tune-tests, capacity-tests, mcp-tests, kuberay-example,
+            chat-ui-manifest, sim-fixtures, sim-matrix, agent-examples, register-model-test, render,
+            packaging-tests, deb-rpm, homebrew, nix-flake, hadolint, arch-image, pkgbuild-lint, kserve-example,
+            ops-tests, known-issues, canary-tests, pin-guard, pins, bot-merge-tests, alarms]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'workflow_dispatch'
+          && (startsWith(github.ref, 'refs/heads/autobump/') || github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch bot-sweep.yml, which waits for this run to complete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # GITHUB_TOKEN: 1,000 REST requests an hour for the repository, every workflow's;
+          # a sweep reads about 10 per open bot PR. GET /rate_limit costs none.
+          left=$(gh api rate_limit --jq .resources.core.remaining 2>/dev/null) || left=
+          if [[ $left =~ ^[0-9]+$ ]] && [ "$left" -lt 500 ]; then
+            echo "::notice::$left GITHUB_TOKEN requests left this hour; no hand-off, the next scheduled sweep reads this run"
+            exit 0
+          fi
+          for n in 1 2 3; do
+            if gh workflow run bot-sweep.yml --ref main -f after_run="$RUN_ID"; then
+              echo "dispatched bot-sweep.yml with after_run=$RUN_ID"
+              exit 0
+            fi
+            if [ "$n" -lt 3 ]; then sleep $((10 * n)); fi
+          done
+          echo "::warning::could not dispatch bot-sweep.yml; its next scheduled run reads this run"
+
   # ─── Bot PR CI and alarm surfacing ───────────────────────────────────────
   # The watchdog files a ci-alarm (an issue; with Issues disabled an entry on branch
   # ci-status) for a red or missing scheduled run or a broken release (email went
