@@ -434,7 +434,13 @@ install (EAS `v1.2.0-rc.1` with Kubespray in a 96-vCPU, one-NUMA KVM guest) gave
 `gemma-4-26b` 76 of 95.4 allocatable CPUs and Qwen3Guard 8; the rest of the stack requested
 about 11.2. EAT 2.0's sandbox router, applied after the models, then stayed Pending with
 `Insufficient cpu`, in two of two attempts
-([H62 run](../../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)).
+([H62 run](../../EXPERIMENTS.md#h62-run-xeon-6741p-2026-11-01)). In H62r, at the GA tags in
+the same guest shape, EAS's documented `nri_reserved_cpu_list` named the guest's 48 sibling
+vCPUs; `gemma-4-26b` was sized to 40 CPUs and the router was placed
+([H62r run](../../EXPERIMENTS.md#h62r-run-xeon-6741p-2026-11-07)). So the gap shows where the
+reserve is small: one thread per core, or a KVM guest whose adjacent sibling numbering EAS's
+topology probe reads as one thread per core
+([probe-node-topology.sh#L30-L31](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/roles/nri_cpu_balloons/files/probe-node-topology.sh#L30-L31)).
 
 **Suggested fix:** subtract the CPU already requested on the node by non-balloon pods, and
 keep back the requests of the layers the installer has still to apply (the agent toolkit's
