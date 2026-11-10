@@ -43,7 +43,7 @@ FROM ${UBUNTU_IMAGE}
 # (https://nvidia.github.io/libnvidia-container/stable/deb/amd64/Packages); the
 # nightly check job bumps both. The toolkit, its base and the libnvidia-container
 # libraries share one version; nvidia-container-runtime is a meta package with its own.
-ARG NVIDIA_CTK_VERSION="1.20.1-1"
+ARG NVIDIA_CTK_VERSION="1.20.2-1"
 ARG NVIDIA_CONTAINER_RUNTIME_VERSION="3.14.0-1"
 
 # Install the NVIDIA container toolkit (distro-agnostic stable/deb repo — the
