@@ -34,6 +34,7 @@ oracle/seed/**                          historical  the maintainer bundles of th
 oracle/raw/**                           historical  the raw H6 and H8 records the seed bundles were built from
 bench/f3/**                             historical  F3's runner and records (a functional row; ledger lines take H ids only)
 bench/f5/**                             historical  F5's runner and records: its pins are the pre-registration's (a functional row; ledger lines take H ids only)
+bench/vllm-agent/**                     historical  the vLLM agent's unpatched end-state runs on an Arc Pro B70 (2026-11-08): release 0.1.94 and #357's head
 
 # --- Runners of finished rows. Ledger lines, so the class follows the ledger: every row
 # listed has a verdict, so each resolves to historical (hack/pin-classes effective).

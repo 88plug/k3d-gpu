@@ -1,0 +1,1 @@
+clean: no GPU device plugin pod, GPU-SCAN clean

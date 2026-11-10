@@ -700,8 +700,16 @@ cfg="${WORK}/xpu-reason.cfg"
 cp "${EAT}/agentic-config.cfg" "${cfg}"
 echo 'compute_platform=xpu' >> "${cfg}"
 out=$(EAT_CONFIG="${cfg}" EAT_KUBECONFIG=/nonexistent "${EAT}/eat-up.sh" 2>&1) || true
-if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm' <<< "${out}"; then ok "eat-up: the xpu refusal points at vLLM on an Intel GPU through k3d-gpu agent up"
+if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm' <<< "${out}"; then ok "eat-up: the xpu refusal names k3d-gpu's vLLM on an Intel GPU"
 else fail "eat-up: the xpu refusal names no alternative: ${out}"; fi
+# Releases through 0.1.93 never served that path. Release 0.1.94 (#339) is the first that
+# does, and it served end to end on an Arc Pro B70: the refusal sends users there and
+# names that release, since an older launcher does not serve.
+if grep -qF 'K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up' <<< "${out}" \
+    && grep -qF 'k3d-gpu 0.1.94 or later' <<< "${out}" \
+    && ! grep -qF 'has not yet served' <<< "${out}"; then
+    ok "eat-up: the xpu refusal sends users to k3d-gpu's vLLM on an Intel GPU, from release 0.1.94"
+else fail "eat-up: the xpu refusal does not send users to k3d-gpu's vLLM from release 0.1.94: ${out}"; fi
 
 # 5. The GenAI Gateway path installs pinned charts and images. EAT's
 #    deploy-genai-gateway.yml syncs helm_charts_base_genai{,_trace} to the node, runs

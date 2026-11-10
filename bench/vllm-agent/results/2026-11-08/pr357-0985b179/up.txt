@@ -1,0 +1,97 @@
+[33mWARN:[0m present but disabled: DSA dsa0 dsa2 dsa4, QAT 0000:01:00.0 0000:06:00.0 0000:0b:00.0 (no user work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
+[32m==>[0m Accelerators: intel amx
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Pulling node image cryptoandcoffee/k3d-gpu:0.1.95...
+0.1.95: Pulling from cryptoandcoffee/k3d-gpu
+3fc420076e28: Pulling fs layer
+c7246eb68d8e: Pulling fs layer
+f772acb95844: Pulling fs layer
+4c0d817598b2: Pulling fs layer
+e4f81e59a4dd: Pulling fs layer
+72fa97de23e4: Pulling fs layer
+5ce602c69cb9: Pulling fs layer
+40eccae86b19: Pulling fs layer
+951c4ec85de1: Pulling fs layer
+c6ceffcc1e6e: Pulling fs layer
+a2b45b3f52ac: Pulling fs layer
+1ea8a99cd78e: Pulling fs layer
+03b22aa06829: Pulling fs layer
+79a61545e121: Pulling fs layer
+098d2e9a74b9: Pulling fs layer
+df5798a4e788: Pulling fs layer
+c6ceffcc1e6e: Already exists
+951c4ec85de1: Already exists
+44136fa355b3: Already exists
+e4f81e59a4dd: Download complete
+57615e2ad07d: Download complete
+f772acb95844: Download complete
+c7246eb68d8e: Download complete
+3fc420076e28: Download complete
+df5798a4e788: Download complete
+5ce602c69cb9: Download complete
+a2b45b3f52ac: Download complete
+72fa97de23e4: Download complete
+1ea8a99cd78e: Download complete
+4c0d817598b2: Download complete
+03b22aa06829: Download complete
+79a61545e121: Download complete
+098d2e9a74b9: Download complete
+40eccae86b19: Download complete
+40eccae86b19: Pull complete
+c6ceffcc1e6e: Pull complete
+951c4ec85de1: Pull complete
+f772acb95844: Pull complete
+c7246eb68d8e: Pull complete
+5ce602c69cb9: Pull complete
+a2b45b3f52ac: Pull complete
+72fa97de23e4: Pull complete
+1ea8a99cd78e: Pull complete
+4c0d817598b2: Pull complete
+03b22aa06829: Pull complete
+c6ceffcc1e6e: Pull complete
+951c4ec85de1: Pull complete
+e4f81e59a4dd: Pull complete
+f772acb95844: Pull complete
+c7246eb68d8e: Pull complete
+3fc420076e28: Pull complete
+df5798a4e788: Pull complete
+5ce602c69cb9: Pull complete
+a2b45b3f52ac: Pull complete
+72fa97de23e4: Pull complete
+1ea8a99cd78e: Pull complete
+4c0d817598b2: Pull complete
+03b22aa06829: Pull complete
+79a61545e121: Pull complete
+098d2e9a74b9: Pull complete
+Digest: sha256:65499cbe202dca63c28029e03c4eb5139f5de31f5f369d915494f06e6f4dd3fa
+Status: Downloaded newer image for cryptoandcoffee/k3d-gpu:0.1.95
+docker.io/cryptoandcoffee/k3d-gpu:0.1.95
+[32m==>[0m Creating k3d cluster 'gpu' with image cryptoandcoffee/k3d-gpu:0.1.95...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-gpu'                    
+[36mINFO[0m[0000] Created image volume k3d-gpu-images          
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-gpu-tools'                
+[36mINFO[0m[0001] Creating node 'k3d-gpu-server-0'             
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'gpu'                       
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-gpu-server-0'             
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'gpu' created successfully!          
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write gpu)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/devcloud/.local/state/k3d-gpu/kubeconfig-gpu
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-gpu-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m intel device plugin auto-deployed by k3s.
+[32m==>[0m Verifying accelerators are schedulable...
+daemon set "intel-gpu-plugin" successfully rolled out
+[33mWARN:[0m present but disabled: DSA dsa0 dsa2 dsa4, QAT 0000:01:00.0 0000:06:00.0 0000:0b:00.0 (no user work queues / VFs), so not in the cluster — enable them: k3d-gpu host-setup --apply, then k3d-gpu down && k3d-gpu up (exact commands: k3d-gpu doctor)
+[32m==>[0m Accelerators schedulable: intel=4 amx=1. Try: k3d-gpu test
