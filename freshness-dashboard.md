@@ -1,17 +1,17 @@
 # Freshness dashboard
 
-Updated 2026-11-11 20:13 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 21:19 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-None.
+ci-main
 
 ## Pins behind (10)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 6h |
-| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 4h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 7h |
+| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 5h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
 | gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
 | gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 5d |
@@ -29,8 +29,8 @@ None.
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #413 | docs-build | auto | - |
 | #411 | vllm-recipes | review | a human approval at the head |
-| #410 | docs-build | auto | - |
 | #408 | examples | review | a human approval at the head |
 | #404 | llama-cpp | review | a human approval at the head |
 | #403 | gguf-convert-pip | auto | - |
@@ -61,7 +61,8 @@ None.
 
 A PENDING row's arm pins move only by a dated amendment pushed before it runs. Propose one with the command beside the row (a human dispatch; the PR is never bot-merged).
 
-No PENDING row has runner paths in `pins/classes` yet.
+- H63d (`bench/h63/**`): `gh workflow run freshness.yml -f propose_amendment=H63d`
+- H63w (`bench/h63/**`): `gh workflow run freshness.yml -f propose_amendment=H63w`
 
 ## Known issues and stale workarounds
 
@@ -158,7 +159,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -515,7 +515,7 @@
+@@ -518,7 +518,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
