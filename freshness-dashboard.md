@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 18:27 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 18:28 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -29,9 +29,9 @@ None.
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #404 | llama-cpp | review | a human approval at the head |
 | #403 | gguf-convert-pip | auto | - |
 | #402 | hf-console-fallback | review | a human approval at the head |
-| #397 | llama-cpp | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 
 ## EAT stock (always review)
