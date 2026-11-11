@@ -234,8 +234,8 @@ the Deployments in `k3d-gpu-eas-models`.
 
 LiteLLM runs in Istio ambient's mesh, and `k3d-gpu-eas-models` is not enrolled in it.
 LiteLLM reaches the model's Service in plain text, which the mesh allows for a destination
-outside it (the mesh-wide `STRICT` policy covers traffic into mesh workloads). This path has
-not run on hardware yet.
+outside it (the mesh-wide `STRICT` policy covers traffic into mesh workloads). On the Xeon
+6741P with a B70 LiteLLM reached the model this way ([Verification](#verification)).
 
 ## Files
 
@@ -265,12 +265,15 @@ guardrail's block and a sandbox run printing 385), a secret scan of 0, and `eat 
 records and the three wiring smokes before it are in
 [bench/f5/results/2026-11-07/](../../bench/f5/results/2026-11-07/).
 
-`eas model add|list|remove` has not run on hardware. `tests/eas_test.sh model` runs it
-against stub kubectl and a stub LiteLLM that answers as LiteLLM v1.84.0 (enterprise-inference
-v1.1.0's pin) answered a local run of the same requests: `/model/info` (HTTP 500 with no
-model list while it serves none), model-manager's `/model/new` payload, and `/model/delete`
-by id. The manifest validates with kubeconform at the node image's Kubernetes version. The
-proof is a run on the Xeon 6741P with its B70s: `eat up`, `eas model add` on a free card,
-`eas check --model` on it (Intel's validate, chat, a tool call, the guardrail's block and
-the sandbox), a secret scan of 0 for the master key during add and remove, then
-`eas model remove` and `eat down`.
+`eas model add|list|remove` ran once on the Xeon 6741P with its four B70s on 2026-11-11, at
+commit `f420655` with node image 0.1.102, EAS v1.2.0 and EAT release-2.0.0
+([record](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985)): `eat up`
+with `failed=0`, `eas model add Qwen/Qwen3-4B` serving `qwen3-4b` on one B70 (the pod held
+`card1` only; the other three cards stayed at 0 GiB), the gateway's `/v1/models` listing
+it, `eas check --model qwen3-4b` (Intel's validate, chat, a tool call, the guardrail's
+block and a sandbox run printing 385), no `sk-` string in any step log, then
+`eas model remove` (the card back to 0 GiB) and `eat down`. `tests/eas_test.sh model` runs
+it against stub kubectl and a stub LiteLLM that answers as LiteLLM v1.84.0
+(enterprise-inference v1.1.0's pin) answered a local run of the same requests:
+`/model/info` (HTTP 500 with no model list while it serves none), model-manager's
+`/model/new` payload, and `/model/delete` by id. The manifest validates with kubeconform at the node image's Kubernetes version.
