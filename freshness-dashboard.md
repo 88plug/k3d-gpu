@@ -1,31 +1,58 @@
 # Freshness dashboard
 
-Updated 2026-11-11 07:58 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 15:40 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-None.
+stale:watchdog.yml
 
-## Pins behind (6)
+## Pins behind (7)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 5d |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 1h |
+| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 0h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
-| hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 5d |
+| hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 6d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 4d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 11d |
-| host-intel | `linux-tools` | `7.3.3` | `7.3.4` | patch | ? | ? |
 
-### Not resolved (1)
+### Not resolved (4)
 
+- `ppa-gmm` (ppa): ppa-gmm: hack/ppa-pins failed: pa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+
+gzip: stdin: unexpected end of file
+ppa-pins: cannot fetch the PPA's noble index
+- `ppa-libva` (ppa): ppa-libva: hack/ppa-pins failed: pa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+
+gzip: stdin: unexpected end of file
+ppa-pins: cannot fetch the PPA's noble index
+- `ppa-media` (ppa): ppa-media: hack/ppa-pins failed: pa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+curl: (6) Could not resolve host: ppa.launchpadcontent.net
+
+gzip: stdin: unexpected end of file
+ppa-pins: cannot fetch the PPA's noble index
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (4)
+## Open bot PRs (3)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #386 | host-intel | auto | - |
 | #385 | hf-console-fallback | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 | #383 | cuda-test | review | a human approval at the head |
@@ -55,8 +82,7 @@ None.
 
 A PENDING row's arm pins move only by a dated amendment pushed before it runs. Propose one with the command beside the row (a human dispatch; the PR is never bot-merged).
 
-- H57wa (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wa`
-- H57wm (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wm`
+No PENDING row has runner paths in `pins/classes` yet.
 
 ## Known issues and stale workarounds
 
@@ -111,7 +137,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.99; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.101; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
