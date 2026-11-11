@@ -52,8 +52,10 @@
   },
   {
    "id": "H57wm",
-   "verdict": "PENDING",
-   "classes": []
+   "verdict": "REFUTED",
+   "classes": [
+    "i7-13700"
+   ]
   },
   {
    "id": "H59",
