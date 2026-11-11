@@ -329,5 +329,59 @@ class Facts(unittest.TestCase):
         self.assertEqual(len(surface.derived_mismatch(derived[1:], {})), 1)
 
 
+class RecipeFlags(unittest.TestCase):
+    """The vLLM recipe flags k3d-gpu may adopt are checked against every vLLM image too."""
+
+    # The vLLM flags vllm_manifest emitted before its device flags and base moved to
+    # vllm_device_args and vllm_base_lines: the move keeps the set.
+    MANIFEST_FLAGS = {"--block-size", "--dtype", "--enable-auto-tool-choice", "--enforce-eager", "--gpu-memory-utilization",
+                      "--kv-cache-dtype", "--max-model-len", "--max-num-batched-tokens", "--max-num-seqs",
+                      "--no-enable-prefix-caching", "--port", "--reasoning-parser", "--revision", "--served-model-name",
+                      "--tensor-parallel-size", "--tool-call-parser"}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = flags_sh("vllm")
+
+    def by_source(self, source):
+        return {r["name"] for r in self.rows if r["source"] == source and r["kind"] == "flag"}
+
+    def test_adopt_names_emitted(self):
+        sys.path.insert(0, os.path.join(ROOT, "console"))
+        import recipes
+        self.assertEqual(self.by_source("console/recipes.py:ADOPT"), {"--" + n for n in recipes.ADOPT})
+
+    def test_manifest_flag_set_kept(self):
+        got = set().union(*(self.by_source("scripts/k3d-gpu:" + f) for f in ("vllm_manifest", "vllm_device_args", "vllm_base_lines")))
+        self.assertEqual(got, self.MANIFEST_FLAGS)
+        self.assertIn("--enforce-eager", self.by_source("scripts/k3d-gpu:vllm_device_args"))
+
+    def test_vllm_engines_check_recipe_flags(self):
+        import tomllib
+        with open(os.path.join(ROOT, "canary", "engines.toml"), "rb") as f:
+            engines = {e["id"]: e for e in tomllib.load(f)["engine"]}
+        for eid in ("vllm-xpu", "llm-scaler", "gaudi-vllm"):
+            for src in ("console/recipes.py:ADOPT", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines"):
+                self.assertIn(src, engines[eid]["flags_source"], eid)
+
+    def test_agent_vllm_version_is_derived(self):
+        import re
+        import tomllib
+        with open(os.path.join(ROOT, "canary", "engines.toml"), "rb") as f:
+            engines = {e["id"]: e for e in tomllib.load(f)["engine"]}
+        text = read(os.path.join(ROOT, "scripts", "k3d-gpu"))
+        body = re.search(r"^agent_vllm_version\(\) \{\n(.*?)^\}", text, re.M | re.S).group(0)
+        for eid in ("vllm-xpu", "llm-scaler", "gaudi-vllm"):
+            d = [x for x in engines[eid]["derived"] if x["file"] == "scripts/k3d-gpu"]
+            self.assertEqual(len(d), 1, eid)
+            self.assertEqual(len(re.findall(d[0]["regex"], text, re.M)), 1, eid)
+            self.assertIsNotNone(re.search(d[0]["regex"], body, re.M), eid)
+
+    def test_recipe_flags_exist_in_v0_32_0(self):
+        found = surface.static_package(VLLM, "vllm")
+        want = [r for r in self.rows if r["source"] == "console/recipes.py:ADOPT"]
+        self.assertEqual(surface.missing(want, found["flags"], found["envs"], driver="vllm", lenient_no=True), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

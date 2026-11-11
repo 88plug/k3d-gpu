@@ -29,6 +29,10 @@ import facts as factsmod  # noqa: E402
 import schema_check  # noqa: E402
 
 HF_DIR = os.path.join(REPO, "tests", "fixtures", "hf")
+# The frozen recipes artifact, for every vLLM decision plan.py makes here (a recipes bump
+# moves no expectation).
+RECIPES_FIXTURE = os.path.join(REPO, "tests", "fixtures", "vllm-recipes", "artifact.json")
+os.environ["K3D_GPU_VLLM_RECIPES_FILE"] = RECIPES_FIXTURE
 GEMMA, QWEN, PHI, LFM = "google/gemma-4-26B-A4B-it", "Qwen/Qwen3.8-27B", "microsoft/Phi-4-mini-instruct", "LiquidAI/LFM2-1.2B"
 
 
@@ -746,6 +750,92 @@ class PlanIntegration(unittest.TestCase):
     def test_plan_without_meta_unchanged(self):
         doc = planmod.plan(self.xb, self.matrix, {"model": QWEN})
         self.assertNotIn("optimizer", doc)
+
+    def test_plan_passes_the_gpu_to_the_recipes(self):
+        doc = planmod.plan(self.xb, self.matrix, {"model": QWEN})
+        d = planmod.add_optimizer(doc, self.xb, bundle(QWEN), {"backend": "vllm"})["optimizer"]
+        self.assertEqual(d["recipe"]["state"], "verified")  # arc_pro_b70, from the facts' 0xe223
+        doc = planmod.plan(self.xb, self.matrix, {"model": QWEN})
+        self.assertNotIn("recipe", planmod.add_optimizer(doc, self.xb, bundle(QWEN), {})["optimizer"])  # OVMS
+
+
+class RecipeFacts(unittest.TestCase):
+    """vLLM's model recipes (console/recipes.py, the frozen fixture artifact) as the
+    optimizer's per-model facts; the family table stays the fallback."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(RECIPES_FIXTURE, encoding="utf-8") as f:
+            cls.art = json.load(f)
+
+    def opt(self, model, engine="vllm", device="GPU", **o):
+        return mo.optimize(bundle(model), engine, device, dict({"recipes": self.art, "pci_id": "0xe223"}, **o))
+
+    def test_parsers_from_the_recipe(self):
+        d = self.opt(QWEN)
+        self.assertEqual((d["tool_parser"], d["reasoning_parser"]), ("qwen3_coder", "qwen3"))
+        self.assertEqual(d["recipe"]["id"], "Qwen/Qwen3.8-27B")
+        c = next(c for c in d["choices"] if c["fact"].startswith("recipe Qwen/Qwen3.8-27B"))
+        self.assertEqual(c["source"], "recipes/models/Qwen/Qwen3.8-27B.yaml features.tool_calling, features.reasoning")
+        self.assertFalse(any(c["fact"].startswith("model family") for c in d["choices"]))
+
+    def test_family_table_without_a_recipe(self):
+        d = self.opt(PHI)
+        self.assertNotIn("recipe", d)
+        self.assertTrue(any(c["fact"].startswith("no vLLM recipe for %s at vllm@" % PHI) for c in d["choices"]))
+        d = mo.optimize(bundle(QWEN), "vllm", "GPU")  # no artifact: today's family table
+        self.assertEqual((d["tool_parser"], d["reasoning_parser"]), ("qwen3_coder", "qwen3"))
+        self.assertTrue(any(c["fact"] == "model family qwen3_5" for c in d["choices"]))
+        self.assertNotIn("recipe", d)
+
+    def test_other_engines_never_read_recipes(self):
+        for engine, device in (("ovms", "GPU"), ("llama.cpp", "CPU")):
+            for model in (QWEN, GEMMA):
+                a = mo.optimize(bundle(model), engine, device, {"pci_id": "0xe223"})
+                b = self.opt(model, engine, device)
+                self.assertEqual(a, b, (engine, model))
+
+    def test_mtp_tokens_from_the_recipe(self):
+        d = self.opt(QWEN)
+        self.assertEqual(d["speculative"]["config"], {"method": "mtp", "num_speculative_tokens": 3})
+        c = next(c for c in d["choices"] if c["choice"].startswith("--speculative-config"))
+        self.assertIn("features.spec_decoding.modes.mtp", c["source"])
+        d = self.opt(GEMMA)
+        self.assertEqual(d["speculative"]["config"]["num_speculative_tokens"], 4)
+
+    def spec(self, o):
+        pick = {"qat": False, "mtp": False, "id": QWEN, "tier": 0}
+        drafter = {"id": "RedHatAI/Qwen3.8-27B-speculator.dspark", "drafter": "dspark", "verifier": QWEN, "qat": False,
+                   "tier": 1, "url": "https://huggingface.co/RedHatAI/Qwen3.8-27B-speculator.dspark", "format": "safetensors"}
+        doc, choices = {"notes": [], "speculative": None}, []
+        mo.spec_decide(doc, lambda f, c, s: choices.append(s), "vllm", "GPU", pick, [drafter], QWEN, {"moe": False},
+                       "auto", None, (0, 33, 0), o)
+        return doc["speculative"]["config"], choices[-1]
+
+    def test_dspark_tokens_from_the_recipe(self):
+        # The recipe follows the dspark model card (8 draft tokens); the README's command says 7.
+        import recipes
+        rf = recipes.facts(self.art, QWEN, device="GPU", pci_id="0xe223", engine_version="0.33.0")
+        cfg, src = self.spec({"recipe_facts": rf})
+        self.assertEqual(cfg["num_speculative_tokens"], 8)
+        self.assertIn("features.spec_decoding.modes.dspark", src)
+        cfg, src = self.spec({})
+        self.assertEqual(cfg["num_speculative_tokens"], 7)
+        self.assertIn("README", src)
+
+    def test_measured_row_beats_the_recipe(self):
+        import recipes
+        rf = recipes.facts(self.art, QWEN, device="GPU", pci_id="0xe223", engine_version="0.33.0")
+        saved = list(recipes.MEASURED)
+        try:
+            recipes.MEASURED[:] = [{"family": "H99", "match": {"model": QWEN, "class_token": "Battlemage"},
+                                    "flag": "speculative-config.num_speculative_tokens", "value": 5}]
+            for verdict, want in (("SUPPORTED", 5), ("REFUTED", 7), ("INCONCLUSIVE", 8)):
+                ledger = "## Hypotheses\n| H99 | dspark depth on Battlemage | p | m | %s |\n" % verdict
+                cfg, src = self.spec({"recipe_facts": rf, "ledger": ledger, "hw_class": "gpu:Battlemage"})
+                self.assertEqual(cfg["num_speculative_tokens"], want, verdict)
+        finally:
+            recipes.MEASURED[:] = saved
 
 
 if __name__ == "__main__":

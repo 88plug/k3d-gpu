@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # The model optimizer end to end through the launcher, no cluster, no network:
 #   - tests/console/test_model_opt.py (unit tests and the zero-flag decision table)
+#   - tests/console/test_vllm_recipes.py (console/recipes.py, the vLLM recipes reader)
 #   - `plan --model <hf-id> --explain` on a Xeon 6 + Arc Pro B70 facts fixture
-#     matches tests/console/model-opt/*.golden (Gemma-4-26B-A4B, Qwen3.8-27B)
+#     matches tests/console/model-opt/*.golden (Gemma-4-26B-A4B, Qwen3.8-27B; OVMS, and
+#     vLLM with its "vLLM server args" block)
 #   - `agent manifest --model <hf-id>` against a stub kubectl renders the optimizer's
 #     choices into the OVMS and vLLM manifests, with no flag set
 #   - env flags override single choices; K3D_GPU_MODEL_OPT=off serves the id as given
@@ -30,6 +32,8 @@ mkdir -p "${WORK}/root"
 # A fixed ledger, so a verdict landing in EXPERIMENTS.md does not move the goldens.
 export K3D_GPU_MODEL_OPT_LEDGER="${GOLD}/ledger.md"
 export K3D_GPU_FIT=off  # fit (#174) is tested in its own suite; it reads HF weight headers
+# The frozen vLLM recipes artifact, so a recipes bump does not move the goldens.
+export K3D_GPU_VLLM_RECIPES_FILE="${ROOT}/tests/fixtures/vllm-recipes/artifact.json"
 unset K3D_GPU_AGENT_OPT_MODEL K3D_GPU_AGENT_MODEL K3D_GPU_AGENT_BACKEND K3D_GPU_AGENT_DEVICE K3D_GPU_AGENT_DRAFT K3D_GPU_AGENT_VARIANT \
     K3D_GPU_AGENT_THINKING K3D_GPU_AGENT_PRECISION K3D_GPU_MODEL_OPT K3D_GPU_AGENT_PREFIX_CACHING
 
@@ -38,6 +42,12 @@ if python3 "${ROOT}/tests/console/test_model_opt.py" 2>&1 | tail -1 | grep -qx O
 else
     python3 "${ROOT}/tests/console/test_model_opt.py" 2>&1 | tail -30
     fail "model_opt unit tests and the zero-flag decision table"
+fi
+if python3 "${ROOT}/tests/console/test_vllm_recipes.py" 2>&1 | tail -1 | grep -qx OK; then
+    ok "vLLM recipes (console/recipes.py): the site's commands, gates and precedence"
+else
+    python3 "${ROOT}/tests/console/test_vllm_recipes.py" 2>&1 | tail -30
+    fail "vLLM recipes (console/recipes.py): the site's commands, gates and precedence"
 fi
 
 # ---- plan --model --explain goldens on the Xeon + B70 fixture -------------------
@@ -53,6 +63,49 @@ for m in google/gemma-4-26B-A4B-it Qwen/Qwen3.8-27B; do
         diff <(printf '%s\n' "${out}") "${g}" | head -20
     fi
 done
+# The vLLM agent on the same host: the optimizer's parsers from each model's vLLM recipe,
+# and the "vLLM server args" block with every argument's source.
+for m in google/gemma-4-26B-A4B-it Qwen/Qwen3.8-27B; do
+    g="${GOLD}/xeon-b70.vllm.${m##*/}.explain.golden"
+    out=$(K3D_GPU_AGENT_BACKEND=vllm "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model "${m}" --explain 2>&1)
+    rc=$?
+    if [ "${UPDATE}" = 1 ]; then printf '%s\n' "${out}" > "${g}"; fi
+    if [ "${rc}" -eq 0 ] && [ "${out}" = "$(cat "${g}" 2>/dev/null)" ]; then
+        ok "vllm: plan --model ${m} --explain matches ${g##*/}"
+    else
+        fail "vllm: plan --model ${m} --explain differs from ${g##*/} (rc=${rc})"
+        diff <(printf '%s\n' "${out}") "${g}" | head -20
+    fi
+done
+# The block is --explain only: --json and --hash stay the plan/v1 bytes.
+for flag in --json ""; do
+    out=$(K3D_GPU_AGENT_BACKEND=vllm "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model Qwen/Qwen3.8-27B ${flag} 2>/dev/null)
+    if grep -q 'vLLM server args' <<< "${out}"; then fail "plan ${flag:-(text)} prints the vLLM server args block"
+    else ok "plan ${flag:-(text)} prints no vLLM server args block"; fi
+done
+j=$(K3D_GPU_AGENT_BACKEND=vllm "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model Qwen/Qwen3.8-27B --json 2>/dev/null | sha256sum)
+h=$(K3D_GPU_AGENT_BACKEND=vllm "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model Qwen/Qwen3.8-27B --hash 2>/dev/null)
+if [ "${h}" = "sha256:${j%% *}" ]; then ok "vllm: plan --hash is the digest of the plan --json bytes"; else fail "vllm: plan --hash ${h} vs --json ${j%% *}"; fi
+out=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --explain 2>&1)
+if grep -q '^  --tool-call-parser=hermes  *\[recipe vllm@[0-9a-f]\{12\} features\.tool_calling' <<< "${out}"; then
+    ok "vllm: plan --explain with K3D_GPU_AGENT_MODEL names the recipe's parser"
+else
+    fail "vllm: plan --explain with K3D_GPU_AGENT_MODEL: $(grep -A30 'vLLM server args' <<< "${out}")"
+fi
+out=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_MODEL_OPT=off "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model Qwen/Qwen3-8B --explain 2>&1)
+if grep -q '^vLLM server args: Qwen/Qwen3-8B on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM ' <<< "${out}" \
+    && grep -q '^  --reasoning-parser=qwen3  *\[recipe vllm@' <<< "${out}"; then
+    ok "vllm: plan --model with K3D_GPU_MODEL_OPT=off lists the model as given, with its recipe"
+else
+    fail "vllm: plan --model with K3D_GPU_MODEL_OPT=off: $(grep -A30 'vLLM server args' <<< "${out}")"
+fi
+out=$(K3D_GPU_AGENT_BACKEND=vllm "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --explain 2>&1)
+if grep -q "recipe: not consulted: Qwen/Qwen3-4B is the vLLM agent's default model" <<< "${out}" \
+    && grep -q '^  --tool-call-parser=hermes  *\[k3d-gpu default (agent_config: Qwen3 family)\]' <<< "${out}"; then
+    ok "vllm: plan --explain keeps the default model's own parsers"
+else
+    fail "vllm: plan --explain for the default model: $(grep -A30 'vLLM server args' <<< "${out}")"
+fi
 out=$("${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model google/gemma-4-26B-A4B-it 2>&1)
 case "${out}" in
     "Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked OpenVINO/gemma-4-26b-a4b-it-int4-ov on OVMS (GPU)"*)
