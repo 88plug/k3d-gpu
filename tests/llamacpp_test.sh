@@ -72,9 +72,18 @@ XEON="${FIX}/hosts/xeon6741p-4xb70.json"
 DESK="${FIX}/hosts/desktop-i9-nogpu.json"
 # The Xeon's cluster after `up` pinned the free cards: two B70s advertised, XMX labelled.
 XEON_ENV=(STUB_XMX=1 STUB_ALLOC=$'cpu 64\ngpu.intel.com/xe 2' K3D_GPU_FIT_HOST="${XEON}")
-SYCL=sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700
-CPUSRV=sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220
-FULL=sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+# The llama.cpp images a render uses with no K3D_GPU_LLAMA_*_IMAGE set: the launcher's own
+# pins (pin llama-cpp in pins/registry.toml), read from it so that a bump moves them here too.
+launcher_image() { sed -n 's/^'"$1"'="\${K3D_GPU_'"$1"':-\(.*\)}"$/\1/p' "${K3D_GPU}"; }
+SYCL_IMAGE=$(launcher_image LLAMA_SYCL_IMAGE)
+CPU_IMAGE=$(launcher_image LLAMA_CPU_IMAGE)
+FULL_IMAGE=$(launcher_image LLAMA_FULL_IMAGE)
+for i in "server-intel ${SYCL_IMAGE}" "server ${CPU_IMAGE}" "full ${FULL_IMAGE}"; do
+    if ! grep -qxE "ghcr\.io/ggml-org/llama\.cpp:${i%% *}-b[0-9]+@sha256:[0-9a-f]{64}" <<< "${i#* }"; then
+        echo "FAIL scripts/k3d-gpu has no ${i%% *}-b<build> image pinned by digest as a LLAMA_*_IMAGE default (read '${i#* }')"
+        exit 1
+    fi
+done
 
 # render <name> [env...] -- [agent args...]: manifest in ${WORK}/<name>.yaml, stderr in .err
 render() {
@@ -135,7 +144,7 @@ GEMMA_GGUF=google/gemma-4-26B-A4B-it-qat-q4_0-gguf
 GREV=d1c082be9cf3c8a514acf63b8761f4b41935842e
 DRAFTER=google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166
 if render gguf "${XEON_ENV[@]}" -- --model "${GEMMA_GGUF}" \
-    && has gguf '^  name: llamacpp$' && has gguf "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11960@${SYCL}" \
+    && has gguf '^  name: llamacpp$' && has gguf "image: ${SYCL_IMAGE}$" \
     && pair gguf --model "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-gguf@${GREV}/gemma-4-26B_q4_0-it.gguf" \
     && pair gguf --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
     && pair gguf --alias 'gemma-4-26B-A4B-it-qat-q4_0-gguf' && arg gguf '--jinja' && pair gguf --reasoning 'off' \
@@ -160,7 +169,7 @@ else fail "GGUF repo goes to llama.cpp first" "$(show ggopt)"; fi
 # 4 x 65,536 at 43Gi: the fit counts the locked GGUF, its CPU_REPACK copies and the compute
 # buffers (it gave 4 x 262,144 at 45Gi before, the render H59d's L was OOMKilled at).
 if render cpu STUB_ALLOC='cpu 32' K3D_GPU_FIT_HOST="${DESK}" -- --model "${GEMMA_GGUF}" \
-    && has cpu "image: ghcr.io/ggml-org/llama.cpp:server-b11960@${CPUSRV}" && arg cpu '-ngl' && arg cpu '0' \
+    && has cpu "image: ${CPU_IMAGE}$" && arg cpu '-ngl' && arg cpu '0' \
     && pair cpu -c 262144 && pair cpu -np 4 \
     && pair cpu --load-mode 'mmap+mlock' && has cpu 'add: \[IPC_LOCK\]' && ! has cpu 'gpu.intel.com' \
     && ! has cpu 'ZES_ENABLE_SYSMAN' && grep -A1 '^            limits:$' "${WORK}/cpu.yaml" | grep -qE '^              memory: 43Gi$' \
@@ -217,7 +226,7 @@ if render fn "${XEON_ENV[@]}" -- --model "${FN}" \
     && pair fn --model "/models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}/model.gguf" && ! has fn 'model-url' \
     && pair fn --n-cpu-moe 45 && pair fn -ts 39,11 && pair fn -np 4 && pair fn --cache-ram 0 && pair fn -ctxcp 4 \
     && grep -A3 '^            limits:$' "${WORK}/fn.yaml" | grep -q '^              gpu.intel.com/xe: 2$' \
-    && has fn 'kind: Job' && has fn "image: ghcr.io/ggml-org/llama.cpp:full-b11960@${FULL}" \
+    && has fn 'kind: Job' && has fn "image: ${FULL_IMAGE}$" \
     && has fn '^            - "Qwen/Qwen3.8-Flash-Next"$' && has fn "^            - \"${FNREV}\"\$" \
     && has fn '^            - "--outtype"$' && has fn '^            - "bf16"$' && ! has fn 'fp8-as-q8' \
     && has fn 'value: "transformers==5.21.0 ' && has fn 'name: wait-gguf' \
@@ -368,7 +377,7 @@ else fail "agent down" "$(cat "${WORK}/kubectl.log")"; fi
 
 if render img "${XEON_ENV[@]}" K3D_GPU_AGENT_IMAGE=openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 \
         -- --model "${GEMMA_GGUF}" \
-    && has img "image: ghcr.io/ggml-org/llama.cpp:server-intel-b11960@${SYCL}" && grep -q 'K3D_GPU_AGENT_IMAGE is not used' "${WORK}/img.err"; then
+    && has img "image: ${SYCL_IMAGE}$" && grep -q 'K3D_GPU_AGENT_IMAGE is not used' "${WORK}/img.err"; then
     ok "an image set for the default backend is not handed to the backend the fit picked"
 else fail "K3D_GPU_AGENT_IMAGE on a followed backend" "$(show img)"; fi
 if ! render auto "${XEON_ENV[@]}" K3D_GPU_AGENT_DRAFT=auto -- --model "${GEMMA_GGUF}" \
@@ -474,6 +483,10 @@ else fail "agent up's fit records the llama.cpp fit" "$(show rec)"; fi
 
 # --- the ledger picks llama.cpp on the CPU (model_opt.py H59 and H57m families) ----------
 # The CPU class is the model name in the sysroot's /proc/cpuinfo; the ledger a stub.
+# The row picks the engine, not a build: the image is the launcher's CPU pin. A bump that
+# moves the build a SUPPORTED row measured is review (hack/pins policy, ledger-defaults)
+# and lists the row to re-measure; the build it measured stays in its run record
+# (hack/ledger-freshness reads it there).
 LG="${WORK}/ledger"
 mkdir -p "${LG}"
 h59() { printf '## Hypotheses\n\n| H59 | Engine choice on the Xeon 6741P: llama.cpp vs OVMS int4 | p | m | %s |\n' "$1" > "${LG}/h59-$1.md"; }
@@ -484,7 +497,7 @@ python3 "${ROOT}/console/model_opt.py" ledger-rules --ledger "${LG}/h59-SUPPORTE
 printf 'processor\t: 0\nmodel name\t: Intel(R) Xeon(R) 6741P\n' > "${WORK}/root/proc/cpuinfo"
 XCPU=(STUB_ALLOC='cpu 64' K3D_GPU_FIT_HOST="${XEON}")
 if render l59 "${XCPU[@]}" K3D_GPU_MODEL_OPT_LEDGER="${LG}/h59-SUPPORTED.md" -- --model google/gemma-4-26B-A4B-it \
-    && has l59 '^  name: llamacpp$' && has l59 "image: ghcr.io/ggml-org/llama.cpp:server-b11960@${CPUSRV}" \
+    && has l59 '^  name: llamacpp$' && has l59 "image: ${CPU_IMAGE}$" \
     && pair l59 --model-url "https://huggingface.co/${GEMMA_GGUF}/resolve/${GREV}/gemma-4-26B_q4_0-it.gguf" \
     && pair l59 --alias 'gemma-4-26B-A4B-it' && pair l59 --spec-type 'draft-mtp' \
     && pair l59 --spec-draft-model "/models/gguf/${DRAFTER}/model.gguf" && has l59 'kind: Job' \
