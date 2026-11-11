@@ -1,25 +1,25 @@
 # Freshness dashboard
 
-Updated 2026-11-10 23:26 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 06:21 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 bot-pr-stuck
 
-## Pins behind (6)
+## Pins behind (7)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | cuda-test | `cuda-test-image` | `13.4.3` | `13.5.0` | minor | 2026-11-05 | 5d |
-| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.108.5` | patch | ? | ? |
+| examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 5d |
-| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 3d |
+| hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 4d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 11d |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.5` | `2.35.5` | `2.35.6` | patch | 2026-11-10 | 14h |
+| host-intel | `linux-tools` | `7.3.3` | `7.3.4` | patch | ? | ? |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.5` | `2.35.5` | `2.35.6` | patch | 2026-11-10 | 21h |
 
-### Not resolved (2)
+### Not resolved (1)
 
-- `linux-tools` (host-intel): linux-tools: https://cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc lists no sha256 for linux-7.3.4.tar.xz
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
 ## Open bot PRs (3)
