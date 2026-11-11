@@ -1,7 +1,7 @@
 # k3d-gpu partner update, November 2026
 
-Status: 2026-11-07. k3d-gpu release 0.1.94. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
-83 rows. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
+Status: 2026-11-11. k3d-gpu release 0.1.101. Ledger: [EXPERIMENTS.md](../../EXPERIMENTS.md),
+83 rows, none PENDING: every row of the wildct campaign has its verdict. Only SUPPORTED rows are quoted as results; REFUTED and INCONCLUSIVE rows are stated
 as the ledger graded them. Every number here is in the ledger with its protocol and
 reproduce block, unless its line cites a merged pull request as the source. Nothing in this page has been sent to an `intel/*` repository.
 
