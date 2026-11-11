@@ -582,7 +582,9 @@ Between 1.84.0 and the floor, [GHSA-7hp6-4w63-5g45](https://github.com/advisorie
 1.100.4 or vLLM 0.32.0. The newest releases on PyPI are LiteLLM 1.109.0 and vLLM 0.33.0,
 inside no advisory.
 
-**Suggested change:** a `release-1.1` patch release with LiteLLM at 1.100.4 or later and the
+**Suggested change:** a `release-1.1` patch release with LiteLLM at 1.100.4 or a later release
+outside GHSA-7hp6-4w63-5g45's backport ranges (1.101.0 to 1.101.2, 1.102.0 to 1.102.1, 1.103.0
+and 1.104.0rc1 are inside them; 1.101.3, 1.102.2, 1.103.1 and 1.104.0rc2 fix them), and the
 vLLM CPU runtime at 0.32.0 or later, for both the pinned version and `default_version`. A newer
 LiteLLM answers a guardrail block with HTTP 200 and `finish_reason: content_filter` instead of
 HTTP 500 (the draft above), so the guardrail docs would change with it.
