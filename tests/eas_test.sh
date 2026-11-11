@@ -2483,12 +2483,30 @@ docs = {
                                   "spec": {"containers": [{"name": "c"}]}, "status": {"phase": "Running"}}]},
     "pods-two.json": {"items": [
         {"metadata": {"namespace": "k3d-gpu-agent", "name": "vllm-0"}, "status": {"phase": "Running"},
-         "spec": {"containers": [{"name": "vllm", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}},
+         "spec": {"nodeName": "k3d-easm-server-0", "containers": [{"name": "vllm", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}},
         {"metadata": {"namespace": "k3d-gpu-agent", "name": "llamacpp-0"}, "status": {"phase": "Running"},
-         "spec": {"containers": [{"name": "llamacpp", "resources": {"requests": {"gpu.intel.com/xe": "1"}, "limits": {"gpu.intel.com/xe": "1"}}}]}},
+         "spec": {"nodeName": "k3d-easm-server-0", "containers": [{"name": "llamacpp", "resources": {"requests": {"gpu.intel.com/xe": "1"}, "limits": {"gpu.intel.com/xe": "1"}}}]}},
         {"metadata": {"namespace": "default", "name": "done-0"}, "status": {"phase": "Succeeded"},
-         "spec": {"containers": [{"name": "c", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}]},
+         "spec": {"nodeName": "k3d-easm-server-0", "containers": [{"name": "c", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}]},
 }
+# Pods whose status names the card the plugin handed them (containerStatuses[].allocatedResourcesStatus,
+# ResourceHealthStatus, beta and on by default since Kubernetes 1.36; the plugin's device ids are cardN-i).
+def holder(ns, name, card, phase="Running"):
+    return {"metadata": {"namespace": ns, "name": name}, "status": {"phase": phase, "containerStatuses": [
+                {"name": "c", "allocatedResourcesStatus": [{"name": "gpu.intel.com/xe", "resources": [{"health": "Healthy", "resourceID": card + "-0"}]}]}]},
+            "spec": {"nodeName": "k3d-easm-server-0", "containers": [{"name": "c", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}
+# card0 (vllm, busy) and card2 (256 MiB: a pod that has not loaded yet) are held; card1 is busy and no pod holds it.
+docs["pods-named-hole.json"] = {"items": [holder("k3d-gpu-agent", "vllm-0", "card0"), holder("k3d-gpu-agent", "loading-0", "card2", "Pending")]}
+# card0 and card1, the busy ones, are held.
+docs["pods-named-busy.json"] = {"items": [holder("k3d-gpu-agent", "vllm-0", "card0"), holder("k3d-gpu-agent", "llamacpp-0", "card1")]}
+# k3d-gpu up left card0 and card1 out; a pod holds card2, which looks idle.
+docs["pods-named-card2.json"] = {"items": [holder("k3d-gpu-agent", "llamacpp-0", "card2")]}
+# A pod no node took (Pending, Insufficient memory) was handed no card: it holds none.
+unscheduled = {"metadata": {"namespace": "k3d-gpu-eas-models", "name": "waiting-0"}, "status": {"phase": "Pending"},
+               "spec": {"containers": [{"name": "vllm", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}
+docs["pods-named-unscheduled.json"] = {"items": docs["pods-named-busy.json"]["items"] + [unscheduled]}
+# One pod names its card, one does not (no status yet): the count decides.
+docs["pods-named-partial.json"] = {"items": [holder("k3d-gpu-agent", "vllm-0", "card0"), docs["pods-two.json"]["items"][1]]}
 for k, v in docs.items():
     json.dump(v, open(os.path.join(f, k), "w"))
 open(os.path.join(f, "none.json"), "w").close()
@@ -2502,7 +2520,7 @@ PY
     out=$(m_cards plugin-all.json nodes4.json pods-none.json)
     has "model: cards: a busy card the plugin advertises and no pod holds is refused" "rc=3" "${out}"
     has "model: cards: and named, with their BDFs" \
-        "2 advertised card(s) are busy (card0 (0000:18:00.0), card1 (0000:3a:00.0)) and pods hold 0: at least one is held outside the cluster" "${out}"
+        "card0 (0000:18:00.0), card1 (0000:3a:00.0) are busy and no pod holds them: they are held outside the cluster" "${out}"
     has "model: cards: and the remedy" "k3d-gpu down && k3d-gpu up leaves a busy card out of the plugin" "${out}"
     check "model: cards: a refusal writes no fit host" "no" "$([ -e "${F}/fit-host.json" ] && echo yes || echo no)"
     out=$(m_cards plugin-pinned.json nodes2.json pods-none.json)
@@ -2517,6 +2535,27 @@ PY
     has "model: cards: the pods holding cards are named; a Succeeded pod's is not counted" \
         "gpu.intel.com/xe: 4 advertised, 2 held by pods (k3d-gpu-agent/vllm-0 (1), k3d-gpu-agent/llamacpp-0 (1)) -> 2 free" "${out}"
     has "model: cards: busy cards are not sized for" "fit -> sized for card2" "${out}"
+    # The pods' status names their cards: the cards the plugin can hand out are exactly the rest.
+    out=$(m_cards plugin-all.json nodes4.json pods-named-hole.json)
+    has "model: cards: a busy card no pod holds is refused even when the pods' count covers it" "rc=3" "${out}"
+    has "model: cards: and named by what the pods' status says they hold" \
+        "card1 (0000:3a:00.0) is busy and no pod holds it: it is held outside the cluster" "${out}"
+    out=$(m_cards plugin-all.json nodes4.json pods-named-busy.json)
+    has "model: cards: the busy cards the pods hold: sized" "rc=0" "${out}"
+    has "model: cards: a held card is named with its pod" "card0 (0000:18:00.0): VRAM 32.0 GiB, in use 29.0 GiB by vllm[4101] 29.0 GiB -> held by k3d-gpu-agent/vllm-0" "${out}"
+    has "model: cards: the plugin can hand out the cards no pod holds" "cards no pod holds -> card2 card3 (from the pods' status)" "${out}"
+    has "model: cards: sized for the least free of those" "fit -> sized for card2" "${out}"
+    out=$(m_cards plugin-all.json nodes4.json pods-named-unscheduled.json)
+    has "model: cards: a pod no node took holds no card: sized" "rc=0" "${out}"
+    has "model: cards: and is not counted" "gpu.intel.com/xe: 4 advertised, 2 held by pods (k3d-gpu-agent/vllm-0 (1), k3d-gpu-agent/llamacpp-0 (1)) -> 2 free" "${out}"
+    has "model: cards: and leaves the pods' status deciding" "cards no pod holds -> card2 card3 (from the pods' status)" "${out}"
+    out=$(m_cards plugin-pinned.json nodes2.json pods-named-card2.json)
+    has "model: cards: a held card that looks idle: sized" "rc=0" "${out}"
+    has "model: cards: sized for the card the plugin can still hand out, not the held one" "fit -> sized for card3" "${out}"
+    check "model: cards: the fit host holds that free card alone" "['card3']" "$(m_json "${F}/fit-host.json" '[g["card"] for g in d["gpus"]]')"
+    out=$(m_cards plugin-all.json nodes4.json pods-named-partial.json)
+    has "model: cards: a pod whose status names no card: the count decides" "rc=0" "${out}"
+    has "model: cards: and says so" "not every pod's status names its card" "${out}"
     out=$(m_cards plugin-pinned.json nodes2.json pods-two.json)
     has "model: cards: every card held by a pod is refused" "rc=3" "${out}"
     has "model: cards: naming the pods" "is held by a pod: k3d-gpu-agent/vllm-0 (1), k3d-gpu-agent/llamacpp-0 (1)" "${out}"
@@ -2533,7 +2572,7 @@ PY
     # ---- eas-model.py manifest, payload, match ----------------------------------------------
     local margs=(--name "${NAME}" --model RedHatAI/Qwen3.8-27B-INT4 --revision "${REV}" --image "${IMAGE}"
                  --ctx 65536 --seqs 5 --util 0.91 --kv-dtype fp8 --memory 9Gi --cpus 2 --gid 992 --fit "gpu 5x65536"
-                 --weight-bytes 19452526368 --tool-parser qwen3_coder --reasoning-parser qwen3
+                 --weight-bytes 19452526368 --tool-parser qwen3_coder --reasoning-parser qwen3 --wait 1800
                  --env VLLM_TARGET_DEVICE=xpu --env CCL_WORKER_AFFINITY= --env "ONEAPI_DEVICE_SELECTOR=level_zero:*")
     (unset HF_TOKEN; python3 "${PY}" manifest "${margs[@]}") > "${F}/m.json"; rc=$?
     check "model: manifest exits 0" 0 "${rc}"
@@ -2543,6 +2582,11 @@ PY
         "$(m_json "${F}/m.json" '{i["metadata"].get("namespace", i["metadata"]["name"]) for i in d["items"]}')"
     j='d["items"][2]["spec"]["template"]["spec"]'
     check "model: manifest: no Service environment variables (#339)" "False" "$(m_json "${F}/m.json" "${j}[\"enableServiceLinks\"]")"
+    # kubectl rollout status stops at the Deployment's progress deadline (600 s unless set)
+    # whatever its --timeout: a first start that pulls the image, downloads the weights and
+    # compiles kernels takes longer, so the deadline is the wait add allows.
+    check "model: manifest: the progress deadline is the wait add allows" "1800" \
+        "$(m_json "${F}/m.json" 'd["items"][2]["spec"]["progressDeadlineSeconds"]')"
     check "model: manifest: one whole xe card" "{'memory': '9Gi', 'gpu.intel.com/xe': '1'}" "$(m_json "${F}/m.json" "${j}[\"containers\"][0][\"resources\"][\"limits\"]")"
     check "model: manifest: the image by digest" "${IMAGE}" "$(m_json "${F}/m.json" "${j}[\"containers\"][0][\"image\"]")"
     check "model: manifest: the render group" "{'supplementalGroups': [992]}" "$(m_json "${F}/m.json" "${j}[\"securityContext\"]")"
@@ -2754,7 +2798,7 @@ EOF
 
     # ---- add ---------------------------------------------------------------------------------
     : > "${LOG}"
-    out=$(HF_TOKEN="${HFTOK}" m_cli model add RedHatAI/Qwen3.8-27B-INT4); rc=$?
+    out=$(HF_TOKEN="${HFTOK}" K3D_GPU_AGENT_TIMEOUT=2400 m_cli model add RedHatAI/Qwen3.8-27B-INT4); rc=$?
     log=$(cat "${LOG}")
     check "model: add exits 0" 0 "${rc}"
     check "model: add applies the manifest server-side, its Secret before the Deployment" \
@@ -2766,6 +2810,9 @@ EOF
     check "model: add sets agent up's vLLM XPU environment" "True" \
         "$(m_json "${S}/applied.json" "{'name': 'VLLM_TARGET_DEVICE', 'value': 'xpu'} in ${j}[\"containers\"][0][\"env\"] and {'name': 'CCL_ZE_IPC_EXCHANGE', 'value': 'pidfd'} in ${j}[\"containers\"][0][\"env\"]")"
     m_has   "model: add waits for the rollout" "${log}" "-n ${NS} rollout status deployment/${NAME}"
+    check "model: add's progress deadline is its rollout wait, K3D_GPU_AGENT_TIMEOUT" "2400" \
+        "$(m_json "${S}/applied.json" 'd["items"][3]["spec"]["progressDeadlineSeconds"]')"
+    m_has   "model: add waits K3D_GPU_AGENT_TIMEOUT" "${log}" "rollout status deployment/${NAME} --timeout=2400s"
     m_has   "model: add warms up from inside the pod, as JSON (#339)" "${log}" \
         "exec deployment/${NAME} -c vllm -- curl -sS --max-time 600 http://127.0.0.1:8000/v1/chat/completions -H Content-Type: application/json"
     check "model: add registers model-manager's payload" \

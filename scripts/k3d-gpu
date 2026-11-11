@@ -335,11 +335,12 @@ Usage: k3d-gpu <command>
             namespace k3d-gpu-eas-models, then registers it with EAS's LiteLLM as
             EI's model-manager registers its own (POST /model/new). The card: one
             the device plugin may hand out and nothing else fills (refused when a
-            busy card is advertised and no pod holds it, or every card is held);
-            the model is fitted to the idle card with the least free VRAM, one card
-            (k3d-gpu fit). Name: EI's rule from the id, or --name. The master key
-            reaches curl as a header file. list: LiteLLM's models, ours marked.
-            remove: deregisters and deletes only what add made
+            busy card is advertised and no pod holds it, or every card is held;
+            pods' status names the cards they hold); the model is fitted to the
+            card it may get with the least free VRAM, one card (k3d-gpu fit).
+            Name: EI's rule from the id, or --name. The master key reaches curl
+            as a header file. list: LiteLLM's models, ours marked. remove:
+            deregisters and deletes only what add made
   eat up [--legacy] [eas up options] | eat status | eat down | eat check [--legacy] [--model NAME]
             Intel's agent toolkit (EAT 2.0): 'eas up --agent-toolkit', 'eas status',
             'eas down' and 'eas check' on the same state. --legacy: EAT 1.x
@@ -7749,7 +7750,7 @@ eas_model_add() {
     gid=$(agent_device_gid GPU)
     for e in "${VLLM_XPU_ENV[@]}"; do envs+=(--env "${e}"); done
     local margs=(--name "${name}" --model "${model}" --revision "${sha}" --image "${image}" --ctx "${fctx}"
-                 --seqs "${fseqs}" --util "${util:-0.9}" --kv-dtype "${kvd}" --memory "${memory}" --cpus 2
+                 --seqs "${fseqs}" --wait "${AGENT_TIMEOUT}" --util "${util:-0.9}" --kv-dtype "${kvd}" --memory "${memory}" --cpus 2
                  --gid "${gid}" --fit "${ann}" --weight-bytes "${wbytes}" --tool-parser "${tp}" --reasoning-parser "${rp}"
                  "${envs[@]}")
     payload=$(python3 "${py}" payload --name "${name}" --api-base "${url}")

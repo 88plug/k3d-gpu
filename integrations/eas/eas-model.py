@@ -24,6 +24,7 @@ model, registered with EAS's LiteLLM the way model-manager registers its own mod
   eas-model.py manifest [options]
       The Namespace, PersistentVolumeClaim, Deployment and Service, as one JSON List for
       kubectl's stdin; with $HF_TOKEN set (gated models), a Secret holding it before them.
+      --wait S: the Deployment's progress deadline, the seconds add waits for the rollout.
   eas-model.py payload --name N --api-base U
       The POST /model/new body, model-manager's shape.
   eas-model.py match --name N --api-base U   (stdin: GET /model/info)
@@ -104,16 +105,35 @@ def cards(host, ds, nodes, pods):
     if shared > 1:
         raise Refusal("the Intel GPU plugin shares each card among %d pods (-shared-dev-num=%d, K3D_GPU_INTEL_SHARED): "
                       "a model needs a whole card; recreate the cluster with K3D_GPU_INTEL_SHARED=1" % (shared, shared))
-    held = []
+    # The pods that hold an xe device, and the cards their status names: kubelet reports
+    # each container's device-plugin devices (containerStatuses[].allocatedResourcesStatus,
+    # ResourceHealthStatus, beta and on by default since Kubernetes 1.36), the Intel GPU
+    # plugin's device ids being cardN-<i>. When every holder names its cards, the cards the
+    # plugin can hand out are exactly the rest; otherwise only the count is known.
+    held, named, exact = [], {}, True
     for p in pods.get("items") or []:
-        if (p.get("status") or {}).get("phase") in ("Succeeded", "Failed"):
+        st = p.get("status") or {}
+        # A pod no node took yet (Pending: Insufficient memory, an unbound claim) was handed
+        # no card: kubelet allocates devices when it admits the pod.
+        if st.get("phase") in ("Succeeded", "Failed") or not (p.get("spec") or {}).get("nodeName"):
             continue
         k = 0
         for c in (p.get("spec") or {}).get("containers") or []:
             r = c.get("resources") or {}
             k += quantity((r.get("limits") or {}).get(RESOURCE) or (r.get("requests") or {}).get(RESOURCE))
-        if k:
-            held.append(("%s/%s" % (p["metadata"]["namespace"], p["metadata"]["name"]), k))
+        if not k:
+            continue
+        pod = "%s/%s" % (p["metadata"]["namespace"], p["metadata"]["name"])
+        held.append((pod, k))
+        ids = [x.get("resourceID") or "" for cs in st.get("containerStatuses") or []
+               for r in cs.get("allocatedResourcesStatus") or [] if r.get("name") == RESOURCE
+               for x in r.get("resources") or []]
+        mine = {m.group(1) for m in (re.match(r"^(card[0-9]+)-[0-9]+$", i) for i in ids) if m}
+        # The plugin shares no card here (refused above), so k devices are k cards.
+        if len(mine) != k:
+            exact = False
+        for c in mine:
+            named[c] = pod
     taken = sum(k for _, k in held)
     who = ", ".join("%s (%d)" % h for h in held) or "none"
     lines.append("%s: %d advertised, %d held by pods (%s) -> %d free" % (RESOURCE, alloc, taken, who, alloc - taken))
@@ -139,20 +159,42 @@ def cards(host, ds, nodes, pods):
         users = ", ".join("%s[%d] %s" % (u["comm"], u["pid"], gib(u["bytes"])) for u in (g.get("users") or [])[:3])
         state = "busy" if g["vram_used"] >= g["vram_total"] * BUSY_PCT else "idle"
         (busy if state == "busy" else idle).append(g)
+        if exact and g["card"] in named:
+            state = "held by " + named[g["card"]]
         lines.append("%s (%s): VRAM %s, in use %s%s -> %s" % (g["card"], g["bdf"], gib(g["vram_total"]), gib(g["vram_used"]),
                                                               " by " + users if users else "", state))
-    # A pod holding a card uses it, so the busy cards past the held count are held by
-    # something else: the plugin still offers one of them, and could hand it to this model.
-    if len(busy) > taken:
-        raise Refusal("%d advertised card(s) are busy (%s) and pods hold %d: at least one is held outside the "
-                      "cluster, and the device plugin could hand it to this model. Stop what holds it, or recreate "
-                      "the cluster (k3d-gpu down && k3d-gpu up leaves a busy card out of the plugin)"
-                      % (len(busy), ", ".join("%s (%s)" % (g["card"], g["bdf"]) for g in busy), taken))
-    if not idle:
-        raise Refusal("no advertised card is idle")
-    pick = min(idle, key=lambda g: (g["vram_total"] - g["vram_used"], g["card"]))
-    lines.append("fit -> sized for %s, the idle card with the least free VRAM (%s): the plugin may hand this "
-                 "model any idle card" % (pick["card"], gib(pick["vram_total"] - pick["vram_used"])))
+    remedy = ("Stop what holds it, or recreate the cluster (k3d-gpu down && k3d-gpu up leaves a busy card out of "
+              "the plugin)")
+    if exact:
+        free = [g for g in seen if g["card"] not in named]
+        lines.append("cards no pod holds -> %s (from the pods' status)" % (" ".join(g["card"] for g in free) or "none"))
+        out_busy = [g for g in free if g in busy]
+        if out_busy:
+            one = len(out_busy) == 1
+            raise Refusal("%s %s busy and no pod holds %s: %s held outside the cluster, and the device plugin could "
+                          "hand %s to this model. %s"
+                          % (", ".join("%s (%s)" % (g["card"], g["bdf"]) for g in out_busy), "is" if one else "are",
+                             "it" if one else "them", "it is" if one else "they are", "it" if one else "one", remedy))
+        if not free:
+            raise Refusal("every advertised card is held by a pod: %s" % who)
+        pick = min(free, key=lambda g: (g["vram_total"] - g["vram_used"], g["card"]))
+        lines.append("fit -> sized for %s, the card no pod holds with the least free VRAM (%s): the plugin may hand "
+                     "this model any of them" % (pick["card"], gib(pick["vram_total"] - pick["vram_used"])))
+    else:
+        # A pod holding a card is assumed to use it, so the busy cards past the held count are
+        # held by something else, and the plugin could hand one to this model. A pod that has
+        # not filled half its card yet hides one busy card from this count.
+        lines.append("not every pod's status names its card (Kubernetes before 1.36, or a pod kubelet has not reported yet): "
+                     "the count decides")
+        if len(busy) > taken:
+            raise Refusal("%d advertised card(s) are busy (%s) and pods hold %d: at least one is held outside the "
+                          "cluster, and the device plugin could hand it to this model. %s"
+                          % (len(busy), ", ".join("%s (%s)" % (g["card"], g["bdf"]) for g in busy), taken, remedy))
+        if not idle:
+            raise Refusal("no advertised card is idle")
+        pick = min(idle, key=lambda g: (g["vram_total"] - g["vram_used"], g["card"]))
+        lines.append("fit -> sized for %s, the idle card with the least free VRAM (%s): the plugin may hand this "
+                     "model any idle card" % (pick["card"], gib(pick["vram_total"] - pick["vram_used"])))
     out = dict(host)
     out["gpus"] = [pick]
     return lines, out
@@ -212,8 +254,12 @@ def manifest(a):
     items += [
         {"apiVersion": "v1", "kind": "PersistentVolumeClaim", "metadata": dict(meta, name=a.name + "-models"),
          "spec": {"accessModes": ["ReadWriteOnce"], "resources": {"requests": {"storage": "%dGi" % storage}}}},
+        # kubectl rollout status stops at the progress deadline (600 s unless set) whatever
+        # its --timeout, and a first start pulls the image, downloads the weights and
+        # compiles kernels: the deadline is the wait add allows.
         {"apiVersion": "apps/v1", "kind": "Deployment", "metadata": dict(meta, annotations=ann),
-         "spec": {"replicas": 1, "strategy": {"type": "Recreate"}, "selector": {"matchLabels": labels},
+         "spec": {"replicas": 1, "progressDeadlineSeconds": a.wait, "strategy": {"type": "Recreate"},
+                  "selector": {"matchLabels": labels},
                   "template": {"metadata": {"labels": labels, "annotations": ann}, "spec": pod}}},
         {"apiVersion": "v1", "kind": "Service", "metadata": meta,
          "spec": {"selector": labels, "ports": [{"name": "http", "port": 8000, "targetPort": "http"}]}},
@@ -252,6 +298,7 @@ def main(argv):
         m.add_argument(k, required=True)
     m.add_argument("--ctx", type=int, required=True)
     m.add_argument("--seqs", type=int, required=True)
+    m.add_argument("--wait", type=int, required=True)
     m.add_argument("--weight-bytes", type=int, default=0)
     m.add_argument("--kv-dtype", default="")
     m.add_argument("--gid", default="")
@@ -295,6 +342,8 @@ def main(argv):
                     raise Refusal("manifest value %r has a space, quote or backslash" % v)
             if not DNS_1035.match(a.name):
                 raise Refusal("'%s' is no DNS-1035 label" % a.name)
+            if a.wait < 1:
+                raise Refusal("--wait must be a positive number of seconds, got %d" % a.wait)
             if "@sha256:" not in a.image:
                 raise Refusal("image %s is not pinned by digest" % a.image)
             json.dump(manifest(a), sys.stdout, indent=2)

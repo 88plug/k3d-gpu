@@ -186,12 +186,16 @@ What `add` does, in order:
    `gpu.intel.com/xe` is held by a pod, when the plugin shares cards
    (`K3D_GPU_INTEL_SHARED` above 1), on a DRA cluster, and when the cluster advertises
    more `gpu.intel.com/xe` than the probe sizes cards (an integrated GPU on `xe`, or a
-   card whose VRAM the probe cannot read). Busy cards that pods hold are
-   counted against those pods. A pod that holds a card but has not loaded onto it yet hides
-   one busy card from this count.
+   card whose VRAM the probe cannot read). Which card each pod holds comes from its status:
+   kubelet names a container's device-plugin devices (`allocatedResourcesStatus`, on by
+   default since Kubernetes 1.36; the plugin's ids are `cardN-<i>`), so the cards the
+   plugin can hand out are exactly the advertised cards no pod holds, and one of them that
+   is busy is refused. When a pod's status names no card (an older Kubernetes), only the
+   count is known: busy cards are counted against the pods that hold cards, and a pod that
+   has not filled half its card yet hides one busy card from that count.
 3. Fits the model to one card with `k3d-gpu fit` (vLLM, one GPU). The fit is done for the
-   idle advertised card with the least free VRAM, since the plugin may hand out any idle
-   card. The fit gives the context, sequences, `--gpu-memory-utilization`, KV cache type,
+   card the plugin can hand out with the least free VRAM (with the count only: the idle
+   card with the least free VRAM). The fit gives the context, sequences, `--gpu-memory-utilization`, KV cache type,
    pod memory and the commit. A model too big for one 32 GB B70, or weights vLLM does not
    load (GGUF, OpenVINO IR), is refused with the fit's reason.
 4. Applies, server-side, namespace `k3d-gpu-eas-models` with the model's
@@ -202,8 +206,11 @@ What `add` does, in order:
    its own namespace because EAS enforces the restricted Pod Security Standard on
    `llm-inference` (`enforce_pss: true`), which vLLM's image, running as root, does not
    meet.
-5. Waits for the rollout (`K3D_GPU_AGENT_TIMEOUT`, default 1800 s: the first start
-   downloads the weights), then sends one chat completion from inside the pod as JSON.
+5. Waits for the rollout (`K3D_GPU_AGENT_TIMEOUT`, default 1800 s: the first start pulls
+   the image, downloads the weights and compiles kernels), then sends one chat completion
+   from inside the pod as JSON. The Deployment's `progressDeadlineSeconds` is the same
+   wait: `kubectl rollout status` stops at the progress deadline (600 s unless set)
+   whatever its `--timeout`.
 6. Registers the model: `POST /model/new` with model-manager's payload
    ([routing.py `litellm_register`](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/routing.py)),
    `{"model_name": NAME, "litellm_params": {"model": "openai/NAME", "api_base":
