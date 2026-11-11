@@ -1,1 +1,10 @@
-{}
+{
+  "stale:freshness.yml": {
+    "title": "no successful scheduled run within 12 h",
+    "body": "`freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/42974732918 at 2026-11-11T06:46:01Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-11T18:46:09Z",
+    "updated_at": "2026-11-11T18:46:09Z",
+    "notified_at": "2026-11-11T18:46:09Z",
+    "acked": false
+  }
+}
