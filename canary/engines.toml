@@ -31,7 +31,15 @@
 #                 endpoint), {args[, entrypoint], regex} (a command in the image) or
 #                 {package} (the installed package); `tag` reads the expected version
 #                 from the pinned tag (a pin without a tag is not compared)
-#   surface       {driver, ...}: how canary/surface.py reads the image's flags (see there)
+#   surface       {driver, ...}: how canary/surface.py reads the image's flags (see there).
+#                 vLLM: `recipes` names console/vllm-recipes.json, whose parser names for
+#                 the image's vLLM release the image must register; `examples_dir` is where
+#                 the image holds vLLM's examples/, and each examples/<f> chat template the
+#                 artifact names must be a file there. An examples_dir is recorded only once
+#                 the image has been seen to hold the templates there (vllm-cpu and
+#                 eat-vllm-cpu: WORKDIR /vllm-workspace; vllm-xpu: /workspace/vllm;
+#                 llm-scaler: /llm-scaler/vllm/vllm; gaudi-vllm: /workspace/vllm-project,
+#                 all read on 2026-11-11 from the pinned digests).
 #   flags_source  the canary/flags.sh sources (of `family`) whose names this image must accept
 #   derived       constants elsewhere in the tree that must equal a fact of the image
 #                 ({file, regex with group v, of}; `of` names the image fact: package,
@@ -65,7 +73,7 @@ api = "/v1"
 port = 8000
 golden = "canary/goldens/vllm-cpu.json"
 version_probe = { path = "/version", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
-surface = { driver = "vllm" }
+surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/vllm-workspace/examples" }
 flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide", "console/model_opt.py:eat_patch"]
 isa_signal = 'Illegal instruction|Failed to import from vllm\._C_AVX2'
 
@@ -128,7 +136,7 @@ api = "/v1"
 port = 8000
 golden = "canary/goldens/eat-vllm-cpu.json"
 version_probe = { path = "/version", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
-surface = { driver = "vllm" }
+surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/vllm-workspace/examples" }
 # model_opt.py's eat_patch adds these to EAT's vLLM modelConfigs entry.
 flags_source = ["console/model_opt.py:eat_patch", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 isa_signal = 'Illegal instruction|Failed to import from vllm\._C_AVX2'
@@ -150,7 +158,7 @@ kind = "surface"
 family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vllm/vllm-openai-xpu(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm", tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
-surface = { driver = "vllm" }
+surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/workspace/vllm/examples" }
 flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"GPU": "(?P<v>[0-9.]+)"', of = "package" },
@@ -165,7 +173,7 @@ kind = "surface"
 family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>intel/llm-scaler-vllm(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm" }
-surface = { driver = "vllm" }
+surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/llm-scaler/vllm/vllm/examples" }
 flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = '"(?P<v>[0-9.]+)" if backend == "llm-scaler"', of = "package" },
@@ -178,7 +186,7 @@ kind = "surface"
 family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vault\.habana\.ai/gaudi-docker/[^@":]+(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm" }
-surface = { driver = "vllm" }
+surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/workspace/vllm-project/examples" }
 flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_HPU_ENV", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"HPU": "(?P<v>[0-9.]+)"', of = "package" },

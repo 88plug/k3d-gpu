@@ -13,6 +13,7 @@ Usage: python3 tests/canary_surface_test.py
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -85,6 +86,139 @@ class StaticVllm(unittest.TestCase):
         self.assertIn("--served-model-name", doc["flags"])
         self.assertIn("VLLM_CPU_KVCACHE_SPACE", doc["envs"])
         self.assertTrue(doc["root"].startswith(VLLM))
+        self.assertIn("hermes", doc["tool_parsers"])
+        self.assertIn("qwen3", doc["reasoning_parsers"])
+
+    def test_parser_registries(self):
+        # v0.32.0 registers 54 tool and 38 reasoning parsers (its --tool-call-parser choices)
+        self.assertEqual((len(self.found["tool_parsers"]), len(self.found["reasoning_parsers"])), (54, 38))
+        for name in ("hermes", "qwen3_coder", "gemma4", "llama3_json"):
+            self.assertIn(name, self.found["tool_parsers"])
+        for name in ("qwen3", "gemma4", "deepseek_r1"):
+            self.assertIn(name, self.found["reasoning_parsers"])
+        self.assertNotIn("nano_v3", self.found["reasoning_parsers"])
+        help_text = read(os.path.join(FIX, "help", "vllm-0.32.0-cpu-serve-help-all.txt"))
+        choices = re.search(r"--tool-call-parser \{([^}]*)\}", help_text).group(1).split(",")
+        self.assertEqual(set(choices), self.found["tool_parsers"])
+
+
+class Recipes(unittest.TestCase):
+    """The parser names and the chat templates console/vllm-recipes.json lists, against
+    what an image registers and holds (canary/plan.py show gives the `recipes` part)."""
+
+    REC = {"file": "console/vllm-recipes.json",
+           "engines": {"0.26.0": {"tool_parsers": ["hermes", "qwen3_coder"], "reasoning_parsers": ["qwen3"]},
+                       "0.32.0": {"tool_parsers": ["hermes", "qwen3_coder", "gemma4"],
+                                  "reasoning_parsers": ["qwen3", "gemma4"]}},
+           "templates": ["examples/tool_chat_template_deepseekv3.jinja", "examples/tool_chat_template_gemma4.jinja"]}
+
+    def check(self, version, tool, reasoning, missing_files=(), examples_dir="/w/examples"):
+        return surface.recipes_check(self.REC, {"version": version, "tool_parsers": tool,
+                                                "reasoning_parsers": reasoning}, examples_dir, list(missing_files))
+
+    def test_the_image_registers_every_listed_name(self):
+        problems, notes = self.check("0.32.0+cpu", ["hermes", "qwen3_coder", "gemma4"], ["qwen3", "gemma4"])
+        self.assertEqual(problems, [])
+        self.assertTrue(any("2 chat templates in /w/examples" in n for n in notes), notes)
+
+    def test_a_listed_name_the_image_lacks_fails(self):
+        problems, _ = self.check("0.32.0+cpu", ["hermes", "qwen3_coder"], ["qwen3", "gemma4"])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("tool parser gemma4", problems[0])
+        self.assertIn("vLLM 0.32.0", problems[0])
+
+    def test_names_only_the_image_has_are_a_note(self):
+        # intel/llm-scaler-vllm 1.5 (v0.26.0 with Intel's patches) also registers muse_glimmer
+        problems, notes = self.check("0.26.1.dev0+g568afb3a1.d20260907.xpu", ["hermes", "qwen3_coder", "muse_glimmer"],
+                                     ["qwen3", "muse_glimmer"])
+        self.assertEqual(problems, [])
+        self.assertTrue(any("muse_glimmer" in n and "0.26.0" in n for n in notes), notes)
+
+    def test_a_version_the_artifact_lacks_fails(self):
+        problems, _ = self.check("0.33.0+xpu", ["hermes"], ["qwen3"])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("no vLLM 0.33.0", problems[0])
+        self.assertIn("hack/vllm-recipes update", problems[0])
+
+    def test_a_template_missing_from_the_examples_dir_fails(self):
+        problems, _ = self.check("0.32.0", ["hermes", "qwen3_coder", "gemma4"], ["qwen3", "gemma4"],
+                                 missing_files=["/w/examples/tool_chat_template_gemma4.jinja"])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("/w/examples/tool_chat_template_gemma4.jinja", problems[0])
+
+    def test_no_examples_dir_is_a_note(self):
+        problems, notes = self.check("0.32.0", ["hermes", "qwen3_coder", "gemma4"], ["qwen3", "gemma4"],
+                                     examples_dir=None)
+        self.assertEqual(problems, [])
+        self.assertTrue(any("no examples_dir" in n for n in notes), notes)
+
+    def test_template_paths(self):
+        self.assertEqual(surface.template_paths(self.REC["templates"], "/workspace/vllm/examples"),
+                         ["/workspace/vllm/examples/tool_chat_template_deepseekv3.jinja",
+                          "/workspace/vllm/examples/tool_chat_template_gemma4.jinja"])
+        self.assertEqual(surface.template_paths(self.REC["templates"], None), [])
+
+
+class PlanRecipes(unittest.TestCase):
+    """canary/plan.py reads console/vllm-recipes.json for the engines whose surface names it."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("plan", os.path.join(ROOT, "canary", "plan.py"))
+        cls.plan = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.plan)
+        with open(os.path.join(ROOT, "console", "vllm-recipes.json"), encoding="utf-8") as f:
+            cls.art = json.load(f)
+
+    def test_every_vllm_engine_reads_the_artifact(self):
+        _, engines = self.plan.load(ROOT)
+        vllm = [e for e in engines.values() if (e.get("surface") or {}).get("driver") == "vllm"]
+        self.assertEqual(sorted(e["id"] for e in vllm), ["eat-vllm-cpu", "gaudi-vllm", "llm-scaler", "vllm-cpu", "vllm-xpu"])
+        for e in vllm:
+            self.assertEqual(e["surface"]["recipes"], "console/vllm-recipes.json", e["id"])
+            self.assertTrue(e["surface"]["examples_dir"].startswith("/"), e["id"])
+
+    def test_show_carries_the_parsers_and_templates(self):
+        doc = self.plan.show("vllm-xpu", ROOT)["recipes"]
+        self.assertEqual(doc["file"], "console/vllm-recipes.json")
+        self.assertEqual(set(doc["engines"]), set(self.art["engines"]))
+        for v, e in doc["engines"].items():
+            self.assertEqual(e, {k: self.art["engines"][v][k] for k in ("tool_parsers", "reasoning_parsers")})
+        # every --chat-template examples/<f> the artifact holds, read from its text; no named
+        # template, so a recipes bump that renames one leaves this test as it is
+        text = json.dumps(self.art)
+        cited = {a or b for a, b in re.findall(r'"--chat-template", "(examples/[^"]+)"|"--chat-template=(examples/[^"]+)"',
+                                               text)}
+        self.assertEqual(doc["templates"], sorted(cited))
+        self.assertTrue(all(re.fullmatch(r"examples/[^/]+", t) for t in doc["templates"]), doc["templates"])
+        self.assertNotIn("recipes", self.plan.show("llama-sycl", ROOT))
+
+    def test_templates_are_every_chat_template_value(self):
+        art = {"models": {"a": {"features": {"tool_calling": {"args": ["--chat-template", "examples/x.jinja"],
+                                                              "hardware_overrides": {"xpu": {"args": [
+                                                                  "--chat-template=examples/y.jinja"]}}}},
+                                "base_args": ["--chat-template", "/abs/z.jinja"]}}}
+        self.assertEqual(self.plan.recipe_templates(art), ["examples/x.jinja", "examples/y.jinja"])
+
+    def test_a_parser_list_change_moves_the_vllm_fingerprints(self):
+        d = tempfile.mkdtemp()
+        try:
+            for rel in ("canary", "scripts", "console", "bench/h54", "integrations/eat", ".github/workflows"):
+                os.makedirs(os.path.join(d, rel), exist_ok=True)
+            for rel in ("canary/engines.toml", "canary/flags.sh", "scripts/k3d-gpu", "console/plan.py",
+                        "console/model_opt.py", "console/fit.py", "console/moe_predict.py", "bench/h54/h54.py",
+                        "integrations/eat/vllm-values.yaml", "console/vllm-recipes.json"):
+                shutil.copy2(os.path.join(ROOT, rel), os.path.join(d, rel))
+            before = {e: self.plan.fingerprint(e, d) for e in ("vllm-xpu", "llama-sycl")}
+            art = json.loads(read(os.path.join(d, "console", "vllm-recipes.json")))
+            # any pinned release: the artifact holds the tree's pinned vLLM versions only
+            art["engines"][max(art["engines"])]["tool_parsers"].append("new_parser")
+            with open(os.path.join(d, "console", "vllm-recipes.json"), "w", encoding="utf-8") as f:
+                json.dump(art, f)
+            self.assertNotEqual(self.plan.fingerprint("vllm-xpu", d), before["vllm-xpu"])
+            self.assertEqual(self.plan.fingerprint("llama-sycl", d), before["llama-sycl"])
+        finally:
+            shutil.rmtree(d)
 
 
 class Compare(unittest.TestCase):
@@ -181,6 +315,16 @@ class Unparseable(unittest.TestCase):
     def test_no_package(self):
         with self.assertRaises(surface.Unparseable):
             surface.static_package(tempfile.gettempdir(), "vllm-not-here")
+
+    def test_no_tool_parser_registry(self):
+        site = self.mutate("vllm/tool_parsers/__init__.py")
+        with self.assertRaisesRegex(surface.Unparseable, "tool_parsers/__init__.py is missing"):
+            surface.static_package(site, "vllm")
+
+    def test_a_registry_that_registers_nothing(self):
+        site = self.mutate("vllm/reasoning/__init__.py", "_OTHER = {'qwen3': ('a', 'B')}\n")
+        with self.assertRaisesRegex(surface.Unparseable, "_REASONING_PARSERS_TO_REGISTER"):
+            surface.static_package(site, "vllm")
 
     def test_inside_mode_reports_unparseable(self):
         site = self.mutate("vllm/envs.py")

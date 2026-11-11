@@ -18148,6 +18148,255 @@ amendment closes it as INCONCLUSIVE (not run).
 **Ledger after it.** 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING (H63d and
 H63w).
 
+### H63 amendment R1: the desktop runner (2026-11-11)
+
+Recorded 2026-11-11, after the H63 pre-registration (#392) and before any H63 measurement. This is
+the runner amendment the pre-registration requires before H63d's first smoke or hold. No H63 arm has
+been rendered on a host, deployed or sent a request; no model file has been downloaded for H63.
+Mechanics only: no row's arms, model files, statistic, quality gate, 1.2 bar, load gate, hold count,
+cap, prior or prediction changes. The scorer, `bench/h63/h63.py`, is unchanged.
+
+**Scope.** This amendment wires H63d on the desktop. H63w's wildct wiring (`bench/wildct/row.sh`
+rows `h63w`, `h63w-prep` and `h63w smoke`, and the wildct steps of `prep.sh`) comes in its own dated
+amendment, with the owner's approval, before any H63w setup, as the pre-registration's "Order and
+changes" allows: the two sub-rows are independent. `run.py` carries both host profiles as
+registered. `hold.sh` and `prep.sh` refuse any host but the desktop.
+
+**Files.** `bench/h63/`:
+
+- `run.py`: the arm table, the hold orders (h63.py's), the host profiles, each arm's render, stage
+  and check, the model and drafter checks, Ld-mtp's affinity reading.
+- `hold.sh`: one hold under the desktop's rules. `hold-run.sh`: the cluster, H57d's P-core sampler
+  and the arms. `arm.sh`: one arm (render, readiness, records, phases or quality, teardown).
+- `prep.sh`: the model files and both drafters, once. Also `k3d-shim.sh` and `reproduce.sh`.
+- `test_run.py`, in CI.
+
+`pins/classes` gains `bench/h63/**` for H63d and H63w. Reused, not copied: `bench/h59/run.py`
+(L's staging, the CPU class, the render scrub, `docker_argv`), `bench/h57d/h57d.py` (Ld-mtp's render,
+Od's read-only transform, the sampler, the affinity table), `bench/h57d/convert.sh`,
+`bench/apb/stage.py`, the committed drafter Job in `bench/h59/results/2026-11-10-wildct/prep/drafter`,
+H54's GSM8K runner, items, grader and TTFT prompt, `bench/llm_load.py` and `bench/energy.sh`.
+
+**Arms as rendered** (`run.py render`, at the runner's commit, in the hold's cluster):
+
+- **Od**: `scripts/k3d-gpu agent manifest` with the six variables the pre-registration lists
+  (`K3D_GPU_AGENT_DEVICE=CPU`, `K3D_GPU_AGENT_MODEL` OVB, `K3D_GPU_AGENT_MODEL_NAME=gemma`,
+  `K3D_GPU_AGENT_DRAFT=off`, `K3D_GPU_AUTOQUANT=off`, `K3D_GPU_AGENT_IMAGE` the OVMS pin) and
+  `K3D_GPU_CLUSTER`; then `stage.py ovms` and `h57d.py`'s `od_readonly`, the chain `bench/h57d/arm.sh`
+  runs. Od serves the `graph.pbtxt` that `bench/h57d/convert.sh` wrote, read-only.
+- **Ld-mtp**: `h57d.py render Ld-mtp`, unchanged. Its check is that the staged documents equal
+  that render.
+- **Ls**: `scripts/k3d-gpu agent manifest --model google/gemma-4-26B-A4B-it-qat-q4_0-gguf` with the
+  seven variables the pre-registration lists and `K3D_GPU_CLUSTER`; staged by `bench/h59/run.py
+  stage L` (H59 amendment R1's staging).
+
+Every other `K3D_GPU_AGENT_*`, `K3D_GPU_LLAMA_*`, fit, ledger or tune variable in the shell that
+starts a hold is dropped first (H59 amendment R1's scrub, plus `K3D_GPU_TUNE`). The variables passed
+are recorded in `render-env.txt`. On the desktop fit fixture, the offline render at this commit gives
+Ls exactly the pre-registration's arguments: `--model <GGUF> --alias gemma --host 0.0.0.0 --port 8000
+--jinja --reasoning off -c 262144 -np 1 -ngl 0 --cache-ram 0 -ctxcp 4 --threads 8 --threads-batch 16
+--load-mode mmap+mlock --spec-draft-model <drafter> --spec-type draft-mtp`, `cpu 1x262144`, a 39Gi
+limit. Its conversion Job is `gguf-convert-b459c9c78d78`, the committed one. On a host the fit
+follows free memory at render time, so `-c` and the limit can differ; `fit.json` records them.
+
+**The render check** (`run.py check`, before `kubectl apply`; a failure stops the arm, failed, and
+the hold counts). As registered, with these readings:
+
+- Od: the image `openvino/model_server:2026.4.1-gpu@sha256:a928903f...`, `--model_path` OVB, the
+  served name, no `--draft` argument, no init container left, device CPU, no GPU resource, the P-core
+  label and a 16-CPU request.
+- Ls: the image `server-b11960@sha256:8052c13e...`; `--model` the GGUF at `d1c082be`;
+  `--spec-draft-model` the drafter's path, and that file (read where the k3d shim binds it from) has
+  the registered sha256 and size; `--spec-type draft-mtp`; `-np 1`; numeric `-c`; `--threads 8
+  --threads-batch 16`; `--jinja`; `--reasoning off`; `-ngl 0`, `--cache-ram 0`, `-ctxcp 4` and
+  `--load-mode mmap+mlock` as in the arm table; no GPU resource; the P-core label and a 16-CPU
+  request; no init container, conversion Job, ConfigMap or PVC left; models mounted read-only.
+- "No server flag outside the list above" reads as the offline render's flags: the settings
+  column of the arm table plus `--model`, `--alias`, `--host` and `--port`, which every llama.cpp
+  render carries. Any other option fails the check.
+- Ld-mtp: the staged documents equal `h57d.py render Ld-mtp`. Its affinity reading (H57dp amendment
+  R1's: single-CPU threads on exactly CPUs 0, 2, ..., 14) goes to `affinity.json` after readiness,
+  marked `"gates": false`.
+
+**Model files** (`prep.sh desktop`, not a hold). Each step takes `~/k3dgpu-bench.lock` itself
+(`flock -w 21600`):
+
+1. Downloads at the registered revisions into `${G}/models`, in H57d's layout, with `hf download`:
+   the GGUF repo's `gemma-4-26B_q4_0-it.gguf` only, the QAT assistant, and OVB. Each gets a
+   `.pinned-revision` file. Then `run.py weights-check` matches every line of
+   `bench/h57d/results/2026-10-21/weights.sha256` (10 files) and the 22 OVB lines of
+   `bench/h59/results/2026-11-10-wildct/weights.sha256` against the files. A mismatch or a missing
+   file stops `prep.sh` before any build. `gguf/<repo>@<rev>` links to the GGUF's directory, so Ls
+   and Ld-mtp read one copy.
+2. `bench/h57d/convert.sh`, unchanged: Ld-mtp's drafter (full-b11749, transformers 5.20.2) and Od's
+   `graph.pbtxt`.
+3. Ls's drafter: the committed Job's container (`job.json` and `convert.sh` in
+   `bench/h59/results/2026-11-10-wildct/prep/drafter`), run once with `docker run` through
+   `bench/h59/run.py docker_argv`, under `timeout -k 30 3600`.
+4. `run.py drafter-check`: Ld-mtp's drafter must be `8eb21d5b...`, 321,145,696 bytes, and Ls's
+   `f6f80c36...`, 321,145,312 bytes. A mismatch exits 3 and is recorded in
+   `${G}/prep/drafter-check.json`; the sub-row stops before its smoke. `run.py models` also checks
+   Od's `graph.pbtxt` against H57d's (`c57ecf35...`).
+5. `${G}/weights.sha256` lists every file the arms read, for the Reproduce header.
+
+**Holds.** `hold.sh desktop HOLD [REPEATS]`, H59 amendment R1's rules over H63's orders:
+
+- Holds 1-3 are performance holds in the orders (Od, Ld-mtp, Ls), (Ld-mtp, Ls, Od) and (Ls, Od,
+  Ld-mtp). Hold 4 is the quality hold, in (Ls, Od, Ld-mtp). A spare 5 or 6 repeats hold REPEATS in
+  its order, only when that hold ran and the record standing for it left Ls or Od not measured (the
+  pre-registration's spare rule: a hold where only Ld-mtp was not measured gets no spare). Spare 6
+  runs only after spare 5. A hold with a `started` file or an `rc` is refused. No hold
+  number above 6 exists.
+- Before the lock, `hold.sh` refuses a CPU class that is not exactly i9-13900T, a node image not
+  pinned by digest or not the one the row's first hold ran (`H63_IMAGE`), a `${G}/bin/k3d` that is
+  not `bench/h63/k3d-shim.sh`, and any model file, drafter or `graph.pbtxt` that `run.py models`
+  does not pass.
+- Then the desktop's rules: `LOCK` (`flock -w 21600`); `load1` <= 24 at the start (2-min polls,
+  at most 60 min, then the hold runs flagged); 15 GB free on `/` and MemAvailable >= 20 GiB, or no
+  hold (exit 5). The hold writes `started` and reads the co-tenants (every container's state, start
+  time and restart count, and each GPU's memory in use, read-only) before and after.
+- Cluster `k3dgpu-d-h63-<hold>`: `K3D_GPU_VENDORS=hybrid`, crescent amendment C1's kubelet
+  thresholds, the node image by digest. The shim binds `${G}/models` read-only at
+  `/var/apb-models`. No H63 arm writes there. Everything runs under `timeout -k 30 4500`, with a
+  disk watchdog at 15 GB. An arm starts only with 900 s left (the quality hold: 600 s); arms end
+  4470 s after the hold started.
+- A wiring smoke (`hold.sh desktop smoke`) runs hold 1's arms with one 16-token request and one
+  `chat_template_kwargs` chat each. It scores nothing and is disclosed.
+
+**Phases** (`arm.sh`), as registered: readiness within 900 s (the model list and a 16-token chat);
+the 60 s idle window (RAPL); 3 warmup requests; N=1 (8), N=4 (16 at concurrency 4) and TTFT (4 at
+N=1 on H54's 1,000-token prompt, `max_tokens` 16). Each runs `bench/llm_load.py --unique-prompts`
+(`max_tokens` 256, `ignore_eos`, temperature 0) under `bench/energy.sh`. The quality hold runs H54's
+GSM8K 0-49. A performance arm is measured when its N=1 phase completed a request; a quality arm when
+GSM8K recorded an item that did not error. Records use H57d's layout, which `h63.py` reads, with
+`cpus.txt` (command line, cgroup CPU set, ISA, threads' affinity), `deploy.yaml`, `fit.json` and
+`check.json` per arm, `agent.yaml` and `render-env.txt` for Od and Ls, and `graph.pbtxt` for Od.
+
+**Tests** (`bench/h63/test_run.py`, in CI, offline):
+
+- Od and Ls render through the real `agent manifest` against the fit fixtures, with H59's kubectl
+  stand-in that answers only for the hold's own context. Ls's staged arguments equal the registered
+  list. A render that misses the hold's cluster is refused for both. Each check names each
+  deviation.
+- `arm.sh` runs all four registered holds against a local stub server. The request log matches the
+  registered counts and settings, and `h63.py score` reads the records end to end.
+- `hold.sh`'s guards, run-once rule and spares (none for a hold where only Ld-mtp was not
+  measured); `prep.sh` with `hf` and `docker` stand-ins (the
+  layout, the weight check stopping before any build, a drafter that is not the registered build
+  exiting 3, the lock taken before any download, a second run building nothing twice); the shim;
+  the Reproduce header.
+- The drafters' registered sha256 cannot be built offline. So the subprocess tests run `run.py`
+  through a stand-in that sets the expected digests to the stand-in files' (`H63_TEST_PATCH`, read
+  only by the test's stand-in). The in-process tests patch the same constants. Unpatched, the
+  stand-in files fail the check.
+
+**Commands** (desktop; `G=~/k3dgpu-h63` links to a directory on the second disk, where docker's root
+also is; `SUDO_ASKPASS` for RAPL):
+
+```bash
+mkdir -p "/home/andrew/docker&models/k3dgpu-h63" && ln -sfnT "/home/andrew/docker&models/k3dgpu-h63" ~/k3dgpu-h63
+install -D -m 0755 bench/h63/k3d-shim.sh ~/k3dgpu-h63/bin/k3d
+export PATH=~/k3dgpu-h63/bin:$PATH K3D_REAL=/usr/bin/k3d G=~/k3dgpu-h63 LOCK=~/k3dgpu-bench.lock \
+    H63_IMAGE=<the k3d-gpu release whose launcher is this amendment's merge commit's or later, name:tag@sha256>
+bench/h63/prep.sh desktop
+bench/h63/hold.sh desktop smoke
+for h in 1 2 3 4; do bench/h63/hold.sh desktop $h; done      # spares 5 and 6 only as the rule allows
+python3 bench/h63/h63.py score ~/k3dgpu-h63/results/H63d > verdict.json
+```
+
+### H63 amendment A1: the box owner approves H63w on wildct, and the storage cleanup before its setup (2026-11-11)
+
+Recorded 2026-11-11, after the H63 pre-registration and before any H63w setup. It is the dated
+amendment the pre-registration's host table asks for before any setup on wildct ("A dated
+amendment records the approval of this use of the host (disk, the downloads, the holds)").
+Mechanics only: no row's hypothesis, arms, model files, statistic, quality gate, 1.2 bar, load
+gate, hold count, cap, order, prior or prediction changes, and no runner changes. No H63 arm has
+been rendered on wildct, deployed or sent a request, and no H63 file has been downloaded there.
+
+**The approval.** The box owner's answer to the question whether H63w may run on wildct, given on
+2026-11-11 at about 10:10 PST (about 18:10Z). Verbatim, apart from the credential it names, which
+is not recorded in the repository:
+
+> [credential redacted] is the sudo pass on this machine and on wildct etc - and manage the
+> storage by deleting any llms or models just aking up disk space
+
+It is read as two approvals: H63w on wildct, and deleting LLM and model files that only take up
+disk space, on wildct and on this desktop ("this machine", `p360ultra`). The statement does not
+repeat the question's terms. It is read as approving H63w because it answers that question, gives
+sudo access on wildct, and asks for disk to be freed there.
+
+**Its scope, as the gate defines it.** This use of wildct for H63w as registered, and nothing
+beyond it:
+
+- **Disk.** H63w's files on `/`, under rule W6 as the H63w column sets it: `/` at least 15 + 45 GB
+  available, the watchdog at 15 GB.
+- **The downloads.** On wildct, from the Hub, at the registered revisions, each file checked
+  against the committed sha256 lists: the GGUF repo's `gemma-4-26B_q4_0-it.gguf` only, the QAT
+  assistant and OVB. Also the images the arms and both drafter builds name, by digest, and the
+  k3d-gpu release and its node image under rule W7.
+- **The holds.** Prep (the downloads, their checks and both drafter builds), one wiring smoke,
+  holds 1-4, and spares 5 and 6 as the spare rule allows. Each runs under rule W1's lock and its
+  `load1` <= 12 start rule, at most 75 min inside W1's 4600 s, with rules W1-W8 as the H63w
+  column applies them: nothing of the owner's touched, the production snapshots before and after
+  each hold, no GPU read or used.
+
+It approves nothing outside the pre-registration and rules W1-W8. The sudo access changes no rule:
+RAPL stays rule W4's reader container, as the H63w column registers it. H63w's wildct wiring is not
+in the desktop runner amendment (H63 amendment R1, pull request #398, which leaves the
+`bench/wildct/row.sh` rows `h63w`, `h63w-prep` and `h63w smoke` to their own dated amendment). So
+no H63w setup, smoke or hold runs before that amendment is merged. "Order and changes" closes H63w
+as not run if the owner has not approved it by 2027-01-31; the approval came first, so that clause
+does not apply.
+
+**The storage cleanup before setup (wildct).** Done under the statement's second part on
+2026-11-11 at 18:22Z, after the statement and before any H63w setup. No hold or campaign was on the
+host: rule W1's lock file did not exist, since the campaign directory was removed at the end of
+the wildct campaign. The cleanup's manifest, written before any deletion, lists each entry with
+its bytes, the newest mtime inside it and why it is unused (`storage-wildct-manifest.txt`, 133
+entries, sha256 `12088b7d...`; not committed, since it lists the box owner's own directories).
+Each entry passed every check before it was deleted: no container mount, running or stopped (43
+containers, 54 mount sources); no open file, memory map or working directory of any process; no
+systemd unit or cron entry naming it; `ollama.service` inactive and disabled; the newest mtime
+inside it older than 24 h; not an H63 model.
+
+| Kind | Entries | Bytes |
+|---|---|---|
+| Hugging Face hub caches | 46 | 89,525,576,913 |
+| Ollama model stores (two of them in docker volumes no container references) | 4 | 105,106,971,040 |
+| Model directories in two other docker volumes no container references (the volumes kept) | 3 | 11,817,507,751 |
+| Weight files of local model directories (their configs kept) | 56 | 236,655,197,680 |
+| Exported ONNX files in a scratch directory | 2 | 258,277,209 |
+| Torch hub and whisper download caches | 2 | 720,892,889 |
+| Model files and directories, together | 113 | 444,084,423,482 |
+| Build-cache records of the campaign's own H28w-prep model-payload builds | 20 | 17,184,000,082 |
+| Listed | 133 | 461,268,423,564 |
+
+The 20 build-cache records are the ones the campaign's end step listed and did not prune
+(`bench/wildct/results/2026-11-11/host/end.txt`); rule W6 deletes everything a campaign creates on
+wildct at its end. Readings around the cleanup:
+
+- `/` (`df -B1`): 244,648,390,656 bytes available, 94% used (228G by `df -h`), at 18:22:14Z;
+  705,985,548,288 bytes, 82% used (658G), at 18:22:59Z. So 461,337,157,632 bytes were freed: the
+  listed bytes and 68,734,068 bytes more, which the listing does not account for.
+- `docker system df`: 490 images (574.1 GB) and 142 volumes before and after, so no image or
+  volume was removed; the OVMS image Od names is among them (`end.txt` kept it at the campaign's
+  end). Build cache: 1,454 records (123.4 GB) before, 1,434 (106.2 GB) after.
+- The box owner's 18 production containers read the same before (18:11:03Z) and after
+  (18:23:07Z): each running, started 2026-10-29T09:11:27Z, restart count 0. MemAvailable
+  119,973,624 kB before, 119,684,176 kB after.
+
+**No model H63 needs was deleted.** H63w's three model repos were not on wildct: H57w's copies
+lived in `~/k3dgpu-bench-wildct`, removed at the end of the campaign on 2026-11-11 (`end.txt`). No
+listed entry is a Gemma 4 26B-A4B file, and no image was removed. H63w's prep downloads its models
+on wildct at the registered revisions, as the pre-registration requires (weights are never copied
+between hosts). At 18:22:59Z `/` had 658G available, above W6's 15 + 45 GB.
+
+This amendment records the cleanup on wildct only. H63d needs no approval (the host table), and
+nothing on the desktop is recorded here.
+
+**Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
+(H63d and H63w).
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.
