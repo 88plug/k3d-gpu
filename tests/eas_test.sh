@@ -126,7 +126,8 @@
 #            - cards, on crescent's 4x B70 fit fixture: a busy card the plugin advertises
 #              and no pod holds is refused (the plugin could hand it out); cards k3d-gpu up
 #              left out are not counted; every card held by a pod, a shared card, no
-#              gpu.intel.com/xe and no plugin are refused; the model is sized for the idle
+#              gpu.intel.com/xe, no plugin, and more devices advertised than cards the
+#              probe sizes are refused; the model is sized for the idle
 #              advertised card with the least free VRAM, alone in the fit's host
 #            - the manifest: its own namespace, no Service links (#339), one whole xe card,
 #              the image by digest, the render group, the fit's flags and the family's
@@ -2500,7 +2501,8 @@ PY
     }
     out=$(m_cards plugin-all.json nodes4.json pods-none.json)
     has "model: cards: a busy card the plugin advertises and no pod holds is refused" "rc=3" "${out}"
-    has "model: cards: and named, with its BDF" "card0 (0000:18:00.0), card1 (0000:3a:00.0) is held outside the cluster" "${out}"
+    has "model: cards: and named, with their BDFs" \
+        "2 advertised card(s) are busy (card0 (0000:18:00.0), card1 (0000:3a:00.0)) and pods hold 0: at least one is held outside the cluster" "${out}"
     has "model: cards: and the remedy" "k3d-gpu down && k3d-gpu up leaves a busy card out of the plugin" "${out}"
     check "model: cards: a refusal writes no fit host" "no" "$([ -e "${F}/fit-host.json" ] && echo yes || echo no)"
     out=$(m_cards plugin-pinned.json nodes2.json pods-none.json)
@@ -2524,6 +2526,9 @@ PY
     has "model: cards: no gpu.intel.com/xe is refused" "the cluster advertises no gpu.intel.com/xe" "${out}"
     out=$(m_cards none.json nodes4.json pods-none.json)
     has "model: cards: no Intel GPU plugin is refused" "no Intel GPU device plugin" "${out}"
+    out=$(m_cards plugin-pinned.json nodes4.json pods-none.json)
+    has "model: cards: more devices advertised than cards the fit sizes (an iGPU on xe) is refused" \
+        "the cluster advertises 4 gpu.intel.com/xe and this host's probe sizes 2 of those cards (card2 card3)" "${out}"
 
     # ---- eas-model.py manifest, payload, match ----------------------------------------------
     local margs=(--name "${NAME}" --model RedHatAI/Qwen3.8-27B-INT4 --revision "${REV}" --image "${IMAGE}"
@@ -2586,7 +2591,7 @@ case "$*" in
     *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*) echo 172.18.0.2 ;;
     *"-n litellm get secret litellm-master-key -o jsonpath={.data.master_key}"*) printf '%s' "${STUB_MASTER}" | base64 ;;
     *"-n k3d-gpu-eas-models get deployment "*" -o name"*)
-        n=${*##*get deployment }; n=${n%% *}
+        a="$*"; n=${a##*get deployment }; n=${n%% *}
         [ -e "${STUB_STATE}/deps/${n}" ] || { echo "Error from server (NotFound): deployments.apps \"${n}\" not found" >&2; exit 1; }
         echo "deployment.apps/${n}" ;;
     *"-n k3d-gpu-eas-models get deployments -l app.kubernetes.io/managed-by=k3d-gpu-eas-model -o json"*)
@@ -2603,7 +2608,7 @@ for i in json.load(open(sys.argv[1]))["items"]:
     *" rollout status deployment/"*) [ -z "${STUB_ROLLOUT_FAIL:-}" ] || { echo 'error: timed out waiting for the condition' >&2; exit 1; } ;;
     *" exec deployment/"*) echo '{"id":"chatcmpl-1","choices":[{"index":0,"message":{"role":"assistant","content":"I am a language model."}}]}' ;;
     *" delete deployment,service,persistentvolumeclaim -l "*)
-        n=${*##*app.kubernetes.io/name=}; n=${n%% *}; rm -f "${STUB_STATE}/deps/${n}" ;;
+        a="$*"; n=${a##*app.kubernetes.io/name=}; n=${n%% *}; rm -f "${STUB_STATE}/deps/${n}" ;;
     *" delete namespace k3d-gpu-eas-models"*) ;;
     *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
 esac
@@ -2708,7 +2713,7 @@ EOF
     m_cli() {
         (export PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_STATE="${S}" STUB_MASTER="${MASTER}" HOME="${S}/home" \
             K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" K3D_GPU_CLUSTER=easm K3D_GPU_EAS_DIR="${ROOT}/integrations/eas" \
-            K3D_GPU_SHARE="${ROOT}/share" K3D_GPU_FIT_HOST="${HOSTFX}" XDG_CACHE_HOME="${S}/cache"
+            K3D_GPU_SHARE="${ROOT}/share" K3D_GPU_CONSOLE="${ROOT}/console" K3D_GPU_FIT_HOST="${HOSTFX}" XDG_CACHE_HOME="${S}/cache"
          unset KUBECONFIG K3D_GPU_KUBECONFIG K3D_GPU_CONTEXT
          # shellcheck disable=SC1090
          source <(sed '/^case "\${1:-help}" in$/,$d' "${LAUNCHER}")

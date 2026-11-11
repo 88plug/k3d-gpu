@@ -324,7 +324,22 @@ Usage: k3d-gpu <command>
             stays). check (agent toolkit): the stack's pods Ready (each one that is
             not, with its cause), then chat, tool call, the guardrail on an unsafe
             prompt and a sandbox run through EAS's LiteLLM gateway with a
-            short-lived virtual key, after Intel's own 'validate agent-toolkit'
+            short-lived virtual key, after Intel's own 'validate agent-toolkit'.
+            down also removes the models 'eas model add' served
+  eas model add <hf-id> [--name NAME] [--revision R] [--ctx N] [--seqs N]
+                [--tool-parser P|none] [--reasoning-parser P|none] [--dry-run]
+  eas model list | eas model remove NAME
+            A model on one Intel Arc card bound to xe (B60, B70) for EAS's agent
+            toolkit: enterprise-inference serves models on the CPU only, so add
+            serves it with agent up's vLLM for Intel GPUs (pinned by digest) in
+            namespace k3d-gpu-eas-models, then registers it with EAS's LiteLLM as
+            EI's model-manager registers its own (POST /model/new). The card: one
+            the device plugin may hand out and nothing else fills (refused when a
+            busy card is advertised and no pod holds it, or every card is held);
+            the model is fitted to the idle card with the least free VRAM, one card
+            (k3d-gpu fit). Name: EI's rule from the id, or --name. The master key
+            reaches curl as a header file. list: LiteLLM's models, ours marked.
+            remove: deregisters and deletes only what add made
   eat up [--legacy] [eas up options] | eat status | eat down | eat check [--legacy] [--model NAME]
             Intel's agent toolkit (EAT 2.0): 'eas up --agent-toolkit', 'eas status',
             'eas down' and 'eas check' on the same state. --legacy: EAT 1.x
@@ -7467,6 +7482,13 @@ eas_down() {
             || warn "could not clear the finalizers of ${ns}/${name}"
     done < <(kubectl get aigatewayroutes.aigateway.envoyproxy.io -A \
         -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+    # The models 'eas model add' serves hold cards and are registered with the LiteLLM the
+    # teardown removes: they go first.
+    if kubectl get namespace "${EAS_MODEL_NS}" -o name >/dev/null 2>&1; then
+        info "removing ${EAS_MODEL_NS} (the models 'k3d-gpu eas model add' served)"
+    fi
+    kubectl delete namespace "${EAS_MODEL_NS}" --ignore-not-found --timeout=300s >/dev/null \
+        || warn "could not delete namespace ${EAS_MODEL_NS}: its models still hold their cards"
     eas_kubeconfig "${state}"
     image=$(eas_bastion_image "${dir}")
     eas_run "${dir}" "${state}" "${image}" down || err "teardown platform failed (log above)"
@@ -7553,6 +7575,269 @@ eas_check() {
         EAT_MODEL="${model:-${EAT_MODEL:-}}" bash "${chk}"
 }
 
+# ---- eas model: a model on an Intel Arc card, registered with EAS's LiteLLM ---------------
+# enterprise-inference v1.1.0 (EAS v1.2.0's inference layer) deploys every model on the CPU:
+# model-manager's pod templates request CPU and memory and no device, and EAT 2.0 has no Arc
+# path. `eas model add` serves a model on one Intel Arc card bound to xe (B60, B70) with the
+# vLLM for Intel GPUs that `k3d-gpu agent up` serves with (its image by digest, its pod spec:
+# no Service links, the warm-up as JSON from inside the pod), in its own namespace, and
+# registers it with EAS's LiteLLM as model-manager registers its own models (POST
+# /model/new, model_manager/core/routing.py litellm_register), so the agent toolkit can use
+# it. integrations/eas/eas-model.py holds the card choice, the manifest and the payload.
+# LiteLLM is reached as `eas check` reaches it: eg-gateway's LoadBalancer IP, Host
+# litellm.<base_domain_name>; the master key goes to curl as a header file, never as an
+# argument. The cluster is the record: the Deployments in EAS_MODEL_NS with the label below.
+EAS_MODEL_NS="k3d-gpu-eas-models"
+EAS_MODEL_LABEL="app.kubernetes.io/managed-by=k3d-gpu-eas-model"
+
+# eas_model_py: integrations/eas/eas-model.py, or an error.
+eas_model_py() {
+    local dir
+    dir=$(eas_dir) || err "integrations/eas not found (set K3D_GPU_EAS_DIR)"
+    [ -f "${dir}/eas-model.py" ] || err "${dir}/eas-model.py missing: the EAS integration is incomplete"
+    echo "${dir}/eas-model.py"
+}
+
+# eas_litellm <state>: the agent toolkit installed and reachable; sets EAS_LL_HOST, EAS_LL_IP
+# and EAS_LL_KEY (the master key, from Secret litellm/litellm-master-key; it stays in this
+# shell and reaches curl only through eas_ll's header file).
+eas_litellm() {
+    eas_installed "$1"
+    [ "$(cat "$1/layer" 2>/dev/null)" = agent-toolkit ] \
+        || err "eas model needs the agent toolkit (LiteLLM comes with it): run 'k3d-gpu eas up --agent-toolkit' first"
+    kubectl get nodes >/dev/null 2>&1 || err "cluster '${CLUSTER}' is not reachable — run 'k3d-gpu doctor'"
+    EAS_LL_HOST="litellm.$(eas_domain "$1")"
+    EAS_LL_IP=$(kubectl -n "${EAS_GW_NS}" get svc -l "${EAS_GW_SELECTOR}" \
+        -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+    [ -n "${EAS_LL_IP}" ] || err "no LoadBalancer IP on the eg-gateway Service in ${EAS_GW_NS}"
+    EAS_LL_KEY=$(kubectl -n litellm get secret litellm-master-key -o jsonpath='{.data.master_key}' | base64 -d) || EAS_LL_KEY=""
+    [ -n "${EAS_LL_KEY}" ] || err "no master_key in Secret litellm/litellm-master-key"
+}
+
+# eas_ll <GET|POST> <path>: one LiteLLM request through eg-gateway, a POST's JSON body on
+# stdin. Prints the response body, then the HTTP status on a line of its own.
+eas_ll() {
+    local body=()
+    [ "$1" = GET ] || body=(-H 'Content-Type: application/json' --data-binary @-)
+    curl -sk --max-time 60 -X "$1" --resolve "${EAS_LL_HOST}:443:${EAS_LL_IP}" "https://${EAS_LL_HOST}$2" \
+        -H @<(printf 'Authorization: Bearer %s\n' "${EAS_LL_KEY}") ${body[@]+"${body[@]}"} -w '\n%{http_code}'
+}
+
+# eas_ll_info: GET /model/info's body (LiteLLM v1.84.0 answers 500 with no model list when
+# it serves none; eas-model.py reads that as empty).
+eas_ll_info() {
+    local out code
+    out=$(eas_ll GET /model/info) || err "LiteLLM did not answer GET https://${EAS_LL_HOST}/model/info on ${EAS_LL_IP}"
+    code=${out##*$'\n'}
+    case "${code}" in
+        200|500) echo "${out%$'\n'*}" ;;
+        *) err "LiteLLM answered GET /model/info with HTTP ${code}: $(head -c 300 <<< "${out%$'\n'*}")" ;;
+    esac
+}
+
+# eas_ll_delete <id>: POST /model/delete for one LiteLLM model id.
+eas_ll_delete() {
+    local out
+    [[ "$1" =~ ^[A-Za-z0-9-]+$ ]] || err "LiteLLM model id '$1' is not an id"
+    out=$(printf '{"id": "%s"}' "$1" | eas_ll POST /model/delete) && [ "${out##*$'\n'}" = 200 ] \
+        || err "LiteLLM did not delete model id $1: $(head -c 300 <<< "${out%$'\n'*}")"
+}
+
+# eas model add <hf-id> [--name NAME] [--revision R] [--ctx N] [--seqs N]
+#               [--tool-parser P|none] [--reasoning-parser P|none] [--dry-run]
+eas_model_add() {
+    local model="" name="" rev="" ctx="" seqs="" tp="" rp="" dry=0 py state w out rc url k v
+    local mdir knobs engine="" placement="" fctx="" fseqs="" util="" kvd="" memory="" ann="" source="" wbytes=0 summary=""
+    local image gid sha payload e envs=() reply ids id
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name|--revision|--ctx|--seqs|--tool-parser|--reasoning-parser)
+                [ $# -ge 2 ] || err "$1 needs a value"
+                case "$1" in
+                    --name) name=$2 ;; --revision) rev=$2 ;; --ctx) ctx=$2 ;; --seqs) seqs=$2 ;;
+                    --tool-parser) tp=$2 ;; --reasoning-parser) rp=$2 ;;
+                esac
+                shift ;;
+            --dry-run) dry=1 ;;
+            -*) err "unknown eas model add option: $1 (see 'k3d-gpu help')" ;;
+            *) [ -z "${model}" ] || err "eas model add takes one model, got '${model}' and '$1'"; model=$1 ;;
+        esac
+        shift
+    done
+    is_hf_id "${model}" || err "eas model add needs a Hugging Face model id (org/name), got '${model}'"
+    [ -z "${rev}" ] || [[ "${rev}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || err "--revision '${rev}' is not a commit, tag or branch"
+    for v in "${ctx}" "${seqs}"; do
+        [ -z "${v}" ] || [[ "${v}" =~ ^[1-9][0-9]*$ ]] || err "--ctx must be a whole number of tokens and --seqs of sequences, got '${v}'"
+    done
+    for v in "${tp}" "${rp}"; do
+        [ -z "${v}" ] || [[ "${v}" =~ ^[A-Za-z0-9_.-]+$ ]] || err "not a parser name: '${v}'"
+    done
+    require kubectl; require curl; require python3
+    py=$(eas_model_py)
+    if [ -z "${name}" ]; then
+        name=$(python3 "${py}" name "${model}") || err "eas model add: no served name for ${model} (above)"
+    fi
+    [[ "${name}" =~ ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$ ]] \
+        || err "--name '${name}' is no DNS-1035 label (a lowercase letter first, then lowercase letters, digits and '-', at most 63)"
+    state=$(eas_state)
+    eas_litellm "${state}"
+    url="http://${name}.${EAS_MODEL_NS}.svc.cluster.local:8000/v1"
+
+    # A name LiteLLM serves from elsewhere (EI's catalog) is refused before any change.
+    out=$(eas_ll_info | python3 "${py}" match --name "${name}" --api-base "${url}") \
+        || err "could not read LiteLLM's models (GET /model/info)"
+    if grep -q '^foreign ' <<< "${out}"; then
+        err "LiteLLM already serves '${name}' from $(sed -n 's/^foreign //p' <<< "${out}" | head -1) (EI's catalog or another registration): pick another --name"
+    fi
+    if kubectl -n "${EAS_MODEL_NS}" get deployment "${name}" -o name >/dev/null 2>&1; then
+        err "'${name}' is already added (k3d-gpu eas model list): 'k3d-gpu eas model remove ${name}' first"
+    fi
+
+    # The card: one the device plugin may hand this model, never one something else fills.
+    w="${state}/model-add"
+    rm -rf "${w:?}"
+    mkdir -p "${w}"
+    fit_host "${w}/host.json" || err "could not probe this host's cards (console/fit.py probe)"
+    kubectl -n kube-system get daemonset intel-gpu-plugin -o json > "${w}/plugin.json" 2>/dev/null || : > "${w}/plugin.json"
+    kubectl get nodes -o json > "${w}/nodes.json" || err "could not read the cluster's nodes"
+    kubectl get pods -A -o json > "${w}/pods.json" || err "could not read the cluster's pods"
+    info "Card (fact -> choice):"
+    rc=0
+    out=$(python3 "${py}" cards --host "${w}/host.json" --plugin "${w}/plugin.json" --nodes "${w}/nodes.json" \
+        --pods "${w}/pods.json" --out "${w}/fit-host.json") || rc=$?
+    # Other pods' specs (their env included) are not kept.
+    rm -f "${w}/pods.json"
+    [ "${rc}" -eq 0 ] || err "no card can take ${model} (above); nothing was changed"
+    sed 's/^/  /' <<< "${out}"
+
+    # The fit on that card: vLLM, one GPU.
+    mdir=$(fit_model_dir "${model}" "${rev:-main}") \
+        || err "no metadata for ${model}${rev:+@${rev}}: the Hugging Face fetch failed (offline, private or gated: set HF_TOKEN)"
+    rc=0
+    fit_py plan --host "${w}/fit-host.json" --model "${mdir}" --name "${model}" --device gpu --engine vllm --gpus 1 \
+        ${ctx:+--ctx "${ctx}"} ${seqs:+--seqs "${seqs}"} --mode json > "${w}/fit.json" || rc=$?
+    [ "${rc}" -eq 0 ] || [ "${rc}" -eq 3 ] || err "fit: could not size ${model} (exit ${rc})"
+    [ "$(fit_field "$(<"${w}/fit.json")" fits)" = true ] \
+        || err "$(fit_field "$(<"${w}/fit.json")" summary); nothing was changed (k3d-gpu fit --model ${model} --engine vllm --device gpu --gpus 1 --explain shows the arithmetic)"
+    knobs=$(fit_py knobs --fit "${w}/fit.json" --rung 0) || err "fit: could not read ${w}/fit.json"
+    while IFS='=' read -r k v; do
+        case "${k}" in
+            engine) engine=${v} ;; placement) placement=${v} ;; ctx) fctx=${v} ;; seqs) fseqs=${v} ;;
+            util) util=${v} ;; kv_dtype) kvd=${v} ;; memory) memory=${v} ;; annotation) ann=${v} ;;
+            source) source=${v} ;; weight_bytes) wbytes=${v} ;; summary) summary=${v} ;;
+        esac
+    done <<< "${knobs}"
+    [ "${engine}" = vllm ] && [ "${placement}" = gpu ] \
+        || err "the fit placed ${model} on ${placement:-?} with ${engine:-?}: eas model add serves vLLM on one card"
+    info "${summary}"
+    sha=${source##*@}
+    [[ "${sha}" =~ ^[0-9a-f]{40}$ ]] || err "the fit names no commit for ${model} (source '${source}')"
+
+    # Parsers: the model family's (console/model_opt.py FAMILY_PARSERS), unless given.
+    if [ -z "${tp}" ] || [ -z "${rp}" ]; then
+        read -r k v < <(python3 "${py}" parsers --config "${mdir}/config.json" --model-opt "$(console_dir)/model_opt.py") \
+            || err "could not read the parsers of ${model}'s family"
+        [ -n "${tp}" ] || tp=${k}
+        [ -n "${rp}" ] || rp=${v}
+    fi
+    [ "${tp}" != none ] || tp=-
+    [ "${rp}" != none ] || rp=-
+    info "tool parser ${tp/#-/none}, reasoning parser ${rp/#-/none}"
+
+    # vLLM for Intel GPUs, the image agent up serves with on an Intel GPU (by digest).
+    image=$(AGENT_BACKEND=vllm AGENT_HPU=""; agent_config; echo "${AGENT_DEFAULT_IMAGE}")
+    gid=$(agent_device_gid GPU)
+    for e in "${VLLM_XPU_ENV[@]}"; do envs+=(--env "${e}"); done
+    local margs=(--name "${name}" --model "${model}" --revision "${sha}" --image "${image}" --ctx "${fctx}"
+                 --seqs "${fseqs}" --util "${util:-0.9}" --kv-dtype "${kvd}" --memory "${memory}" --cpus 2
+                 --gid "${gid}" --fit "${ann}" --weight-bytes "${wbytes}" --tool-parser "${tp}" --reasoning-parser "${rp}"
+                 "${envs[@]}")
+    payload=$(python3 "${py}" payload --name "${name}" --api-base "${url}")
+    if [ "${dry}" = 1 ]; then
+        info "Manifest (kubectl apply --server-side; HF_TOKEN, when set, goes in Secret hf-token):"
+        (unset HF_TOKEN; python3 "${py}" manifest "${margs[@]}") || err "eas-model.py manifest failed (above)"
+        info "LiteLLM: POST https://${EAS_LL_HOST}/model/new ${payload}"
+        info "Dry run: nothing applied, nothing registered"
+        rm -rf "${w:?}"
+        return 0
+    fi
+    # Server-side apply: no last-applied annotation copies the Secret's token.
+    python3 "${py}" manifest "${margs[@]}" | kubectl apply --server-side --field-manager=k3d-gpu-eas-model -f - >/dev/null \
+        || err "kubectl apply of ${name} failed (above)"
+    rm -rf "${w:?}"
+    info "Waiting for ${name} in ${EAS_MODEL_NS} (the first start downloads the weights and compiles kernels)..."
+    kubectl -n "${EAS_MODEL_NS}" rollout status "deployment/${name}" --timeout="${AGENT_TIMEOUT}s" \
+        || err "${name} is not Ready after ${AGENT_TIMEOUT}s: ${KHINT} -n ${EAS_MODEL_NS} describe pod -l app.kubernetes.io/name=${name}, and its logs; 'k3d-gpu eas model remove ${name}' takes it out"
+    reply=$(kubectl -n "${EAS_MODEL_NS}" exec "deployment/${name}" -c vllm -- curl -sS --max-time 600 \
+        http://127.0.0.1:8000/v1/chat/completions -H 'Content-Type: application/json' \
+        -d "{\"model\":\"${name}\",\"max_tokens\":32,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"Reply with one short sentence: what are you?\"}]}" 2>&1) \
+        && [[ "${reply}" == *'"choices"'* ]] \
+        || err "${name}'s warm-up request failed: $(head -c 300 <<< "${reply}"); 'k3d-gpu eas model remove ${name}' takes it out"
+    info "warm-up reply: $(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' <<< "${reply}" | sed -n 1p)"
+
+    # LiteLLM: a stale entry of ours goes first (/model/new mints a new id each time), then
+    # model-manager's payload, then GET /model/info must list it.
+    ids=$(eas_ll_info | python3 "${py}" match --name "${name}" --api-base "${url}" | sed -n 's/^ours //p') || ids=""
+    for id in ${ids}; do eas_ll_delete "${id}"; done
+    out=$(eas_ll POST /model/new <<< "${payload}") || out=$'\n000'
+    [ "${out##*$'\n'}" = 200 ] && ids=$(eas_ll_info | python3 "${py}" match --name "${name}" --api-base "${url}") \
+        && grep -q '^ours ' <<< "${ids}" \
+        || err "LiteLLM did not register ${name} (HTTP ${out##*$'\n'}: $(head -c 300 <<< "${out%$'\n'*}")); it serves in ${EAS_MODEL_NS} but not through LiteLLM: 'k3d-gpu eas model remove ${name}', then add it again"
+    info "${name} is registered with EAS's LiteLLM (api_base ${url}) on '${CLUSTER}'"
+    echo "  check it end to end: k3d-gpu eas check --model ${name}"
+}
+
+eas_model_list() {
+    local py state deps
+    [ $# -eq 0 ] || err "eas model list takes no options (got: $*)"
+    require kubectl; require curl; require python3
+    py=$(eas_model_py)
+    state=$(eas_state)
+    eas_litellm "${state}"
+    deps=$(mktemp)
+    kubectl -n "${EAS_MODEL_NS}" get deployments -l "${EAS_MODEL_LABEL}" -o json > "${deps}" 2>/dev/null || echo '{"items": []}' > "${deps}"
+    eas_ll_info | python3 "${py}" list --namespace "${EAS_MODEL_NS}" --deployments "${deps}" \
+        || { rm -f "${deps}"; err "could not read LiteLLM's models (GET /model/info)"; }
+    rm -f "${deps}"
+}
+
+eas_model_remove() {
+    local name=${1:-} py state url out ids id
+    [ $# -eq 1 ] && [ -n "${name}" ] || err "usage: k3d-gpu eas model remove NAME (k3d-gpu eas model list names them)"
+    [[ "${name}" =~ ^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$ ]] || err "'${name}' is no model name eas model add makes"
+    require kubectl; require curl; require python3
+    py=$(eas_model_py)
+    state=$(eas_state)
+    eas_litellm "${state}"
+    url="http://${name}.${EAS_MODEL_NS}.svc.cluster.local:8000/v1"
+    out=$(eas_ll_info | python3 "${py}" match --name "${name}" --api-base "${url}") \
+        || err "could not read LiteLLM's models (GET /model/info)"
+    ids=$(sed -n 's/^ours //p' <<< "${out}")
+    if [ -z "${ids}" ] && ! kubectl -n "${EAS_MODEL_NS}" get deployment "${name}" -o name >/dev/null 2>&1; then
+        err "'${name}' was not added by 'k3d-gpu eas model add' (k3d-gpu eas model list); EI's models stay with EI's model-manager"
+    fi
+    for id in ${ids}; do eas_ll_delete "${id}"; done
+    [ -z "${ids}" ] || info "${name} is no longer registered with LiteLLM"
+    kubectl -n "${EAS_MODEL_NS}" delete deployment,service,persistentvolumeclaim -l "${EAS_MODEL_LABEL},app.kubernetes.io/name=${name}" \
+        --ignore-not-found --timeout=300s >/dev/null || err "could not delete ${name} from ${EAS_MODEL_NS}"
+    if [ -z "$(kubectl -n "${EAS_MODEL_NS}" get deployments -l "${EAS_MODEL_LABEL}" -o json 2>/dev/null \
+        | python3 -c 'import json, sys; print(" ".join(i["metadata"]["name"] for i in json.load(sys.stdin)["items"]))' 2>/dev/null)" ]; then
+        kubectl delete namespace "${EAS_MODEL_NS}" --ignore-not-found --timeout=300s >/dev/null || warn "could not delete namespace ${EAS_MODEL_NS}"
+    fi
+    info "${name} removed: its card is free"
+}
+
+eas_model() {
+    local sub=${1:-}
+    [ $# -eq 0 ] || shift
+    case "${sub}" in
+        add)    eas_model_add "$@" ;;
+        list)   eas_model_list "$@" ;;
+        remove) eas_model_remove "$@" ;;
+        *) err "usage: k3d-gpu eas model add <hf-id> [--name NAME] [--revision R] [--ctx N] [--seqs N] [--tool-parser P|none] [--reasoning-parser P|none] [--dry-run] | list | remove NAME" ;;
+    esac
+}
+
 cmd_eas() {
     local sub=${1:-}
     [ $# -eq 0 ] || shift
@@ -7561,7 +7846,8 @@ cmd_eas() {
         down)   eas_down "$@" ;;
         status) eas_status "$@" ;;
         check)  eas_check "$@" ;;
-        *) err "usage: k3d-gpu eas up [--agent-toolkit] [--model NAME] [--eas-ref R] [--ei-ref R] [--eat-ref R] [--reset-env] [--dry-run] [--explain] [-- ansible args] | status | down | check [--model NAME]" ;;
+        model)  eas_model "$@" ;;
+        *) err "usage: k3d-gpu eas up [--agent-toolkit] [--model NAME] [--eas-ref R] [--ei-ref R] [--eat-ref R] [--reset-env] [--dry-run] [--explain] [-- ansible args] | status | down | check [--model NAME] | model add|list|remove" ;;
     esac
 }
 
