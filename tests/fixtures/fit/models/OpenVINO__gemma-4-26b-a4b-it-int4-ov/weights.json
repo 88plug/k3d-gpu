@@ -45,6 +45,6 @@
   ],
   "format": "openvino",
   "schema": "k3d-gpu.weights/v1",
-  "source": "OpenVINO/gemma-4-26b-a4b-it-int4-ov@4e5885c3f03844f5887982def09708bdc9f53f7a",
+  "source": "OpenVINO/gemma-4-26b-a4b-it-int4-ov@7b3cbc98e24a9946e561f82c752ae26cd53fc660",
   "total_bytes": 15295859825
 }
