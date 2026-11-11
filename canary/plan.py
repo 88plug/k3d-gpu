@@ -154,6 +154,45 @@ def derived_for(eng, root):
     return out
 
 
+def recipe_templates(art):
+    """Every examples/<f> value of a --chat-template in the artifact's models, sorted."""
+    found = set()
+
+    def walk(v):
+        if isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        elif isinstance(v, list):
+            for i, a in enumerate(v):
+                if a == "--chat-template" and i + 1 < len(v):
+                    found.add(v[i + 1])
+                elif isinstance(a, str) and a.startswith("--chat-template="):
+                    found.add(a.split("=", 1)[1])
+                else:
+                    walk(a)
+    walk(art.get("models") or {})
+    return sorted(t for t in found if isinstance(t, str) and t.startswith("examples/"))
+
+
+def recipes_for(eng, root):
+    """What the surface check compares with a vLLM image, from the artifact its surface
+    names (console/vllm-recipes.json): each vLLM version's parser names and the chat
+    templates the recipes cite; None when the engine names no artifact."""
+    rel = (eng.get("surface") or {}).get("recipes")
+    if not rel:
+        return None
+    try:
+        text = read(root, rel)
+    except FileNotFoundError:
+        raise PlanError("%s: recipes file %s does not exist" % (eng["id"], rel))
+    try:
+        art = json.loads(text)
+        engines = {v: {k: e[k] for k in ("tool_parsers", "reasoning_parsers")} for v, e in art["engines"].items()}
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise PlanError("%s: %s is not a vLLM recipes artifact: %s" % (eng["id"], rel, e))
+    return {"file": rel, "engines": engines, "templates": recipe_templates(art)}
+
+
 def model_dir(eng):
     base = os.environ.get("CANARY_MODELS") or os.path.join(os.path.expanduser("~"), ".cache", "k3d-gpu-canary")
     return os.path.join(base, model_slug(eng))
@@ -183,6 +222,9 @@ def show(eid, root):
     if eng["kind"] != "node":
         doc["flags"] = flags_for(eng, root)
     doc["derived"] = derived_for(eng, root)
+    rec = recipes_for(eng, root)
+    if rec:
+        doc["recipes"] = rec
     if eng["kind"] == "runtime":
         doc["model_dir"] = model_dir(eng)
         doc["golden_doc"] = json.loads(read(root, eng["golden"]))
@@ -248,6 +290,7 @@ def fingerprint(eid, root):
                     ("flags", lambda: sorted(json.dumps(f, sort_keys=True) for f in flags_for(eng, root))
                      if eng["kind"] != "node" else []),
                     ("golden", lambda: read(root, eng["golden"]) if eng.get("golden") else ""),
+                    ("recipes", lambda: recipes_for(eng, root)),
                     ("paths", lambda: digest_paths(root, eng.get("paths", [])))):
         try:
             fp[key] = fn()
@@ -295,6 +338,8 @@ def base_tree(root, ref, dest):
         paths.add(e["locator"]["file"])
         paths.update(d["file"] for d in e.get("derived", []))
         paths.update(p.rstrip("/") for p in e.get("paths", []))
+        if (e.get("surface") or {}).get("recipes"):
+            paths.add(e["surface"]["recipes"])
     present = [p for p in sorted(paths)
                if subprocess.run(["git", "-C", root, "cat-file", "-e", "%s:%s" % (commit, p)], capture_output=True).returncode == 0]
     if present:
