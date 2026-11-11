@@ -312,8 +312,12 @@
      "text": "OpenVINO GenAI currently supports this MTP path with greedy decoding and prefix caching disabled, as demonstrated in the [Qwen3.8 MTP notebook](https://openvinotoolkit.github.io/openvino_notebooks/?search=qwen3.8-mtp)."
     },
     {
-     "line": 149,
-     "text": "For MTP deployment, see the [OVMS speculative decoding instructions](https://github.com/openvinotoolkit/model_server/tree/main/demos/continuous_batching/speculative_decoding)."
+     "line": 154,
+     "text": "ovms.exe --rest_port 8000 --source_model OpenVINO/Qwen3.8-27B-int4-ov --model_repository_path C:\\models --allowed_media_domains all --draft_model_path ."
+    },
+    {
+     "line": 160,
+     "text": "--rest_port 8000 --model_repository_path /models --source_model OpenVINO/Qwen3.8-27B-int4-ov --allowed_media_domains all --draft_model_path ."
     }
    ],
    "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
@@ -496,7 +500,7 @@
    },
    "params_total": null,
    "pipeline_tag": "image-text-to-text",
-   "sha": "7b20ea8c7df7223a85ff27bab5c473f0cb038943",
+   "sha": "d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e",
    "tags": [
     "base_model:Qwen/Qwen3.8-27B",
     "base_model:quantized:Qwen/Qwen3.8-27B",
@@ -508,7 +512,7 @@
     "region:us"
    ],
    "tokenizer_max_length": 131072,
-   "url": "https://huggingface.co/OpenVINO/Qwen3.8-27B-int4-ov/tree/7b20ea8c7df7223a85ff27bab5c473f0cb038943"
+   "url": "https://huggingface.co/OpenVINO/Qwen3.8-27B-int4-ov/tree/d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e"
   },
   "OpenVINO/Qwen3.8-27B-int8-ov": {
    "card": {
@@ -769,7 +773,7 @@
      "text": "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 vllm serve ... --hf-overrides '{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}' --ma"
     }
    ],
-   "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+   "chat_template_sha256": "af16f654968d47d09a6c604e00370b12dbc21f76456f59c9e98b82e84d9f6375",
    "chat_template_thinking": [
     {
      "line": 46,
@@ -899,7 +903,7 @@
    "library_name": "transformers",
    "params_total": 27781427952,
    "pipeline_tag": "image-text-to-text",
-   "sha": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+   "sha": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
    "tags": [
     "conversational",
     "deploy:azure",
@@ -914,7 +918,7 @@
     "transformers"
    ],
    "tokenizer_max_length": 262144,
-   "url": "https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+   "url": "https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0"
   },
   "Qwen/Qwen3.8-27B-FP8": {
    "card": {
