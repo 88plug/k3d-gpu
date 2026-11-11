@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""vLLM's model recipes, vendored offline as console/vllm-recipes.json (pin vllm-recipes).
+
+  hack/vllm-recipes resolve
+      network: prints v=<vllm-project/recipes main>, vllm_commit=<the vllm commit its
+      sources.lock.json names> and vllm_tree=<that commit's recipes/ tree>. When the
+      artifact generated from that pair equals console/vllm-recipes.json in everything
+      but those three ids, it prints the pinned values instead: an upstream move that
+      changes nothing k3d-gpu reads is no move (the pin's `cmd` source).
+  hack/vllm-recipes update [--recipes-commit SHA]
+      network: fetch the pair at SHA (default: the artifact's own recipes_commit, the
+      regenerate path when only a pinned vLLM version moved) and the vLLM tags of
+      `versions`, then write console/vllm-recipes.json (the bump hook).
+  hack/vllm-recipes generate --recipes-src DIR --site-src DIR --vllm-src DIR
+                             --versions V1,V2 --recipes-commit SHA [--out FILE]
+      offline: the artifact from local trees (hack/vllmrecipes/artifact.py says which).
+  hack/vllm-recipes versions
+      offline: the vLLM versions this tree pins for a vLLM consumer, one per line.
+  hack/vllm-recipes diff (--base-ref REF | --base FILE) [--head FILE]
+      offline: what moved between two artifacts (models, parsers, flags, unported), one
+      line each, for a bump PR's notes. A base with no artifact counts as empty.
+
+The YAML is read as recipes.vllm.ai reads it (js-yaml 4.1.1); that needs PyYAML
+(hack/ci-tools.env PYYAML_VERSION). VLLM_RECIPES_PYTHON, when set, is the interpreter
+this runs under (the Freshness and CI jobs point it at the venv holding PyYAML).
+VLLM_RECIPES_SRC=<dir>: update and resolve read <dir>/{site,recipes,vllm} instead of
+git (tests).
+"""
+
+import os
+import sys
+
+_PY = os.environ.get("VLLM_RECIPES_PYTHON")
+if _PY and os.environ.get("VLLM_RECIPES_RUNNING_UNDER") != _PY:
+    os.environ["VLLM_RECIPES_RUNNING_UNDER"] = _PY
+    os.execv(_PY, [_PY, os.path.abspath(__file__)] + sys.argv[1:])
+
+import argparse  # noqa: E402
+import json  # noqa: E402
+import subprocess  # noqa: E402
+import tempfile  # noqa: E402
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+sys.dont_write_bytecode = True  # no __pycache__ in the tree a bump writes
+
+from vllmrecipes import artifact, source  # noqa: E402
+
+ARTIFACT = "console/vllm-recipes.json"
+
+
+def load(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+
+
+def build(root, recipes_commit):
+    vers = source.versions(root)
+    with tempfile.TemporaryDirectory(prefix="vllm-recipes.") as d:
+        rd, sd, vd = source.fetch(d, recipes_commit, vers)
+        return artifact.generate(rd, sd, vd, vers, recipes_commit)
+
+
+def write(path, doc):
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(artifact.dumps(doc))
+    os.replace(path + ".tmp", path)
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="vllm-recipes", description=__doc__.split("\n")[0])
+    ap.add_argument("--root", default=ROOT)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("resolve")
+    u = sub.add_parser("update")
+    u.add_argument("--recipes-commit")
+    g = sub.add_parser("generate")
+    for k in ("--recipes-src", "--site-src", "--vllm-src", "--versions", "--recipes-commit"):
+        g.add_argument(k, required=True)
+    g.add_argument("--out", default="-")
+    sub.add_parser("versions")
+    d = sub.add_parser("diff")
+    base = d.add_mutually_exclusive_group(required=True)
+    base.add_argument("--base-ref")
+    base.add_argument("--base")
+    d.add_argument("--head")
+    a = ap.parse_args(argv)
+    root = os.path.abspath(a.root)
+    path = os.path.join(root, ARTIFACT)
+    try:
+        if a.cmd == "versions":
+            print("\n".join(source.versions(root)))
+        elif a.cmd == "generate":
+            doc = artifact.generate(a.recipes_src, a.site_src, a.vllm_src, a.versions.split(","), a.recipes_commit)
+            if a.out == "-":
+                sys.stdout.write(artifact.dumps(doc))
+            else:
+                write(a.out, doc)
+        elif a.cmd == "update":
+            sha = a.recipes_commit or (load(path) or {}).get("recipes_commit")
+            if not sha:
+                raise artifact.GenError("no --recipes-commit and no %s to read one from" % ARTIFACT)
+            write(path, build(root, sha))
+        elif a.cmd == "resolve":
+            cur = load(path)
+            doc = build(root, source.latest_recipes_commit())
+            if cur is not None and artifact.content(cur) == artifact.content(doc):
+                doc = cur
+            for k, out in (("v", "recipes_commit"), ("vllm_commit", "vllm_commit"), ("vllm_tree", "vllm_tree")):
+                print("%s=%s" % (k, doc[out]))
+        elif a.cmd == "diff":
+            if a.base_ref:
+                p = subprocess.run(["git", "show", "%s:%s" % (a.base_ref, ARTIFACT)], cwd=root, capture_output=True,
+                                   text=True)
+                old = json.loads(p.stdout) if p.returncode == 0 else None
+            else:
+                old = load(a.base)
+            print("\n".join(artifact.diff(old, load(a.head or path))) or "no change")
+    except artifact.GenError as e:
+        sys.stderr.write("hack/vllm-recipes: %s\n" % e)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

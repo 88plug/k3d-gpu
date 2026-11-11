@@ -1,0 +1,3092 @@
+{
+ "engines": {
+  "0.26.0": {
+   "flags": [
+    "--additional-config",
+    "--aggregate-engine-logging",
+    "--all2all-backend",
+    "--allow-credentials",
+    "--allow-deprecated-quantization",
+    "--allowed-headers",
+    "--allowed-local-media-path",
+    "--allowed-media-domains",
+    "--allowed-methods",
+    "--allowed-origins",
+    "--api-key",
+    "--api-server-count",
+    "--async-scheduling",
+    "--attention-backend",
+    "--attention-config",
+    "--block-size",
+    "--calculate-kv-scales",
+    "--chat-template",
+    "--chat-template-content-format",
+    "--code-revision",
+    "--collect-detailed-traces",
+    "--compilation-config",
+    "--config",
+    "--config-format",
+    "--convert",
+    "--cp-kv-cache-interleave-size",
+    "--cpu-distributed-timeout-seconds",
+    "--cpu-offload-gb",
+    "--cpu-offload-params",
+    "--cudagraph-capture-sizes",
+    "--cudagraph-metrics",
+    "--data-parallel-address",
+    "--data-parallel-backend",
+    "--data-parallel-external-lb",
+    "--data-parallel-hybrid-lb",
+    "--data-parallel-multi-port-external-lb",
+    "--data-parallel-rank",
+    "--data-parallel-rpc-port",
+    "--data-parallel-size",
+    "--data-parallel-size-local",
+    "--data-parallel-start-rank",
+    "--data-parallel-supervisor-port",
+    "--dbo-decode-token-threshold",
+    "--dbo-prefill-token-threshold",
+    "--dcp-comm-backend",
+    "--dcp-kv-cache-interleave-size",
+    "--decode-context-parallel-size",
+    "--default-chat-template-kwargs",
+    "--default-mm-loras",
+    "--device-ids",
+    "--diffusion-config",
+    "--disable-access-log-for-endpoints",
+    "--disable-cascade-attn",
+    "--disable-chunked-mm-input",
+    "--disable-custom-all-reduce",
+    "--disable-fastapi-docs",
+    "--disable-hybrid-kv-cache-manager",
+    "--disable-log-stats",
+    "--disable-nccl-for-dp-synchronization",
+    "--disable-sliding-window",
+    "--disable-uvicorn-access-log",
+    "--distributed-executor-backend",
+    "--distributed-timeout-seconds",
+    "--download-dir",
+    "--dp-supervisor-probe-failure-threshold",
+    "--dp-supervisor-probe-interval-s",
+    "--dp-supervisor-probe-timeout-s",
+    "--dtype",
+    "--ec-transfer-config",
+    "--enable-auto-tool-choice",
+    "--enable-bf16x3-router-gemm",
+    "--enable-chunked-prefill",
+    "--enable-cumem-allocator",
+    "--enable-dbo",
+    "--enable-elastic-ep",
+    "--enable-ep-weight-filter",
+    "--enable-eplb",
+    "--enable-expert-parallel",
+    "--enable-flash-late-interaction",
+    "--enable-flashinfer-autotune",
+    "--enable-force-include-usage",
+    "--enable-layerwise-nvtx-tracing",
+    "--enable-log-deltas",
+    "--enable-log-outputs",
+    "--enable-log-requests",
+    "--enable-logging-iteration-details",
+    "--enable-lora",
+    "--enable-mamba-cache-stochastic-rounding",
+    "--enable-mfu-metrics",
+    "--enable-mixed-moe-lora-format",
+    "--enable-mm-embeds",
+    "--enable-moe-shared-loras",
+    "--enable-offline-docs",
+    "--enable-per-request-metrics",
+    "--enable-prefix-caching",
+    "--enable-prompt-embeds",
+    "--enable-prompt-tokens-details",
+    "--enable-request-id-headers",
+    "--enable-return-routed-experts",
+    "--enable-server-load-tracking",
+    "--enable-sleep-mode",
+    "--enable-ssl-refresh",
+    "--enable-tokenizer-info-endpoint",
+    "--enable-tower-connector-lora",
+    "--enforce-eager",
+    "--eplb-config",
+    "--exclude-tools-when-tool-choice-none",
+    "--expert-placement-strategy",
+    "--fail-on-environ-validation",
+    "--fingerprint-mode",
+    "--fingerprint-value",
+    "--fully-sharded-loras",
+    "--gdn-prefill-backend",
+    "--generation-config",
+    "--gpu-memory-utilization",
+    "--grpc",
+    "--h11-max-header-count",
+    "--h11-max-incomplete-event-size",
+    "--headless",
+    "--hf-config-path",
+    "--hf-overrides",
+    "--hf-token",
+    "--host",
+    "--ignore-patterns",
+    "--interleave-mm-strings",
+    "--io-processor-plugin",
+    "--ir-op-priority",
+    "--jit-monitor-mode",
+    "--jit-monitor-verbose",
+    "--kernel-config",
+    "--kv-cache-dtype",
+    "--kv-cache-dtype-skip-layers",
+    "--kv-cache-memory-bytes",
+    "--kv-cache-metrics",
+    "--kv-cache-metrics-sample",
+    "--kv-events-config",
+    "--kv-offloading-backend",
+    "--kv-offloading-size",
+    "--kv-sharing-fast-prefill",
+    "--kv-transfer-config",
+    "--language-model-only",
+    "--limit-mm-per-prompt",
+    "--linear-backend",
+    "--load-format",
+    "--log-config-file",
+    "--log-error-stack",
+    "--logits-processors",
+    "--logprobs-mode",
+    "--long-prefill-token-threshold",
+    "--lora-dtype",
+    "--lora-modules",
+    "--lora-target-modules",
+    "--mamba-backend",
+    "--mamba-block-size",
+    "--mamba-cache-dtype",
+    "--mamba-cache-mode",
+    "--mamba-cache-philox-rounds",
+    "--mamba-ssm-cache-dtype",
+    "--master-addr",
+    "--master-port",
+    "--max-cpu-loras",
+    "--max-cudagraph-capture-size",
+    "--max-log-len",
+    "--max-logprobs",
+    "--max-long-partial-prefills",
+    "--max-lora-rank",
+    "--max-loras",
+    "--max-model-len",
+    "--max-num-batched-tokens",
+    "--max-num-partial-prefills",
+    "--max-num-scheduled-tokens",
+    "--max-num-seqs",
+    "--max-parallel-loading-workers",
+    "--media-io-kwargs",
+    "--middleware",
+    "--mm-encoder-attn-backend",
+    "--mm-encoder-attn-dtype",
+    "--mm-encoder-fp8-scale-path",
+    "--mm-encoder-fp8-scale-save-margin",
+    "--mm-encoder-fp8-scale-save-path",
+    "--mm-encoder-only",
+    "--mm-encoder-tp-mode",
+    "--mm-ipc-gpu-memory-gb",
+    "--mm-processor-cache-gb",
+    "--mm-processor-cache-type",
+    "--mm-processor-kwargs",
+    "--mm-shm-cache-max-object-size-mb",
+    "--mm-tensor-ipc",
+    "--model",
+    "--model-class-overrides",
+    "--model-impl",
+    "--model-loader-extra-config",
+    "--moe-backend",
+    "--nnodes",
+    "--node-rank",
+    "--num-gpu-blocks-override",
+    "--numa-bind",
+    "--numa-bind-cpus",
+    "--numa-bind-nodes",
+    "--offload-backend",
+    "--offload-group-size",
+    "--offload-num-in-group",
+    "--offload-params",
+    "--offload-prefetch-step",
+    "--optimization-level",
+    "--otlp-traces-endpoint",
+    "--override-attention-dtype",
+    "--override-generation-config",
+    "--performance-mode",
+    "--pipeline-parallel-size",
+    "--pooler-config",
+    "--port",
+    "--prefill-context-parallel-size",
+    "--prefill-schedule-interval",
+    "--prefix-caching-hash-algo",
+    "--prefix-match-unit",
+    "--profiler-config",
+    "--pt-load-map-location",
+    "--quantization",
+    "--quantization-config",
+    "--ray-workers-use-nsight",
+    "--reasoning-config",
+    "--reasoning-parser",
+    "--reasoning-parser-plugin",
+    "--renderer-num-workers",
+    "--response-role",
+    "--return-tokens-as-token-ids",
+    "--revision",
+    "--root-path",
+    "--runner",
+    "--safetensors-load-strategy",
+    "--safetensors-prefetch-block-size",
+    "--safetensors-prefetch-num-threads",
+    "--scheduler-cls",
+    "--scheduler-reserve-full-isl",
+    "--scheduling-policy",
+    "--seed",
+    "--served-model-name",
+    "--show-hidden-metrics-for-version",
+    "--shutdown-timeout",
+    "--skip-mm-profiling",
+    "--skip-tokenizer-init",
+    "--spec-method",
+    "--spec-model",
+    "--spec-tokens",
+    "--specialize-active-lora",
+    "--speculative-config",
+    "--ssl-ca-certs",
+    "--ssl-cert-reqs",
+    "--ssl-certfile",
+    "--ssl-ciphers",
+    "--ssl-keyfile",
+    "--stream-interval",
+    "--structured-outputs-config",
+    "--tensor-parallel-size",
+    "--tokenizer",
+    "--tokenizer-mode",
+    "--tokenizer-revision",
+    "--tokens-only",
+    "--tool-call-parser",
+    "--tool-parser-plugin",
+    "--tool-server",
+    "--trust-remote-code",
+    "--trust-request-chat-template",
+    "--ubatch-size",
+    "--uds",
+    "--use-fp64-gumbel",
+    "--use-tqdm-on-load",
+    "--uvicorn-log-level",
+    "--video-pruning-rate",
+    "--watermark",
+    "--weight-transfer-config",
+    "--worker-cls",
+    "--worker-extension-cls",
+    "-ac",
+    "-asc",
+    "-cc",
+    "-dc",
+    "-dcp",
+    "-dp",
+    "-dpa",
+    "-dpb",
+    "-dpe",
+    "-dph",
+    "-dpl",
+    "-dpm",
+    "-dpn",
+    "-dpp",
+    "-dpr",
+    "-ep",
+    "-n",
+    "-pcp",
+    "-pp",
+    "-q",
+    "-r",
+    "-sc",
+    "-tp"
+   ],
+   "reasoning_parsers": [
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_r1",
+    "deepseek_v3",
+    "deepseek_v4",
+    "ernie45",
+    "gemma4",
+    "glm45",
+    "glm47",
+    "granite",
+    "holo2",
+    "hunyuan_a13b",
+    "hy_v3",
+    "inkling",
+    "kimi_k2",
+    "mimo",
+    "minimax_m2",
+    "minimax_m2_append_think",
+    "minimax_m3",
+    "mistral",
+    "nemotron_v3",
+    "olmo3",
+    "openai_gptoss",
+    "poolside_v1",
+    "qwen3",
+    "seed_oss",
+    "step3",
+    "step3p5"
+   ],
+   "tool_parsers": [
+    "apertus",
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_v3",
+    "deepseek_v31",
+    "deepseek_v32",
+    "deepseek_v4",
+    "ernie45",
+    "functiongemma",
+    "gemma4",
+    "gigachat3",
+    "glm45",
+    "glm47",
+    "granite",
+    "granite-20b-fc",
+    "granite4",
+    "hermes",
+    "hunyuan_a13b",
+    "hy_v3",
+    "inkling",
+    "internlm",
+    "jamba",
+    "kimi_k2",
+    "lfm2",
+    "llama3_json",
+    "llama4_json",
+    "llama4_pythonic",
+    "longcat",
+    "mimo",
+    "minicpm5",
+    "minimax_m2",
+    "minimax_m3",
+    "mistral",
+    "olmo3",
+    "openai",
+    "phi4_mini_json",
+    "poolside_v1",
+    "pythonic",
+    "qwen3_coder",
+    "qwen3_xml",
+    "seed_oss",
+    "step3",
+    "step3p5",
+    "xlam"
+   ]
+  },
+  "0.32.0": {
+   "flags": [
+    "--additional-config",
+    "--aggregate-engine-logging",
+    "--all2all-backend",
+    "--allow-credentials",
+    "--allow-deprecated-quantization",
+    "--allowed-headers",
+    "--allowed-local-media-path",
+    "--allowed-media-domains",
+    "--allowed-methods",
+    "--allowed-origins",
+    "--anthropic-disabled-thinking-effort",
+    "--api-key",
+    "--api-server-count",
+    "--async-scheduling",
+    "--attention-backend",
+    "--attention-config",
+    "--aux-output-config",
+    "--block-size",
+    "--chat-template",
+    "--chat-template-content-format",
+    "--code-revision",
+    "--cohere-format",
+    "--cohere-is-reasoning-model",
+    "--collect-detailed-traces",
+    "--compilation-config",
+    "--config",
+    "--config-format",
+    "--convert",
+    "--cp-kv-cache-interleave-size",
+    "--cpu-distributed-timeout-seconds",
+    "--cpu-offload-gb",
+    "--cpu-offload-params",
+    "--cudagraph-capture-sizes",
+    "--cudagraph-metrics",
+    "--custom-histogram-buckets",
+    "--data-parallel-address",
+    "--data-parallel-backend",
+    "--data-parallel-external-lb",
+    "--data-parallel-hybrid-lb",
+    "--data-parallel-multi-port-external-lb",
+    "--data-parallel-rank",
+    "--data-parallel-rpc-port",
+    "--data-parallel-size",
+    "--data-parallel-size-local",
+    "--data-parallel-start-rank",
+    "--data-parallel-supervisor-port",
+    "--dbo-decode-token-threshold",
+    "--dbo-prefill-token-threshold",
+    "--dcp-comm-backend",
+    "--dcp-kv-cache-interleave-size",
+    "--dcp-q-replicate",
+    "--decode-context-parallel-size",
+    "--default-chat-template-kwargs",
+    "--default-mm-loras",
+    "--device-ids",
+    "--device-memory-utilization",
+    "--diffusion-config",
+    "--disable-access-log-for-endpoints",
+    "--disable-cascade-attn",
+    "--disable-chunked-mm-input",
+    "--disable-custom-all-reduce",
+    "--disable-fastapi-docs",
+    "--disable-hybrid-kv-cache-manager",
+    "--disable-log-stats",
+    "--disable-nccl-for-dp-synchronization",
+    "--disable-sliding-window",
+    "--disable-uvicorn-access-log",
+    "--distributed-executor-backend",
+    "--distributed-timeout-seconds",
+    "--download-dir",
+    "--dp-supervisor-probe-failure-threshold",
+    "--dp-supervisor-probe-interval-s",
+    "--dp-supervisor-probe-timeout-s",
+    "--dp-sync-interval",
+    "--dtype",
+    "--ec-manager-config",
+    "--ec-transfer-config",
+    "--elastic-ep-max-dp-size",
+    "--enable-auto-tool-choice",
+    "--enable-batch-sharded-sampling",
+    "--enable-chunked-prefill",
+    "--enable-cumem-allocator",
+    "--enable-dbo",
+    "--enable-elastic-ep",
+    "--enable-ep-weight-filter",
+    "--enable-eplb",
+    "--enable-expert-parallel",
+    "--enable-fault-tolerance",
+    "--enable-flash-late-interaction",
+    "--enable-flashinfer-autotune",
+    "--enable-force-include-usage",
+    "--enable-hc-sp",
+    "--enable-layerwise-nvtx-tracing",
+    "--enable-log-deltas",
+    "--enable-log-outputs",
+    "--enable-log-requests",
+    "--enable-logging-iteration-details",
+    "--enable-lora",
+    "--enable-mamba-cache-stochastic-rounding",
+    "--enable-mamba-shared-prefix-checkpoint",
+    "--enable-mfu-metrics",
+    "--enable-mixed-moe-lora-format",
+    "--enable-mm-embeds",
+    "--enable-moe-shared-loras",
+    "--enable-nccl-comm-suspend",
+    "--enable-offline-docs",
+    "--enable-per-request-metrics",
+    "--enable-prefix-caching",
+    "--enable-prompt-embeds",
+    "--enable-prompt-tokens-details",
+    "--enable-request-id-headers",
+    "--enable-return-routed-experts",
+    "--enable-scale-out",
+    "--enable-server-load-tracking",
+    "--enable-shm-tensor-arena",
+    "--enable-sleep-mode",
+    "--enable-ssl-refresh",
+    "--enable-tokenizer-info-endpoint",
+    "--enable-tower-connector-lora",
+    "--enable-trace-replay",
+    "--enforce-eager",
+    "--engram-config",
+    "--eplb-config",
+    "--exclude-tools-when-tool-choice-none",
+    "--expert-placement-strategy",
+    "--fail-on-environ-validation",
+    "--fault-tolerance-config",
+    "--fingerprint-mode",
+    "--fingerprint-value",
+    "--fully-sharded-loras",
+    "--gdn-prefill-backend",
+    "--generation-config",
+    "--gpu-memory-utilization",
+    "--grpc",
+    "--grpc-port",
+    "--h11-max-header-count",
+    "--h11-max-incomplete-event-size",
+    "--headless",
+    "--hf-config-path",
+    "--hf-overrides",
+    "--hf-token",
+    "--host",
+    "--ignore-patterns",
+    "--interleave-mm-strings",
+    "--io-processor-plugin",
+    "--ir-op-priority",
+    "--jit-monitor-mode",
+    "--jit-monitor-verbose",
+    "--kda-decode-backend",
+    "--kda-prefill-backend",
+    "--kernel-config",
+    "--kv-cache-dtype",
+    "--kv-cache-dtype-skip-layers",
+    "--kv-cache-memory-bytes",
+    "--kv-cache-metrics",
+    "--kv-cache-metrics-sample",
+    "--kv-events-config",
+    "--kv-offloading-backend",
+    "--kv-offloading-size",
+    "--kv-sharing-fast-prefill",
+    "--kv-transfer-config",
+    "--language-model-only",
+    "--limit-mm-per-prompt",
+    "--linear-backend",
+    "--load-format",
+    "--log-config-file",
+    "--log-error-stack",
+    "--log-level",
+    "--logging-config",
+    "--logits-processors",
+    "--logprobs-mode",
+    "--long-prefill-token-threshold",
+    "--long-prefill-token-threshold-adaptive",
+    "--lora-dtype",
+    "--lora-modules",
+    "--lora-target-modules",
+    "--mamba-backend",
+    "--mamba-block-size",
+    "--mamba-cache-dtype",
+    "--mamba-cache-mode",
+    "--mamba-cache-philox-rounds",
+    "--mamba-ssm-cache-dtype",
+    "--mamba-ssu-algorithm",
+    "--master-addr",
+    "--master-port",
+    "--max-cpu-loras",
+    "--max-cudagraph-capture-size",
+    "--max-log-len",
+    "--max-logprobs",
+    "--max-lora-cls-labels",
+    "--max-lora-rank",
+    "--max-loras",
+    "--max-model-len",
+    "--max-num-active-seqs",
+    "--max-num-batched-tokens",
+    "--max-num-queued-reqs",
+    "--max-num-queued-tokens",
+    "--max-num-scheduled-tokens",
+    "--max-num-seqs",
+    "--max-parallel-loading-workers",
+    "--media-io-kwargs",
+    "--middleware",
+    "--mm-device-do-normalize",
+    "--mm-encoder-attn-backend",
+    "--mm-encoder-attn-dtype",
+    "--mm-encoder-fp8-scale-path",
+    "--mm-encoder-fp8-scale-save-margin",
+    "--mm-encoder-fp8-scale-save-path",
+    "--mm-encoder-only",
+    "--mm-encoder-tp-mode",
+    "--mm-hasher-algorithm",
+    "--mm-ipc-gpu-memory-gb",
+    "--mm-processor-cache-gb",
+    "--mm-processor-cache-type",
+    "--mm-processor-device",
+    "--mm-processor-kwargs",
+    "--mm-shm-cache-max-object-size-mb",
+    "--mm-tensor-ipc",
+    "--model",
+    "--model-class-overrides",
+    "--model-impl",
+    "--model-loader-extra-config",
+    "--moe-backend",
+    "--nnodes",
+    "--node-rank",
+    "--num-gpu-blocks-override",
+    "--numa-bind",
+    "--numa-bind-cpus",
+    "--numa-bind-nodes",
+    "--offload-backend",
+    "--offload-group-size",
+    "--offload-num-in-group",
+    "--offload-params",
+    "--offload-prefetch-step",
+    "--optimization-level",
+    "--otlp-traces-endpoint",
+    "--override-generation-config",
+    "--per-request-spec-decode-metrics",
+    "--performance-mode",
+    "--pipeline-parallel-size",
+    "--pooler-config",
+    "--port",
+    "--prefill-context-parallel-size",
+    "--prefill-schedule-interval",
+    "--prefix-cache-retention-interval",
+    "--prefix-caching-hash-algo",
+    "--prefix-match-unit",
+    "--profiler-config",
+    "--pt-load-map-location",
+    "--quantization",
+    "--quantization-config",
+    "--ray-workers-use-nsight",
+    "--reasoning-config",
+    "--reasoning-parser",
+    "--reasoning-parser-plugin",
+    "--renderer-num-workers",
+    "--replayssm-buffer-len",
+    "--response-role",
+    "--return-sampling-mask",
+    "--return-tokens-as-token-ids",
+    "--revision",
+    "--root-path",
+    "--runner",
+    "--safetensors-load-strategy",
+    "--safetensors-prefetch-block-size",
+    "--safetensors-prefetch-num-threads",
+    "--scheduler-cls",
+    "--scheduler-reserve-full-isl",
+    "--scheduling-policy",
+    "--seed",
+    "--served-model-name",
+    "--show-hidden-metrics-for-version",
+    "--shutdown-timeout",
+    "--skip-mm-profiling",
+    "--skip-tokenizer-init",
+    "--sleep-mode-offload-cudagraph",
+    "--sleep-preserve-parameter-names",
+    "--sparse-indexer-topk-backend",
+    "--spec-method",
+    "--spec-model",
+    "--spec-tokens",
+    "--specialize-active-lora",
+    "--speculative-config",
+    "--sse-keep-alive-interval",
+    "--ssl-ca-certs",
+    "--ssl-cert-reqs",
+    "--ssl-certfile",
+    "--ssl-ciphers",
+    "--ssl-keyfile",
+    "--stream-interval",
+    "--structured-outputs-config",
+    "--swa-bounded-replay",
+    "--tensor-parallel-size",
+    "--tokenizer",
+    "--tokenizer-mode",
+    "--tokenizer-revision",
+    "--tokens-only",
+    "--tool-call-parser",
+    "--tool-parser-plugin",
+    "--tool-server",
+    "--tool-strict-level",
+    "--trust-remote-code",
+    "--trust-request-chat-template",
+    "--trust-request-mm-kwargs",
+    "--ubatch-size",
+    "--uds",
+    "--use-fp64-gumbel",
+    "--use-replayssm",
+    "--use-tqdm-on-load",
+    "--uvicorn-log-level",
+    "--video-pruning-method",
+    "--video-pruning-rate",
+    "--watermark",
+    "--watermark-config",
+    "--weight-transfer-config",
+    "--worker-cls",
+    "--worker-extension-cls",
+    "-ac",
+    "-asc",
+    "-cc",
+    "-dc",
+    "-dcp",
+    "-dp",
+    "-dpa",
+    "-dpb",
+    "-dpe",
+    "-dph",
+    "-dpl",
+    "-dpm",
+    "-dpn",
+    "-dpp",
+    "-dpr",
+    "-ep",
+    "-n",
+    "-pcp",
+    "-pp",
+    "-q",
+    "-r",
+    "-sc",
+    "-tp"
+   ],
+   "reasoning_parsers": [
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_r1",
+    "deepseek_v3",
+    "deepseek_v4",
+    "deepseek_v41",
+    "ernie45",
+    "gemma4",
+    "glm45",
+    "glm47",
+    "granite",
+    "granite_thinking_parser",
+    "hf",
+    "holo2",
+    "hunyuan_a13b",
+    "hy_v3",
+    "hy_v4",
+    "inkling",
+    "k2_horizon",
+    "kimi_k2",
+    "kimi_k3",
+    "ling3",
+    "mimo",
+    "minicpmv",
+    "minimax_m2",
+    "minimax_m2_append_think",
+    "minimax_m3",
+    "mistral",
+    "muse_glimmer",
+    "nemotron_v3",
+    "olmo3",
+    "openai_gptoss",
+    "plamo3",
+    "poolside_v1",
+    "qwen3",
+    "seed_oss",
+    "step3",
+    "step3p5"
+   ],
+   "tool_parsers": [
+    "apertus",
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_v3",
+    "deepseek_v31",
+    "deepseek_v32",
+    "deepseek_v4",
+    "deepseek_v41",
+    "dots",
+    "ernie45",
+    "functiongemma",
+    "gemma4",
+    "gigachat3",
+    "glm45",
+    "glm47",
+    "granite",
+    "granite-20b-fc",
+    "granite4",
+    "hermes",
+    "hf",
+    "hunyuan_a13b",
+    "hy_v3",
+    "hy_v4",
+    "inkling",
+    "internlm",
+    "jamba",
+    "k2_horizon",
+    "kimi_k2",
+    "kimi_k3",
+    "lfm2",
+    "ling3",
+    "llama3_json",
+    "llama4_json",
+    "llama4_pythonic",
+    "longcat",
+    "mimo",
+    "minicpm5",
+    "minimax_m2",
+    "minimax_m3",
+    "mistral",
+    "muse_glimmer",
+    "olmo3",
+    "openai",
+    "phi4_mini_json",
+    "plamo3",
+    "poolside_v1",
+    "pythonic",
+    "qwen3_coder",
+    "qwen3_json",
+    "qwen3_xml",
+    "seed_oss",
+    "step3",
+    "step3p5",
+    "xlam"
+   ]
+  },
+  "0.33.0": {
+   "flags": [
+    "--additional-config",
+    "--aggregate-engine-logging",
+    "--all2all-backend",
+    "--allow-credentials",
+    "--allow-deprecated-quantization",
+    "--allowed-headers",
+    "--allowed-local-media-path",
+    "--allowed-media-domains",
+    "--allowed-methods",
+    "--allowed-origins",
+    "--anthropic-disabled-thinking-effort",
+    "--api-key",
+    "--api-server-count",
+    "--async-scheduling",
+    "--attention-backend",
+    "--attention-config",
+    "--aux-output-config",
+    "--block-size",
+    "--chat-template",
+    "--chat-template-content-format",
+    "--code-revision",
+    "--cohere-format",
+    "--cohere-is-reasoning-model",
+    "--collect-detailed-traces",
+    "--compilation-config",
+    "--config",
+    "--config-format",
+    "--convert",
+    "--cp-kv-cache-interleave-size",
+    "--cpu-distributed-timeout-seconds",
+    "--cpu-offload-gb",
+    "--cpu-offload-params",
+    "--cudagraph-capture-sizes",
+    "--cudagraph-metrics",
+    "--custom-histogram-buckets",
+    "--data-parallel-address",
+    "--data-parallel-backend",
+    "--data-parallel-external-lb",
+    "--data-parallel-hybrid-lb",
+    "--data-parallel-multi-port-external-lb",
+    "--data-parallel-rank",
+    "--data-parallel-rpc-port",
+    "--data-parallel-size",
+    "--data-parallel-size-local",
+    "--data-parallel-start-rank",
+    "--data-parallel-supervisor-port",
+    "--dbo-decode-token-threshold",
+    "--dbo-prefill-token-threshold",
+    "--dcp-comm-backend",
+    "--dcp-kv-cache-interleave-size",
+    "--dcp-q-replicate",
+    "--decode-context-parallel-size",
+    "--default-chat-template-kwargs",
+    "--default-mm-loras",
+    "--device-ids",
+    "--device-memory-utilization",
+    "--diffusion-config",
+    "--disable-access-log-for-endpoints",
+    "--disable-cascade-attn",
+    "--disable-chunked-mm-input",
+    "--disable-custom-all-reduce",
+    "--disable-fastapi-docs",
+    "--disable-hybrid-kv-cache-manager",
+    "--disable-log-stats",
+    "--disable-nccl-for-dp-synchronization",
+    "--disable-sliding-window",
+    "--disable-uvicorn-access-log",
+    "--distributed-executor-backend",
+    "--distributed-timeout-seconds",
+    "--download-dir",
+    "--dp-supervisor-probe-failure-threshold",
+    "--dp-supervisor-probe-interval-s",
+    "--dp-supervisor-probe-timeout-s",
+    "--dp-sync-interval",
+    "--dtype",
+    "--ec-manager-config",
+    "--ec-transfer-config",
+    "--elastic-ep-max-dp-size",
+    "--enable-auto-tool-choice",
+    "--enable-batch-sharded-sampling",
+    "--enable-chunked-prefill",
+    "--enable-cumem-allocator",
+    "--enable-dbo",
+    "--enable-elastic-ep",
+    "--enable-ep-weight-filter",
+    "--enable-eplb",
+    "--enable-expert-parallel",
+    "--enable-fault-tolerance",
+    "--enable-flash-late-interaction",
+    "--enable-flashinfer-autotune",
+    "--enable-force-include-usage",
+    "--enable-hc-sp",
+    "--enable-layerwise-nvtx-tracing",
+    "--enable-log-deltas",
+    "--enable-log-outputs",
+    "--enable-log-requests",
+    "--enable-logging-iteration-details",
+    "--enable-lora",
+    "--enable-mamba-cache-stochastic-rounding",
+    "--enable-mamba-shared-prefix-checkpoint",
+    "--enable-mfu-metrics",
+    "--enable-mixed-moe-lora-format",
+    "--enable-mm-embeds",
+    "--enable-moe-shared-loras",
+    "--enable-nccl-comm-suspend",
+    "--enable-offline-docs",
+    "--enable-per-request-metrics",
+    "--enable-prefix-caching",
+    "--enable-prompt-embeds",
+    "--enable-prompt-tokens-details",
+    "--enable-request-id-headers",
+    "--enable-return-routed-experts",
+    "--enable-scale-out",
+    "--enable-server-load-tracking",
+    "--enable-shm-tensor-arena",
+    "--enable-sleep-mode",
+    "--enable-ssl-refresh",
+    "--enable-tokenizer-info-endpoint",
+    "--enable-tower-connector-lora",
+    "--enable-trace-replay",
+    "--enforce-eager",
+    "--engram-config",
+    "--eplb-config",
+    "--exclude-tools-when-tool-choice-none",
+    "--expert-placement-strategy",
+    "--fail-on-environ-validation",
+    "--fault-tolerance-config",
+    "--fingerprint-mode",
+    "--fingerprint-value",
+    "--fully-sharded-loras",
+    "--gdn-prefill-backend",
+    "--generation-config",
+    "--gpu-memory-utilization",
+    "--grpc",
+    "--grpc-port",
+    "--h11-max-header-count",
+    "--h11-max-incomplete-event-size",
+    "--headless",
+    "--hf-config-path",
+    "--hf-overrides",
+    "--hf-token",
+    "--host",
+    "--ignore-patterns",
+    "--interleave-mm-strings",
+    "--io-processor-plugin",
+    "--ir-op-priority",
+    "--jit-monitor-mode",
+    "--jit-monitor-verbose",
+    "--kda-decode-backend",
+    "--kda-prefill-backend",
+    "--kernel-config",
+    "--kv-cache-dtype",
+    "--kv-cache-dtype-skip-layers",
+    "--kv-cache-memory-bytes",
+    "--kv-cache-metrics",
+    "--kv-cache-metrics-sample",
+    "--kv-events-config",
+    "--kv-offloading-backend",
+    "--kv-offloading-size",
+    "--kv-sharing-fast-prefill",
+    "--kv-transfer-config",
+    "--language-model-only",
+    "--limit-mm-per-prompt",
+    "--linear-backend",
+    "--load-format",
+    "--log-config-file",
+    "--log-error-stack",
+    "--log-level",
+    "--logging-config",
+    "--logits-processors",
+    "--logprobs-mode",
+    "--long-prefill-token-threshold",
+    "--long-prefill-token-threshold-adaptive",
+    "--lora-dtype",
+    "--lora-modules",
+    "--lora-target-modules",
+    "--mamba-backend",
+    "--mamba-block-size",
+    "--mamba-cache-dtype",
+    "--mamba-cache-mode",
+    "--mamba-cache-philox-rounds",
+    "--mamba-ssm-cache-dtype",
+    "--mamba-ssu-algorithm",
+    "--master-addr",
+    "--master-port",
+    "--max-cpu-loras",
+    "--max-cudagraph-capture-size",
+    "--max-log-len",
+    "--max-logprobs",
+    "--max-lora-cls-labels",
+    "--max-lora-rank",
+    "--max-loras",
+    "--max-model-len",
+    "--max-num-active-seqs",
+    "--max-num-batched-tokens",
+    "--max-num-queued-reqs",
+    "--max-num-queued-tokens",
+    "--max-num-scheduled-tokens",
+    "--max-num-seqs",
+    "--max-parallel-loading-workers",
+    "--media-io-kwargs",
+    "--middleware",
+    "--mm-device-do-normalize",
+    "--mm-encoder-attn-backend",
+    "--mm-encoder-attn-dtype",
+    "--mm-encoder-fp8-scale-path",
+    "--mm-encoder-fp8-scale-save-margin",
+    "--mm-encoder-fp8-scale-save-path",
+    "--mm-encoder-only",
+    "--mm-encoder-tp-mode",
+    "--mm-hasher-algorithm",
+    "--mm-ipc-gpu-memory-gb",
+    "--mm-processor-cache-gb",
+    "--mm-processor-cache-type",
+    "--mm-processor-device",
+    "--mm-processor-kwargs",
+    "--mm-shm-cache-max-object-size-mb",
+    "--mm-tensor-ipc",
+    "--model",
+    "--model-class-overrides",
+    "--model-impl",
+    "--model-loader-extra-config",
+    "--moe-backend",
+    "--monokernel",
+    "--nnodes",
+    "--node-rank",
+    "--num-gpu-blocks-override",
+    "--numa-bind",
+    "--numa-bind-cpus",
+    "--numa-bind-nodes",
+    "--offload-backend",
+    "--offload-group-size",
+    "--offload-num-in-group",
+    "--offload-params",
+    "--offload-prefetch-step",
+    "--optimization-level",
+    "--otlp-traces-endpoint",
+    "--override-generation-config",
+    "--per-request-spec-decode-metrics",
+    "--performance-mode",
+    "--pipeline-parallel-size",
+    "--pooler-config",
+    "--port",
+    "--prefill-context-parallel-size",
+    "--prefill-schedule-interval",
+    "--prefix-cache-retention-interval",
+    "--prefix-caching-hash-algo",
+    "--prefix-match-unit",
+    "--profiler-config",
+    "--pt-load-map-location",
+    "--quantization",
+    "--quantization-config",
+    "--ray-workers-use-nsight",
+    "--reasoning-config",
+    "--reasoning-effort-map",
+    "--reasoning-parser",
+    "--reasoning-parser-plugin",
+    "--renderer-num-workers",
+    "--replayssm-buffer-len",
+    "--response-role",
+    "--return-sampling-mask",
+    "--return-tokens-as-token-ids",
+    "--revision",
+    "--root-path",
+    "--runner",
+    "--safetensors-load-strategy",
+    "--safetensors-prefetch-block-size",
+    "--safetensors-prefetch-num-threads",
+    "--scheduler-cls",
+    "--scheduler-reserve-full-isl",
+    "--scheduling-policy",
+    "--seed",
+    "--served-model-name",
+    "--show-hidden-metrics-for-version",
+    "--shutdown-timeout",
+    "--skip-mm-profiling",
+    "--skip-tokenizer-init",
+    "--sleep-mode-backend",
+    "--sleep-mode-offload-cudagraph",
+    "--sleep-preserve-parameter-names",
+    "--sparse-indexer-topk-backend",
+    "--spec-method",
+    "--spec-model",
+    "--spec-tokens",
+    "--specialize-active-lora",
+    "--speculative-config",
+    "--sse-keep-alive-interval",
+    "--ssl-ca-certs",
+    "--ssl-cert-reqs",
+    "--ssl-certfile",
+    "--ssl-ciphers",
+    "--ssl-keyfile",
+    "--stream-interval",
+    "--structured-outputs-config",
+    "--swa-bounded-replay",
+    "--tensor-parallel-size",
+    "--tokenizer",
+    "--tokenizer-mode",
+    "--tokenizer-revision",
+    "--tokens-only",
+    "--tool-call-parser",
+    "--tool-parser-plugin",
+    "--tool-server",
+    "--tool-strict-level",
+    "--trust-remote-code",
+    "--trust-request-chat-template",
+    "--trust-request-mm-kwargs",
+    "--ubatch-size",
+    "--uds",
+    "--use-fp64-gumbel",
+    "--use-replayssm",
+    "--use-tqdm-on-load",
+    "--uvicorn-log-level",
+    "--video-pruning-method",
+    "--video-pruning-rate",
+    "--watchdog-config",
+    "--watermark",
+    "--watermark-config",
+    "--weight-transfer-config",
+    "--worker-cls",
+    "--worker-extension-cls",
+    "-ac",
+    "-asc",
+    "-cc",
+    "-dc",
+    "-dcp",
+    "-dp",
+    "-dpa",
+    "-dpb",
+    "-dpe",
+    "-dph",
+    "-dpl",
+    "-dpm",
+    "-dpn",
+    "-dpp",
+    "-dpr",
+    "-ep",
+    "-n",
+    "-pcp",
+    "-pp",
+    "-q",
+    "-r",
+    "-sc",
+    "-tp"
+   ],
+   "reasoning_parsers": [
+    "beam",
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_r1",
+    "deepseek_v3",
+    "deepseek_v4",
+    "deepseek_v41",
+    "ernie45",
+    "gemma4",
+    "glm45",
+    "glm47",
+    "granite",
+    "granite_thinking_parser",
+    "hf",
+    "holo2",
+    "hunyuan_a13b",
+    "hy_v3",
+    "hy_v4",
+    "inkling",
+    "k2_horizon",
+    "kimi_k2",
+    "kimi_k3",
+    "ling3",
+    "mimo",
+    "minicpmv",
+    "minimax_m2",
+    "minimax_m2_append_think",
+    "minimax_m3",
+    "mistral",
+    "muse",
+    "muse_glimmer",
+    "musespark1x",
+    "nemotron_v3",
+    "olmo3",
+    "openai_gptoss",
+    "plamo3",
+    "poolside_v1",
+    "qwen3",
+    "seed_oss",
+    "step3",
+    "step3p5",
+    "step5"
+   ],
+   "tool_parsers": [
+    "apertus",
+    "beam",
+    "cohere_command3",
+    "cohere_command4",
+    "deepseek_v3",
+    "deepseek_v31",
+    "deepseek_v32",
+    "deepseek_v4",
+    "deepseek_v41",
+    "dots",
+    "ernie45",
+    "functiongemma",
+    "gemma4",
+    "gigachat3",
+    "glm45",
+    "glm47",
+    "granite",
+    "granite-20b-fc",
+    "granite4",
+    "hermes",
+    "hf",
+    "hunyuan_a13b",
+    "hy_v3",
+    "hy_v4",
+    "inkling",
+    "internlm",
+    "jamba",
+    "k2_horizon",
+    "kimi_k2",
+    "kimi_k3",
+    "lfm2",
+    "ling3",
+    "llama3_json",
+    "llama4_json",
+    "llama4_pythonic",
+    "longcat",
+    "mimo",
+    "minicpm5",
+    "minimax_m2",
+    "minimax_m3",
+    "mistral",
+    "muse",
+    "muse_glimmer",
+    "musespark1x",
+    "olmo3",
+    "openai",
+    "phi4_mini_json",
+    "plamo3",
+    "poolside_v1",
+    "pythonic",
+    "qwen3_coder",
+    "qwen3_json",
+    "qwen3_xml",
+    "seed_oss",
+    "step3",
+    "step3p5",
+    "step5",
+    "xlam"
+   ]
+  }
+ },
+ "license": {
+  "sources": [
+   "https://github.com/vllm-project/vllm/tree/960f5c1bb14533ed759344fdd745b623c474f901/recipes",
+   "https://github.com/vllm-project/recipes/tree/d9862f5cba9ee4e04c959aee595c0c4a410aeac0"
+  ],
+  "spdx": "Apache-2.0",
+  "text": "                                 Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"[]\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.\n"
+ },
+ "models": {
+  "baidu/ernie-5.5-flash": {
+   "base_args": [
+    "--kv-cache-dtype",
+    "fp8",
+    "--max-model-len",
+    "131072"
+   ],
+   "base_env": {
+    "VLLM_ENGINE_READY_TIMEOUT_S": "3600"
+   },
+   "context_length": 1048576,
+   "default_frontend": null,
+   "feature_order": [
+    "spec_decoding",
+    "reasoning",
+    "tool_calling"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "ernie5"
+     ]
+    },
+    "spec_decoding": {
+     "default_mode": "mtp2",
+     "mode_order": [
+      "mtp",
+      "mtp2",
+      "mtp3",
+      "dspark"
+     ],
+     "modes": {
+      "dspark": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\"}"
+       ],
+       "variants": [
+        "flash"
+       ]
+      },
+      "mtp": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"mtp\",\"num_speculative_tokens\":1}"
+       ]
+      },
+      "mtp2": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"mtp\",\"num_speculative_tokens\":2}"
+       ]
+      },
+      "mtp3": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+       ]
+      }
+     }
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "ernie5"
+     ]
+    }
+   },
+   "file": "recipes/models/baidu/ERNIE-5.5-Flash.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "baidu/ERNIE-5.5-Flash",
+   "min_vllm": "0.32.0",
+   "model_id": "baidu/ERNIE-5.5-Flash",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding",
+    "reasoning",
+    "tool_calling"
+   ],
+   "overrides": {},
+   "strategies": [
+    "single_node_dep",
+    "single_node_tep",
+    "pd_cluster"
+   ],
+   "variants": {
+    "bf16": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "baidu/ERNIE-5.5-Flash-Base-BF16",
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 688
+    },
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "baidu/ERNIE-5.5-Flash-Base",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 347
+    },
+    "flash": {
+     "args": [],
+     "default_modes": {
+      "spec_decoding": "dspark"
+     },
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 347
+    }
+   }
+  },
+  "google/gemma-4-12b-it": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 131072,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "gemma4"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"model\":\"google/gemma-4-12B-it-assistant\",\"num_speculative_tokens\":4}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "gemma4",
+      "--chat-template",
+      "examples/tool_chat_template_gemma4.jinja"
+     ]
+    }
+   },
+   "file": "recipes/models/Google/gemma-4-12B-it.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Google/gemma-4-12B-it",
+   "min_vllm": "0.23.0",
+   "model_id": "google/gemma-4-12B-it",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding"
+   ],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--enforce-eager",
+      "--attention-backend",
+      "flash_attn",
+      "--trust-remote-code",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--no-enable-prefix-caching",
+      "--max-num-batched-tokens",
+      "8192",
+      "--max-model-len",
+      "5120",
+      "--tensor-parallel-size",
+      "2"
+     ]
+    }
+   },
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 29
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "RedHatAI/gemma-4-12B-it-FP8-Dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 15
+    },
+    "nvfp4": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "RedHatAI/gemma-4-12B-it-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 8
+    },
+    "w4a16": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "google/gemma-4-12B-it-qat-w4a16-ct",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 9
+    }
+   }
+  },
+  "google/gemma-4-26b-a4b-it": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 131072,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "text_only",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "gemma4"
+     ]
+    },
+    "spec_decoding": {
+     "default_mode": "mtp",
+     "mode_order": [
+      "mtp",
+      "eagle3"
+     ],
+     "modes": {
+      "eagle3": {
+       "args": [
+        "--speculative-config",
+        "{\"model\": \"RedHatAI/gemma-4-26B-A4B-it-speculator.eagle3\", \"num_speculative_tokens\": 3, \"method\": \"eagle3\"}"
+       ],
+       "variants": [
+        "default"
+       ]
+      },
+      "mtp": {
+       "args": [
+        "--speculative-config",
+        "{\"model\":\"google/gemma-4-26B-A4B-it-assistant\",\"num_speculative_tokens\":4}"
+       ]
+      }
+     }
+    },
+    "text_only": {
+     "args": [
+      "--language-model-only"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "gemma4",
+      "--chat-template",
+      "examples/tool_chat_template_gemma4.jinja"
+     ]
+    }
+   },
+   "file": "recipes/models/Google/gemma-4-26B-A4B-it.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified",
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Google/gemma-4-26B-A4B-it",
+   "min_vllm": "0.25.0",
+   "model_id": "google/gemma-4-26B-A4B-it",
+   "nightly": false,
+   "opt_in": [
+    "text_only",
+    "spec_decoding"
+   ],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--enforce-eager",
+      "--attention-backend",
+      "flash_attn",
+      "--trust-remote-code",
+      "--gpu-memory-utilization",
+      "0.9",
+      "--no-enable-prefix-caching",
+      "--max-num-batched-tokens",
+      "8192",
+      "--max-model-len",
+      "5120",
+      "--tensor-parallel-size",
+      "4"
+     ]
+    }
+   },
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "single_node_tep",
+    "single_node_dep",
+    "multi_node_tp",
+    "multi_node_tep",
+    "multi_node_dep"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 64
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 32
+    },
+    "nvfp4": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/gemma-4-26B-A4B-it-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 16
+    },
+    "nvidia_nvfp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Gemma-4-26B-A4B-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 16
+    }
+   }
+  },
+  "inclusionai/ling-3.0-flash": {
+   "base_args": [
+    "--trust-remote-code",
+    "--dtype",
+    "bfloat16",
+    "--gpu-memory-utilization",
+    "0.9",
+    "--enable-chunked-prefill",
+    "--compilation-config",
+    "{\"cudagraph_mode\":\"FULL_AND_PIECEWISE\"}",
+    "--enable-prefix-caching"
+   ],
+   "base_env": {},
+   "context_length": 262144,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "ling3"
+     ]
+    },
+    "spec_decoding": {
+     "default_mode": "mtp",
+     "mode_order": [
+      "mtp",
+      "dspark"
+     ],
+     "modes": {
+      "dspark": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"dspark\",\"model\":\"inclusionAI/Ling-3.0-flash-dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\",\"attention_backend\":\"FLASH_ATTN\",\"enable_adaptive_verification\":false}"
+       ]
+      },
+      "mtp": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+       ]
+      }
+     }
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "ling3"
+     ]
+    }
+   },
+   "file": "recipes/models/inclusionAI/Ling-3.0-flash.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "inclusionAI/Ling-3.0-flash",
+   "min_vllm": "0.28.0",
+   "model_id": "inclusionAI/Ling-3.0-flash",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding"
+   ],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 300
+    },
+    "fp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "inclusionAI/Ling-3.0-flash-fp4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp4",
+     "precision_hardware": {},
+     "supported": [],
+     "vram_min": 85
+    },
+    "fp8": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "inclusionAI/Ling-3.0-flash-fp8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 150
+    },
+    "int4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "inclusionAI/Ling-3.0-flash-int4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 95
+    }
+   }
+  },
+  "meta-llama/llama-3.1-8b-instruct": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 131072,
+   "default_frontend": null,
+   "feature_order": [
+    "spec_decoding"
+   ],
+   "features": {
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"model\":\"RedHatAI/Llama-3.1-8B-Instruct-speculator.eagle3\",\"method\":\"eagle3\",\"num_speculative_tokens\":3}"
+     ]
+    }
+   },
+   "file": "recipes/models/meta-llama/Llama-3.1-8B-Instruct.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified",
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "meta-llama/Llama-3.1-8B-Instruct",
+   "min_vllm": "0.6.0",
+   "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding"
+   ],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "awq_int4": {
+     "args": [
+      "--quantization",
+      "awq"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 5
+    },
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6",
+      "arc_pro_b60",
+      "arc_pro_b70"
+     ],
+     "vram_min": 20
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 10
+    },
+    "nvfp4": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Llama-3.1-8B-Instruct-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 5
+    },
+    "nvidia_fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Llama-3.1-8B-Instruct-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 10
+    },
+    "redhat_fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 10
+    },
+    "redhat_fp8_block": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Llama-3.1-8B-Instruct-FP8-block",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 10
+    },
+    "redhat_nvfp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Llama-3.1-8B-Instruct-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 6
+    },
+    "w8a8_int8": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Meta-Llama-3.1-8B-Instruct-quantized.w8a8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int8",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 10
+    }
+   }
+  },
+  "meta-llama/llama-3.3-70b-instruct": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 131072,
+   "default_frontend": null,
+   "feature_order": [
+    "spec_decoding"
+   ],
+   "features": {
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"model\":\"RedHatAI/Llama-3.3-70B-Instruct-speculator.eagle3\",\"num_speculative_tokens\":3,\"method\":\"eagle3\"}"
+     ]
+    }
+   },
+   "file": "recipes/models/meta-llama/Llama-3.3-70B-Instruct.yaml",
+   "hardware": {
+    "arc_pro_b70": "verified",
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "meta-llama/Llama-3.3-70B-Instruct",
+   "min_vllm": "0.12.0",
+   "model_id": "meta-llama/Llama-3.3-70B-Instruct",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding"
+   ],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--block-size",
+      "64",
+      "--enforce-eager",
+      "--no-enable-prefix-caching",
+      "--disable-sliding-window",
+      "--max-model-len",
+      "9472",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9"
+     ],
+     "env": {
+      "PYTHONUNBUFFERED": "1",
+      "TORCH_LLM_ALLREDUCE": "1",
+      "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1",
+      "VLLM_WORKER_MULTIPROC_METHOD": "spawn"
+     }
+    }
+   },
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp",
+    "multi_node_tp_pp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {
+      "xpu": {
+       "args": [
+        "--quantization",
+        "fp8",
+        "--kv-cache-dtype",
+        "fp8"
+       ]
+      }
+     },
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6",
+      "arc_pro_b70"
+     ],
+     "vram_min": 170
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Llama-3.3-70B-Instruct-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 84
+    },
+    "nvfp4": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Llama-3.3-70B-Instruct-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 42
+    },
+    "redhat_fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 84
+    },
+    "redhat_fp8_block": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Llama-3.3-70B-Instruct-FP8-block",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 84
+    },
+    "redhat_nvfp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Llama-3.3-70B-Instruct-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 46
+    }
+   }
+  },
+  "nvidia/nvidia-nemotron-3-nano-4b-bf16": {
+   "base_args": [
+    "--trust-remote-code",
+    "--async-scheduling"
+   ],
+   "base_env": {},
+   "context_length": 262144,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser-plugin",
+      "nano_v3_reasoning_parser.py",
+      "--reasoning-parser",
+      "nano_v3"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "qwen3_coder"
+     ]
+    }
+   },
+   "file": "recipes/models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+   "min_vllm": "0.11.2",
+   "model_id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+   "nightly": false,
+   "opt_in": [],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--enforce-eager"
+     ]
+    }
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp",
+    "multi_node_tp_pp"
+   ],
+   "variants": {
+    "default": {
+     "args": [
+      "--kv-cache-dtype",
+      "auto"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 10
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 5
+    }
+   }
+  },
+  "qwen/qwen3-30b-a3b": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 40960,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "long_context"
+   ],
+   "features": {
+    "long_context": {
+     "args": [
+      "--hf-overrides",
+      "{\"max_position_embeddings\":131072,\"rope_parameters\":{\"rope_type\":\"yarn\",\"rope_theta\":1000000,\"factor\":4.0,\"original_max_position_embeddings\":32768}}",
+      "--max-model-len",
+      "131072"
+     ]
+    },
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "qwen3"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "hermes"
+     ]
+    }
+   },
+   "file": "recipes/models/Qwen/Qwen3-30B-A3B.yaml",
+   "hardware": {
+    "arc_pro_b70": "verified",
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Qwen/Qwen3-30B-A3B",
+   "min_vllm": "0.8.5",
+   "model_id": "Qwen/Qwen3-30B-A3B",
+   "nightly": false,
+   "opt_in": [
+    "long_context"
+   ],
+   "overrides": {
+    "cpu": {
+     "args": [
+      "--max-num-batched-tokens",
+      "16384",
+      "--gpu-memory-utilization",
+      "0.8"
+     ]
+    },
+    "xpu": {
+     "args": [
+      "--block-size",
+      "64",
+      "--enforce-eager",
+      "--no-enable-prefix-caching",
+      "--disable-sliding-window",
+      "--max-model-len",
+      "9472",
+      "--max-num-batched-tokens",
+      "8192",
+      "--gpu-memory-utilization",
+      "0.9"
+     ]
+    }
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6",
+      "arc_pro_b70"
+     ],
+     "vram_min": 74
+    }
+   }
+  },
+  "qwen/qwen3-4b": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 40960,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "long_context"
+   ],
+   "features": {
+    "long_context": {
+     "args": [
+      "--hf-overrides",
+      "{\"max_position_embeddings\":131072,\"rope_parameters\":{\"rope_type\":\"yarn\",\"factor\":4.0,\"original_max_position_embeddings\":32768}}",
+      "--max-model-len",
+      "131072"
+     ]
+    },
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "qwen3"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "hermes"
+     ]
+    }
+   },
+   "file": "recipes/models/Qwen/Qwen3-4B.yaml",
+   "hardware": {
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Qwen/Qwen3-4B",
+   "min_vllm": "0.8.5",
+   "model_id": "Qwen/Qwen3-4B",
+   "nightly": false,
+   "opt_in": [
+    "long_context"
+   ],
+   "overrides": {},
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 10
+    },
+    "fp8": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "Qwen/Qwen3-4B-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 5
+    },
+    "redhat_fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Qwen3-4B-FP8-dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 5
+    }
+   }
+  },
+  "qwen/qwen3-8b": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 40960,
+   "default_frontend": null,
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "long_context"
+   ],
+   "features": {
+    "long_context": {
+     "args": [
+      "--hf-overrides",
+      "{\"max_position_embeddings\":131072,\"rope_parameters\":{\"rope_type\":\"yarn\",\"factor\":4.0,\"original_max_position_embeddings\":32768}}",
+      "--max-model-len",
+      "131072"
+     ]
+    },
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "qwen3"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "hermes"
+     ]
+    }
+   },
+   "file": "recipes/models/Qwen/Qwen3-8B.yaml",
+   "hardware": {
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Qwen/Qwen3-8B",
+   "min_vllm": "0.8.5",
+   "model_id": "Qwen/Qwen3-8B",
+   "nightly": false,
+   "opt_in": [
+    "long_context"
+   ],
+   "overrides": {
+    "cpu": {
+     "args": [
+      "--max-num-batched-tokens",
+      "16384",
+      "--gpu-memory-utilization",
+      "0.8"
+     ]
+    }
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [
+      "xeon6"
+     ],
+     "vram_min": 20
+    }
+   }
+  },
+  "qwen/qwen3.5-4b": {
+   "base_args": [
+    "--trust-remote-code"
+   ],
+   "base_env": {},
+   "context_length": 262144,
+   "default_frontend": "rust",
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding",
+    "text_only",
+    "long_context"
+   ],
+   "features": {
+    "long_context": {
+     "args": [
+      "--hf-overrides",
+      "{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}",
+      "--max-model-len",
+      "1010000"
+     ],
+     "env": {
+      "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"
+     }
+    },
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "qwen3"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"method\":\"mtp\",\"num_speculative_tokens\":1}"
+     ]
+    },
+    "text_only": {
+     "args": [
+      "--language-model-only"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "qwen3_coder"
+     ]
+    }
+   },
+   "file": "recipes/models/Qwen/Qwen3.5-4B.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified",
+    "xeon6": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Qwen/Qwen3.5-4B",
+   "min_vllm": "0.17.0",
+   "model_id": "Qwen/Qwen3.5-4B",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding",
+    "text_only",
+    "long_context"
+   ],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--enforce-eager"
+     ]
+    }
+   },
+   "strategies": [
+    "single_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 10
+    },
+    "fp8": {
+     "args": [
+      "--kv-cache-dtype",
+      "fp8"
+     ],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Qwen3.5-4B-FP8-dynamic",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [
+      "arc_pro_b60",
+      "arc_pro_b70"
+     ],
+     "vram_min": 5
+    }
+   }
+  },
+  "qwen/qwen3.8-27b": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 262144,
+   "default_frontend": "rust",
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding",
+    "text_only",
+    "encoder_parallel",
+    "long_context"
+   ],
+   "features": {
+    "encoder_parallel": {
+     "args": [
+      "--mm-encoder-tp-mode",
+      "data"
+     ]
+    },
+    "long_context": {
+     "args": [
+      "--hf-overrides",
+      "{\"text_config\": {\"rope_parameters\": {\"mrope_interleaved\": true, \"mrope_section\": [11, 11, 10], \"rope_type\": \"yarn\", \"rope_theta\": 10000000, \"partial_rotary_factor\": 0.25, \"factor\": 4.0, \"original_max_position_embeddings\": 262144}}}",
+      "--max-model-len",
+      "1000000"
+     ],
+     "env": {
+      "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"
+     }
+    },
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "qwen3"
+     ]
+    },
+    "spec_decoding": {
+     "default_mode": "mtp",
+     "mode_order": [
+      "mtp",
+      "qwen3_5_mtp",
+      "dflash",
+      "dspark"
+     ],
+     "modes": {
+      "dflash": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"dflash\",\"model\":\"incoai/Qwen3.8-27B-DFlash2\",\"num_speculative_tokens\":7}"
+       ],
+       "variants": [
+        "default"
+       ]
+      },
+      "dspark": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"dspark\",\"model\":\"RedHatAI/Qwen3.8-27B-speculator.dspark\",\"num_speculative_tokens\":8}"
+       ],
+       "variants": [
+        "default"
+       ]
+      },
+      "mtp": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"mtp\",\"num_speculative_tokens\":3}"
+       ],
+       "variants": [
+        "default",
+        "fp8",
+        "nvfp4",
+        "nvfp4_nvidia",
+        "int4",
+        "mxfp4"
+       ]
+      },
+      "qwen3_5_mtp": {
+       "args": [
+        "--speculative-config",
+        "{\"method\":\"qwen3_5_mtp\",\"num_speculative_tokens\":3,\"enforce_eager\":true}"
+       ],
+       "variants": [
+        "ascend_w8a8",
+        "fp8"
+       ]
+      }
+     }
+    },
+    "text_only": {
+     "args": [
+      "--language-model-only"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "qwen3_coder"
+     ]
+    }
+   },
+   "file": "recipes/models/Qwen/Qwen3.8-27B.yaml",
+   "hardware": {
+    "arc_pro_b60": "verified",
+    "arc_pro_b70": "verified"
+   },
+   "hardware_opt_in": {},
+   "id": "Qwen/Qwen3.8-27B",
+   "min_vllm": "0.17.0",
+   "model_id": "Qwen/Qwen3.8-27B",
+   "nightly": false,
+   "opt_in": [
+    "spec_decoding",
+    "text_only",
+    "long_context"
+   ],
+   "overrides": {
+    "xpu": {
+     "args": [
+      "--enforce-eager"
+     ]
+    }
+   },
+   "strategies": [
+    "single_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 67
+    },
+    "fp8": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "Qwen/Qwen3.8-27B-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 38
+    },
+    "int4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Qwen3.8-27B-INT4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 24
+    },
+    "mxfp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "RedHatAI/Qwen3.8-27B-MXFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "mxfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 24
+    },
+    "nvfp4": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "Inferact/Qwen3.8-27B-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 32
+    },
+    "nvfp4_nvidia": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "model_id": "nvidia/Qwen3.8-27B-NVFP4",
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 32
+    }
+   }
+  }
+ },
+ "profiles": {
+  "arc_pro_b60": {
+   "brand": "Intel",
+   "generation": "xpu",
+   "gpu_count": 4,
+   "restricted": true,
+   "vram_gb": 96
+  },
+  "arc_pro_b70": {
+   "brand": "Intel",
+   "generation": "xpu",
+   "gpu_count": 4,
+   "restricted": true,
+   "vram_gb": 128
+  },
+  "xeon5": {
+   "brand": "Intel",
+   "generation": "cpu",
+   "gpu_count": 4,
+   "restricted": true,
+   "vram_gb": 1024
+  },
+  "xeon6": {
+   "brand": "Intel",
+   "generation": "cpu",
+   "gpu_count": 4,
+   "restricted": true,
+   "vram_gb": 1024
+  }
+ },
+ "recipes_commit": "d9862f5cba9ee4e04c959aee595c0c4a410aeac0",
+ "schema": "k3d-gpu.vllm-recipes/v1",
+ "schema_version": 1,
+ "single_node_tp": {
+  "env": {},
+  "vllm_args": []
+ },
+ "unported": [],
+ "variant_index": {
+  "baidu/ernie-5.5-flash-base": [
+   "baidu/ernie-5.5-flash",
+   "default"
+  ],
+  "baidu/ernie-5.5-flash-base-bf16": [
+   "baidu/ernie-5.5-flash",
+   "bf16"
+  ],
+  "google/gemma-4-12b-it-qat-w4a16-ct": [
+   "google/gemma-4-12b-it",
+   "w4a16"
+  ],
+  "hugging-quants/meta-llama-3.1-8b-instruct-awq-int4": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "awq_int4"
+  ],
+  "inclusionai/ling-3.0-flash-fp4": [
+   "inclusionai/ling-3.0-flash",
+   "fp4"
+  ],
+  "inclusionai/ling-3.0-flash-fp8": [
+   "inclusionai/ling-3.0-flash",
+   "fp8"
+  ],
+  "inclusionai/ling-3.0-flash-int4": [
+   "inclusionai/ling-3.0-flash",
+   "int4"
+  ],
+  "inferact/qwen3.8-27b-nvfp4": [
+   "qwen/qwen3.8-27b",
+   "nvfp4"
+  ],
+  "nvidia/gemma-4-26b-a4b-nvfp4": [
+   "google/gemma-4-26b-a4b-it",
+   "nvidia_nvfp4"
+  ],
+  "nvidia/llama-3.1-8b-instruct-fp8": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "nvidia_fp8"
+  ],
+  "nvidia/llama-3.1-8b-instruct-nvfp4": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "nvfp4"
+  ],
+  "nvidia/llama-3.3-70b-instruct-fp8": [
+   "meta-llama/llama-3.3-70b-instruct",
+   "fp8"
+  ],
+  "nvidia/llama-3.3-70b-instruct-nvfp4": [
+   "meta-llama/llama-3.3-70b-instruct",
+   "nvfp4"
+  ],
+  "nvidia/nvidia-nemotron-3-nano-4b-fp8": [
+   "nvidia/nvidia-nemotron-3-nano-4b-bf16",
+   "fp8"
+  ],
+  "nvidia/qwen3.8-27b-nvfp4": [
+   "qwen/qwen3.8-27b",
+   "nvfp4_nvidia"
+  ],
+  "qwen/qwen3-4b-fp8": [
+   "qwen/qwen3-4b",
+   "fp8"
+  ],
+  "qwen/qwen3.8-27b-fp8": [
+   "qwen/qwen3.8-27b",
+   "fp8"
+  ],
+  "redhatai/gemma-4-12b-it-fp8-dynamic": [
+   "google/gemma-4-12b-it",
+   "fp8"
+  ],
+  "redhatai/gemma-4-12b-it-nvfp4": [
+   "google/gemma-4-12b-it",
+   "nvfp4"
+  ],
+  "redhatai/gemma-4-26b-a4b-it-fp8-dynamic": [
+   "google/gemma-4-26b-a4b-it",
+   "fp8"
+  ],
+  "redhatai/gemma-4-26b-a4b-it-nvfp4": [
+   "google/gemma-4-26b-a4b-it",
+   "nvfp4"
+  ],
+  "redhatai/llama-3.1-8b-instruct-fp8-block": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "redhat_fp8_block"
+  ],
+  "redhatai/llama-3.1-8b-instruct-nvfp4": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "redhat_nvfp4"
+  ],
+  "redhatai/llama-3.3-70b-instruct-fp8-block": [
+   "meta-llama/llama-3.3-70b-instruct",
+   "redhat_fp8_block"
+  ],
+  "redhatai/llama-3.3-70b-instruct-fp8-dynamic": [
+   "meta-llama/llama-3.3-70b-instruct",
+   "redhat_fp8"
+  ],
+  "redhatai/llama-3.3-70b-instruct-nvfp4": [
+   "meta-llama/llama-3.3-70b-instruct",
+   "redhat_nvfp4"
+  ],
+  "redhatai/meta-llama-3.1-8b-instruct-fp8": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "redhat_fp8"
+  ],
+  "redhatai/meta-llama-3.1-8b-instruct-fp8-dynamic": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "fp8"
+  ],
+  "redhatai/meta-llama-3.1-8b-instruct-quantized.w8a8": [
+   "meta-llama/llama-3.1-8b-instruct",
+   "w8a8_int8"
+  ],
+  "redhatai/qwen3-4b-fp8-dynamic": [
+   "qwen/qwen3-4b",
+   "redhat_fp8"
+  ],
+  "redhatai/qwen3.5-4b-fp8-dynamic": [
+   "qwen/qwen3.5-4b",
+   "fp8"
+  ],
+  "redhatai/qwen3.8-27b-int4": [
+   "qwen/qwen3.8-27b",
+   "int4"
+  ],
+  "redhatai/qwen3.8-27b-mxfp4": [
+   "qwen/qwen3.8-27b",
+   "mxfp4"
+  ]
+ },
+ "vllm_commit": "960f5c1bb14533ed759344fdd745b623c474f901",
+ "vllm_tree": "b1dcea5705d362666e7afaf22269f72bd7e88c77"
+}

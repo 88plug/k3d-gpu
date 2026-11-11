@@ -15,7 +15,9 @@
    repin (the digests group), hf-meta (each moved Hugging Face repo's record in
    the saved metadata bundles, tests/fixtures/hf, read again at its new revision),
    model-opt-goldens (tests/model_opt_test.sh --update: the model optimizer's
-   goldens from those bundles); ledger-rules also runs whenever console/ changed.
+   goldens from those bundles), vllm-recipes (console/vllm-recipes.json at the
+   moved recipes pair, or the pinned one for a group that moved a pinned vLLM
+   version); ledger-rules also runs whenever console/ changed.
 4. hack/substitute-goldens: each exact old pin string becomes its new one in
    tests/** only (hack/pinlib/goldens.py says which strings a test keeps).
 5. The group's tests (skipped by --dry-run and --no-tests).
@@ -53,7 +55,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pinlib import goldens, http, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
 
 HOOKS = ("lock", "readme-history", "render-latest", "ppa-write", "convert-pins", "ledger-rules", "constraints",
-         "docs-lock", "flake-update", "repin", "hf-meta", "model-opt-goldens")
+         "docs-lock", "flake-update", "repin", "hf-meta", "model-opt-goldens", "vllm-recipes")
 
 
 class BumpError(Exception):
@@ -380,10 +382,23 @@ def hook_model_opt_goldens(root, ctx):
         ctx["touched"].add(p)
 
 
+def hook_vllm_recipes(root, ctx):
+    """console/vllm-recipes.json at the resolved recipes pair (the vllm-recipes pin), or
+    regenerated at the pinned pair for the vLLM versions the tree now pins; what moved
+    (hack/vllm-recipes diff against HEAD) goes in the PR notes."""
+    new = next((n for p, _, n in ctx["moves"] if p["id"] == "vllm-recipes"), None)
+    tool = os.path.join(root, "hack", "vllm-recipes")
+    sh(root, sys.executable, tool, "update", *(["--recipes-commit", new] if new else []), capture=False)
+    ctx["notes"] += ["vllm-recipes: %s" % ln for ln in
+                     sh(root, sys.executable, tool, "diff", "--base-ref", "HEAD").stdout.splitlines()]
+    ctx["touched"].add("console/vllm-recipes.json")
+
+
 HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,
             "ppa-write": hook_ppa_write, "convert-pins": hook_convert_pins, "ledger-rules": hook_ledger_rules,
             "constraints": hook_constraints, "docs-lock": hook_docs_lock, "flake-update": hook_flake_update,
-            "repin": hook_repin, "hf-meta": hook_hf_meta, "model-opt-goldens": hook_model_opt_goldens}
+            "repin": hook_repin, "hf-meta": hook_hf_meta, "model-opt-goldens": hook_model_opt_goldens,
+            "vllm-recipes": hook_vllm_recipes}
 
 
 # ---- known issues -------------------------------------------------------------------

@@ -71,11 +71,21 @@ jobs:
           ref: main
           persist-credentials: false
 
+      - name: Tool versions (hack/ci-tools.env)
+        run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
+
+      # PyYAML for hack/vllm-recipes resolve (the vllm-recipes pin's source).
+      - name: The resolvers' tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "PyYAML==${PYYAML_VERSION}"
+
       - name: Pins behind upstream
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
           GROUP: ${{ inputs.group }}
+          VLLM_RECIPES_PYTHON: ${{ runner.temp }}/venv/bin/python
         run: |
           hack/pins outdated --json --all > "$RUNNER_TEMP/outdated-all.json"
           # a pin no source resolves, or whose second source disagrees, never moves: say so
@@ -116,18 +126,21 @@ jobs:
       - name: Tool versions (hack/ci-tools.env)
         run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
 
-      # packaging for hack/bump-convert-pins; the pinned helm for the render-latest
-      # hook and the render tests.
+      # packaging for hack/bump-convert-pins; PyYAML for hack/vllm-recipes (the
+      # vllm-recipes source and hook, tests/vllm_recipes_test.sh); the pinned helm for
+      # the render-latest hook and the render tests.
       - name: The bumper's tools
         run: |
           python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}"
+          "$RUNNER_TEMP/venv/bin/pip" install --disable-pip-version-check "packaging==${PACKAGING_VERSION}" \
+            "PyYAML==${PYYAML_VERSION}"
           hack/install-helm "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: Bump
         env:
           GH_TOKEN: ${{ github.token }}
+          VLLM_RECIPES_PYTHON: ${{ runner.temp }}/venv/bin/python
         run: |
           out="$RUNNER_TEMP/out"
           mkdir -p "$out"

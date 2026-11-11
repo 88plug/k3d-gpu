@@ -162,6 +162,12 @@ jobs:
         run: tests/console_mcp_test.sh
       - name: Model optimizer (plan --model, agent manifest --model), from saved HF metadata
         run: tests/model_opt_test.sh
+      - name: Install PyYAML for the vendored vLLM recipes (pinned)
+        run: python3 -m venv /tmp/pyyaml && /tmp/pyyaml/bin/pip install --disable-pip-version-check "PyYAML==${PYYAML_VERSION}"
+      - name: Vendored vLLM recipes (console/vllm-recipes.json, hack/vllm-recipes on a frozen fixture)
+        env:
+          VLLM_RECIPES_PYTHON: /tmp/pyyaml/bin/python
+        run: tests/vllm_recipes_test.sh
 
   # images.lock must list every image share/, the Dockerfile, the launcher and the
   # EAT integration reference, at the digests they pin (offline; `scripts/images-lock update`
