@@ -5,8 +5,8 @@
 class K3dGpu < Formula
   desc "Bootstrap GPU-ready k3d clusters on Docker"
   homepage "https://github.com/88plug/k3d-gpu"
-  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.106.tar.gz"
-  sha256 "f1ed549adb678dc804bce50ad08d2615c0ddbf9de2aa8ae3db903affec8bfabd"
+  url "https://github.com/88plug/k3d-gpu/archive/refs/tags/aur-v0.1.107.tar.gz"
+  sha256 "47b24428ce7b40981c9de7bfbdaf83b982286ce5502f6dcd019d138b225ca7db"
   license "FSL-1.1-ALv2"
 
   depends_on :linux
