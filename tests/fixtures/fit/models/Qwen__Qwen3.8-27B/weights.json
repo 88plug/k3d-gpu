@@ -97,6 +97,6 @@
   ],
   "format": "safetensors",
   "schema": "k3d-gpu.weights/v1",
-  "source": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "source": "Qwen/Qwen3.8-27B@37561816e66b5b9153b1b64c10968c18c1e6f4a0",
   "total_bytes": 55562855904
 }
