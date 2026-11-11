@@ -104,7 +104,7 @@ tests = ["tests/detect_test.sh"]
 
 [groups.hf-console-fallback]
 tests = ["tests/model_opt_test.sh"]
-hooks = ["hf-meta"]
+hooks = ["hf-meta", "model-opt-goldens"]
 outputs = ["tests/fixtures/hf/*.json"]
 
 [groups.convert-pins]
