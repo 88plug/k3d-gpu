@@ -111,6 +111,27 @@ class Tables(unittest.TestCase):
         self.assertEqual((h63.BAR, h63.QUALITY_SLACK), (1.2, 2))
         self.assertEqual(h63.GATED, ("Ls", "Od"))
 
+    def test_h59_runner_is_read_by_path_beside_a_module_named_run(self):
+        # The runner amendment adds bench/h63/run.py, whose tests import it as `run` beside h63.
+        # h63 must still read H59's idle_gate from bench/h59/run.py, whichever is imported first.
+        d = tempfile.mkdtemp(prefix="h63-run-")
+        try:
+            with open(os.path.join(d, "run.py"), "w") as f:
+                f.write("MARK = 'h63-runner'\n")
+            for first in ("run", "h63"):
+                second = "h63" if first == "run" else "run"
+                code = ("import sys; sys.path[:0] = [sys.argv[1], sys.argv[2]]\n"
+                        f"import {first}\nimport {second}\n"
+                        "print(run.MARK, h63.h59run.__file__, hasattr(h63.h59run, 'idle_gate'))\n")
+                r = subprocess.run([sys.executable, "-c", code, d, HERE], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, first + ": " + r.stderr)
+                mark, path, has = r.stdout.split()
+                self.assertEqual(mark, "h63-runner", first)
+                self.assertEqual(os.path.realpath(path), os.path.realpath(os.path.join(REPO, "bench", "h59", "run.py")), first)
+                self.assertEqual(has, "True", first)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
     def test_order_cli_takes_a_hold_by_its_own_number_only(self):
         ok = subprocess.run([sys.executable, os.path.join(HERE, "h63.py"), "order", "2"], capture_output=True, text=True)
         self.assertEqual((ok.returncode, ok.stdout.split()), (0, ["Ld-mtp", "Ls", "Od"]))

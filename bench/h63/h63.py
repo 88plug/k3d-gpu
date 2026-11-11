@@ -28,6 +28,7 @@ its N=1 phase completed a request. Failed requests (ok false) are dropped, as in
 H59's scorers.
 Python 3 standard library only."""
 
+import importlib.util
 import json
 import os
 import re
@@ -35,11 +36,28 @@ import statistics
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "h59"))
+# Appended, not put first: bench/h59 holds a run.py, and H63's runner is a run.py too.
+sys.path.append(os.path.join(HERE, "..", "h59"))
 import h59  # noqa: E402  (hold_dirs, status, decode_samples, phase_samples; puts h54 and h57d on the path)
-import run as h59run  # noqa: E402  (idle_gate: H59 amendment R2's load gate)
 import h54  # noqa: E402  (boot_ratio, median)
 import h57d  # noqa: E402  (foreign, load_gate)
+
+
+def _h59_runner():
+    """bench/h59/run.py by its path, as module h59_run, with sys.path as it was before: H63's own
+    runner is also a run.py, so an `import run` would give whichever of the two came first."""
+    spec = importlib.util.spec_from_file_location("h59_run", os.path.join(HERE, "..", "h59", "run.py"))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["h59_run"] = mod
+    saved = list(sys.path)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path[:] = saved
+    return mod
+
+
+h59run = sys.modules.get("h59_run") or _h59_runner()  # idle_gate: H59 amendment R2's load gate
 
 BAR = 1.2            # SUPPORTED: CI lower bound >= 1.2; REFUTED: CI upper bound < 1.2
 QUALITY_SLACK = 2    # Ls's GSM8K items correct >= Od's - 2 (of 50)

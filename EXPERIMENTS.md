@@ -18056,11 +18056,11 @@ this with `console/model_opt.py`'s `row_classes`).
 - **INCONCLUSIVE.** Nothing changes. The 6-hold cap leaves another attempt to a new row.
 
 **Hosts.** Each sub-row has its own host, caps, holds, start gates and records; neither waits for
-the other, and a hold of one never overlaps a hold of the other on the same host.
+the other, and each hold takes its host's lock, so it never overlaps another bench hold there.
 
 | | H63d (desktop) | H63w (wildct) |
 |---|---|---|
-| Host | `p360ultra`: i9-13900T, CPUs 0-15 the 8 P-cores with HT, 16-31 the E-cores; PL1 = PL2 = 117 W; read at registration (below) | wildct, reached by IP 100.66.38.121: i7-13700, CPUs 0-15 the 8 P-cores with HT, 16-23 the E-cores; PL1 35 W; the box owner's 18 production containers |
+| Host | `p360ultra`: i9-13900T, CPUs 0-15 the 8 P-cores with HT, 16-31 the E-cores; PL1 = PL2 = 117 W as the H57d run's header records it, not read again here; the CPU flags, memory, load and disks read at registration (below) | wildct, reached by IP 100.66.38.121: i7-13700, CPUs 0-15 the 8 P-cores with HT, 16-23 the E-cores; PL1 35 W; the box owner's 18 production containers |
 | CPU checked before the lock | `model name` names the i9-13900T (`model_opt.py class_tokens`, exact) | the i7-13700, exactly (an i7-13700K is not it) |
 | Owner's approval | none registered: H57d, H57dp and H59d ran on this host under the bench lock alone | needed before any setup: the wildct campaign ended on 2026-11-11 and its directory was removed. A dated amendment records the approval of this use of the host (disk, the downloads, the holds) |
 | Lock | `~/k3dgpu-bench.lock` (`flock -w 21600`), for downloads and their check, both drafter builds, the smoke and every hold | rule W1's `~/k3dgpu-bench-wildct/live.lock`, then a private inner lock |
@@ -18070,11 +18070,13 @@ the other, and a hold of one never overlaps a hold of the other on the same host
 | Node image | the k3d-gpu release whose launcher is the runner amendment's merge commit's or later, by digest; the first hold records it and every later hold runs it | the same rule, under W7: the release's `.deb` checked against its `SHA256SUMS`, and the archive's `scripts/k3d-gpu` equal to the release's apart from the version line |
 | RAPL | `energy.sh` through sudo | W4's reader container |
 | Caps | each hold at most 75 min (`timeout -k 30 4500`; an arm starts only with 900 s left, in the quality hold 600 s); at most 6 holds: 3 performance, 1 quality, 2 spares | the same, inside W1's 4600 s |
-| Co-tenants | untouched; the GPU co-tenants read before and after each hold | W1: nothing of the owner's touched; the production snapshots before and after each hold |
+| Co-tenants | untouched; the GPU co-tenants read before and after each hold | W1: nothing of the owner's touched; the production snapshots before and after each hold; W8: no GPU is read or used, so no GPU co-tenant reading |
 
-Spares follow H59 amendment R1: a spare 5 or 6 repeats a hold that ran and left an arm not measured,
-in that hold's order, and writes `repeats`; spare 6 runs only after spare 5; a hold runs once, and a
-failed hold counts. One wiring smoke per sub-row runs before its first hold (hold 1's arms, one
+Spares follow H59 amendment R1: a spare 5 or 6 repeats a hold that ran and left Ls or Od not
+measured, in that hold's order, and writes `repeats`; spare 6 runs only after spare 5; a hold runs
+once, and a failed hold counts. A spare stands in for its hold for every arm (`h59.py hold_dirs`), so
+a hold in which only Ld-mtp, never gated, was not measured gets no spare, and its Ls and Od records
+stand. One wiring smoke per sub-row runs before its first hold (hold 1's arms, one
 16-token request and one `chat_template_kwargs` chat each). It scores nothing, is not a hold, and is
 disclosed in the run section.
 
@@ -18115,7 +18117,8 @@ its readings there are expected to spread; it is not gated.
 **Scorer.** `bench/h63/h63.py score RESULTS_DIR [--arms Ls=NAME,Od=NAME[,Ld-mtp=NAME]]` applies the
 rule above to records in H57d's layout. It imports, and does not copy, `bench/h59/h59.py`'s record
 readers (`hold_dirs`, `status`, `decode_samples`), `bench/h59/run.py`'s `idle_gate` (H59 amendment
-R2's gate), `bench/h57d/h57d.py`'s `foreign` and `load_gate`, and `bench/h54/h54.py`'s `boot_ratio`.
+R2's gate; loaded by its path, since H63's runner is a `run.py` too), `bench/h57d/h57d.py`'s
+`foreign` and `load_gate`, and `bench/h54/h54.py`'s `boot_ratio`.
 `h63.py order HOLD` prints hold 1-4's registered order and refuses any other hold, `01` included, as
 H57dp amendment R2's guard does. `bench/h63/test_h63.py` (in CI) covers the orders, the statistic
 against `h54.boot_ratio`, every verdict branch on synthetic hold records (the bar exactly met, one
