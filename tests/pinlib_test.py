@@ -470,8 +470,9 @@ class Holds(Fixtures):
         self.serve(self.pypi("mkdocs", ["1.6.1", "1.6.2", "2.0.0", "2.1.0"]))
         self.assertEqual(sources.resolve(PINS["docs-mkdocs"], "1.6.1").v, "1.6.2")
 
-    def test_gguf_convert_pins_stay_where_h59w_registered_them(self):
-        # H59 amendment R1: the drafter conversion Job runs with these four pins
+    def test_gguf_convert_pins_move_once_h59w_is_scored(self):
+        # H59 amendment R1 froze the drafter conversion Job's four pins until H59w ran;
+        # H59w is REFUTED (EXPERIMENTS.md), so each takes upstream's newest stable release
         registered = {"gguf-transformers": ("transformers", "5.21.0", ["5.21.0.post1", "5.21.1", "5.22.2"]),
                       "gguf-huggingface-hub": ("huggingface-hub", "2.3.0", ["2.3.0.post1", "2.3.1", "2.4.0"]),
                       "gguf-tokenizers": ("tokenizers", "0.23.3", ["0.23.4", "0.24.0"]),
@@ -480,23 +481,36 @@ class Holds(Fixtures):
         for pkg, cur, newer in registered.values():
             recs.update(self.pypi(pkg, [cur] + newer))
         self.serve(recs)
-        for pid, (_, cur, _) in registered.items():
-            self.assertIn("H59w is PENDING", PINS[pid]["hold"]["reason"], pid)
-            self.assertEqual(sources.resolve(PINS[pid], cur).v, cur, pid)
+        for pid, (_, cur, newer) in registered.items():
+            self.assertNotIn("hold", PINS[pid], pid)
+            self.assertEqual(sources.resolve(PINS[pid], cur).v, newer[-1], pid)
 
-    def test_llama_cpp_stays_at_the_build_h59w_registered(self):
-        # server-b11960 and full-b11960 are release v0.8.0; upstream's latest is v0.9.0
+    def test_llama_cpp_moves_once_h59w_is_scored(self):
+        # H59 amendment R1 froze server-b11960 and full-b11960 (release v0.8.0) until
+        # H59w ran; H59w is REFUTED, so the pin takes upstream's latest release v0.9.0
         self.serve({
             GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.9.0", commit=SHA_B)),
             GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([
                 rel("b12100", prerelease=True, commit=SHA_B),
                 rel("b11960", prerelease=True, commit="8642541b255bfb5dc39cd351a178be09013a55d6")]),
         })
-        self.assertIn("H59w is PENDING", PINS["llama-cpp"]["hold"]["reason"])
+        self.assertNotIn("hold", PINS["llama-cpp"])
         r = sources.resolve(PINS["llama-cpp"], "v0.8.0")
+        self.assertEqual((r.v, r.values["build"], r.values["commit"]), ("v0.9.0", "b12100", SHA_B))
+        self.assertFalse(r.values.get("held"))
+        self.assertIsNone(r.note)
+
+    def test_a_latest_only_source_keeps_the_pin_at_its_hold(self):
+        # llama reads only upstream's latest release: one that reaches the hold leaves the pin
+        pin = dict(PINS["llama-cpp"], hold={"max": "v0.8.1", "reason": "a row registered v0.8.0",
+                                            "review_by": "2099-01-01"})
+        self.serve({GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.9.0", commit=SHA_B)),
+                    GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([
+                        rel("b12100", prerelease=True, commit=SHA_B)])})
+        r = sources.resolve(pin, "v0.8.0")
         self.assertEqual(r.v, "v0.8.0")
         self.assertTrue(r.values.get("held"))
-        self.assertIn("upstream v0.9.0 reaches the hold v0.8.1", r.note)
+        self.assertIn("upstream v0.9.0 reaches the hold v0.8.1 (a row registered v0.8.0)", r.note)
 
     EAT_RELEASES = GH + "repos/intel/enterprise-agent-toolkit/releases?per_page=100&page=1"
 

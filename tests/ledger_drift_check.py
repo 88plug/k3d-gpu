@@ -6,7 +6,8 @@ The ledger verdict of a row is the first word of its last cell (PENDING,
 SUPPORTED, REFUTED or INCONCLUSIVE). Scanned: README.md, docs/*.md and
 docs/intel/*.md, outside fenced code blocks, inline code and HTML comments;
 and, in prose form only, every line of scripts/k3d-gpu (its --help text,
-messages and comments) and console/*.py (the predictor's output labels).
+messages and comments), console/*.py (the predictor's output labels), and
+pins/registry.toml and pins/classes (a hold's or a class line's reason).
 A doc states a verdict for row Hn in any of these forms:
 
   prose      "H5 is PENDING", "(H1) is INCONCLUSIVE", "H28 (PENDING)": the id,
@@ -238,6 +239,7 @@ def main(argv):
     for f in files:
         errors += check_file(f, str(f.relative_to(root)), rows)
     code = [root / "scripts" / "k3d-gpu"] + sorted((root / "console").glob("*.py"))
+    code += [root / "pins" / "registry.toml", root / "pins" / "classes"]
     for f in (f for f in code if f.is_file()):
         files.append(f)
         errors += check_script(f, str(f.relative_to(root)), rows)
