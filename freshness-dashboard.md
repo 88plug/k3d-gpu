@@ -1,33 +1,33 @@
 # Freshness dashboard
 
-Updated 2026-11-11 22:08 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 23:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 None.
 
-## Pins behind (5)
+## Pins behind (6)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 8h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 9h |
+| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 1h |
 | gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
 | gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 5d |
-| llama-cpp | `llama-cpp` | `v0.8.0` | `v0.9.0` | minor | 2026-11-04 | 7d |
+| tools | `ci-chrome` | `157.0.8103.50` | `157.0.8103.78` | patch | ? | ? |
 | vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `0eb50b4a3505ce2cd22d0d131ed5c22d11d2d980` | revision | ? | ? |
 
 ### Not resolved (1)
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (4)
+## Open bot PRs (3)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #416 | gguf-convert-pip | auto | - |
 | #413 | docs-build | auto | - |
 | #411 | vllm-recipes | review | a human approval at the head |
-| #404 | llama-cpp | review | a human approval at the head |
-| #403 | gguf-convert-pip | auto | - |
 
 ## EAT stock (always review)
 
@@ -55,7 +55,7 @@ None.
 A PENDING row's arm pins move only by a dated amendment pushed before it runs. Propose one with the command beside the row (a human dispatch; the PR is never bot-merged).
 
 - H63d (`bench/h63/**`): `gh workflow run freshness.yml -f propose_amendment=H63d`
-- H63w (`bench/h63/**`): `gh workflow run freshness.yml -f propose_amendment=H63w`
+- H63w (`bench/h63/**`, `bench/wildct/**`): `gh workflow run freshness.yml -f propose_amendment=H63w`
 
 ## Known issues and stale workarounds
 
@@ -78,12 +78,14 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 
 | # | Row | Why first | Reason | Suggested row |
 |---|-----|-----------|--------|---------------|
-| 1 | H57dm | ledger-rules (drives optimizer defaults) | llama.cpp b11749 -> b11960 (minor) | H57r |
-| 2 | H6 | cited by a docs claim | rancher/k3s v1.34.1+k3s1 -> v1.37.2-k3s1 (minor) | H6r |
-| 3 | H30 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H30r |
-| 4 | H31 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H31r |
-| 5 | H32 | cited by a docs claim | llama.cpp b11706 -> b11960 (minor) | H32r |
-| 6 | H1b | other | priority-stale: vllm-openai-cpu 0.24.0 is inside vllm-45844 (<0.25.0, fixed in 0.25.0); priority-stale: vllm-openai-cpu 0.24.0 is inside vllm-50801 (<0.28.0, changed in 0.28.0); vllm-openai-cpu 0.24.0 -> 0.32.0 (minor) | H1br |
+| 1 | H57dm | ledger-rules (drives optimizer defaults) | llama.cpp b11749 -> b12110 (minor) | H57r |
+| 2 | H59 | ledger-rules (drives optimizer defaults) | llama.cpp b11960 -> b12110 (minor) | H59r |
+| 3 | H6 | cited by a docs claim | rancher/k3s v1.34.1+k3s1 -> v1.37.2-k3s1 (minor) | H6r |
+| 4 | H30 | cited by a docs claim | llama.cpp b11706 -> b12110 (minor) | H30r |
+| 5 | H31 | cited by a docs claim | llama.cpp b11706 -> b12110 (minor) | H31r |
+| 6 | H32 | cited by a docs claim | llama.cpp b11706 -> b12110 (minor) | H32r |
+| 7 | H60 | cited by a docs claim | llama.cpp b11960 -> b12110 (minor) | H60r |
+| 8 | H1b | other | priority-stale: vllm-openai-cpu 0.24.0 is inside vllm-45844 (<0.25.0, fixed in 0.25.0); priority-stale: vllm-openai-cpu 0.24.0 is inside vllm-50801 (<0.28.0, changed in 0.28.0); vllm-openai-cpu 0.24.0 -> 0.32.0 (minor) | H1br |
 
 ### Measured versions (SUPPORTED rows)
 
@@ -107,10 +109,10 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H34 | cryptoandcoffee/k3d-gpu 0.1.55; openvino/model_server 2026.4.1 | no |
 | H52w | cryptoandcoffee/k3d-gpu 0.1.89; rancher/k3s v1.37.1+k3s1 | no |
 | H57dm | cryptoandcoffee/k3d-gpu 0.1.63; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11749; openvino/model_server 2026.4.1 | yes |
-| H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
-| H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
+| H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | yes |
+| H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | yes |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.106; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.107; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
@@ -152,7 +154,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -518,7 +518,7 @@
+@@ -521,7 +521,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
