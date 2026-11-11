@@ -1,0 +1,18 @@
+2026-11-11T07:16:34Z
+ 02:16:34 up 12 days, 22:05,  2 users,  load average: 6.68, 7.65, 7.02
+               total        used        free      shared  buff/cache   available
+Mem:          128441       11263       69636        1421       49785      117178
+Swap:         393215           2      393213
+%CPU   PID USER     COMMAND
+ 2.6  1157 root     tailscaled
+ 1.5     1 root     systemd
+ 1.1  9906 911      python3
+ 0.9  1184 root     gdm
+ 0.7  6260 andrew   rustdesk
+ 0.6  9806 andrew   WebExtensions
+ 0.3  6528 nobody   prometheus
+ 0.3  3313 root     dockerd
+ 0.3  8054 andrew   firefox
+ 0.3 13373 andrew   localsearch-ext
+/dev/nvme0n1p2  3844245864 3449149768 199744376      95% /
+/dev/nvme0n1p2  3844245864 3449149768 199744376      95% /

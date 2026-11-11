@@ -1,0 +1,14 @@
+W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
+echo "== after $N $(date -u +%FT%TZ)"
+cat $W/runs/$N/rc; ls $W/runs/$N/{flagged,disk-abort,cleanup-incomplete,unhealthy} 2>/dev/null; tail -3 $W/runs/campaign.log
+timeout 60 k3d cluster list -o json | python3 $R/bench/wildct/clusters.py; echo "list rc=$?"
+timeout 30 docker ps -a --filter name=k3dgpu-w- --filter name=k3d-gpu-bench-load --format '{{.Names}}'; echo "ps rc=$?"
+timeout 30 python3 $R/bench/wildct/strays.py $N; echo "strays rc=$?"
+df -P -BG / | tail -1
+flock -n $W/live.lock true && echo lock-free || echo lock-HELD
+flock -n $W/inner.lock true && echo inner-free || echo inner-HELD
+timeout 30 docker network ls --format '{{.Name}}' | grep -E 'k3dgpu' ; echo "net rc=$?"
+timeout 30 docker volume ls --format '{{.Name}}' | grep -E 'k3dgpu' ; echo "vol rc=$?"
+echo "-- h28-model images"; timeout 30 docker images 'h28-model' --format '{{.Repository}}:{{.Tag}} {{.ID}} {{.Size}}'; echo "img rc=$?"
+echo "-- docker system df"; timeout 60 docker system df; echo "df rc=$?"
+echo "-- files"; ls -la $W/runs/$N $W/runs/$N/out 2>&1

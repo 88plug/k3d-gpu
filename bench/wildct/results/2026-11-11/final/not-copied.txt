@@ -1,0 +1,23 @@
+Files of ~/k3dgpu-bench-wildct on wildct that are not in the repository, read 2026-11-11 before the
+end-of-campaign cleanup (RESUME.md step 9), with their sha256 on wildct:
+
+ea62d08c932f5f2c1debea4d3048f283837568b376e94c70a5dd621b448a1641  runs/diag-smoke2/out/node-inspect.json
+    docker inspect of diag-smoke2's node container (2026-10-29); it holds that cluster's K3S_TOKEN
+    in plain text. The cluster was deleted the same day.
+629e8e0533701f54e998f66e425a3dec1b972e61aef5fe16435cca00ed9b24e2  setup/containers-before.txt
+d4dc6f82aece1aa7a9ffad2af824bb4688a0304d2731364b256b21f46df2fa5d  setup/images-before.txt
+602427a8cc30b64520fedc160157954a05317a7ad07ed1d5e318ba59f9eedc09  setup/networks-before.txt
+afaa8a16909e0e2a38868f1135f70a91cbf52eef1bf95270883d7f45f7a026e1  setup/volumes-before.txt
+    The box owner's container, image, network and volume lists of 2026-10-20 (880 image lines, with
+    the owner's private registry addresses). Step 3c and step 9 read images-before.txt to tell a
+    pre-existing image from the campaign's; they are host inventory, not run records.
+
+Also not copied, as at every earlier copy: the kubeconfig files (cluster credentials), the model
+files (sha256 in setup/verify-h57.log and h57/weights.sha256), the tools in bin/ and k3d-gpu/, the
+Python venv hfvenv/ and the bench archives repo-*/ (each is a commit of this repository, named by
+its COMMIT file).
+
+Every other file is in the repository byte for byte: the ones already committed by earlier wildct
+and H59w records, and the rest in this directory (wildct.sha256: their sha256 on wildct under their
+wildct paths; SHA256SUMS: the files as committed here, where scripts carry a .txt suffix and
+runs/smoke3-node.log is gzipped).

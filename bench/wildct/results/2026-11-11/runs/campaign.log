@@ -1,0 +1,91 @@
+== smoke1 waiting for the lock 2026-10-21T21:27:13Z
+== smoke1 lock taken 2026-10-21T21:27:13Z
+== smoke1 RAPL reader did not start 2026-10-21T21:39:26Z
+== smoke2 waiting for the lock 2026-10-29T18:36:12Z
+== smoke2 lock taken 2026-10-29T18:36:12Z
+== smoke2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh smoke 2026-10-29T18:36:12Z
+== smoke2 rc=1; clusters deleted: none; now: ; / 208 GB available 2026-10-29T18:39:28Z
+== diag-smoke2 waiting for the lock 2026-10-29T18:42:11Z
+== diag-smoke2 lock taken 2026-10-29T18:42:11Z
+== diag-smoke2 start: bash /home/andrew/k3dgpu-bench-wildct/diag/diag-up.sh 2026-10-29T18:42:12Z
+== diag-smoke2 rc=1; clusters deleted: none; now: ; / 208 GB available 2026-10-29T18:45:23Z
+== smoke3 waiting for the lock 2026-10-29T19:45:43Z
+== smoke3 lock taken 2026-10-29T19:45:43Z
+== smoke3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh smoke 2026-10-29T19:45:43Z
+== smoke3 rc=0; clusters deleted: none; now: ; / 208 GB available 2026-10-29T19:48:59Z
+== smoke4 waiting for the lock 2026-10-30T05:10:53Z
+== smoke4 lock taken 2026-10-30T05:10:53Z
+== smoke4 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh smoke 2026-10-30T05:10:53Z
+== smoke4 rc=0; clusters deleted: none; now: ; / 208 GB available 2026-10-30T05:11:44Z
+== smoke5 waiting for the lock 2026-11-07T03:34:15Z
+== smoke5 lock taken 2026-11-07T03:34:15Z
+== smoke5 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh smoke 2026-11-07T03:34:15Z
+== smoke5 rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T03:35:07Z
+== H52w waiting for the lock 2026-11-07T04:03:54Z
+== H52w lock taken 2026-11-07T04:03:54Z
+== H52w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h52w 2026-11-07T04:03:54Z
+== H52w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T04:05:00Z
+== H18w waiting for the lock 2026-11-07T04:22:23Z
+== H18w lock taken 2026-11-07T04:22:23Z
+== H18w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h18w 2026-11-07T04:22:24Z
+== H18w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T04:26:30Z
+== H25w waiting for the lock 2026-11-07T05:18:20Z
+== H25w lock taken 2026-11-07T05:18:20Z
+== H25w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h25w 2026-11-07T05:18:20Z
+== H25w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T05:36:58Z
+== H34w waiting for the lock 2026-11-07T05:54:52Z
+== H34w lock taken 2026-11-07T05:54:52Z
+== H34w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h34w 2026-11-07T05:54:53Z
+== H34w rc=0; clusters deleted: none; now: ; / 207 GB available 2026-11-07T06:10:05Z
+== H28w-prep waiting for the lock 2026-11-07T07:37:52Z
+== H28w-prep lock taken 2026-11-07T07:37:52Z
+== H28w-prep start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T07:37:52Z
+== H28w-prep rc=0; clusters deleted: none; now: ; / 199 GB available 2026-11-07T07:38:49Z
+== H28w waiting for the lock 2026-11-07T07:39:38Z
+== H28w lock taken 2026-11-07T07:39:38Z
+== H28w start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T07:39:38Z
+== H28w rc=143; clusters deleted: k3dgpu-w-h28; now: ; / 199 GB available 2026-11-07T07:42:30Z
+== H28w-prep-r2 waiting for the lock 2026-11-07T09:05:37Z
+== H28w-prep-r2 lock taken 2026-11-07T09:05:37Z
+== H28w-prep-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w-prep 2026-11-07T09:05:37Z
+== H28w-prep-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:06:34Z
+== H28w-r2 waiting for the lock 2026-11-07T09:07:05Z
+== H28w-r2 lock taken 2026-11-07T09:07:05Z
+== H28w-r2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h28w 2026-11-07T09:07:06Z
+== H28w-r2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-07T09:11:42Z
+== H59w-smoke waiting for the lock 2026-11-10T19:53:46Z
+== H59w-smoke lock taken 2026-11-10T19:53:46Z
+== H59w-smoke start: env G=/home/andrew/k3dgpu-bench-wildct/h59 LOCK=/home/andrew/k3dgpu-bench-wildct/inner.lock K3D_REAL=/home/andrew/k3dgpu-bench-wildct/bin/k3d H59_IMAGE=cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4 bash /home/andrew/k3dgpu-bench-wildct/repo/bench/h59/hold.sh wildct smoke 2026-11-10T19:53:46Z
+== H59w-smoke rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T19:57:08Z
+== H59w-1 waiting for the lock 2026-11-10T19:58:55Z
+== H59w-1 lock taken 2026-11-10T19:58:55Z
+== H59w-1 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h59w 1 2026-11-10T19:58:56Z
+== H59w-1 rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T20:34:00Z
+== H59w-2 waiting for the lock 2026-11-10T20:35:32Z
+== H59w-2 lock taken 2026-11-10T20:35:32Z
+== H59w-2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h59w 2 2026-11-10T20:35:33Z
+== H59w-2 rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T21:10:32Z
+== H59w-3 waiting for the lock 2026-11-10T21:12:19Z
+== H59w-3 lock taken 2026-11-10T21:12:19Z
+== H59w-3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h59w 3 2026-11-10T21:12:19Z
+== H59w-3 rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T21:47:13Z
+== H59w-4 waiting for the lock 2026-11-10T21:49:15Z
+== H59w-4 lock taken 2026-11-10T21:49:15Z
+== H59w-4 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h59w 4 2026-11-10T21:49:16Z
+== H59w-4 rc=0; clusters deleted: none; now: ; / 160 GB available 2026-11-10T22:25:06Z
+== H57w-1 waiting for the lock 2026-11-11T06:33:04Z
+== H57w-1 lock taken 2026-11-11T06:33:04Z
+== H57w-1 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 1 perf 2026-11-11T06:33:05Z
+== H57w-1 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T07:16:39Z
+== H57w-2 waiting for the lock 2026-11-11T07:17:45Z
+== H57w-2 lock taken 2026-11-11T07:17:45Z
+== H57w-2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 2 perf 2026-11-11T07:17:46Z
+== H57w-2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T08:00:15Z
+== H57w-3 waiting for the lock 2026-11-11T08:00:58Z
+== H57w-3 lock taken 2026-11-11T08:00:58Z
+== H57w-3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 3 perf 2026-11-11T08:00:59Z
+== H57w-3 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T08:43:34Z
+== H57w-4 waiting for the lock 2026-11-11T08:44:37Z
+== H57w-4 lock taken 2026-11-11T08:44:37Z
+== H57w-4 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 4 quality 2026-11-11T08:44:37Z
+== H57w-4 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T09:39:18Z

@@ -1,0 +1,16 @@
+== H57d-hold1 waiting for the lock (mode perf, arms: Od Ld Ld-mtp) 2026-11-11T06:33:05Z
+== H57d-hold1 lock taken 2026-11-11T06:33:05Z
+== H57d-hold1 start: Od Ld Ld-mtp 2026-11-11T06:33:05Z
+== H57d-hold1 rc=0; clusters deleted: k3dgpu-w-h57d-1; now:  2026-11-11T07:16:34Z
+== H57d-hold2 waiting for the lock (mode perf, arms: Ld Ld-mtp Od) 2026-11-11T07:17:46Z
+== H57d-hold2 lock taken 2026-11-11T07:17:46Z
+== H57d-hold2 start: Ld Ld-mtp Od 2026-11-11T07:17:46Z
+== H57d-hold2 rc=0; clusters deleted: k3dgpu-w-h57d-2; now:  2026-11-11T08:00:11Z
+== H57d-hold3 waiting for the lock (mode perf, arms: Ld-mtp Od Ld) 2026-11-11T08:00:59Z
+== H57d-hold3 lock taken 2026-11-11T08:00:59Z
+== H57d-hold3 start: Ld-mtp Od Ld 2026-11-11T08:00:59Z
+== H57d-hold3 rc=0; clusters deleted: k3dgpu-w-h57d-3; now:  2026-11-11T08:43:28Z
+== H57d-hold4 waiting for the lock (mode quality, arms: Ld Od Ld-mtp) 2026-11-11T08:44:37Z
+== H57d-hold4 lock taken 2026-11-11T08:44:37Z
+== H57d-hold4 start: Ld Od Ld-mtp 2026-11-11T08:44:38Z
+== H57d-hold4 rc=0; clusters deleted: k3dgpu-w-h57d-4; now:  2026-11-11T09:39:16Z

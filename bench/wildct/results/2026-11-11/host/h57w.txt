@@ -1,0 +1,311 @@
+## h57w-prod-before-preflight
+2026-11-11T06:31:55Z
+ 01:31:55 up 12 days, 21:20,  2 users,  load average: 0.36, 0.39, 0.37
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   120081240 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-prod-before-H57w-1
+2026-11-11T06:33:04Z
+ 01:33:04 up 12 days, 21:21,  2 users,  load average: 0.54, 0.43, 0.38
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   120038740 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-after-checks-H57w-1
+== after H57w-1 2026-11-11T07:16:57Z
+0
+== H57w-1 lock taken 2026-11-11T06:33:04Z
+== H57w-1 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 1 perf 2026-11-11T06:33:05Z
+== H57w-1 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T07:16:39Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1
+vol rc=1
+
+## h57w-prod-after-H57w-1
+2026-11-11T07:16:57Z
+ 02:16:57 up 12 days, 22:05,  2 users,  load average: 4.91, 7.19, 6.88
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   120026156 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-prod-before-H57w-2
+2026-11-11T07:17:45Z
+ 02:17:45 up 12 days, 22:06,  2 users,  load average: 2.22, 6.11, 6.53
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   120064792 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-after-checks-H57w-2
+== after H57w-2 2026-11-11T08:00:29Z
+0
+== H57w-2 lock taken 2026-11-11T07:17:45Z
+== H57w-2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 2 perf 2026-11-11T07:17:46Z
+== H57w-2 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T08:00:15Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1
+vol rc=1
+
+## h57w-prod-after-H57w-2
+2026-11-11T08:00:29Z
+ 03:00:29 up 12 days, 22:49,  2 users,  load average: 5.66, 8.17, 7.94
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119982164 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-prod-before-H57w-3
+2026-11-11T08:00:58Z
+ 03:00:58 up 12 days, 22:49,  2 users,  load average: 3.80, 7.49, 7.72
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119965544 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-after-checks-H57w-3
+== after H57w-3 2026-11-11T08:43:42Z
+0
+== H57w-3 lock taken 2026-11-11T08:00:58Z
+== H57w-3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 3 perf 2026-11-11T08:00:59Z
+== H57w-3 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T08:43:34Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1
+vol rc=1
+
+## h57w-prod-after-H57w-3
+2026-11-11T08:43:42Z
+ 03:43:42 up 12 days, 23:32,  2 users,  load average: 5.31, 7.03, 7.42
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119951348 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-prod-before-H57w-4
+2026-11-11T08:44:36Z
+ 03:44:36 up 12 days, 23:33,  2 users,  load average: 2.55, 6.00, 7.05
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   119997428 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+
+## h57w-after-checks-H57w-4
+== after H57w-4 2026-11-11T09:39:49Z
+0
+== H57w-4 lock taken 2026-11-11T08:44:37Z
+== H57w-4 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 4 quality 2026-11-11T08:44:37Z
+== H57w-4 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T09:39:18Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+lock-free
+inner-free
+net rc=1
+vol rc=1
+
+## h57w-prod-after-H57w-4
+2026-11-11T09:39:49Z
+ 04:39:49 up 13 days, 28 min,  2 users,  load average: 4.24, 7.04, 7.72
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+MemAvailable:   120051424 kB
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+up: 18 non-campaign containers running
+campaign containers: 
+LIVE-LOCK-FREE
+

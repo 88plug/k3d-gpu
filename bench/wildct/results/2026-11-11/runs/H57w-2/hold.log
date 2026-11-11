@@ -1,0 +1,4 @@
+== H57d-hold2 waiting for the lock (mode perf, arms: Ld Ld-mtp Od) 2026-11-11T07:17:46Z
+== H57d-hold2 lock taken 2026-11-11T07:17:46Z
+== H57d-hold2 start: Ld Ld-mtp Od 2026-11-11T07:17:46Z
+== H57d-hold2 rc=0; clusters deleted: k3dgpu-w-h57d-2; now:  2026-11-11T08:00:11Z

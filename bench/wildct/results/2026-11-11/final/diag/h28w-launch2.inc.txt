@@ -1,0 +1,13 @@
+W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
+# RESUME.md's launch as amendment R9 has it (systemd-run --user --scope: outlives the ssh session)
+launch() {
+    [ ! -e "$W/runs/$1" ] || { echo "runs/$1 exists: use a new NAME"; return 1; }
+    IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_CHECK=1 bash "$R/bench/wildct/row.sh" "${@:4}" \
+        || { echo "row.sh ${*:4}: not a row it runs; nothing launched"; return 1; }
+    IMAGE=$(cat $W/runs/IMAGE) setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
+        bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
+    echo "launched $1"
+}
+echo "IMAGE=$(cat $W/runs/IMAGE) repo=$(cat $R/COMMIT) installed=$(grep -m1 '^VERSION=' $W/k3d-gpu/usr/bin/k3d-gpu | cut -d'"' -f2) $(date -u +%FT%TZ)"
+echo "load: $(cat /proc/loadavg)"; df -P -BG / | tail -1; grep MemAvailable /proc/meminfo
+echo "## launcher vs release"; diff <(grep -v '^VERSION=' $R/scripts/k3d-gpu) <(grep -v '^VERSION=' $W/k3d-gpu/usr/bin/k3d-gpu) > /dev/null && echo LAUNCHER-MATCH || echo LAUNCHER-DIFF

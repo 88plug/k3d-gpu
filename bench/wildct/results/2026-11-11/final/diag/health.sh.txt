@@ -1,0 +1,16 @@
+#!/bin/bash
+# bench/wildct/RESUME.md step 1 (H1-H10), as written there, on wildct as andrew. Read-only apart
+# from the probe containers (H4, H10).
+W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
+PYIMG=python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+echo "== resume step 1 $(date -u +%FT%TZ) repo=$(cat $R/COMMIT)"
+echo "-- H1"; timeout 30 systemctl show -p ActiveState --value docker containerd; echo "H1 rc=$?"
+echo "-- H2"; timeout 30 systemctl is-system-running; echo "H2 rc=$?"
+echo "-- H3"; timeout 30 docker info --format '{{.ServerVersion}} live-restore={{.LiveRestoreEnabled}} cgroup={{.CgroupDriver}}/{{.CgroupVersion}}'; echo "H3 rc=$?"
+echo "-- H4"; timeout 120 docker run --rm --name k3dgpu-w-probe --privileged --network none --cpuset-cpus 20-23 "$PYIMG" true; echo "probe rc=$?"
+echo "-- H5"; ps -eo pid,etime,stat,args | awk '$4 == "runc" && $5 == "init"'; echo "H5 done"
+echo "-- H6"; df -P -BG / | tail -1; grep MemAvailable /proc/meminfo; cat /proc/loadavg
+echo "-- H7"; timeout 60 k3d cluster list -o json | python3 $R/bench/wildct/clusters.py; echo "H7 rc=${PIPESTATUS[0]}/${PIPESTATUS[1]}"
+echo "-- H8"; flock -n $W/live.lock true && echo lock-free; ps -eo pid,args | grep '[h]old.sh'; echo "H8 done"
+echo "-- H9"; awk '$1 == "vxlan" || $1 == "br_netfilter" {print $1}' /proc/modules | sort | paste -sd' '; echo "modprobe=[$(cat /proc/sys/kernel/modprobe)]"
+echo "-- H10"; timeout 300 bash $R/bench/wildct/nfprobe.sh "$(cat $W/runs/IMAGE)"; echo "nfprobe rc=$?"

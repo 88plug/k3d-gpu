@@ -1,0 +1,4 @@
+== H57w-1 waiting for the lock 2026-11-11T06:33:04Z
+== H57w-1 lock taken 2026-11-11T06:33:04Z
+== H57w-1 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h57w 1 perf 2026-11-11T06:33:05Z
+== H57w-1 rc=0; clusters deleted: none; now: ; / 191 GB available 2026-11-11T07:16:39Z

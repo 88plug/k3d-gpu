@@ -1,0 +1,33 @@
+[32m==>[0m opted out by K3D_GPU_VENDORS: nvidia intel (detected here: nvidia intel); not deployed, not advertised
+[32m==>[0m Accelerators: hybrid
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Creating k3d cluster 'k3dgpu-w-diag' with image cryptoandcoffee/k3d-gpu:0.1.79@sha256:6e27ff9817bf9398edb20f479dceb5f08273a04a01971b37628a7b2791bdfcfe...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-w-diag'          
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-w-diag-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-w-diag-tools'      
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-w-diag-server-0'   
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-w-diag'             
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-w-diag-server-0'   
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-w-diag' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(k3d kubeconfig write k3dgpu-w-diag)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/runs/diag-smoke2/out/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-w-diag-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+E1029 14:42:32.492100   19897 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: read tcp 127.0.0.1:58396->127.0.0.1:36285: read: connection reset by peer" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 14:42:39.309558   19897 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: read tcp 127.0.0.1:50898->127.0.0.1:36285: read: connection reset by peer" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+E1029 14:42:46.015416   19897 reflector.go:227] "Failed to watch" err="apiserver not ready - error from a previous attempt: read tcp 127.0.0.1:47882->127.0.0.1:36285: read: connection reset by peer" reflector="k8s.io/client-go/tools/watch/informerwatcher.go:162" type="*unstructured.Unstructured"
+error: timed out waiting for the condition
+[33mWARN:[0m CoreDNS is not ready; pods may not resolve names yet (KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/runs/diag-smoke2/out/kubeconfig kubectl --context k3d-k3dgpu-w-diag -n kube-system get pods -l k8s-app=kube-dns)
+The connection to the server 0.0.0.0:36285 was refused - did you specify the right host or port?

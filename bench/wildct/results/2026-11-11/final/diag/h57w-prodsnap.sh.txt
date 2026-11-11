@@ -1,0 +1,12 @@
+#!/bin/bash
+# Read-only production snapshot on wildct (the H59w host-file format): every running container's
+# name, state, start time and restart count, the count of non-campaign ones, the campaign's own,
+# and the lock state.
+W=~/k3dgpu-bench-wildct
+date -u +%FT%TZ; uptime; df -P -BG / | tail -1; grep MemAvailable /proc/meminfo
+L=$(for c in $(timeout 30 docker ps -q); do timeout 30 docker inspect -f '{{.Name}} {{.State.Status}} {{.State.StartedAt}} rc={{.RestartCount}}' "$c"; done | sort)
+P=$(printf '%s\n' "$L" | grep -vE '^/(k3dgpu-|k3d-k3dgpu|k3d-gpu-bench-load)')
+printf '%s\n' "$P"
+echo "up: $(printf '%s\n' "$P" | grep -c ' running ') non-campaign containers running"
+echo "campaign containers: $(printf '%s\n' "$L" | grep -E '^/(k3dgpu-|k3d-k3dgpu|k3d-gpu-bench-load)' | tr '\n' ' ')"
+flock -n $W/live.lock true && echo LIVE-LOCK-FREE || echo LIVE-LOCK-HELD

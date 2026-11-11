@@ -1,0 +1,4 @@
+== smoke1 waiting for the lock 2026-10-21T21:27:13Z
+== smoke1 lock taken 2026-10-21T21:27:13Z
+/home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/hold.sh: line 75: 2354593 Killed                     docker run -d --rm --name "${RAPL_C}" --privileged --network none --cpuset-cpus 20-23 "${RAPL_IMAGE}" sleep "$(( cap + 120 ))" > /dev/null
+== smoke1 RAPL reader did not start 2026-10-21T21:39:26Z
