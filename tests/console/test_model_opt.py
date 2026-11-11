@@ -880,5 +880,27 @@ class RecipeFacts(unittest.TestCase):
             recipes.EXAMPLES_DIR.update(dirs)
 
 
+class Standalone(unittest.TestCase):
+    """hack/gate_lib.sh rules_stale and hack/bot-merge copy model_opt.py and convert-pins.json
+    alone into a scratch directory and run ledger-rules there; that subcommand needs no other
+    console module."""
+
+    def test_ledger_rules_runs_without_the_other_console_modules(self):
+        import shutil
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            for f in ("model_opt.py", "convert-pins.json"):
+                shutil.copy(os.path.join(REPO, "console", f), d)
+            ledger = os.path.join(d, "EXPERIMENTS.md")
+            shutil.copy(os.path.join(HERE, "model-opt", "ledger.md"), ledger)
+            out = os.path.join(d, "rules.json")
+            r = subprocess.run([sys.executable, os.path.join(d, "model_opt.py"), "ledger-rules",
+                                "--ledger", ledger, "--out", out], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            with open(out, encoding="utf-8") as f:
+                self.assertIsInstance(json.load(f), (dict, list))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

@@ -55,8 +55,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# console/recipes.py (vLLM's model recipes, stdlib only) is imported where a vLLM decision
+# reads it, so ledger-rules runs from a copy of this file alone (hack/gate_lib.sh rules_stale).
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import recipes  # noqa: E402  (console/recipes.py: vLLM's model recipes, stdlib only)
 
 META_SCHEMA = "k3d-gpu.hfmeta/v1"
 OPT_SCHEMA = "k3d-gpu.modelopt/v1"
@@ -945,6 +946,7 @@ def optimize(bundle, engine, device, opts=None):
     # this vLLM version) falls back to the family table.
     rf = None
     if engine == "vllm" and o.get("recipes"):
+        import recipes
         rf = recipes.facts(o["recipes"], pick["id"] if pick and pick["id"] != "qat-convert" else target,
                            requested=bundle.get("requested", target), target=target, device=device,
                            pci_id=o.get("pci_id"), cpu_brand=o.get("cpu_brand"),
@@ -1212,6 +1214,7 @@ def recipe_spec_tokens(cfg, o):
     rf = o.get("recipe_facts")
     if not rf:
         return None
+    import recipes
     rows = recipes.measured(ledger_from_text(o.get("ledger")), o.get("hw_class"), [rf["id"]])
     hit = rows.get("speculative-config.num_speculative_tokens")
     if hit:
@@ -1336,6 +1339,7 @@ def vllm_recipes(engine):
     """The vendored vLLM recipes for a vLLM decision (K3D_GPU_VLLM_RECIPES=off: none)."""
     if engine != "vllm" or os.environ.get("K3D_GPU_VLLM_RECIPES", "auto") == "off":
         return None
+    import recipes
     art, why = recipes.load()
     if art is None:
         sys.stderr.write("model_opt: vLLM recipes unavailable (%s): parsers from the model family table\n" % why)
