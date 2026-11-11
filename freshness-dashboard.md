@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 06:21 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 06:56 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -22,13 +22,15 @@ bot-pr-stuck
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (3)
+## Open bot PRs (5)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #386 | host-intel | auto | - |
+| #385 | hf-console-fallback | review | a human approval at the head |
+| #384 | examples | review | a human approval at the head |
+| #383 | cuda-test | review | a human approval at the head |
 | #381 | packaging-images | auto | - |
-| #350 | hf-console-fallback | review | a human approval at the head |
-| #346 | cuda-test | review | a human approval at the head |
 
 ## EAT stock (always review)
 
@@ -56,7 +58,6 @@ bot-pr-stuck
 A PENDING row's arm pins move only by a dated amendment pushed before it runs. Propose one with the command beside the row (a human dispatch; the PR is never bot-merged).
 
 - H57wa (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wa`
-- H57wb (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wb`
 - H57wm (`bench/xhost/fetch_models.py`, `bench/h57d/h57d.py`, `bench/h57d/**`, `bench/wildct/**`, `bench/load/**`): `gh workflow run freshness.yml -f propose_amendment=H57wm`
 
 ## Known issues and stale workarounds
