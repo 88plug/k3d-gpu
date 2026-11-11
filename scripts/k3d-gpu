@@ -75,7 +75,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.102"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.104"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -321,11 +321,13 @@ Usage: k3d-gpu <command>
   eas status|down|check [--model NAME]
             status: EAS's own status, pins, overlay, gateway, pods not Ready and the
             cause of each stack pod not Ready. down: teardown platform (the cluster
-            stays). check (agent toolkit): the stack's pods Ready (each one that is
-            not, with its cause), then chat, tool call, the guardrail on an unsafe
-            prompt and a sandbox run through EAS's LiteLLM gateway with a
-            short-lived virtual key, after Intel's own 'validate agent-toolkit'.
-            down also removes the models 'eas model add' served
+            stays). check (agent toolkit): a warning, never a failure, for each
+            deployed LiteLLM or vLLM inside a published security advisory
+            (integrations/eas/advisories.json); Intel's own 'validate agent-toolkit';
+            then the stack's pods Ready (each one that is not, with its cause), chat,
+            tool call, the guardrail on an unsafe prompt and a sandbox run through
+            EAS's LiteLLM gateway with a short-lived virtual key. down also removes
+            the models 'eas model add' served
   eas model add <hf-id> [--name NAME] [--revision R] [--ctx N] [--seqs N]
                 [--tool-parser P|none] [--reasoning-parser P|none] [--dry-run]
   eas model list | eas model remove NAME
@@ -6979,6 +6981,7 @@ EAS_DEFAULT_DOMAIN="solutions.ai"   # base_domain_name in EAS configs/defaults/g
 # Environment the bastion gets by name only (docker run -e NAME), never by value.
 EAS_PASS_ENV=(HF_TOKEN HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy ES_LOG_LEVEL)
 EAS_FILES=(eas.sh bastion.Dockerfile requirements.lock images.yaml pins.json eas-config.py eas-ready.py overlay.py overlay.json
+           eas-advisories.py advisories.json
            ei-kcadm.sh patches/ei/0001-keycloak-config-kcadm-argv.patch
            patches/ei/0001-release-1.1-keycloak-config-kcadm-argv.patch
            eat-redis-cli.sh patches/eat/0001-redis-stack-validate-redis-cli-auth.patch)
@@ -7544,6 +7547,27 @@ print("\n".join(bad) if bad else "  none")'
     kubectl get pods,daemonsets -A -o json | python3 "${dir}/eas-ready.py" 2>&1 | sed 's/^/  /' || true
 }
 
+# eas_advisories <dir>: the deployed LiteLLM and vLLM against the published advisories of
+# <dir>/advisories.json (eas-advisories.py reads each pod's image tag). Warnings only:
+# a version below a fix, a missing table or an unreadable pod list never stops eas check.
+eas_advisories() {
+    local table="$1/advisories.json" pods out
+    info "Published advisories (${table}):"
+    if [ ! -f "${table}" ]; then
+        echo "  warn: advisories.json not found in $1: not checked"
+        return 0
+    fi
+    if ! pods=$(kubectl get pods -A -o json 2>/dev/null); then
+        echo "  warn: could not list the pods: advisories not checked"
+        return 0
+    fi
+    if out=$(python3 "$1/eas-advisories.py" "${table}" 2>&1 <<< "${pods}"); then
+        sed 's/^/  /' <<< "${out}"
+    else
+        echo "  warn: could not read the advisories: ${out}"
+    fi
+}
+
 eas_check() {
     local dir state chk image layer model=""
     while [ $# -gt 0 ]; do
@@ -7565,6 +7589,7 @@ eas_check() {
     chk="${dir}/../eat/eat-check.sh"
     [ -f "${chk}" ] || err "${chk} not found"
     eas_kubeconfig "${state}"
+    eas_advisories "${dir}"
     # Intel's own post-deploy checks first (EAT docs/validate-stack.md): every enabled
     # component of the layer and its dependencies; a failure stops with its reason.
     info "Intel's validate ${layer} (es_auto_installer.sh validate, in the bastion):"

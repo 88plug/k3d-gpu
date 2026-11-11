@@ -50,6 +50,11 @@ check "nfpm ships console/*.py to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.py\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
 check "nfpm ships console/*.json to /usr/share/k3d-gpu/console/" \
     grep -Pzq 'src: console/\*\.json\n +dst: /usr/share/k3d-gpu/console/\n' "${NFPM}"
+# The vendored vLLM recipes (hack/vllm-recipes) are a console/*.json, so every recipe
+# below ships them, and packaging/check.sh byte-compares them in the built packages.
+check "console/vllm-recipes.json is one of the console/*.json every package ships" \
+    bash -c 'for f in "$1"/console/*.json; do [ "${f}" = "$1/console/vllm-recipes.json" ] && exit 0; done; exit 1' \
+    _ "${ROOT}"
 # The AUR recipe globs console/ like nfpm and nix, so a new console module
 # needs no packaging edit (and no merge conflict between parallel PRs).
 check "PKGBUILD installs console/*.py and console/*.json" \

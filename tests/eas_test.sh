@@ -98,6 +98,8 @@
 #            - sandbox up refuses when EAS's sandbox-router-deployment exists
 #            - the bastion pins what pins.json's bastion profile names, and ships a
 #              sha256-checked jq (EI's deploy_models.yaml runs jq on the bastion)
+#            - check warns, before Intel's validate, on the deployed LiteLLM and vLLM below
+#              published fixes, and still exits 0; an unreadable table is a warning too
 #   ready    integrations/eas/eas-ready.py, the stack check `k3d-gpu eas check` runs
 #            before its first request, on synthetic `kubectl get pods,daemonsets -A -o json`
 #            lists:
@@ -116,6 +118,15 @@
 #            - no istio-cni-node or ztunnel DaemonSet: Istio ambient's data plane is
 #              missing
 #            - input that is not a kubectl List exits 2
+#   advisories integrations/eas/advisories.json and eas-advisories.py, the advisory warning
+#            `k3d-gpu eas check` prints, on synthetic `kubectl get pods -A -o json` lists:
+#            - the table's shape; Intel's stock versions (EI v1.1.0: LiteLLM 1.84.0, vLLM
+#              CPU 0.28.0) are inside listed ranges, `clean` and each fix outside them
+#            - the stock stack warns with each advisory, its fix and the first clean
+#              release; a stack at the clean releases says ok
+#            - versions read from the deployed tags: tag@digest, a suffixed LiteLLM tag, an
+#              rc, docker.io spellings; a digest-only image is not graded
+#            - no LiteLLM or vLLM pod is an info line; bad input or table exits 2
 #   gwapi    overlay 0007's condition under ansible-playbook: release-1.2's istio role applies
 #            Gateway API v1.2.1 only when the CRDs are absent or older, and keeps a newer
 #            install (k3s v1.37's, whose safe-upgrades policy refuses a downgrade). Needs
@@ -977,6 +988,7 @@ section_cli() {
     # gathers must be what it reads), with overlay.py replaced by a recorder (the overlay
     # section tests it on real EAS trees).
     cp "${EAS_DIR}"/eas.sh "${EAS_DIR}"/eas-config.py "${EAS_DIR}"/eas-ready.py "${EAS_DIR}"/pins.json "${EAS_DIR}"/overlay.json \
+       "${EAS_DIR}"/eas-advisories.py "${EAS_DIR}"/advisories.json \
        "${EAS_DIR}"/bastion.Dockerfile "${EAS_DIR}"/requirements.lock "${EAS_DIR}"/images.yaml "${K}/eas/"
     mkdir -p "${K}/eas/patches/ei" "${K}/eas/patches/eat"
     cp "${EAS_DIR}"/patches/ei/*.patch "${K}/eas/patches/ei/"
@@ -1170,9 +1182,11 @@ EOF
     echo '{"items": [{"metadata": {"name": "default"}}, {"metadata": {"name": "kube-system"}}, {"metadata": {"name": "node-feature-discovery"}}]}' > "${S}/fx/namespaces.json"
     cp "${S}/fx/namespaces.json" "${S}/fx/namespaces.ok"
     cat > "${S}/fx/pods.json" <<'EOF'
-{"items": [
- {"metadata": {"namespace": "litellm", "name": "litellm-0"}, "status": {"phase": "Running", "containerStatuses": [{"ready": true}]}},
- {"metadata": {"namespace": "llm-inference", "name": "vllm-qwen-0"}, "status": {"phase": "Pending", "containerStatuses": [{"ready": false, "state": {"waiting": {"reason": "ContainerCreating"}}}]}},
+{"apiVersion": "v1", "kind": "List", "items": [
+ {"metadata": {"namespace": "litellm", "name": "litellm-0"}, "spec": {"containers": [{"name": "litellm", "image": "ghcr.io/berriai/litellm-database:v1.84.0"}]},
+  "status": {"phase": "Running", "containerStatuses": [{"ready": true}]}},
+ {"metadata": {"namespace": "llm-inference", "name": "vllm-qwen-0"}, "spec": {"containers": [{"name": "kserve-container", "image": "docker.io/vllm/vllm-openai-cpu:v0.28.0"}]},
+  "status": {"phase": "Pending", "containerStatuses": [{"ready": false, "state": {"waiting": {"reason": "ContainerCreating"}}}]}},
  {"metadata": {"namespace": "kube-system", "name": "helm-install-x"}, "status": {"phase": "Succeeded"}}]}
 EOF
     # The stack as eas-ready.py reads it: the guard Pending on EI's AMXBF16 node affinity.
@@ -1625,6 +1639,21 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_has "cli: check runs Intel's validate for the layer in the bastion" "$(grep '^docker run' "${LOG}")" \
         "bash /k3d-gpu/integrations/eas/eas.sh validate agent-toolkit"
     cli_before "cli: Intel's validate, then eat-check" "$(cat "${LOG}")" "eas.sh validate agent-toolkit" "eat-check mode=eas"
+    cli_has   "cli: check warns on Intel's stock LiteLLM 1.84.0 below published fixes" "${out}" "warn: LiteLLM 1.84.0"
+    cli_has   "cli: ...naming the advisory and its fix" "${out}" "GHSA-g5ff-637f-6q2m (high): fixed in 1.95.0"
+    cli_has   "cli: ...and the deployed image and pod" "${out}" "ghcr.io/berriai/litellm-database:v1.84.0 in litellm/litellm-0"
+    cli_has   "cli: check warns on vLLM CPU 0.28.0" "${out}" "warn: vLLM 0.28.0"
+    cli_before "cli: the advisories print before Intel's validate" "${out}" "warn: LiteLLM 1.84.0" "Intel's validate agent-toolkit"
+    cp "${K}/eas/advisories.json" "${WORK}/cli/advisories.keep"
+    echo '{' > "${K}/eas/advisories.json"
+    out=$(cli cmd_eas check); rc=$?
+    cli_eq    "cli: check with an unreadable advisory table still exits 0" "${rc}" 0
+    cli_has   "cli: ...and says it could not read the table" "${out}" "could not read the advisories"
+    rm -f "${K}/eas/advisories.json"
+    out=$(cli cmd_eas check); rc=$?
+    cli_eq    "cli: check with no advisory table still exits 0" "${rc}" 0
+    cli_has   "cli: ...and says so" "${out}" "advisories.json not found"
+    cp "${WORK}/cli/advisories.keep" "${K}/eas/advisories.json"
 
     # ---- an env set up at other pins or for another layer ------------------------------------------
     # EAS keeps one layer per checkout, and init never reseeds models.yaml or
@@ -2001,6 +2030,166 @@ PY
     done <<< "${out}"
     if [ "${rc}" -eq 0 ] && [ "$(tail -n1 <<< "${out}")" = "done" ]; then ok "ready: the driver ran every case"
     else fail "ready: the driver stopped early (rc=${rc})"; fi
+}
+
+section_advisories() {
+    local line out rc
+    out=$(python3 - "${ROOT}/integrations/eas/eas-advisories.py" "${ROOT}/integrations/eas/advisories.json" 2>&1 <<'PY'
+import json, os, re, subprocess, sys, tempfile
+
+SCAN, TABLE = sys.argv[1:3]
+EI = "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/"
+# The advisories the EI v1.1.0 issue draft names, each read with gh api /advisories/<id>.
+CANDIDATES = {"GHSA-g5ff-637f-6q2m": "litellm", "GHSA-hhww-mrg2-969h": "litellm",
+              "GHSA-3cv6-jpf6-8222": "litellm", "GHSA-h3rc-6mm3-gc2m": "vllm",
+              "GHSA-6757-hggm-hp2w": "vllm"}
+
+
+def ok(name, cond, detail=""):
+    print(("ok   " if cond else "FAIL ") + name + ("" if cond else " " + detail))
+
+
+# ---- the table ---------------------------------------------------------------------------
+t = json.load(open(TABLE))
+ok("table: schema k3d-gpu.eas-advisories/v1", t.get("schema") == "k3d-gpu.eas-advisories/v1")
+ok("table: a checked date", bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", t.get("checked", ""))))
+comps = {c["name"]: c for c in t.get("components", [])}
+ok("table: LiteLLM and vLLM", sorted(comps) == ["litellm", "vllm"], str(sorted(comps)))
+ok("table: Intel's stock LiteLLM is 1.84.0 (EI v1.1.0)", comps["litellm"]["stock"] == "1.84.0"
+   and comps["litellm"]["stock_source"].startswith(EI + "roles/litellm/defaults/main.yaml#L"))
+ok("table: Intel's stock vLLM CPU is 0.28.0 (EI v1.1.0)", comps["vllm"]["stock"] == "0.28.0"
+   and comps["vllm"]["stock_source"].startswith(EI + "model_manager/models.yaml#L"))
+ids = [a["id"] for c in comps.values() for a in c["advisories"]]
+ok("table: every id once", len(ids) == len(set(ids)), str(ids))
+for gid, comp in CANDIDATES.items():
+    ok("table: %s is listed under %s" % (gid, comp), gid in [a["id"] for a in comps[comp]["advisories"]])
+for c in comps.values():
+    for a in c["advisories"]:
+        good = (re.fullmatch(r"GHSA(-[23456789cfghjmpqrvwx]{4}){3}", a["id"]) and a["severity"] in ("low", "medium", "high", "critical")
+                and a.get("summary") and a.get("vulnerable") and all(v.get("range") and v.get("fixed") for v in a["vulnerable"]))
+        ok("table: %s has an id, severity, summary and each range's fix" % a["id"], bool(good), json.dumps(a))
+
+# The scanner's own range logic, through its --in-range probe: stock inside, clean and
+# every fix outside.
+def inside(comp, version):
+    p = subprocess.run([SCAN, TABLE, "--in-range", comp, version], capture_output=True, text=True)
+    if p.returncode not in (0, 1):
+        raise SystemExit("--in-range %s %s: rc %s %s" % (comp, version, p.returncode, p.stderr))
+    return p.stdout.split()
+for c in comps.values():
+    ok("table: stock %s %s is inside a listed range" % (c["name"], c["stock"]), inside(c["name"], c["stock"]) != [])
+    ok("table: clean %s %s is outside every listed range" % (c["name"], c["clean"]), inside(c["name"], c["clean"]) == [])
+    for a in c["advisories"]:
+        for v in a["vulnerable"]:
+            ok("table: %s's fix %s is outside its own range" % (a["id"], v["fixed"]),
+               a["id"] not in inside(c["name"], v["fixed"]))
+for gid, comp in CANDIDATES.items():
+    ok("table: %s covers Intel's stock %s" % (gid, comp), gid in inside(comp, comps[comp]["stock"]))
+ok("table: LiteLLM 1.95.0 is inside GHSA-3cv6 and GHSA-7hp6, not GHSA-g5ff",
+   sorted(inside("litellm", "1.95.0")) == ["GHSA-3cv6-jpf6-8222", "GHSA-7hp6-4w63-5g45"], str(inside("litellm", "1.95.0")))
+ok("table: an rc compares below its release (1.104.0rc1 inside GHSA-7hp6, rc2 not)",
+   inside("litellm", "1.104.0rc1") == ["GHSA-7hp6-4w63-5g45"] and inside("litellm", "1.104.0rc2") == [])
+ok("table: 1.89.10 is outside GHSA-3cv6's 1.89 backport range", "GHSA-3cv6-jpf6-8222" not in inside("litellm", "1.89.10"))
+
+
+# ---- the scanner on pod lists ------------------------------------------------------------
+def pod(ns, name, *images, init=(), phase="Running"):
+    spec = {"containers": [{"name": "c%d" % i, "image": im} for i, im in enumerate(images)]}
+    if init:
+        spec["initContainers"] = [{"name": "i%d" % i, "image": im} for i, im in enumerate(init)]
+    return {"kind": "Pod", "metadata": {"namespace": ns, "name": name}, "spec": spec, "status": {"phase": phase}}
+
+
+def run(items, table=TABLE):
+    p = subprocess.run([SCAN, table], input=json.dumps({"apiVersion": "v1", "kind": "List", "items": items}),
+                       capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr
+
+
+def case(name, items, want_rc, *patterns, absent=()):
+    rc, out = run(items)
+    bad = [pat for pat in patterns if not re.search(pat, out)] + [pat for pat in absent if re.search(pat, out)]
+    if rc == want_rc and not bad:
+        print("ok   " + name)
+    else:
+        print("FAIL %s (rc=%s, want %s, unmatched %s)" % (name, rc, want_rc, bad))
+        for line in out.splitlines():
+            print(line)
+
+
+LITELLM = "ghcr.io/berriai/litellm-database:v1.84.0"
+VLLM = "docker.io/vllm/vllm-openai-cpu:v0.28.0"
+STOCK = [
+    pod("litellm", "litellm-5f6d-r8t2k", LITELLM),
+    pod("llm-inference", "gemma-4-26b-predictor-7c4b-h5j6k", VLLM, init=("kserve/storage-initializer:v0.15.2",)),
+    pod("llm-inference", "qwen3guard-predictor-9d8e-a1b2c", VLLM),
+    pod("istio-system", "istiod-7d9f-xk2lp", "docker.io/istio/pilot:1.26.0"),
+]
+case("the stock stack warns on LiteLLM 1.84.0 with each advisory, its fix and the first clean release",
+     STOCK, 0, r"warn: LiteLLM 1\.84\.0 .*below published security fixes", r"1\.100\.4 is the first release outside",
+     r"GHSA-g5ff-637f-6q2m \(high\): fixed in 1\.95\.0", r"GHSA-hhww-mrg2-969h \(medium\): fixed in 1\.85\.0",
+     r"GHSA-3cv6-jpf6-8222 \(medium\): fixed in 1\.88\.6", re.escape(LITELLM) + r" in litellm/litellm-5f6d-r8t2k",
+     r"Intel's stock", absent=(r"GHSA-7hp6",))
+case("the stock stack warns on vLLM 0.28.0 once, naming both model pods",
+     STOCK, 0, r"warn: vLLM 0\.28\.0 .*below published security fixes", r"0\.32\.0 is the first release outside",
+     r"GHSA-h3rc-6mm3-gc2m \(high\): fixed in 0\.31\.0", r"GHSA-6757-hggm-hp2w \(high\): fixed in 0\.32\.0",
+     r"llm-inference/gemma-4-26b-predictor-7c4b-h5j6k", r"llm-inference/qwen3guard-predictor-9d8e-a1b2c",
+     absent=(r"warn: vLLM 0\.28\.0[^\n]*\n(?:.*\n)*warn: vLLM 0\.28\.0", r"istio", r"storage-initializer"))
+case("the warning says check goes on and k3d-gpu keeps Intel's pins",
+     STOCK, 0, r"eas check goes on", r"keeps Intel's pins")
+case("vLLM 0.24.0 (EI's runtime default_version) warns as its own version",
+     [pod("llm-inference", "bge-base-en-predictor-1a2b", "docker.io/vllm/vllm-openai-cpu:v0.24.0")], 0,
+     r"warn: vLLM 0\.24\.0", r"GHSA-6757-hggm-hp2w", absent=(r"Intel's stock",))
+case("a stack at the clean releases says ok and warns nothing",
+     [pod("litellm", "litellm-0", "ghcr.io/berriai/litellm-database:v1.100.4"),
+      pod("llm-inference", "m-0", "docker.io/vllm/vllm-openai-cpu:v0.32.0")],
+     0, r"ok: LiteLLM 1\.100\.4, vLLM 0\.32\.0: no listed advisory", absent=(r"warn",))
+case("LiteLLM 1.95.0 warns GHSA-3cv6 and GHSA-7hp6, not GHSA-g5ff",
+     [pod("litellm", "litellm-0", "ghcr.io/berriai/litellm-database:v1.95.0")], 0,
+     r"warn: LiteLLM 1\.95\.0", r"GHSA-3cv6-jpf6-8222 \(medium\): fixed in 1\.95\.1", r"GHSA-7hp6-4w63-5g45 \(high\): fixed in 1\.100\.4",
+     absent=(r"GHSA-g5ff", r"GHSA-hhww"))
+case("a tag with a digest is read by its tag",
+     [pod("llm-inference", "m-0", VLLM + "@sha256:" + "a" * 64)], 0, r"warn: vLLM 0\.28\.0")
+case("a suffixed LiteLLM tag (v1.83.14-stable.patch.2) reads as 1.83.14",
+     [pod("litellm", "litellm-0", "ghcr.io/berriai/litellm:v1.83.14-stable.patch.2")], 0,
+     r"warn: LiteLLM 1\.83\.14", r"GHSA-hhww-mrg2-969h")
+case("an rc tag is graded as the rc",
+     [pod("litellm", "litellm-0", "ghcr.io/berriai/litellm-database:v1.104.0rc1")], 0,
+     r"warn: LiteLLM 1\.104\.0rc1", r"GHSA-7hp6-4w63-5g45")
+case("vllm/vllm-openai-cpu and index.docker.io spellings match too",
+     [pod("a", "p-0", "vllm/vllm-openai-cpu:v0.28.0"), pod("b", "p-1", "index.docker.io/vllm/vllm-openai-cpu:v0.28.0")], 0,
+     r"warn: vLLM 0\.28\.0", r"a/p-0", r"b/p-1")
+case("a digest-only image is not graded",
+     [pod("llm-inference", "m-0", "docker.io/vllm/vllm-openai-cpu@sha256:" + "b" * 64)], 0,
+     r"info: .*vllm-openai-cpu@sha256:b+ in llm-inference/m-0 names no version", absent=(r"warn",))
+case("a Succeeded or Failed pod runs nothing and is not graded",
+     [pod("litellm", "litellm-old", LITELLM, phase="Failed"), pod("llm-inference", "m-done", VLLM, phase="Succeeded"),
+      pod("litellm", "litellm-0", "ghcr.io/berriai/litellm-database:v1.100.4")], 0,
+     r"ok: LiteLLM 1\.100\.4", absent=(r"warn", r"litellm-old", r"m-done"))
+case("no LiteLLM or vLLM pod is an info line",
+     [pod("istio-system", "istiod-0", "docker.io/istio/pilot:1.26.0")], 0, r"info: no LiteLLM or vLLM image", absent=(r"warn",))
+for name, text in (("not JSON", "nope"), ("not a List", json.dumps({"kind": "Pod"}))):
+    p = subprocess.run([SCAN, TABLE], input=text, capture_output=True, text=True)
+    ok("input %s exits 2 (rc=%s)" % (name, p.returncode), p.returncode == 2)
+with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+    f.write("{")
+rc, out = run(STOCK, f.name)
+os.unlink(f.name)
+ok("an unreadable table exits 2 (rc=%s)" % rc, rc == 2)
+print("done")
+PY
+)
+    rc=$?
+    while IFS= read -r line; do
+        case "${line}" in
+            "ok   "*) ok "advisories: ${line#ok   }" ;;
+            "FAIL "*) fail "advisories: ${line#FAIL }" ;;
+            done) ;;
+            *) echo "  | ${line}" ;;
+        esac
+    done <<< "${out}"
+    if [ "${rc}" -eq 0 ] && [ "$(tail -n1 <<< "${out}")" = "done" ]; then ok "advisories: the driver ran every case"
+    else fail "advisories: the driver stopped early (rc=${rc})"; fi
 }
 
 
@@ -2887,7 +3076,7 @@ EOF
     m_lacks "model: remove: the master key is on no argument list" "${log}" "${MASTER}"
 }
 
-SECTIONS=(overlay config cli ready argv kcadm rediscli gwapi model)
+SECTIONS=(overlay config cli ready advisories argv kcadm rediscli gwapi model)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then
