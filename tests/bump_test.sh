@@ -11,6 +11,10 @@
 #   - with the hf-meta hook, re-reads the saved Hugging Face metadata of each moved
 #     repo at its new revision, and in the hf-console-fallback group writes the model
 #     optimizer's goldens again from it, so the group's offline test passes;
+#   - in the groups that move a release pin facts/v1 reports (llama-cpp, ovms), renders
+#     the report.html goldens again from the substituted facts, so the offline report
+#     test passes (and the registry puts the hook in every such group), and does so in
+#     any group whose substitution moved a saved facts.json, and in no other;
 #   - leaves ledger (bench/), historical, eat-stock files and .github/ alone;
 #   - is a no-op when run a second time;
 #   - moves no held pin to or past its hold, from --resolved values and from a
@@ -577,6 +581,192 @@ out=$(python3 "${ROOT}/hack/pin-only-diff" --root "${R9}" --group hf-console-fal
 check "hf-console-fallback: the new note is the one line that is no pin move: review (rc ${rc}: ${out})" \
     test "${rc}" -eq 1 -a "$(grep -c '^not a pin move: ' <<< "${out}")" -eq 1 -a \
     "$(grep -c "^not a pin move: tests/console/model-opt/o.explain.golden:[0-9]*: +${NOTE9:0:60}" <<< "${out}")" -eq 1
+
+# the groups that move a release pin facts/v1 reports (llama-cpp, ovms), each as
+# pins/registry.toml has it (tests, hooks, outputs): the substitution moves the pin in a
+# saved facts.json and in its report.html, whose footer is the sha256 of the facts'
+# canonical bytes, so the report is rendered again from the substituted facts and the
+# bumped tree passes the offline report test. tests/report_html_test.sh here keeps the
+# real suite's contract (each fixture's report.html is console/report_html.py of its
+# facts.json, offline; --update rewrites them first); the group's other tests are stubs.
+for G in llama-cpp ovms; do
+    R10="${WORK}/repo10-${G}"
+    mkdir -p "${R10}/pins" "${R10}/scripts" "${R10}/tests/fixtures/h"
+    cp -R "${ROOT}/console" "${R10}/console" && rm -rf "${R10}/console/__pycache__"
+    python3 - "${ROOT}" "${R10}" "${G}" "${D_OLD}" "${D_EAT}" <<'PY'
+import json, os, sys, tomllib
+repo, root, g, old, other = sys.argv[1:]
+group = tomllib.load(open(repo + "/pins/registry.toml", "rb"))["groups"][g]
+with open(root + "/pins/registry.toml", "w") as f:
+    f.write("[groups.%s]\n" % g)
+    for k in ("tests", "hooks", "outputs"):
+        f.write("%s = %s\n" % (k, json.dumps(group.get(k, []))))
+    f.write('\n[[pin]]\nid = "rel"\nclass = "ours"\ngroup = "%s"\nfamily = "tools"\nscheme = "semver"\n'
+            'source = { kind = "oci", image = "x/rel", tag = "{v}" }\n'
+            'sites = [{ file = "scripts/k3d-gpu", ref = "x/rel" }]\n' % g)
+for t in group.get("tests", []):
+    if t != "tests/report_html_test.sh":
+        os.makedirs(os.path.dirname(os.path.join(root, t)), exist_ok=True)
+        with open(os.path.join(root, t), "w") as f:
+            f.write("exit 0\n")
+facts = json.load(open(repo + "/tests/fixtures/raptorlake-nvidia/facts.json"))
+facts["release"]["pins"] = {"llama.cpp": "x/other:2.0.0@" + other, "ovms": "x/other:2.0.0@" + other}
+facts["release"]["pins"]["llama.cpp" if g == "llama-cpp" else "ovms"] = "x/rel:7.7.1@" + old
+with open(root + "/tests/fixtures/h/facts.json", "w") as f:
+    f.write(json.dumps(facts, indent=2, sort_keys=True) + "\n")
+PY
+    printf 'REL_IMAGE="${K3D_GPU_REL_IMAGE:-x/rel:7.7.1@%s}"\n' "${D_OLD}" > "${R10}/scripts/k3d-gpu"
+    cat > "${R10}/tests/report_html_test.sh" <<'EOF'
+#!/usr/bin/env bash
+# each fixture's report.html from its facts.json, offline; --update rewrites them first
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+rc=0
+for f in "${ROOT}"/tests/fixtures/*/facts.json; do
+    want="$(dirname "${f}")/report.html"
+    out=$(python3 "${ROOT}/console/report_html.py" --matrix "${ROOT}/console/matrix.v1.json" < "${f}") || exit 1
+    if [ "${1:-}" = --update ]; then printf '%s\n' "${out}" > "${want}"; continue; fi
+    [ "${out}" = "$(cat "${want}")" ] || rc=1
+done
+exit "${rc}"
+EOF
+    bash "${R10}/tests/report_html_test.sh" --update
+    printf '#!/usr/bin/env bash\n# stub: images-lock --root R update --only FILE...\nexit 0\n' > "${R10}/scripts/images-lock"
+    chmod +x "${R10}/scripts/images-lock"
+    echo '{}' > "${R10}/images.lock"
+    : > "${R10}/EXPERIMENTS.md"
+    : > "${R10}/images.unpinned"
+    (cd "${R10}" && python3 console/model_opt.py ledger-rules --ledger EXPERIMENTS.md --out console/ledger-rules.json)
+    git -C "${R10}" init -q -b main && git -C "${R10}" add -A && git -C "${R10}" commit -qm base
+    FIX10="${WORK}/fixtures10.json"
+    cat > "${FIX10}" <<EOF
+{"https://registry-1.docker.io/v2/x/rel/manifests/7.7.2": {"status": 200, "headers": {"Docker-Content-Digest": "${D_NEW}"}, "body": ""}}
+EOF
+    echo '{"rel": {"v": "7.7.2", "tag": "7.7.2"}}' > "${WORK}/resolved10.json"
+    out=$(PINLIB_FIXTURES="${FIX10}" python3 "${ROOT}/hack/bump" --root "${R10}" --resolved "${WORK}/resolved10.json" \
+        "${G}" --summary "${WORK}/rel10-${G}.json" 2>&1); rc=$?
+    check "${G}: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+    check "${G}: the saved facts and their report carry the moved pin" \
+        grep -q "x/rel:7.7.2@${D_NEW}" "${R10}/tests/fixtures/h/facts.json" "${R10}/tests/fixtures/h/report.html"
+    check "${G}: the offline report test passes on the bumped tree" bash "${R10}/tests/report_html_test.sh"
+    check "${G}: the group's tests passed in the bump, tests/report_html_test.sh among them" python3 - "${ROOT}" "${G}" \
+        "${WORK}/rel10-${G}.json" <<'PY'
+import json, sys, tomllib
+repo, g, summary = sys.argv[1:]
+want = tomllib.load(open(repo + "/pins/registry.toml", "rb"))["groups"][g]["tests"]
+got = json.load(open(summary))["tests"]
+assert "tests/report_html_test.sh" in want and got == [[t, "passed"] for t in want], (want, got)
+PY
+    check "${G}: the summary notes the report rendered again" \
+        grep -q "report-html-goldens: tests/fixtures/h/report.html" "${WORK}/rel10-${G}.json"
+    git -C "${R10}" add -A && git -C "${R10}" commit -qm bump
+    out=$(python3 "${ROOT}/hack/pin-only-diff" --root "${R10}" --group "${G}" HEAD~1 HEAD 2>&1); rc=$?
+    check "${G}: the report's new footer digest is a pin move to hack/pin-only-diff (rc ${rc}: ${out})" test "${rc}" -eq 0
+done
+
+# the registry: every group that moves a release pin facts/v1 reports (facts_raw in
+# scripts/k3d-gpu: AGENT_OVMS_IMAGE and LLAMA_VULKAN_IMAGE) renders the report.html
+# goldens again and runs their test
+check "the groups that move facts/v1's release pins run report-html-goldens and tests/report_html_test.sh" \
+    python3 - "${ROOT}" <<'PY'
+import re, sys
+root = sys.argv[1]
+sys.path.insert(0, root + "/hack")
+from pinlib import registry
+tree = registry.Tree(root)
+text = tree.read("scripts/k3d-gpu")
+body = re.search(r"^facts_raw\(\) \{\n(.*?)^\}", text, re.M | re.S).group(1)
+assert '"pins":{"ovms":%s,"llama.cpp":%s}' in body and "ovms_pin=${AGENT_OVMS_IMAGE}" in body \
+    and '"$(json_str "${LLAMA_VULKAN_IMAGE}")"' in body, "facts_raw reports other release pins"
+lines = text.split("\n")
+reg = registry.load(root + "/pins/registry.toml")
+pins, gen, spans_by = registry.all_pins(tree, reg)
+group_of = {p["id"]: p["group"] for p in pins + gen}
+groups = {group_of[pid] for pid, spans in spans_by.items() for s in spans if s.file == "scripts/k3d-gpu"
+          and re.match(r"(AGENT_OVMS_IMAGE|LLAMA_VULKAN_IMAGE)=", lines[s.line(tree) - 1])}
+assert len(groups) >= 2, groups
+for g in sorted(groups):
+    conf = reg["groups"][g]
+    assert "report-html-goldens" in conf.get("hooks", []), (g, conf)
+    assert "tests/report_html_test.sh" in conf.get("tests", []), (g, conf)
+PY
+
+# a group without report-html-goldens whose pin string a saved facts.json holds (npu-umd:
+# NPU_UMD_IMAGE is the OVMS image, so once ovms has moved, an npu-umd bump substitutes
+# the facts' OVMS pin): the substitution moved a facts.json, so the reports are rendered
+# again all the same. A group whose bump moves no facts.json renders none.
+R11="${WORK}/repo11"
+mkdir -p "${R11}/pins" "${R11}/scripts" "${R11}/tests/fixtures/h"
+cp -R "${ROOT}/console" "${R11}/console" && rm -rf "${R11}/console/__pycache__"
+cp "${R10}/tests/report_html_test.sh" "${R11}/tests/report_html_test.sh"  # the report test of the cases above
+D_OTH=sha256:4444444444444444444444444444444444444444444444444444444444444444
+D_OTH2=sha256:5555555555555555555555555555555555555555555555555555555555555555
+cat > "${R11}/pins/registry.toml" <<'EOF'
+[groups.umd]
+tests = ["tests/report_html_test.sh"]
+
+[groups.other]
+tests = ["tests/report_html_test.sh"]
+
+[[pin]]
+id = "umd"
+class = "ours"
+group = "umd"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "x/rel", tag = "{v}" }
+sites = [{ file = "scripts/k3d-gpu", ref = "x/rel" }]
+
+[[pin]]
+id = "oth"
+class = "ours"
+group = "other"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "x/oth", tag = "{v}" }
+sites = [{ file = "scripts/k3d-gpu", ref = "x/oth" }]
+EOF
+printf 'UMD_IMAGE="${K3D_GPU_UMD_IMAGE:-x/rel:7.7.1@%s}"\nOTH_IMAGE="${K3D_GPU_OTH_IMAGE:-x/oth:1.0.0@%s}"\n' \
+    "${D_OLD}" "${D_OTH}" > "${R11}/scripts/k3d-gpu"
+python3 - "${ROOT}" "${R11}" "${D_OLD}" <<'PY'
+import json, sys
+repo, root, old = sys.argv[1:]
+facts = json.load(open(repo + "/tests/fixtures/raptorlake-nvidia/facts.json"))
+facts["release"]["pins"] = {"llama.cpp": "x/none:2.0.0", "ovms": "x/rel:7.7.1@" + old}
+with open(root + "/tests/fixtures/h/facts.json", "w") as f:
+    f.write(json.dumps(facts, indent=2, sort_keys=True) + "\n")
+PY
+bash "${R11}/tests/report_html_test.sh" --update
+echo '{}' > "${R11}/images.lock"
+: > "${R11}/EXPERIMENTS.md"
+: > "${R11}/images.unpinned"
+git -C "${R11}" init -q -b main && git -C "${R11}" add -A && git -C "${R11}" commit -qm base
+FIX11="${WORK}/fixtures11.json"
+cat > "${FIX11}" <<EOF
+{"https://registry-1.docker.io/v2/x/rel/manifests/7.7.2": {"status": 200, "headers": {"Docker-Content-Digest": "${D_NEW}"}, "body": ""},
+ "https://registry-1.docker.io/v2/x/oth/manifests/1.0.1": {"status": 200, "headers": {"Docker-Content-Digest": "${D_OTH2}"}, "body": ""}}
+EOF
+echo '{"oth": {"v": "1.0.1", "tag": "1.0.1"}, "umd": {"v": "7.7.2", "tag": "7.7.2"}}' > "${WORK}/resolved11.json"
+out=$(PINLIB_FIXTURES="${FIX11}" python3 "${ROOT}/hack/bump" --root "${R11}" --resolved "${WORK}/resolved11.json" \
+    other --summary "${WORK}/oth11.json" 2>&1); rc=$?
+check "a bump that moves no facts.json exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "a bump that moves no facts.json renders no report.html" \
+    test -z "$(git -C "${R11}" status --porcelain -- tests)" -a "$(grep -c report-html-goldens "${WORK}/oth11.json")" -eq 0
+git -C "${R11}" add -A && git -C "${R11}" commit -qm other
+out=$(PINLIB_FIXTURES="${FIX11}" python3 "${ROOT}/hack/bump" --root "${R11}" --resolved "${WORK}/resolved11.json" \
+    umd --summary "${WORK}/umd11.json" 2>&1); rc=$?
+check "a group without report-html-goldens: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "a group without report-html-goldens: the substitution moved the saved facts and their report" \
+    grep -q "x/rel:7.7.2@${D_NEW}" "${R11}/tests/fixtures/h/facts.json" "${R11}/tests/fixtures/h/report.html"
+check "a group without report-html-goldens: the offline report test passes on the bumped tree" \
+    bash "${R11}/tests/report_html_test.sh"
+check "a group without report-html-goldens: the group's report test passed in the bump" \
+    python3 -c 'import json, sys; t = json.load(open(sys.argv[1]))["tests"]; sys.exit(t != [["tests/report_html_test.sh", "passed"]])' \
+    "${WORK}/umd11.json"
+check "a group without report-html-goldens: the summary notes the report rendered again" \
+    grep -q "report-html-goldens: tests/fixtures/h/report.html" "${WORK}/umd11.json"
+git -C "${R11}" add -A && git -C "${R11}" commit -qm umd
+out=$(python3 "${ROOT}/hack/pin-only-diff" --root "${R11}" --group umd HEAD~1 HEAD 2>&1); rc=$?
+check "a group without report-html-goldens: the diff is pin moves only (rc ${rc}: ${out})" test "${rc}" -eq 0
 
 # render-latest then lock (the nri group): the manifest render-component writes (the
 # component's OUTPUT) is this bump's file too, so the lock hook names it in

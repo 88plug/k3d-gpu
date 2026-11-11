@@ -85,7 +85,8 @@ A `[groups.<name>]` table: `tests` (suites `hack/bump` runs after the rewrite;
 CI runs everything again on the PR), `hooks` (built-in steps after the rewrite,
 in order: `lock`, `readme-history`, `render-latest`, `ppa-write`, `convert-pins`,
 `ledger-rules`, `constraints`, `docs-lock`, `flake-update`, `repin`, `hf-meta`,
-`model-opt-goldens`, `vllm-recipes`) and `outputs` (files those hooks write;
+`model-opt-goldens`, `vllm-recipes`, and after the goldens `report-html-goldens`)
+and `outputs` (files those hooks write;
 `hack/pin-only-diff` accepts any change there). Coupled components go in one group,
 so they land in one PR. `hf-meta` reads each moved Hugging Face repo's record again
 at its new revision, in every saved metadata bundle under `tests/fixtures/hf` that
@@ -120,6 +121,18 @@ both as pin tokens). A test keeps the old string when
 Prose and records that no test names hold nothing back. A test script that checks
 a pinned value reads it from the file that pins it (the launcher, the Dockerfile,
 `bench/competitors.lock`), so a bump never has to edit the script.
+
+A golden rendered from a substituted one needs more than substitution.
+`report-html-goldens` runs after it: facts/v1 reports the release pins
+(`AGENT_OVMS_IMAGE` and `LLAMA_VULKAN_IMAGE` in `scripts/k3d-gpu`), so each saved
+`tests/fixtures/*/facts.json` holds them, and its `report.html` ends with the sha256
+of those facts' bytes. The hook runs `tests/report_html_test.sh --update`, which
+renders every report again from the moved facts, offline. The new digest is a pin
+token to `hack/pin-only-diff`, so it alone does not put the PR on review. Every group
+that moves one of those pins (`llama-cpp`, `ovms`) runs the hook and that test. The
+bump also runs the hook in any other group whose substitution changed a saved
+`facts.json`: `NPU_UMD_IMAGE` (group `npu-umd`) is the same OVMS image, so once `ovms`
+has moved, an `npu-umd` bump moves the facts' OVMS pin.
 
 ## Hold a pin
 

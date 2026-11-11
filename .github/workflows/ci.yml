@@ -312,6 +312,9 @@ jobs:
       # H63's scorer (the H63 pre-registration): the N=1 rule over Ls and Od, the idle-window
       # gate, and the committed H57w, H59w, H57d and H59d records read through it.
       - run: python3 bench/h63/test_h63.py
+      # H63's desktop runner (amendment R1): Od and Ls through the launcher against the fit
+      # fixtures, arm.sh against a local stub server, its records scored by h63.py.
+      - run: python3 bench/h63/test_run.py
       - run: python3 bench/h62/test_h62.py
       # H62r's runner: H62's at the GA tags, with D1 as a check and D3's sibling read.
       - run: python3 bench/h62r/test_h62r.py

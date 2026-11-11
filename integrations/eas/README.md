@@ -6,7 +6,9 @@ bring-your-own-cluster mode (`existing_kubernetes`). The layers are platform, in
 ([enterprise-inference](https://github.com/intel/enterprise-inference), EI) and agent-toolkit
 ([enterprise-agent-toolkit](https://github.com/intel/enterprise-agent-toolkit) 2.0, EAT).
 They run on the Xeon CPU path: `kubernetes_accelerator: cpu` is the only value EAS acts on at
-the pinned commit. Gaudi and Arc stay with `k3d-gpu agent up`.
+the pinned commit. A model on an Arc B60 or B70 joins the stack through
+[`k3d-gpu eas model add`](#models-on-an-arc-b60-or-b70-eas-model-add); a Gaudi stays with
+`k3d-gpu agent up`.
 
 The default pins are Intel's GA releases of 2026-11-06 (`pins.json` profile `release`): EAS
 [`v1.2.0`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0) (`a051f00`) and
@@ -108,9 +110,14 @@ CRDs (EAS #42); 0007 is the same on `release-1.2`.
 ## What `eas check` does
 
 `eas check` (and `eat check`) needs the agent toolkit (LiteLLM and the sandbox come with it).
-It runs Intel's own `es_auto_installer.sh validate agent-toolkit --env k3d-gpu` in the
-bastion first, with install's extra vars (every enabled component's validate checks; a
-failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`.
+It first runs `eas-advisories.py` on `kubectl get pods -A -o json`: a deployed LiteLLM or vLLM
+image whose tag is inside a published security advisory of `advisories.json` prints a
+warning with each advisory, its fix and the first release outside them all. Intel's stock
+LiteLLM v1.84.0 and vLLM CPU v0.28.0 both warn. Warnings never stop the check or change its
+exit status ([eas.md](../../docs/intel/eas.md#component-advisories)). Next it runs Intel's
+own `es_auto_installer.sh validate agent-toolkit --env k3d-gpu` in the bastion, with
+install's extra vars (every enabled component's validate checks; a failure stops with its
+reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`.
 Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` validate so its
 `redis-cli` takes the Redis password from the pod's environment, not from `-a <value>`:
 
@@ -144,6 +151,92 @@ Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` val
    pass; a model reply to the probe (any other `finish_reason`) fails the check.
 5. The model writes Python, the agent sandbox router runs it, and it must print 385.
 
+## Models on an Arc B60 or B70 (`eas model add`)
+
+enterprise-inference v1.1.0 serves every model on the CPU. model-manager's pod templates
+request CPU and memory and no device
+([llm-inference-service.yaml#L26-L33](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/templates/llm-inference-service.yaml#L26-L33)),
+and no code reads its runtimes' `device:` key
+([runtimes/vllm/values.yaml#L10](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/runtimes/vllm/values.yaml#L10)).
+EAT 2.0 lists Arc (XPU) deployment as not in the release. So EI's own runtime cannot put a
+model on an Arc card. `k3d-gpu eas model add` serves the model itself, on one card, and
+registers it with EAS's LiteLLM the way model-manager registers its own models. The agent
+toolkit then uses it like any other model.
+
+```bash
+k3d-gpu eas up --agent-toolkit                   # LiteLLM comes with the agent toolkit
+k3d-gpu eas model add Qwen/Qwen3-4B --dry-run    # the card, the fit, the manifest and the registration; changes nothing
+k3d-gpu eas model add Qwen/Qwen3-4B              # serves it on one B70 as qwen3-4b, registers it
+k3d-gpu eas check --model qwen3-4b               # Intel's validate, then chat, tool call, guard and sandbox on it
+k3d-gpu eas model list                           # LiteLLM's models, those eas model add made marked
+k3d-gpu eas model remove qwen3-4b                # deregisters it and frees the card
+```
+
+Options of `add`: `--name NAME` (default: EI's rule, the repo part of the id in lower case
+with `-` for anything else, as a DNS-1035 label), `--revision R` (default `main`, resolved
+to its commit once), `--ctx N` and `--seqs N` (asked of the fit), `--tool-parser P|none`
+and `--reasoning-parser P|none` (default: the model family's, from `console/model_opt.py`).
+
+What `add` does, in order:
+
+1. Checks that the agent toolkit is installed and LiteLLM answers through eg-gateway.
+   The master key comes from Secret `litellm/litellm-master-key` and reaches curl as a
+   header file, never as an argument. A name LiteLLM already serves from elsewhere (EI's
+   catalog) is refused, and so is a name `add` already made.
+2. Picks the card, from `kubectl` and the fit's host probe (`eas-model.py cards`). The
+   Intel GPU plugin hands a pod any card it advertises that no pod holds. `k3d-gpu up`
+   already leaves cards that host processes fill out of the plugin. `add` refuses when an
+   advertised card is busy (others hold half its VRAM or more) and no pod accounts for it,
+   since the plugin could hand that card to the model. It also refuses when every
+   `gpu.intel.com/xe` is held by a pod, when the plugin shares cards
+   (`K3D_GPU_INTEL_SHARED` above 1), on a DRA cluster, and when the cluster advertises
+   more `gpu.intel.com/xe` than the probe sizes cards (an integrated GPU on `xe`, or a
+   card whose VRAM the probe cannot read). Which card each pod holds comes from its status:
+   kubelet names a container's device-plugin devices (`allocatedResourcesStatus`, on by
+   default since Kubernetes 1.36; the plugin's ids are `cardN-<i>`), so the cards the
+   plugin can hand out are exactly the advertised cards no pod holds, and one of them that
+   is busy is refused. When a pod's status names no card (an older Kubernetes), only the
+   count is known: busy cards are counted against the pods that hold cards, and a pod that
+   has not filled half its card yet hides one busy card from that count.
+3. Fits the model to one card with `k3d-gpu fit` (vLLM, one GPU). The fit is done for the
+   card the plugin can hand out with the least free VRAM (with the count only: the idle
+   card with the least free VRAM). The fit gives the context, sequences, `--gpu-memory-utilization`, KV cache type,
+   pod memory and the commit. A model too big for one 32 GB B70, or weights vLLM does not
+   load (GGUF, OpenVINO IR), is refused with the fit's reason.
+4. Applies, server-side, namespace `k3d-gpu-eas-models` with the model's
+   PersistentVolumeClaim, Deployment and Service. With `HF_TOKEN` set, Secret `hf-token`
+   goes first, through kubectl's stdin. The pod spec is the one `k3d-gpu agent up` serves
+   vLLM with on a B70 (#339): `vllm/vllm-openai-xpu` by digest, the same flags and environment,
+   `enableServiceLinks: false`, one `gpu.intel.com/xe` and the render group. It lives in
+   its own namespace because EAS enforces the restricted Pod Security Standard on
+   `llm-inference` (`enforce_pss: true`), which vLLM's image, running as root, does not
+   meet.
+5. Waits for the rollout (`K3D_GPU_AGENT_TIMEOUT`, default 1800 s: the first start pulls
+   the image, downloads the weights and compiles kernels), then sends one chat completion
+   from inside the pod as JSON. The Deployment's `progressDeadlineSeconds` is the same
+   wait: `kubectl rollout status` stops at the progress deadline (600 s unless set)
+   whatever its `--timeout`.
+6. Registers the model: `POST /model/new` with model-manager's payload
+   ([routing.py `litellm_register`](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/core/routing.py)),
+   `{"model_name": NAME, "litellm_params": {"model": "openai/NAME", "api_base":
+   "http://NAME.k3d-gpu-eas-models.svc.cluster.local:8000/v1", "api_key": "unused"}}`.
+   It goes through `https://litellm.<base_domain_name>` with the master key, as EAT
+   documents for adding a model at runtime
+   ([hybrid-router.md#L223-L236](https://github.com/intel/enterprise-agent-toolkit/blob/7b827e2d95cec826a20c7e3f5a30eb4818ed2992/docs/hybrid-router.md#L223-L236);
+   EAT publishes every LiteLLM path, `litellm_public_paths: []`). A stale entry of its own
+   goes first. `GET /model/info` must then list it. EI's guardrail is on by default, so it
+   screens these requests as it screens EI's models.
+
+`remove` deletes only LiteLLM entries whose `api_base` is its own Service, then the
+model's objects; the namespace goes with the last model. `eas down` deletes the namespace
+before the teardown. The cluster is the record: `list` reads LiteLLM's `/model/info` and
+the Deployments in `k3d-gpu-eas-models`.
+
+LiteLLM runs in Istio ambient's mesh, and `k3d-gpu-eas-models` is not enrolled in it.
+LiteLLM reaches the model's Service in plain text, which the mesh allows for a destination
+outside it (the mesh-wide `STRICT` policy covers traffic into mesh workloads). On the Xeon
+6741P with a B70 LiteLLM reached the model this way ([Verification](#verification)).
+
 ## Files
 
 | File | Role |
@@ -154,7 +247,9 @@ Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` val
 | `images.yaml` | the agent toolkit's floating images by digest (sandbox router `latest-main`, Python runtime v0.5.0) |
 | `known-issues.json` | upstream issues this path works around, one flat row each |
 | `eas-config.py`, `pins.json` | the choice generator and the pins it reads; `pins.json`'s release profile follows EAS's latest release (pin `eas-release`, `hack/eas-release-pins`) |
-| `eas-ready.py` | the stack readiness check `eas check` runs first (stdin: `kubectl get pods,daemonsets -A -o json`) |
+| `eas-ready.py` | the stack readiness check `eas check` runs before its first request (stdin: `kubectl get pods,daemonsets -A -o json`) |
+| `eas-advisories.py`, `advisories.json` | the advisory warning `eas check` prints first (stdin: `kubectl get pods -A -o json`), and its table: LiteLLM and vLLM advisories from the GitHub advisory database, with ranges and fixes as the database gives them, Intel's stock versions and the first release outside every row |
+| `eas-model.py` | `eas model add`'s data: the served name, the card choice, the manifest, model-manager's LiteLLM payload, and reading `GET /model/info` for `list` and `remove` |
 | `overlay.py`, `overlay.json`, `patches/` | the k3s/k3d patch overlay |
 | `ei-kcadm.sh`, `patches/ei/` | enterprise-inference's `keycloak_config` patch (variant a for EI `main`, b for `release-1.1`), applied after `init`: kcadm gets the Keycloak admin password from its environment and the client secret from Keycloak, never as an argument; stops the install when the task changed shape. With `auth_provider: litellm` (the agent toolkit) EI runs no `keycloak_config` |
 | `eat-redis-cli.sh`, `patches/eat/` | enterprise-agent-toolkit's `redis_stack` validate patch (release-2.0.0), applied after `init` and before each `validate`: `redis-cli` gets the Redis password as `REDISCLI_AUTH` from the `REDIS_PASSWORD` the chart sets in the pod, never as `-a <value>`; stops when the task changed shape or another `redis-cli` call in EAT's roles, playbooks or charts passes the password as an argument |
@@ -169,3 +264,16 @@ and no hand edit, `eat check` (Intel's `validate agent-toolkit`, then chat, a to
 guardrail's block and a sandbox run printing 385), a secret scan of 0, and `eat down`. Its
 records and the three wiring smokes before it are in
 [bench/f5/results/2026-11-07/](../../bench/f5/results/2026-11-07/).
+
+`eas model add|list|remove` ran once on the Xeon 6741P with its four B70s on 2026-11-11, at
+commit `f420655` with node image 0.1.102, EAS v1.2.0 and EAT release-2.0.0
+([record](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985)): `eat up`
+with `failed=0`, `eas model add Qwen/Qwen3-4B` serving `qwen3-4b` on one B70 (the pod held
+`card1` only; the other three cards stayed at 0 GiB), the gateway's `/v1/models` listing
+it, `eas check --model qwen3-4b` (Intel's validate, chat, a tool call, the guardrail's
+block and a sandbox run printing 385), no `sk-` string in any step log, then
+`eas model remove` (the card back to 0 GiB) and `eat down`. `tests/eas_test.sh model` runs
+it against stub kubectl and a stub LiteLLM that answers as LiteLLM v1.84.0
+(enterprise-inference v1.1.0's pin) answered a local run of the same requests:
+`/model/info` (HTTP 500 with no model list while it serves none), model-manager's
+`/model/new` payload, and `/model/delete` by id. The manifest validates with kubeconform at the node image's Kubernetes version.

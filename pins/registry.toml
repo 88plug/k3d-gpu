@@ -52,8 +52,8 @@ outputs = ["hack/components/nri-balloons/component.conf", "hack/components/nri-b
            "share/nri-balloons.yml", "share/nri-balloons-guard.yml", "images.lock"]
 
 [groups.llama-cpp]
-tests = ["tests/image_pins_test.sh", "tests/llamacpp_test.sh"]
-hooks = ["lock", "ledger-rules"]
+tests = ["tests/image_pins_test.sh", "tests/llamacpp_test.sh", "tests/report_html_test.sh"]
+hooks = ["lock", "ledger-rules", "report-html-goldens"]
 outputs = ["images.lock", "console/ledger-rules.json"]
 
 [groups.vllm-cpu]
@@ -77,8 +77,8 @@ hooks = ["lock", "ledger-rules", "vllm-recipes"]
 outputs = ["images.lock", "console/ledger-rules.json", "console/vllm-recipes.json"]
 
 [groups.ovms]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
-hooks = ["lock", "ledger-rules"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/report_html_test.sh"]
+hooks = ["lock", "ledger-rules", "report-html-goldens"]
 outputs = ["images.lock", "console/ledger-rules.json"]
 
 [groups.npu-umd]
