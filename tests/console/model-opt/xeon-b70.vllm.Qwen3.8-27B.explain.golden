@@ -9,14 +9,14 @@ decision:
   unmeasured: no green cell for this box; quickstart and agent up still pick by device
   bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
 model optimizer: Qwen/Qwen3.8-27B on vllm (GPU), metadata from huggingface
-  dense qwen3_5, 27781427952 params -> no MoE adjustment [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
-  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json]
-  2 safetensors candidate(s); top: Qwen/Qwen3.8-27B [official] -> serve Qwen/Qwen3.8-27B@1d4bf0f2ff60 [https://huggingface.co/Qwen/Qwen3.8-27B/tree/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0]
+  dense qwen3_5, 27781427952 params -> no MoE adjustment [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json]
+  2 safetensors candidate(s); top: Qwen/Qwen3.8-27B [official] -> serve Qwen/Qwen3.8-27B@37561816e66b [https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0]
   recipe Qwen/Qwen3.8-27B (vllm@960f5c1bb145) -> tool parser qwen3_coder, reasoning parser qwen3 [recipes/models/Qwen/Qwen3.8-27B.yaml features.tool_calling, features.reasoning]
-  chat template thinks on by default, reasoning_effort in xhigh/medium/low -> thinking off for agents, pinned server-side: --default-chat-template-kwargs '{"enable_thinking": false, "reasoning_effort": "medium"}' (a request's own kwargs still win; K3D_GPU_AGENT_THINKING=on|off|model) [vllm entrypoints cli_args.py default_chat_template_kwargs (v0.14.0+); https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/chat_template (line 46)]
-  card: non-thinking sampling min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8 -> --override-generation-config (thinking is off) [https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/README.md (L253); vLLM arg_utils.py --override-generation-config (v0.24.0+)]
+  chat template thinks on by default, reasoning_effort in xhigh/medium/low -> thinking off for agents, pinned server-side: --default-chat-template-kwargs '{"enable_thinking": false, "reasoning_effort": "medium"}' (a request's own kwargs still win; K3D_GPU_AGENT_THINKING=on|off|model) [vllm entrypoints cli_args.py default_chat_template_kwargs (v0.14.0+); https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/chat_template (line 46)]
+  card: non-thinking sampling min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8 -> --override-generation-config (thinking is off) [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/README.md (L253); vLLM arg_utils.py --override-generation-config (v0.24.0+)]
   vision tower in config.json; agents send text -> --language-model-only (no encoder memory, larger KV pool) [https://github.com/vllm-project/vllm/blob/v0.33.0/vllm/engine/arg_utils.py (L1460, v0.17.0+)]
-  Qwen/Qwen3.8-27B has a built-in MTP head (https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/config.json (mtp_num_hidden_layers)) -> --speculative-config {"method": "mtp", "num_speculative_tokens": 3} [recipe Qwen/Qwen3.8-27B (vllm@960f5c1bb145) features.spec_decoding.modes.mtp (num_speculative_tokens 3)]
+  Qwen/Qwen3.8-27B has a built-in MTP head (https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json (mtp_num_hidden_layers)) -> --speculative-config {"method": "mtp", "num_speculative_tokens": 3} [recipe Qwen/Qwen3.8-27B (vllm@960f5c1bb145) features.spec_decoding.modes.mtp (num_speculative_tokens 3)]
   variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
     1. Qwen/Qwen3.8-27B [official], MTP head
     2. RedHatAI/Qwen3.8-27B [RedHatAI], MTP head
@@ -33,7 +33,7 @@ summary: Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); pic
 vLLM server args: Qwen/Qwen3.8-27B on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM 0.33.0)
   recipe: Qwen/Qwen3.8-27B (vllm@960f5c1bb145 recipes/models/Qwen/Qwen3.8-27B.yaml; arc_pro_b70 verified)
   Qwen/Qwen3.8-27B                   [model optimizer]
-  --revision=1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0 [model optimizer]
+  --revision=37561816e66b5b9153b1b64c10968c18c1e6f4a0 [model optimizer]
   --served-model-name=Qwen3.8-27B    [k3d-gpu default (agent_config; K3D_GPU_AGENT_MODEL_NAME unset)]
   --port=8000                        [k3d-gpu default (agent_config)]
   --dtype=float16                    [k3d-gpu default (vllm_device_args)]
