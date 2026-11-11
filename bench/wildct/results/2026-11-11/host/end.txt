@@ -1,0 +1,80 @@
+== RESUME.md step 9 (end of the campaign) 2026-11-11T09:50:03Z
+/dev/nvme0n1p2             3667G 3290G      191G      95% /
+-- clusters and containers (pass: empty, rc 0)
+
+list rc=0
+ps rc=0
+lock-free
+hold.sh procs: none above
+-- volumes and networks against setup/*-before.txt (only k3d-k3dgpu-w-* would be removed)
+volumes not in before: listed above
+networks not in before: listed above
+-- images: a campaign ref is removed only when its ID is not in setup/images-before.txt
+rmi 5811390ea98d cryptoandcoffee/k3d-gpu:0.1.89 rc=0
+rmi 1931b2906173 ghcr.io/k3d-io/k3d-tools:5.9.0 rc=0
+rmi 403bc5ae3546 ghcr.io/k3d-io/k3d-proxy:5.9.0 rc=0
+keep 6348136997e0 openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 (its ID is in images-before.txt)
+rmi 521a6d74176d ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312 rc=0
+rmi a69a456a28ce ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e rc=0
+rmi eb124d5207cd ghcr.io/colinianking/stress-ng:72a9d0cae0f420a887991d4024d3101c4af7a4fc@sha256:2ea9a7c3828eda1b1ca3d0b0c5a669ec252f9caf97a6a33aedcea6b2a66d1cbe rc=0
+rmi bdfc738a8a86 python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb rc=0
+rmi ce3ff9524414 python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f rc=0
+h28-model images: []
+-- build cache (reported, nothing pruned)
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          490       42        574.1GB   206GB (35%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        694.8GB   172.3GB (24%)
+Build Cache     1454      0         123.4GB   25.87GB
+buildx du rc=0
+buildx du: 1455 records; created on 2026-11-07 (the two H28w-prep builds): 20
+47gum2sqx7m4oti4g1dqlnejv 2026-11-07 07:37:55.400842777 +0000 UTC 0B local source for context
+hq35n4ddx90fl45ldh1kovqlq 2026-11-07 09:05:40.531992949 +0000 UTC 0B local source for context
+nyjn6jze3xv2xl90z3xslnll1 2026-11-07 09:05:40.518906671 +0000 UTC 41B local source for dockerfile
+q5x00b6cu9ppnzezkqcbxmel8 2026-11-07 07:37:55.386902131 +0000 UTC 41B local source for dockerfile
+24a5uf65dhim8a4oweh3gh2ta 2026-11-07 07:37:59.281512086 +0000 UTC 1.074GB [1/1] COPY blob-r0 /model/blob-r0
+28079dhhx7a6oxxf5lwn19x7n 2026-11-07 07:38:15.021767262 +0000 UTC 1.074GB [1/1] COPY blob-r2 /model/blob-r2
+3o4m66eznao8gti4x2i8k9dys 2026-11-07 09:05:40.546405893 +0000 UTC 1.074GB local source for context
+5gii0285wcexspjr5a9cqweqq 2026-11-07 09:06:22.32601699 +0000 UTC 1.074GB [1/1] COPY blob-r5 /model/blob-r5
+7oadlx0d21kkzj6xxosdijykp 2026-11-07 07:38:22.846895007 +0000 UTC 1.074GB [1/1] COPY blob-r3 /model/blob-r3
+91i2wcmmccwabnczynowy4urf 2026-11-07 09:06:29.61695408 +0000 UTC 1.074GB [1/1] COPY blob-r6 /model/blob-r6
+kk53phs1ibgqay4n119zda33v 2026-11-07 07:38:07.19049893 +0000 UTC 1.074GB [1/1] COPY blob-r1 /model/blob-r1
+mw3gr4624ups2s6zr4vfphepe 2026-11-07 09:05:59.147662122 +0000 UTC 1.074GB [1/1] COPY blob-r2 /model/blob-r2
+n7ozmfgfrhg37h4yg3sxkzc4s 2026-11-07 09:05:44.588893751 +0000 UTC 1.074GB [1/1] COPY blob-r0 /model/blob-r0
+pq6ae1nn4nkzsxuqapeg30907 2026-11-07 09:06:07.125840846 +0000 UTC 1.074GB [1/1] COPY blob-r3 /model/blob-r3
+qexajubv198dwaxljshmaliwe 2026-11-07 07:38:37.994847045 +0000 UTC 1.074GB [1/1] COPY blob-r5 /model/blob-r5
+syx3rs7caebdf6ww3bmw7cmfq 2026-11-07 09:06:14.802694253 +0000 UTC 1.074GB [1/1] COPY blob-r4 /model/blob-r4
+uculnopzp0phafjr4ftoisj3f 2026-11-07 07:38:45.310840091 +0000 UTC 1.074GB [1/1] COPY blob-r6 /model/blob-r6
+uyjzbkh1xddd0kcyr1imd0maa 2026-11-07 09:05:51.900896356 +0000 UTC 1.074GB [1/1] COPY blob-r1 /model/blob-r1
+vsbf0dboinwxrzmb4likypvk7 2026-11-07 07:37:55.416090725 +0000 UTC 1.074GB local source for context
+ybtzbbkqrg3n50kx6mu5h4uyo 2026-11-07 07:38:30.445829393 +0000 UTC 1.074GB [1/1] COPY blob-r4 /model/blob-r4
+-- kernel modules (the box owner's file stays)
+-rw-r--r-- 1 root root 955 Oct 30 01:03 /etc/modules-load.d/k3dgpu-wildct.conf
+18
+-- files
+34G	/home/andrew/k3dgpu-bench-wildct
+rm rc=0 exists=no
+-- last check
+/dev/nvme0n1p2             3667G 3252G      228G      94% /
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+ps rc=0
+-- production after the cleanup
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18

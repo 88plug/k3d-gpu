@@ -2,15 +2,28 @@
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
 pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6, R7, R8, R9, R10 and
-R11, and the "H52w run", "H18w run", "H25w run", "H34w run" and "H28w run" sections). This file changes no
+R11, and the "H52w run", "H18w run", "H25w run", "H34w run", "H28w run" and "H57w run" sections). This file changes no
 rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
 predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check
 passes.
 
-## Where things stand (2026-11-10, after H28w, the H57wb reading and amendment R11)
+## Where things stand (2026-11-11: the campaign has ended)
 
-- **Next: row 8, `H57w-1` (step 6), then `H57w-2` to `H57w-4`.** Holds used: 8 of at most 12,
-  so H57wa and H57wm have holds 1-4 and no spare `H57w-5` (amendment R9).
+- **The campaign has ended; nothing here runs again.** Rows 8-11, `H57w-1` to `H57w-4`, ran on
+  2026-11-11 (06:33:04Z to 09:39:18Z, each rc 0, no load wait, none flagged): holds 9-12 of the
+  12, with no spare (amendment R9). H57wa and H57wm are scored REFUTED (EXPERIMENTS.md "H57w run";
+  records in `results/2026-11-11/h57/H57w/` and `results/2026-11-11/runs/`, the host before and
+  after each hold in `results/2026-11-11/host/h57w.txt`). Step 1 passed first (06:31:55Z,
+  `runs/resume-health.txt`), and steps 2 and 4 read as amendment R6 left them
+  (`runs/h57w-preflight.txt`). The production containers, start times and restart counts read
+  the same before and after every hold, and nothing of a hold was left.
+- **Step 9 ran on 2026-11-11 at 09:50:03Z** (`results/2026-11-11/host/end.txt`). The campaign's
+  records not committed before were copied first (`results/2026-11-11/final/`, checked by sha256;
+  `final/not-copied.txt` names the five left out). No `k3dgpu-w-*` cluster, container, volume or
+  network was left; the campaign's images were removed (the OVMS image kept: its ID is in
+  `setup/images-before.txt`); `~/k3dgpu-bench-wildct` (34 GB) was removed; `/` went from 191G to
+  228G available. Left for the box owner: the 18 kernel modules and their `modules-load.d` file,
+  and the build cache of the two `H28w-prep` builds (20 records of 2026-11-07, nothing pruned).
 - **Row 7, the H57wb reading, stopped the pack; amendment R11 resolved the stop.** The reading
   ran on 2026-11-07 at 09:26:53Z under `live.lock` (not a hold): `/` 191 GiB available (need
   >= 85) and MemAvailable 113.6 GiB (need >= 100), so both gates were met. H57wb has no runner
@@ -108,46 +121,19 @@ passes.
   plugin pod, no `/dev` hostPath, no GPU resource in the node's allocatable. No cluster, container
   or process of the campaign was left after it, and the host's containers, port codes and
   firewall line counts read as before.
-- **Left on wildct by this campaign** (no container, cluster, network or volume):
-  - `~/k3dgpu-bench-wildct/`, which holds:
-    - `bin/`: k3d v5.9.0, helm v4.3.1, kubectl v1.37.2;
-    - `k3d-gpu/`: the 0.1.89 `.deb`, unpacked;
-    - `hfvenv/`;
-    - `models/` and `h57/models/`: every file sha256-checked against the Hub, `VERIFY ok`
-      (`setup/dl.log` also holds the first H57 verify's `VERIFY 1 bad`: the mmproj file,
-      not downloaded on purpose; `setup/verify-h57.log` skips it and reads `VERIFY ok`);
-    - `h57/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/` (step 4c, 2026-10-29: Q4_0
-      `8eb21d5b...`, 321,145,696 bytes, the i9's bytes) and Od's `graph.pbtxt` (`c57ecf35...`,
-      the i9's); both hashed again on 2026-11-07;
-    - `h57/bin/k3d` (the shim) and `h57/weights.sha256`;
-    - `repo` -> `repo-fd822b337155` (and the older archives, `repo-ce4ff16c47ee` and
-      `repo-85a7bc8668d1` among them);
-    - `setup/`: `images-before.txt`, `containers-before.txt`, `volumes-before.txt`,
-      `networks-before.txt` and the verify logs;
-    - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
-      node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `H28w*`, `H57wb/` (row 7's reading, amendment R10), `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
-      earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
-      `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
-    - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
-      `nfprobe.sh`; the second load's read-only checks `modsnap.sh` (modules and firewall, as
-      root), `prodcheck.sh` (the host's services), `health.sh` (step 1, as written below) and
-      `nftexpr.sh` (`runs/nftexpr.txt`), with `modules-append.conf`, the lines that load
-      appended; 2026-10-30's `smoke4-live.sh` (a read-only view of the smoke cluster) and
-      `modstate.sh` (the loaded modules and firewall line counts, as root); and 2026-11-07's
-      `h28w-gpuread.sh` and `h28w-gpuread-r2.sh` (amendment R8's read), `h28w-launch2.inc` (the
-      `launch` of amendment R9) and `h28w-after.inc` (step 6's after-hold checks).
+- **Left on wildct by this campaign, after step 9** (no container, cluster, network, volume or
+  file of the campaign's directory):
   - `/etc/modules-load.d/k3dgpu-wildct.conf` (root, 0644; 18 modules), written with the box
-    owner's approval. It is the owner's: step 9 does not remove it.
-  - Images: `cryptoandcoffee/k3d-gpu:0.1.89`, `ghcr.io/k3d-io/k3d-tools:5.9.0`,
-    `ghcr.io/k3d-io/k3d-proxy:5.9.0` (not in `setup/images-before.txt`; H28w's plain `k3d cluster
-    create`, with its load balancer, is the campaign's only cluster that runs it), the five refs of
-    `setup-images.sh`, and `python:3.13-slim@sha256:70729b46...` (the RAPL reader's image until
-    2026-10-29, and H28w's pod image, amendment R8). `cryptoandcoffee/k3d-gpu:0.1.71`, `:0.1.79` and
-    `:0.1.81` were removed in step 3c. No `h28-model` image is left.
+    owner's approval. It is the owner's: step 9 did not remove it.
+  - The OVMS image `openvino/model_server@sha256:a928903f...`: its ID is in
+    `setup/images-before.txt` (pulled seconds before that list was taken), so it was left.
   - Build cache: the two `H28w-prep` holds' `docker build` took it from 1434 records and 106.2 GB
-    (before hold 5) to 1454 and 123.4 GB (after hold 7), by `docker system df`; `/` read 207 GB
-    available before hold 5 and 191 GB after hold 8. Step 9 reports it; nothing was pruned.
+    (before hold 5) to 1454 and 123.4 GB (after hold 7), by `docker system df`, and it read 1454
+    and 123.4 GB at step 9; `docker buildx du` lists 20 records of 2026-11-07 (16 of 1.074 GB,
+    `results/2026-11-11/host/end.txt`). Nothing was pruned: it is the box owner's to clear.
+  - Until step 9, `~/k3dgpu-bench-wildct/` held the tools (`bin/`, the 0.1.89 `.deb` unpacked,
+    `hfvenv/`), the models and the drafter GGUF, the bench archives `repo-*` and the run records;
+    the records are in `results/` and the rest was removed.
 - **Never existed.** No inference request. No measurement before `H52w`. `smoke1`, `smoke2`,
   `diag-smoke2`, `smoke3`, `smoke4` and `smoke5` are discarded and disclosed (amendments R1, R2,
   R3, R5 and R6); `smoke5` is the campaign's passing wiring smoke for 0.1.89.

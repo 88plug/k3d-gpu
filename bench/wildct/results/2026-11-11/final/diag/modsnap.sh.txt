@@ -1,0 +1,27 @@
+#!/bin/bash
+# modsnap.sh TAG: read-only kernel module and firewall snapshot of wildct, run as root.
+# Writes the full module name list to /root/k3dgpu-modsnap-TAG.mods for a later diff; prints a
+# diffable block. Loads nothing, changes nothing.
+tag=${1:?usage: modsnap.sh TAG}
+M="x_tables nfnetlink nfnetlink_log ip_set nf_reject_ipv4 nf_reject_ipv6 xt_comment xt_statistic xt_multiport xt_limit xt_NFLOG xt_physdev xt_pkttype ipt_REJECT ip6t_REJECT ip_set_hash_ip ip_set_hash_net ip_set_hash_ipport ip_set_hash_ipportip ip_set_hash_ipportnet vxlan br_netfilter bridge"
+echo "## date $(date -Is)"
+echo "## modules (name refcount users) of: $M"
+for m in $M; do awk -v m="$m" '$1 == m {print $1, $3, $4}' /proc/modules; done
+awk '{print $1}' /proc/modules | sort > "/root/k3dgpu-modsnap-${tag}.mods"
+echo "lsmod lines: $(wc -l < /proc/modules)"
+echo "modprobe=[$(cat /proc/sys/kernel/modprobe)]"
+echo "## sysctl net.bridge"
+sysctl net.bridge 2>/dev/null || echo "(no /proc/sys/net/bridge)"
+echo "## firewall"
+echo "iptables-save lines: $(timeout 30 iptables-save | wc -l)"
+echo "iptables-save rules sha256 (counters stripped): $(timeout 30 iptables-save | grep -v '^#' | sed -E 's/\[[0-9]+:[0-9]+\]//' | sha256sum | cut -c1-16)"
+echo "ip6tables-save lines: $(timeout 30 ip6tables-save | wc -l)"
+echo "ip6tables-save rules sha256 (counters stripped): $(timeout 30 ip6tables-save | grep -v '^#' | sed -E 's/\[[0-9]+:[0-9]+\]//' | sha256sum | cut -c1-16)"
+echo "nft ruleset lines: $(timeout 30 nft list ruleset | wc -l)"
+echo "nft ruleset sha256 (counters stripped): $(timeout 30 nft list ruleset | sed -E 's/counter packets [0-9]+ bytes [0-9]+//' | sha256sum | cut -c1-16)"
+echo "## iptables -S FORWARD"
+timeout 30 iptables -S FORWARD
+echo "## modules-load.d"
+ls -l /etc/modules-load.d
+echo "## /etc/modules-load.d/k3dgpu-wildct.conf ($(stat -c '%U:%G %a' /etc/modules-load.d/k3dgpu-wildct.conf))"
+cat /etc/modules-load.d/k3dgpu-wildct.conf

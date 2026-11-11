@@ -1,0 +1,10 @@
+# RESUME.md step 5's launch, as written there (amendment R9), sourced on wildct.
+W=~/k3dgpu-bench-wildct; R=$W/repo; export PATH=$W/bin:$PATH
+launch() {
+    [ ! -e "$W/runs/$1" ] || { echo "runs/$1 exists: use a new NAME"; return 1; }
+    IMAGE=$(cat $W/runs/IMAGE) WILDCT_HOLD=$1 WILDCT_ROW_CHECK=1 bash "$R/bench/wildct/row.sh" "${@:4}" \
+        || { echo "row.sh ${*:4}: not a row it runs; nothing launched"; return 1; }
+    IMAGE=$(cat $W/runs/IMAGE) setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no bash "$R/bench/wildct/hold.sh" "$1" "$2" "$3" \
+        bash "$R/bench/wildct/row.sh" "${@:4}" > "$W/runs/$1.out" 2>&1 < /dev/null &
+    echo "launched $1"
+}

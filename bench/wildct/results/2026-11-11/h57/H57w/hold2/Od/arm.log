@@ -1,0 +1,12 @@
+2026-11-11T07:43:14Z Od start perf (2942 s of the hold left)
+2026-11-11T07:44:12Z Od ready after 57 s
+energy: zone=intel-rapl:0 (package-0) joules=2100.986 seconds=60.007 avg_watts=35.012 command_seconds=60.001 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=2.705s ttft_p90=2.727s latency_median=31.386s tok/s_median=8.2 aggregate_tok/s=8.2
+energy: zone=intel-rapl:0 (package-0) joules=3289.458 seconds=94.130 avg_watts=34.946 command_seconds=94.125 samples=20 exit=0
+concurrency=1 ok=8/8 ttft_median=2.589s ttft_p90=2.681s latency_median=31.292s tok/s_median=8.2 aggregate_tok/s=8.2
+energy: zone=intel-rapl:0 (package-0) joules=8760.175 seconds=250.733 avg_watts=34.938 command_seconds=250.716 samples=52 exit=0
+concurrency=4 ok=16/16 ttft_median=10.111s ttft_p90=10.231s latency_median=81.086s tok/s_median=3.2 aggregate_tok/s=12.6
+energy: zone=intel-rapl:0 (package-0) joules=11343.539 seconds=324.411 avg_watts=34.967 command_seconds=324.393 samples=66 exit=0
+concurrency=1 ok=4/4 ttft_median=51.297s ttft_p90=51.577s latency_median=52.882s tok/s_median=0.3 aggregate_tok/s=0.3
+energy: zone=intel-rapl:0 (package-0) joules=7407.182 seconds=211.830 avg_watts=34.968 command_seconds=211.825 samples=44 exit=0
+2026-11-11T07:59:54Z Od status measured: perf phases recorded

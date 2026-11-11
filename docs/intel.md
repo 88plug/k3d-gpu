@@ -290,8 +290,8 @@ one B70.
 | [ledger:H54b] | Qwen3.8-27B on Arc Pro B70, the best one-card arm against EAT #21's two-card XPU path. No one-card arm was delivered: the arms on Qwen bf16 or RedHat int4 weights did not fit the shared disk, two OVMS arms hit runner bugs, and llama.cpp SYCL's "one card" pod saw and used all four cards | INCONCLUSIVE |
 | [ledger:H54c] | Experts in the Xeon's DRAM and the rest on one B70, against a byte-split model. The experts ran on the Xeon, but every GPU arm spread over all four cards (the same placement failure), so the one-card model was not tested | INCONCLUSIVE |
 
-**The wildct campaign (in progress).** wildct is a second Raptor Lake client host, an
-i7-13700 with its GPUs opted out, so its rows are CPU rows. They run on release 0.1.89 under the
+**The wildct campaign (ended 2026-11-11).** wildct is a second Raptor Lake client host, an
+i7-13700 with its GPUs opted out, so its rows are CPU rows. They ran on release 0.1.89 under the
 [wildct pre-registration](../EXPERIMENTS.md#wildct-pre-registration-client-raptor-lake-i7-13700-2026-10-20),
 in its registered order. Each row is stated as the ledger graded it.
 
@@ -303,9 +303,10 @@ in its registered order. Each row is stated as the ledger graded it.
 | [ledger:H34w] | H34 replicated: OVMS's CPU Fast Draft against the 4B target alone under matched `typical` load. Neither the pre-registered gain nor its exclusion was resolved, so the i7-13700 class gets no CPU draft by default ([run](../EXPERIMENTS.md#h34w-run-wildct-i7-13700-2026-11-07)) | INCONCLUSIVE |
 | [ledger:H28w] | H28 replicated: eight pods that mmap one 1 GiB model through an image volume shared one page-cache copy (1.00x the model size on the node, against 9.00x for per-pod copies) and were ready in 0.339 of the copy arm's time (CI 0.329-0.363), under matched `typical` load ([run](../EXPERIMENTS.md#h28w-run-wildct-i7-13700-2026-11-07)) | SUPPORTED |
 | H57wb | Inside EAT's banking flow, k3d-gpu auto on the P-cores against EAT's stock CPU arm (vLLM CPU bf16 on the Gemma 4 26B-A4B QAT bf16 weights). Not run: its start gates were met, but that arm (a 51.6 GB download and about 94 GB resident of 125 GiB, beside the box's production containers) has no registered runner there, and the owner closed the row rather than register one ([amendment R11](../EXPERIMENTS.md#wildct-amendment-r11-h57wb-closed-as-not-run-by-the-owners-decision-2026-11-10)) | INCONCLUSIVE |
+| H57wa | Gemma 4 26B-A4B QAT on the P-cores, one stream: k3d-gpu's own CPU pick (OVMS with OpenVINO's base-model int4 IR) against llama.cpp with Google's QAT Q4_0 GGUF, with and without the QAT MTP drafter. llama.cpp with the drafter decoded at 1.34x OVMS's rate (CI 1.31-1.34), ahead in each of 3 holds, with GSM8K 50 of 50 for every arm, so on this host OVMS did not lead at one stream. It moves no default: the CPU engine is the engine-choice row's ([run](../EXPERIMENTS.md#h57w-run-wildct-i7-13700-2026-11-11)) | REFUTED |
+| H57wm | The same holds: Google's QAT MTP drafter in llama.cpp decoded at 1.13x llama.cpp alone (CI 1.11-1.14), ahead in each hold but short of the pre-registered 1.2x bar, at GSM8K 50 of 50, so the i7-13700 class gets no QAT MTP drafter by default ([run](../EXPERIMENTS.md#h57w-run-wildct-i7-13700-2026-11-11)) | REFUTED |
 | [ledger:H59w] | H59's engine choice re-run here, registered under H59 and run outside this pack's order (H59 amendment R5): at four concurrent requests, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter decoded Gemma 4 26B-A4B per request at 1.00x the rate of OVMS with OpenVINO's base-model int4 IR (CI 0.98-1.02), short of the pre-registered 1.2x, with GSM8K equal, so the i7-13700 class keeps OVMS ([run](../EXPERIMENTS.md#h59w-run-wildct-i7-13700-2026-11-10)) | REFUTED |
 
-H57wa and H57wm are pre-registered there and not yet run.
 
 Facts from `0ecf67a` that shape a k3d run:
 

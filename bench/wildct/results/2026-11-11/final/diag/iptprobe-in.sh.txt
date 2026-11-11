@@ -1,0 +1,40 @@
+#!/bin/sh
+# Runs INSIDE a throwaway node-image container (own netns, --network none, NET_ADMIN only):
+# which iptables extensions and ipset types the running kernel serves to k3s's own iptables.
+A=/bin/aux; ls $A | tr "\n" " "; echo
+[ -x $A/iptables ] || A=/bin
+I=$A/iptables-nft; I6=$A/ip6tables-nft; S=$(command -v ipset || echo $A/ipset)
+echo "iptables: $($I --version 2>&1)"; echo "ipset: $($S --version 2>&1 | head -1)"
+t() { b=$1; tbl=$2; shift 2
+      out=$($b -w -t "$tbl" -A K3DGPU_PROBE "$@" 2>&1) && echo "ok   ${b##*/} $tbl $*" || echo "FAIL ${b##*/} $tbl $* :: $(echo "$out" | tr '\n' ' ' | cut -c1-110)"; }
+for b in $I $I6; do for tbl in filter nat; do $b -w -t $tbl -N K3DGPU_PROBE 2>&1 | head -1; done; done
+for st in hash:ip hash:net hash:ip,port hash:ip,port,ip hash:ip,port,net; do
+  out=$($S create "k3dgpu-$(echo $st | tr ':,' '--')" $st 2>&1) && echo "ok   ipset $st" || echo "FAIL ipset $st :: $out"
+done
+for b in $I $I6; do
+  t $b filter -m comment --comment probe -j ACCEPT
+  t $b filter -m statistic --mode random --probability 0.5 -j ACCEPT
+  t $b filter -m recent --name probe --rcheck --seconds 10 --reap -j ACCEPT
+  t $b filter -m conntrack --ctstate NEW,INVALID -j ACCEPT
+  t $b filter -m addrtype --dst-type LOCAL -j ACCEPT
+  t $b filter -m mark --mark 0x4000/0x4000 -j ACCEPT
+  t $b filter -j MARK --set-xmark 0x4000/0x4000
+  t $b filter -j REJECT
+  t $b filter -p tcp -m tcp --dport 80 -j REJECT --reject-with tcp-reset
+  t $b filter -p udp -m udp --dport 53 -j ACCEPT
+  t $b filter -p tcp -m multiport --dports 80,443 -j ACCEPT
+  t $b filter -m limit --limit 10/minute --limit-burst 10 -j ACCEPT
+  t $b filter -j NFLOG --nflog-group 100 --nflog-prefix probe
+  t $b filter -m physdev --physdev-is-bridged -j ACCEPT
+  t $b filter -m pkttype --pkt-type multicast -j ACCEPT
+  t $b filter -m nfacct --nfacct-name probe -j ACCEPT
+  t $b nat -j MASQUERADE --random-fully
+  t $b nat -j MASQUERADE
+  t $b nat -j MARK --set-xmark 0x4000/0x4000
+  t $b nat -m comment --comment probe -j RETURN
+done
+t $I filter -m set --match-set k3dgpu-hash-ip src -j ACCEPT
+t $I nat -p tcp -j DNAT --to-destination 10.0.0.1:80
+t $I nat -j SNAT --to-source 10.0.0.1
+t $I6 nat -p tcp -j DNAT --to-destination [fd00::1]:80
+echo "probe done"
