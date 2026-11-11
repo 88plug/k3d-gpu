@@ -18,10 +18,10 @@ passes.
   `results/2026-11-07/runs/H57wb/reading.txt`, the host before and after in
   `results/2026-11-07/host/h57wb.txt`). On 2026-11-10 the owner chose to amend H57wb's row
   rather than register a runner and a hold for it. Amendment R11 closes H57wb as INCONCLUSIVE
-  (not run). Its arm B, EAT stock CPU vLLM bf16 on the Gemma 4 26B-A4B QAT bf16 weights, cannot
-  be served safely on this production host: a 51.6 GB download onto `/`, then about 94 GB
-  resident of 125 GiB beside the 18 production containers. It has no registered runner here,
-  and the owner chose not to register one. No H57wb data exists. H57wa and H57wm are unchanged
+  (not run). Its arm B, EAT stock CPU vLLM bf16 on the Gemma 4 26B-A4B QAT bf16 weights, would
+  need a 51.6 GB download onto `/`, then about 94 GB resident of 125 GiB on this production host,
+  beside its 18 production containers. It has no registered runner here, and the owner chose not
+  to register one. No H57wb data exists. H57wa and H57wm are unchanged
   (arms, predictions, statistic, gates, caps, holds `H57w-1` to `H57w-4` and order), except that
   the pack now goes on past row 7. Row 7 does not run again.
 - **Rows 5 and 6, `H28w-prep` and `H28w`,** took four holds on 2026-11-07 and `H28w` is scored
