@@ -118,12 +118,12 @@ says "  ...and no Fast Draft beside it" 0 'draft_source_model' negate "${GPU[@]}
 says "Gemma 4 on OVMS: the OpenVINO IR, gemma4 parsers" 0 '--reasoning_parser=gemma4' "" "${GPU[@]}" -- --model google/gemma-4-26B-A4B-it
 says "a tool parser set in the environment wins" 0 '--tool_parser=hermes3' "" "${GPU[@]}" K3D_GPU_AGENT_TOOL_PARSER=hermes3 -- --model google/gemma-4-26B-A4B-it
 says "vLLM on the GPU: Qwen3.8 MTP" 0 "'\{\"method\": \"mtp\", \"num_speculative_tokens\": 3\}'" "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model Qwen/Qwen3.8-27B
-says "vLLM pins the model revision" 0 '--revision=1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0' "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model Qwen/Qwen3.8-27B
+says "vLLM pins the model revision" 0 '--revision=37561816e66b5b9153b1b64c10968c18c1e6f4a0' "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model Qwen/Qwen3.8-27B
 says "vLLM: thinking off server-side" 0 "'--default-chat-template-kwargs'" "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model Qwen/Qwen3.8-27B
 says "vLLM: text-only load" 0 "'--language-model-only'" "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model Qwen/Qwen3.8-27B
 says "vLLM: Gemma 4 with its assistant drafter" 0 'gemma-4-26B-A4B-it-assistant' "" "${GPU[@]}" K3D_GPU_AGENT_BACKEND=vllm -- --model google/gemma-4-26B-A4B-it
 says "Gaudi: vLLM, no speculative decoding by default" 0 'speculative' negate STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1' -- --model Qwen/Qwen3.8-27B
-says "Gaudi: bf16 original at its revision" 0 '--revision=1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0' "" STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1' -- --model Qwen/Qwen3.8-27B
+says "Gaudi: bf16 original at its revision" 0 '--revision=37561816e66b5b9153b1b64c10968c18c1e6f4a0' "" STUB_ALLOC=$'cpu 32\nhabana.ai/gaudi 1' -- --model Qwen/Qwen3.8-27B
 says "CPU: the Phi-4 control serves its OpenVINO int4 IR, no draft" 0 '--source_model=OpenVINO/Phi-4-mini-instruct-int4-ov' "" STUB_ALLOC='cpu 32' -- --model microsoft/Phi-4-mini-instruct
 says "a model with no OpenVINO IR keeps OVMS's default, with one line" 0 'keeping the engine.s default model' "" STUB_ALLOC='cpu 32' -- --model LiquidAI/LFM2-1.2B
 says "  ...the default model is served" 0 '--source_model=OpenVINO/Qwen3-4B-int4-ov' "" STUB_ALLOC='cpu 32' -- --model LiquidAI/LFM2-1.2B
