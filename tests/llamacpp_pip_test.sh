@@ -4,8 +4,9 @@
 # scripts/k3d-gpu, so the suite reads the conversion Job's pip set from the launcher:
 #   - another fully pinned set: the suite passes, nothing in it names the old versions;
 #   - a set with a requirement that is not name==version (no version, a range, a
-#     wildcard), one without transformers, or an empty one: the suite stops at the
-#     read with exit 1 and names it, before any render (an empty read cannot match).
+#     wildcard), one without transformers (sentence-transformers is another package),
+#     or an empty one: the suite stops at the read with exit 1 and names it, before
+#     any render (an empty read cannot match).
 #
 # Usage: tests/llamacpp_pip_test.sh
 
@@ -60,10 +61,11 @@ refused() {
         && grep -qxF "FAIL scripts/k3d-gpu has no GGUF_CONVERT_PIP of name==version requirements, transformers among them (read '${value}')" \
             "${WORK}/${name}.out"
 }
-for c in "unversioned|transformers huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0" \
-         "range|transformers>=5.21 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0" \
-         "wildcard|transformers==5.* huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0" \
-         "no-transformers|huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0" \
+for c in "unversioned|transformers huggingface-hub==9.9.2 tokenizers==9.9.3 safetensors==9.9.4" \
+         "range|transformers>=9.9 huggingface-hub==9.9.2 tokenizers==9.9.3 safetensors==9.9.4" \
+         "wildcard|transformers==9.* huggingface-hub==9.9.2 tokenizers==9.9.3 safetensors==9.9.4" \
+         "no-transformers|huggingface-hub==9.9.2 tokenizers==9.9.3 safetensors==9.9.4" \
+         "other-transformers|sentence-transformers==9.9.1 huggingface-hub==9.9.2 tokenizers==9.9.3" \
          "empty|"; do
     if refused "${c%%|*}" "${c#*|}"; then
         ok "GGUF_CONVERT_PIP='${c#*|}' (${c%%|*}): tests/llamacpp_test.sh exits 1 at the read"
