@@ -1,16 +1,29 @@
 # wildct resume pack
 
 How to resume the wildct campaign ([EXPERIMENTS.md](../../EXPERIMENTS.md), "Wildct
-pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6, R7, R8 and R9, and
-the "H52w run", "H18w run", "H25w run", "H34w run" and "H28w run" sections). This file changes no
+pre-registration", rules W1-W8, wildct amendments R1, P1, R2, R3, R4, R5, R6, R7, R8, R9, R10 and
+R11, and the "H52w run", "H18w run", "H25w run", "H34w run" and "H28w run" sections). This file changes no
 rule. Run it top to bottom, except that step 3b (ship `origin/main` to wildct) runs first when the `repo` on wildct
 predates `bench/wildct/nfprobe.sh` (H10 runs it). Nothing past step 1 runs until every step 1 check
 passes.
 
-## Where things stand (2026-11-07, after H28w)
+## Where things stand (2026-11-10, after H28w, the H57wb reading and amendment R11)
 
-- **Next: row 7, the H57wb reading (step 6), then `H57w-1` to `H57w-4`.** Holds used: 8 of at
-  most 12, so H57wa and H57wm have holds 1-4 and no spare `H57w-5` (amendment R9).
+- **Next: row 8, `H57w-1` (step 6), then `H57w-2` to `H57w-4`.** Holds used: 8 of at most 12,
+  so H57wa and H57wm have holds 1-4 and no spare `H57w-5` (amendment R9).
+- **Row 7, the H57wb reading, stopped the pack; amendment R11 resolved the stop.** The reading
+  ran on 2026-11-07 at 09:26:53Z under `live.lock` (not a hold): `/` 191 GiB available (need
+  >= 85) and MemAvailable 113.6 GiB (need >= 100), so both gates were met. H57wb has no runner
+  on this host, so the pack stopped at row 7, before `H57w-1` (amendment R10; records in
+  `results/2026-11-07/runs/H57wb/reading.txt`, the host before and after in
+  `results/2026-11-07/host/h57wb.txt`). On 2026-11-10 the owner chose to amend H57wb's row
+  rather than register a runner and a hold for it. Amendment R11 closes H57wb as INCONCLUSIVE
+  (not run). Its arm B, EAT stock CPU vLLM bf16 on the Gemma 4 26B-A4B QAT bf16 weights, would
+  need a 51.6 GB download onto `/`, then about 94 GB resident of 125 GiB on this production host,
+  beside its 18 production containers. It has no registered runner here, and the owner chose not
+  to register one. No H57wb data exists. H57wa and H57wm are unchanged
+  (arms, predictions, statistic, gates, caps, holds `H57w-1` to `H57w-4` and order), except that
+  the pack now goes on past row 7. Row 7 does not run again.
 - **Rows 5 and 6, `H28w-prep` and `H28w`,** took four holds on 2026-11-07 and `H28w` is scored
   SUPPORTED (EXPERIMENTS.md "H28w run"; records in `results/2026-11-07/runs/H28w-r2/`, the host
   around all four in `results/2026-11-07/host/h28w.txt`). Amendment R8 (the node label
@@ -113,7 +126,7 @@ passes.
       `networks-before.txt` and the verify logs;
     - `runs/`: `smoke1*`, `smoke2*`, `diag-smoke2*`, `smoke3*` (with `smoke3-node.log`, the
       node's log, and `smoke3-node-excerpt.txt`), `smoke4*` (with `smoke4-live.txt`), `smoke5*`,
-      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `H28w*`, `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
+      `H52w*`, `H18w*`, `H25w*`, `H34w*`, `H28w*`, `H57wb/` (row 7's reading, amendment R10), `convert/`, `resume-health.txt` (2026-11-07T03:32:22Z; the
       earlier ones renamed `resume-health.txt.<UTC time>`), `install-0.1.79.log`, `install-0.1.81.log`,
       `install-0.1.89.log`, `setup-images-*.log`, `IMAGE` and `campaign.log`;
     - `diag/`: `diag-up.sh`, the command `diag-smoke2` ran; `iptprobe-in.sh`, an ad-hoc form of
@@ -146,9 +159,9 @@ passes.
   - `.deb` sha256: `8f94d69ccc999e4f67295f6cffea8de6cb5307e2ef71210d3ba090458ba88acc`.
   - Node image: `cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4`.
   - Its launcher and `share/` equal main's at `85a7bc86`, apart from the version line.
-- **H57wb's start gates were met on 2026-11-07** (`/` 207 GB available, MemAvailable 114.5 GiB,
-  at step 1), not a reading of the row. If they still are at step 6's row 7, the pack stops there:
-  H57wb has no runner on this host.
+- **H57wb's start gates were met on 2026-11-07** at step 1 (`/` 207 GB available, MemAvailable
+  114.5 GiB) and again at its reading (row 7, above). Amendment R11 closed the row, so nothing
+  reads its gates again.
 - **Not in this pack: H59w** (H59 amendments R1 and R5; `row.sh h59w` and `row.sh h59w-prep`).
   H59 amendment R5 records where H59w sits: outside this pack's order, its holds counted against
   H59's cap of 6 per row and not against the 12 here. Its wiring smoke is `row.sh h59w smoke`.
@@ -499,7 +512,7 @@ on [c]):
 | 4 | `H34w` | 1500 | 8 | `launch H34w 1500 8 h34w` | `out/verdict.json` written by `h34.py` |
 | 5 | `H28w-prep` | 900 | 35 | `launch H28w-prep 900 35 h28w-prep` | `docker images 'h28-model'` lists r0-r6. Before it, record `timeout 60 docker system df` (build cache) |
 | 6 | `H28w` | 1500 | 35 | `launch H28w 1500 35 h28w` | `out/h28-*.csv` has 6 `round,...,scored,typical` lines (report any `VOID`); `docker images 'h28-model'` empty afterwards; record `docker system df` again |
-| 7 | H57wb reading | none | none | [w] `bash $R/bench/wildct/row.sh h57wb` (not a hold) | `runs/H57wb/reading.txt`. Expected: INCONCLUSIVE (not run). If both gates are met, stop: H57wb has no runner on this host |
+| 7 | H57wb reading | none | none | Done on 2026-11-07 (amendment R10); not run again. It ran [w] `bash $R/bench/wildct/row.sh h57wb` (not a hold) | `runs/H57wb/reading.txt`: both gates met, so the pack stopped here (R10). Amendment R11 closed H57wb as INCONCLUSIVE (not run): go on to row 8 |
 | 8 | `H57w-1` | 4600 | 40 | `launch H57w-1 4600 40 h57w 1 perf` | `$W/h57/results/H57w/hold1/{Od,Ld,Ld-mtp}/status.json` say `measured` |
 | 9 | `H57w-2` | 4600 | 40 | `launch H57w-2 4600 40 h57w 2 perf` | as hold 1 |
 | 10 | `H57w-3` | 4600 | 40 | `launch H57w-3 4600 40 h57w 3 perf` | as hold 1 |
@@ -562,7 +575,7 @@ Notes on the holds:
 | Bounded calls | docker and `k3d cluster list` 120 s; cluster deletes 600 s; SIGKILL 10 s after either. A signal ends the lock and load waits at once; during cleanup further signals are ignored | R1 |
 | CPUs | treatment 0-15 (H18w sandboxes: E-core balloon); load 20-23; 16-19 never in a campaign cpuset | W2 |
 | H57w inside | `timeout -k 30 4500`; arms start only with 900 s left (quality: 600 s); `/` >= 15 GB; MemAvailable >= 20 GiB | H57d R1 |
-| H57wb | runs only with `/` >= 85 GB and MemAvailable >= 100 GiB; otherwise INCONCLUSIVE (not run) | H57wb row |
+| H57wb | closed as INCONCLUSIVE (not run) by the owner's decision; its gates (`/` >= 85 GB, MemAvailable >= 100 GiB) were met at its one reading, and it has no runner here | H57wb row, R10, R11 |
 | Hold count | at most 12 row holds (smoke not counted). Each row may repeat a failed hold once. H57wa and H57wm share at most 5 | W order, R1 |
 | GPUs | `K3D_GPU_VENDORS=auto,-nvidia,-intel` on every cluster; nothing opens a GPU device | W8 |
 
