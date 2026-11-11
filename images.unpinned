@@ -31,6 +31,8 @@ tests/image_test.sh                   *                                     node
 tests/model_share_test.sh             localhost:5000/agent                  checks a registry port is not read as a tag
 tests/image_pins_test.sh              *                                     the pin gate's own unpinned inputs
 tests/eat_test.sh                     *                                     stubs of EAT's gateway chart files, the input gateway-charts.py pins
+tests/eas_test.sh                     ghcr.io/berriai/litellm-database:v1.84.0 a stub pod list's image, tag only as EI v1.1.0 deploys it, that eas check grades by tag
+tests/eas_test.sh                     docker.io/vllm/vllm-openai-cpu:v0.28.0 a stub pod list's image, tag only as EI v1.1.0 deploys it, that eas check grades by tag
 tests/ledger_freshness_test.py        cryptoandcoffee/k3d-gpu:0.1.70        a fixture ledger row's node image the re-measure queue parses, never pulled
 tests/pin_classes_test.py             *                                     the pin-token parser's own inputs
 tests/pinlib_test.py                  *                                     the pin sources' recorded registry answers (fake and real names, no pull)
