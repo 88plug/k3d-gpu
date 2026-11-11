@@ -84,11 +84,19 @@ git clone -q . /tmp/k && /tmp/k/hack/bump telemetry --root /tmp/k --dry-run
 A `[groups.<name>]` table: `tests` (suites `hack/bump` runs after the rewrite;
 CI runs everything again on the PR), `hooks` (built-in steps after the rewrite,
 in order: `lock`, `readme-history`, `render-latest`, `ppa-write`, `convert-pins`,
-`ledger-rules`, `constraints`, `docs-lock`, `flake-update`, `repin`, `hf-meta`) and
-`outputs` (files those hooks write; `hack/pin-only-diff` accepts any change there).
-Coupled components go in one group, so they land in one PR. `hf-meta` reads each
-moved Hugging Face repo's record again at its new revision, in every saved metadata
-bundle under `tests/fixtures/hf` that recorded it at the old one.
+`ledger-rules`, `constraints`, `docs-lock`, `flake-update`, `repin`, `hf-meta`,
+`model-opt-goldens`, `vllm-recipes`) and `outputs` (files those hooks write;
+`hack/pin-only-diff` accepts any change there). Coupled components go in one group,
+so they land in one PR. `hf-meta` reads each moved Hugging Face repo's record again
+at its new revision, in every saved metadata bundle under `tests/fixtures/hf` that
+recorded it at the old one. `model-opt-goldens` then runs
+`tests/model_opt_test.sh --update`, which writes the model optimizer's goldens from
+those bundles, offline: a note the new revision brings (a variant whose chat template
+now differs from the target's) is in the diff, and the group's test passes on it.
+The goldens are not `outputs`, so a golden line that is no pin move keeps the PR on
+review. `vllm-recipes` regenerates `console/vllm-recipes.json`
+(`hack/vllm-recipes update`) at the moved recipes pair, or at the pinned one when the
+group moved a pinned vLLM version, and puts `hack/vllm-recipes diff` in the PR notes.
 
 ## Goldens
 
@@ -121,6 +129,9 @@ release below it; every other kind reads one newest version, and when that reach
 values). To freeze a pin at its version, set `max` to the first release after it
 (`v0.8.1` for llama.cpp `v0.8.0`, `5.21.0.post0` for PyPI `5.21.0`). `hack/pins check`
 fails once `review_by` has passed: review the hold, then move the date or drop it.
+A reason that states a ledger row's verdict ("H59w is PENDING") is checked against
+EXPERIMENTS.md by `tests/ledger_drift_check.py`, so the PR that scores the row drops
+the hold.
 
 ## Register a known issue
 
@@ -154,6 +165,7 @@ name, a canary pass with hard and exact true (`hack/bot-merge` checks both).
 | chrome | everything | none |
 | base-image | same-tag digest, patch | a tag line change (busybox 1.37 to 1.38, ubuntu, python 3.14 to 3.15) |
 | eat-stock | none | always |
+| recipes (vLLM's model recipes, `console/vllm-recipes.json`) | none | always (the notes list what moved) |
 
 Across every family:
 

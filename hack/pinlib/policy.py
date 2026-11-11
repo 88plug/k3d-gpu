@@ -20,6 +20,7 @@ Matrix (family: what may go auto; everything else is review)
   chrome           anything
   base-image       digest, patch (a minor or a line tag is a tag line change)
   eat-stock        none
+  recipes          none
 Cross-cutting:
   - any major is review;
   - a 0.x minor counts as a major unless the pin has a runtime canary (a runtime
@@ -59,6 +60,7 @@ AUTO = {
     "chrome": {"digest", "patch", "minor", "major", "line"},
     "base-image": {"digest", "patch"},
     "eat-stock": set(),
+    "recipes": set(),  # vLLM's model recipes: the notes list what moved; resolve drops no-op moves
 }
 
 

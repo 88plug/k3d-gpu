@@ -236,6 +236,16 @@ class Drift(unittest.TestCase):
     def test_console_python_is_scanned(self):
         self.assertDrift('"hypothesis": "H2 PENDING: model output",\n', r"console/sku_model.py:1: H2", path="console/sku_model.py")
 
+    def test_a_pin_hold_reason_is_scanned(self):
+        # a hold that waits on a row outlives it unless its reason is checked
+        self.assertDrift('hold = { max = "v0.8.1", reason = "H2 is PENDING: the runner registered v0.8.0", '
+                         'review_by = "2026-12-31" }\n',
+                         r"pins/registry.toml:1: H2 reads PENDING \(prose\).*REFUTED", path="pins/registry.toml")
+
+    def test_a_pin_class_reason_is_scanned(self):
+        self.assertDrift("bench/x/**  ledger H4 amend=  H4's runner; H2 PENDING reuses it\n",
+                         r"pins/classes:1: H2 reads PENDING.*REFUTED", path="pins/classes")
+
 
 class RealRepo(unittest.TestCase):
     def test_this_repo_agrees_with_its_ledger(self):

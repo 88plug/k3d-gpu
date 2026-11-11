@@ -40,7 +40,7 @@ REGISTRY = os.path.join(ROOT, "pins", "registry.toml")
 KINDS = ("oci", "github-release", "pypi", "hf", "apt-index", "eat", "llama", "habana", "json", "cmd", "helm",
          "github-branch")
 FAMILIES = ("k3s", "plugin", "runtime-engine", "static-engine", "host-driver", "host-ppa", "hf", "pypi", "tools",
-            "chrome", "telemetry", "opt-in", "base-image", "eat-stock")
+            "chrome", "telemetry", "opt-in", "base-image", "eat-stock", "recipes")
 PIN_KEYS = {"id", "class", "source", "scheme", "sites", "derived", "group", "family", "policy", "canary", "confirm",
             "hold", "tests", "writer", "notes", "component", "patterns"}
 DIGEST = r"sha256:[0-9a-f]{64}"
