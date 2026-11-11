@@ -306,8 +306,12 @@ jobs:
       - run: python3 bench/h57d/test_h57d.py
       - run: python3 bench/h59/test_h59.py
       # The H59-family runner (amendment R1): renders through the launcher against the fit
-      # fixtures, arm.sh against a local stub server, its records scored by h59.py.
-      - run: python3 bench/h59/test_run.py
+      # fixtures, arm.sh against a local stub server, its records scored by h59.py. The rows
+      # are scored, so it runs on a copy whose launcher carries R1's llama.cpp pins.
+      - run: tests/h59_runner_test.sh
+      # H63's scorer (the H63 pre-registration): the N=1 rule over Ls and Od, the idle-window
+      # gate, and the committed H57w, H59w, H57d and H59d records read through it.
+      - run: python3 bench/h63/test_h63.py
       - run: python3 bench/h62/test_h62.py
       # H62r's runner: H62's at the GA tags, with D1 as a check and D3's sibling read.
       - run: python3 bench/h62r/test_h62r.py
