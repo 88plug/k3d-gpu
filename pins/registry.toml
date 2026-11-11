@@ -509,8 +509,8 @@ derived = [
   { file = "console/model_opt.py", regex = 'o\.get\("vllm_version"\) or "(?P<v>[0-9.]+)"', from = "{v_bare}" },
   { file = "console/model_opt.py", regex = '^VLLM_[A-Z_]+ = "https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/', from = "{v}", count = 3 },
   { file = "console/model_opt.py", regex = '"--language-model-only [^\n]*"https://github\.com/vllm-project/vllm/blob/(?P<v>v[0-9.]+)/vllm/engine/arg_utils\.py', from = "{v}" },
-  # the vLLM version the launcher hands the optimizer (agent_optimize)
-  { file = "scripts/k3d-gpu", regex = 'device=\$\{AGENT_SEL%% \*\} vver=(?P<v>[0-9.]+) ', from = "{v_bare}" },
+  # the vLLM version the launcher hands the optimizer and the recipe gates (agent_vllm_version)
+  { file = "scripts/k3d-gpu", regex = '^    local vver=(?P<v>[0-9.]+)$', from = "{v_bare}" },
 ]
 
 [[pin]]

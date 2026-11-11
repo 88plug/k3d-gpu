@@ -163,7 +163,7 @@ plan_auto "k3s pin" "node" sed -i 's/^ARG K3S_TAG="v[^"]*"/ARG K3S_TAG="v9.9.9-k
 plan_auto "a baked manifest" "node" sed -i '1i # touched' share/intel-gpu-plugin.yml
 plan_auto "a derived constant" "vllm-xpu" sed -i -E 's/"GPU": "[0-9.]+"/"GPU": "9.9.9"/' console/plan.py
 plan_auto "a vllm_manifest flag" "gaudi-vllm llm-scaler vllm-cpu vllm-xpu" \
-    edit scripts/k3d-gpu '"${item}--port=8000"' '"${item}--port=8000"'$'\n''    args+="${item}--enable-chunked-prefill"'
+    edit scripts/k3d-gpu '"${item}--reasoning-parser=${rparser}"' '"${item}--reasoning-parser=${rparser}"'$'\n''    args+="${item}--enable-chunked-prefill"'
 plan_auto "an OVMS manifest flag" "npu-umd ovms ovms-cpu" \
     edit scripts/k3d-gpu $'            - --rest_port=8000\n            - --model_path=/models/${AGENT_MODEL}\n' \
         $'            - --rest_port=8000\n            - --grpc_port=9000\n            - --model_path=/models/${AGENT_MODEL}\n'

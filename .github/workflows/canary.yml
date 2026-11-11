@@ -41,6 +41,7 @@ on:
       - console/plan.py
       - console/model_opt.py
       - console/fit.py
+      - console/recipes.py # ADOPT, the vLLM recipe flags the surface check reads
       - bench/h54/h54.py # sglang_args, the sglang flags the surface check reads
       - 'canary/**'
       - packaging/install.sh
