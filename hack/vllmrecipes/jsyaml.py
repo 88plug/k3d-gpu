@@ -164,6 +164,10 @@ JsYamlLoader.add_constructor("tag:yaml.org,2002:map", _map)
 
 
 def loads(text):
+    # js-yaml's loadDocuments adds a final line break when the text has none, so a block
+    # scalar that ends the text keeps one (clip and keep chomping)
+    if text and text[-1] not in "\n\r":
+        text += "\n"
     return yaml.load(text, Loader=JsYamlLoader)
 
 

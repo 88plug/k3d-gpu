@@ -138,6 +138,16 @@ class Generate(unittest.TestCase):
         self.assertIs(type(got["b"][6]), bool)
         self.assertEqual(got["b"][:6], ["yes", "no", "on", "off", "y", "n"], "YAML 1.1 booleans are strings")
 
+    def test_text_without_a_final_line_break_parses_as_js_yaml_4_1_1(self):
+        # js-yaml's loadDocuments adds the missing final line break before it parses, so
+        # a block scalar that ends the file keeps one (MiMo-V2.6-Flash-RL.yaml's guide)
+        self.assertEqual(jsyaml.loads("a: |\n  x"), {"a": "x\n"})
+        self.assertEqual(jsyaml.loads("a: |+\n  x"), {"a": "x\n"})
+        self.assertEqual(jsyaml.loads("a: >\n  x\n  y"), {"a": "x y\n"})
+        self.assertEqual(jsyaml.loads("a: |-\n  x"), {"a": "x"})
+        self.assertEqual(jsyaml.loads("a: [x]"), {"a": ["x"]})
+        self.assertIsNone(jsyaml.loads(""))
+
     def test_schema_version_2_is_an_error(self):
         (self.s.src / "recipes" / "manifest.yaml").write_text("schema_version: 2\n")
         self.s.relock()
