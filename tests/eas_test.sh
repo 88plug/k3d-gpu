@@ -120,6 +120,26 @@
 #            Gateway API v1.2.1 only when the CRDs are absent or older, and keeps a newer
 #            install (k3s v1.37's, whose safe-upgrades policy refuses a downgrade). Needs
 #            ansible-playbook.
+#   model    `k3d-gpu eas model add|list|remove` and integrations/eas/eas-model.py: a model on an
+#            Intel Arc B60/B70 (vLLM for Intel GPUs) registered with EAS's LiteLLM:
+#            - the served name is EI model-manager's (a DNS-1035 label, else --name)
+#            - cards, on crescent's 4x B70 fit fixture: a busy card the plugin advertises
+#              and no pod holds is refused (the plugin could hand it out); cards k3d-gpu up
+#              left out are not counted; every card held by a pod, a shared card, no
+#              gpu.intel.com/xe and no plugin are refused; the model is sized for the idle
+#              advertised card with the least free VRAM, alone in the fit's host
+#            - the manifest: its own namespace, no Service links (#339), one whole xe card,
+#              the image by digest, the render group, the fit's flags and the family's
+#              parsers, HF_TOKEN from an optional Secret; payload and match are
+#              model-manager's (routing.py litellm_register, GET /model/info)
+#            - add, list and remove against stub kubectl and a stub LiteLLM behind
+#              eg-gateway answering as v1.84.0 does: dry run changes nothing; add applies
+#              server-side, waits, warms up in the pod as JSON, then registers; the master
+#              key and HF_TOKEN are on no argument list and in no output; refusals (EI's
+#              name, a model too big for one card, GGUF, a busy or held card, the inference
+#              layer, LiteLLM or the cluster unreachable, bad ids, names and options)
+#              change neither the cluster nor LiteLLM; remove takes out only its own
+#              entries, and the namespace with the last model
 # Needs bash, git, python3 (with PyYAML, for the config section's shape checks only).
 
 set -uo pipefail
@@ -1575,6 +1595,8 @@ print(sorted(f), f["nri_socket"], f["containerd_cni_bin_dirs"], f["agent_sandbox
     cli_before "cli: finalizers cleared before teardown" "${log}" "patch aigatewayroute aigw-qwen3guard" "eas.sh down"
     cli_has    "cli: down keeps the cluster" "${out}" "the cluster stays"
     cli_lacks  "cli: down does not delete the cluster" "${log}" "cluster delete"
+    cli_has    "cli: down deletes the namespace of eas model add's models" "${log}" "delete namespace k3d-gpu-eas-models"
+    cli_before "cli: their namespace goes before teardown (LiteLLM goes with it)" "${log}" "delete namespace k3d-gpu-eas-models" "eas.sh down"
 
     # ---- status --------------------------------------------------------------------------------------
     echo agent-toolkit > "${STATE}/layer"
@@ -2409,7 +2431,411 @@ PY
     done
 }
 
-SECTIONS=(overlay config cli ready argv kcadm rediscli gwapi)
+section_model() {
+    local PY="${ROOT}/integrations/eas/eas-model.py" LAUNCHER="${ROOT}/scripts/k3d-gpu"
+    local B="${WORK}/model/bin" S="${WORK}/model/s" LOG="${WORK}/model/log"
+    local HOSTFX="${ROOT}/tests/fixtures/fit/hosts/xeon6741p-4xb70.json"
+    local MASTER="sk-MASTER_9d2e41a7" HFTOK="hf_MODEL_TOKEN_5c1b"
+    local STATE="${S}/k3d-gpu-state/eas-easm" NS=k3d-gpu-eas-models
+    local NAME=qwen3-8-27b-int4 REV=91bd022d5b49442a868bc35008f6c21e1860edfa
+    local URL="http://qwen3-8-27b-int4.k3d-gpu-eas-models.svc.cluster.local:8000/v1"
+    local IMAGE="vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086"
+    local out rc log j F="${WORK}/model/s/fx"
+    mkdir -p "${B}" "${F}" "${S}/deps" "${S}/home" "${STATE}/eas/env/k3d-gpu"
+    echo agent-toolkit > "${STATE}/layer"
+    m_has()   { if grep -Fq -- "$3" <<< "$2"; then ok "$1"; else fail "$1: missing '$3' in: $(head -c 800 <<< "$2")"; fi; }
+    m_lacks() { if grep -Fq -- "$3" <<< "$2"; then fail "$1: unexpected '$3'"; else ok "$1"; fi; }
+    m_before() {
+        local a b
+        a=$(grep -nF -- "$3" <<< "$2" | head -1 | cut -d: -f1)
+        b=$(grep -nF -- "$4" <<< "$2" | head -1 | cut -d: -f1)
+        if [ -n "${a}" ] && [ -n "${b}" ] && [ "${a}" -lt "${b}" ]; then ok "$1"; else fail "$1: '$3' (line ${a:-none}) not before '$4' (line ${b:-none})"; fi
+    }
+    # m_json <file> <python expression over d>
+    m_json() { python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2" 2>&1; }
+
+    # ---- eas-model.py name: EI model-manager's served name ----------------------------------
+    check "model: name of Qwen/Qwen3-4B is EI's" qwen3-4b "$(python3 "${PY}" name Qwen/Qwen3-4B)"
+    check "model: name of RedHatAI/Qwen3.8-27B-INT4" "${NAME}" "$(python3 "${PY}" name RedHatAI/Qwen3.8-27B-INT4)"
+    out=$(python3 "${PY}" name org/1bit-model 2>&1); rc=$?
+    check "model: a name that is no DNS-1035 label exits 3" 3 "${rc}"
+    has "model: and asks for --name" "pass --name" "${out}"
+
+    # ---- eas-model.py cards: the card the model is sized for --------------------------------
+    # The host is crescent's 4x B70 (the fit fixture): card0 held by vllm, card1 by
+    # llama-server, card2 with xpu-smi's 256 MiB, card3 empty.
+    python3 - "${F}" <<'PY'
+import json, os, sys
+f = sys.argv[1]
+def ds(volumes, args=()):
+    return {"spec": {"template": {"spec": {"containers": [{"name": "intel-gpu-plugin", "args": list(args)}], "volumes": volumes}}}}
+devfs = [{"name": "devfs", "hostPath": {"path": "/dev/dri"}}, {"name": "sysfsdrm", "hostPath": {"path": "/sys/class/drm"}}]
+pinned = [{"name": "dri-%s" % n.lower(), "hostPath": {"path": "/dev/dri/" + n}} for n in ("card2", "renderD130", "card3", "renderD131")] \
+    + [{"name": "dri-by-path", "hostPath": {"path": "/dev/dri/by-path"}}, {"name": "sysfsdrm", "hostPath": {"path": "/sys/class/drm"}}]
+docs = {
+    "plugin-all.json": ds(devfs), "plugin-pinned.json": ds(pinned),
+    "plugin-shared.json": ds(devfs, ["-shared-dev-num=2", "-allocation-policy=none"]),
+    "nodes4.json": {"items": [{"metadata": {"name": "k3d-easm-server-0"}, "status": {"allocatable": {"cpu": "64", "gpu.intel.com/xe": "4"}}}]},
+    "nodes2.json": {"items": [{"metadata": {"name": "k3d-easm-server-0"}, "status": {"allocatable": {"cpu": "64", "gpu.intel.com/xe": "2"}}}]},
+    "nodes0.json": {"items": [{"metadata": {"name": "k3d-easm-server-0"}, "status": {"allocatable": {"cpu": "64"}}}]},
+    "pods-none.json": {"items": [{"metadata": {"namespace": "kube-system", "name": "coredns-0"},
+                                  "spec": {"containers": [{"name": "c"}]}, "status": {"phase": "Running"}}]},
+    "pods-two.json": {"items": [
+        {"metadata": {"namespace": "k3d-gpu-agent", "name": "vllm-0"}, "status": {"phase": "Running"},
+         "spec": {"containers": [{"name": "vllm", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}},
+        {"metadata": {"namespace": "k3d-gpu-agent", "name": "llamacpp-0"}, "status": {"phase": "Running"},
+         "spec": {"containers": [{"name": "llamacpp", "resources": {"requests": {"gpu.intel.com/xe": "1"}, "limits": {"gpu.intel.com/xe": "1"}}}]}},
+        {"metadata": {"namespace": "default", "name": "done-0"}, "status": {"phase": "Succeeded"},
+         "spec": {"containers": [{"name": "c", "resources": {"limits": {"gpu.intel.com/xe": "1"}}}]}}]},
+}
+for k, v in docs.items():
+    json.dump(v, open(os.path.join(f, k), "w"))
+open(os.path.join(f, "none.json"), "w").close()
+PY
+    # m_cards <plugin> <nodes> <pods>: eas-model.py cards on the B70 host; its output, then rc.
+    m_cards() {
+        rm -f "${F}/fit-host.json"
+        python3 "${PY}" cards --host "${HOSTFX}" --plugin "${F}/$1" --nodes "${F}/$2" --pods "${F}/$3" --out "${F}/fit-host.json" 2>&1
+        echo "rc=$?"
+    }
+    out=$(m_cards plugin-all.json nodes4.json pods-none.json)
+    has "model: cards: a busy card the plugin advertises and no pod holds is refused" "rc=3" "${out}"
+    has "model: cards: and named, with its BDF" "card0 (0000:18:00.0), card1 (0000:3a:00.0) is held outside the cluster" "${out}"
+    has "model: cards: and the remedy" "k3d-gpu down && k3d-gpu up leaves a busy card out of the plugin" "${out}"
+    check "model: cards: a refusal writes no fit host" "no" "$([ -e "${F}/fit-host.json" ] && echo yes || echo no)"
+    out=$(m_cards plugin-pinned.json nodes2.json pods-none.json)
+    has "model: cards: k3d-gpu up left the busy cards out: sized" "rc=0" "${out}"
+    has "model: cards: the plugin's cards are read from its hostPath mounts" "cards the plugin advertises -> card2 card3" "${out}"
+    has "model: cards: card2 (xpu-smi's 256 MiB) is idle" "card2 (0000:9a:00.0): VRAM 32.0 GiB, in use 0.2 GiB by xpu-smi[2210] 0.2 GiB -> idle" "${out}"
+    has "model: cards: sized for the idle card with the least free VRAM" "fit -> sized for card2" "${out}"
+    check "model: cards: the fit host holds that card alone" "['card2']" "$(m_json "${F}/fit-host.json" '[g["card"] for g in d["gpus"]]')"
+    check "model: cards: the fit host keeps the rest of the probe" "k3d-gpu.host/v1" "$(m_json "${F}/fit-host.json" 'd["schema"]')"
+    out=$(m_cards plugin-all.json nodes4.json pods-two.json)
+    has "model: cards: two busy cards held by two pods: sized" "rc=0" "${out}"
+    has "model: cards: the pods holding cards are named; a Succeeded pod's is not counted" \
+        "gpu.intel.com/xe: 4 advertised, 2 held by pods (k3d-gpu-agent/vllm-0 (1), k3d-gpu-agent/llamacpp-0 (1)) -> 2 free" "${out}"
+    has "model: cards: busy cards are not sized for" "fit -> sized for card2" "${out}"
+    out=$(m_cards plugin-pinned.json nodes2.json pods-two.json)
+    has "model: cards: every card held by a pod is refused" "rc=3" "${out}"
+    has "model: cards: naming the pods" "is held by a pod: k3d-gpu-agent/vllm-0 (1), k3d-gpu-agent/llamacpp-0 (1)" "${out}"
+    out=$(m_cards plugin-shared.json nodes4.json pods-none.json)
+    has "model: cards: a shared card (-shared-dev-num) is refused" "-shared-dev-num=2" "${out}"
+    out=$(m_cards plugin-all.json nodes0.json pods-none.json)
+    has "model: cards: no gpu.intel.com/xe is refused" "the cluster advertises no gpu.intel.com/xe" "${out}"
+    out=$(m_cards none.json nodes4.json pods-none.json)
+    has "model: cards: no Intel GPU plugin is refused" "no Intel GPU device plugin" "${out}"
+
+    # ---- eas-model.py manifest, payload, match ----------------------------------------------
+    local margs=(--name "${NAME}" --model RedHatAI/Qwen3.8-27B-INT4 --revision "${REV}" --image "${IMAGE}"
+                 --ctx 65536 --seqs 5 --util 0.91 --kv-dtype fp8 --memory 9Gi --cpus 2 --gid 992 --fit "gpu 5x65536"
+                 --weight-bytes 19452526368 --tool-parser qwen3_coder --reasoning-parser qwen3
+                 --env VLLM_TARGET_DEVICE=xpu --env CCL_WORKER_AFFINITY= --env "ONEAPI_DEVICE_SELECTOR=level_zero:*")
+    (unset HF_TOKEN; python3 "${PY}" manifest "${margs[@]}") > "${F}/m.json"; rc=$?
+    check "model: manifest exits 0" 0 "${rc}"
+    check "model: manifest: Namespace, PVC, Deployment, Service" "['Namespace', 'PersistentVolumeClaim', 'Deployment', 'Service']" \
+        "$(m_json "${F}/m.json" '[i["kind"] for i in d["items"]]')"
+    check "model: manifest: its own namespace, outside EAS's restricted llm-inference" "{'${NS}'}" \
+        "$(m_json "${F}/m.json" '{i["metadata"].get("namespace", i["metadata"]["name"]) for i in d["items"]}')"
+    j='d["items"][2]["spec"]["template"]["spec"]'
+    check "model: manifest: no Service environment variables (#339)" "False" "$(m_json "${F}/m.json" "${j}[\"enableServiceLinks\"]")"
+    check "model: manifest: one whole xe card" "{'memory': '9Gi', 'gpu.intel.com/xe': '1'}" "$(m_json "${F}/m.json" "${j}[\"containers\"][0][\"resources\"][\"limits\"]")"
+    check "model: manifest: the image by digest" "${IMAGE}" "$(m_json "${F}/m.json" "${j}[\"containers\"][0][\"image\"]")"
+    check "model: manifest: the render group" "{'supplementalGroups': [992]}" "$(m_json "${F}/m.json" "${j}[\"securityContext\"]")"
+    out=$(m_json "${F}/m.json" "' '.join(${j}[\"containers\"][0][\"args\"])")
+    has "model: manifest: the commit, the served name and the fit's flags" \
+        "RedHatAI/Qwen3.8-27B-INT4 --revision=${REV} --served-model-name=${NAME} --port=8000 --dtype=float16 --block-size=64 --max-model-len=65536 --max-num-batched-tokens=2048 --gpu-memory-utilization=0.91 --enforce-eager --no-enable-prefix-caching --max-num-seqs=5 --kv-cache-dtype=fp8 --tensor-parallel-size=1" "${out}"
+    has "model: manifest: the family's parsers" "--enable-auto-tool-choice --tool-call-parser=qwen3_coder --reasoning-parser=qwen3" "${out}"
+    out=$(m_json "${F}/m.json" "${j}[\"containers\"][0][\"env\"]")
+    has "model: manifest: an empty env value stays" "{'name': 'CCL_WORKER_AFFINITY', 'value': ''}" "${out}"
+    has "model: manifest: HF_TOKEN from an optional Secret" "{'name': 'HF_TOKEN', 'valueFrom': {'secretKeyRef': {'name': 'hf-token', 'key': 'token', 'optional': True}}}" "${out}"
+    check "model: manifest: the PVC holds the weights and 10 GiB" "29Gi" "$(m_json "${F}/m.json" 'd["items"][1]["spec"]["resources"]["requests"]["storage"]')"
+    check "model: manifest: the Service selects the Deployment's pods" "True" \
+        "$(m_json "${F}/m.json" 'd["items"][3]["spec"]["selector"] == d["items"][2]["spec"]["template"]["metadata"]["labels"]')"
+    HF_TOKEN="${HFTOK}" python3 "${PY}" manifest "${margs[@]}" > "${F}/m-hf.json"
+    check "model: manifest with HF_TOKEN: the Secret before the Deployment" "['Namespace', 'Secret', 'PersistentVolumeClaim', 'Deployment', 'Service']" \
+        "$(m_json "${F}/m-hf.json" '[i["kind"] for i in d["items"]]')"
+    out=$(python3 "${PY}" manifest "${margs[@]/${IMAGE}/vllm/vllm-openai-xpu:v0.33.0}" 2>&1); rc=$?
+    check "model: manifest: an image without a digest exits 3" 3 "${rc}"
+    out=$(python3 "${PY}" manifest "${margs[@]}" --env 'A=b c' 2>&1); rc=$?
+    check "model: manifest: a value with a space exits 3" 3 "${rc}"
+    check "model: payload is model-manager's (routing.py litellm_register)" \
+        "{\"model_name\": \"${NAME}\", \"litellm_params\": {\"model\": \"openai/${NAME}\", \"api_base\": \"${URL}\", \"api_key\": \"unused\"}}" \
+        "$(python3 "${PY}" payload --name "${NAME}" --api-base "${URL}")"
+    local INFO="{\"data\": [{\"model_name\": \"${NAME}\", \"litellm_params\": {\"api_base\": \"${URL}\"}, \"model_info\": {\"id\": \"id-1\"}},
+        {\"model_name\": \"${NAME}\", \"litellm_params\": {\"api_base\": \"http://elsewhere/v1\"}, \"model_info\": {\"id\": \"id-2\"}},
+        {\"model_name\": \"other\", \"litellm_params\": {\"api_base\": \"${URL}\"}, \"model_info\": {\"id\": \"id-3\"}}]}"
+    check "model: match: ours by api_base, the rest foreign" "ours id-1|foreign http://elsewhere/v1" \
+        "$(python3 "${PY}" match --name "${NAME}" --api-base "${URL}" <<< "${INFO}" | paste -sd'|')"
+    check "model: match: LiteLLM v1.84.0's empty answer (500, no model list) is no entry" "" \
+        "$(python3 "${PY}" match --name "${NAME}" --api-base "${URL}" <<< '{"detail":{"error":"LLM Model List not loaded in. Make sure you passed models in your config.yaml"}}')"
+
+    # ---- k3d-gpu eas model add|list|remove against stubs ------------------------------------
+    # kubectl: one line per call in ${STUB_LOG}; an apply's stdin goes to applied.json, and each
+    # Deployment it applies becomes deps/<name>, which get deployment(s) reads back.
+    cat > "${B}/kubectl" <<'EOF'
+#!/usr/bin/env bash
+echo "kubectl $*" >> "${STUB_LOG}"
+F="${STUB_STATE}/fx"
+case "$*" in
+    *"config view --minify --flatten"*) echo "apiVersion: v1" ;;
+    *"get nodes -o json"*) cat "${F}/${STUB_NODES:-nodes2.json}" ;;
+    *"get nodes"*) [ -z "${STUB_UNREACHABLE:-}" ] || exit 1; echo "node/k3d-easm-server-0" ;;
+    *"-n kube-system get daemonset intel-gpu-plugin -o json"*)
+        [ "${STUB_PLUGIN:-plugin-pinned.json}" != none ] || exit 1; cat "${F}/${STUB_PLUGIN:-plugin-pinned.json}" ;;
+    *"get pods -A -o json"*) cat "${F}/${STUB_PODS:-pods-none.json}" ;;
+    *"-n envoy-gateway-system get svc -l gateway.envoyproxy.io/owning-gateway-name=eg-gateway"*) echo 172.18.0.2 ;;
+    *"-n litellm get secret litellm-master-key -o jsonpath={.data.master_key}"*) printf '%s' "${STUB_MASTER}" | base64 ;;
+    *"-n k3d-gpu-eas-models get deployment "*" -o name"*)
+        n=${*##*get deployment }; n=${n%% *}
+        [ -e "${STUB_STATE}/deps/${n}" ] || { echo "Error from server (NotFound): deployments.apps \"${n}\" not found" >&2; exit 1; }
+        echo "deployment.apps/${n}" ;;
+    *"-n k3d-gpu-eas-models get deployments -l app.kubernetes.io/managed-by=k3d-gpu-eas-model -o json"*)
+        python3 -c 'import json, os, sys
+d = sys.argv[1]
+print(json.dumps({"items": [json.load(open(os.path.join(d, n))) for n in sorted(os.listdir(d))]}))' "${STUB_STATE}/deps" ;;
+    *"apply --server-side"*" -f -"*)
+        cat > "${STUB_STATE}/applied.json"
+        python3 -c 'import json, os, sys
+for i in json.load(open(sys.argv[1]))["items"]:
+    if i["kind"] == "Deployment":
+        i["status"] = {"readyReplicas": 1}
+        json.dump(i, open(os.path.join(sys.argv[2], i["metadata"]["name"]), "w"))' "${STUB_STATE}/applied.json" "${STUB_STATE}/deps" ;;
+    *" rollout status deployment/"*) [ -z "${STUB_ROLLOUT_FAIL:-}" ] || { echo 'error: timed out waiting for the condition' >&2; exit 1; } ;;
+    *" exec deployment/"*) echo '{"id":"chatcmpl-1","choices":[{"index":0,"message":{"role":"assistant","content":"I am a language model."}}]}' ;;
+    *" delete deployment,service,persistentvolumeclaim -l "*)
+        n=${*##*app.kubernetes.io/name=}; n=${n%% *}; rm -f "${STUB_STATE}/deps/${n}" ;;
+    *" delete namespace k3d-gpu-eas-models"*) ;;
+    *) echo "kubectl stub: unexpected: $*" >&2; exit 1 ;;
+esac
+EOF
+    # curl: EAS's LiteLLM behind eg-gateway (state in litellm.json). It answers as v1.84.0
+    # answered the spike: /model/info 500 "LLM Model List not loaded in" when empty,
+    # /model/new 200, /model/delete 200 (400 for an id it lacks), 401 for any key but the
+    # master key. The key is read from the -H @file; the log records only whether it matched.
+    cat > "${B}/curl" <<'EOF'
+#!/usr/bin/env python3
+import json, os, sys, uuid
+a = sys.argv[1:]
+log = open(os.environ["STUB_LOG"], "a")
+log.write("curl %s\n" % " ".join(a))
+if os.environ.get("STUB_LITELLM_DOWN"):
+    sys.stderr.write("curl: (7) Failed to connect\n")
+    sys.exit(7)
+sf = os.path.join(os.environ["STUB_STATE"], "litellm.json")
+st = json.load(open(sf))
+method, url, auth, data, wfmt, resolve, i = "GET", "", "", False, None, "", 0
+while i < len(a):
+    t = a[i]
+    if t in ("-X", "-H", "--data-binary", "-w", "--resolve", "--max-time"):
+        v = a[i + 1]
+        if t == "-X":
+            method = v
+        elif t == "-H" and v.startswith("@"):
+            auth += open(v[1:]).read()
+        elif t == "--data-binary":
+            data = True
+        elif t == "-w":
+            wfmt = v
+        elif t == "--resolve":
+            resolve = v
+        i += 2
+        continue
+    if t.startswith("https://"):
+        url = t
+    i += 1
+ok = auth.strip() == "Authorization: Bearer " + os.environ["STUB_MASTER"]
+log.write("curl-auth %s resolve=%s\n" % ("master-key" if ok else "WRONG", resolve))
+body = sys.stdin.read() if data else ""
+path = url.split("litellm.solutions.ai", 1)[-1]
+code, out = 404, {"detail": "Not Found"}
+if not ok:
+    code, out = 401, {"error": {"message": "Authentication Error", "code": "401"}}
+elif method == "GET" and path == "/model/info":
+    code, out = (200, {"data": st["data"]}) if st["data"] else \
+        (500, {"detail": {"error": "LLM Model List not loaded in. Make sure you passed models in your config.yaml or on the LiteLLM Admin UI."}})
+elif method == "POST" and path == "/model/new":
+    p = json.loads(body)
+    with open(os.path.join(os.environ["STUB_STATE"], "new-bodies"), "a") as f:
+        f.write(json.dumps(p, sort_keys=True) + "\n")
+    if os.environ.get("STUB_NEW_FAIL"):
+        code, out = 500, {"error": {"message": "db write failed"}}
+    else:
+        e = {"model_name": p["model_name"], "litellm_params": dict(p["litellm_params"], api_key=None),
+             "model_info": {"id": str(uuid.uuid4()), "db_model": True}}
+        st["data"].append(e)
+        code, out = 200, e
+elif method == "POST" and path == "/model/delete":
+    mid = json.loads(body)["id"]
+    keep = [e for e in st["data"] if e["model_info"]["id"] != mid]
+    code, out = (200, {"message": "Model: %s deleted successfully" % mid}) if len(keep) < len(st["data"]) \
+        else (400, {"error": {"message": "Model with id=%s not found in db" % mid}})
+    st["data"] = keep
+json.dump(st, open(sf, "w"))
+sys.stdout.write(json.dumps(out) + ("\n%s" % code if wfmt else ""))
+EOF
+    cat > "${B}/k3d" <<'EOF'
+#!/usr/bin/env bash
+echo "k3d $*" >> "${STUB_LOG}"
+case "$*" in
+    "cluster get "*) exit 0 ;;
+    "kubeconfig get "*) echo "apiVersion: v1 # easm" ;;
+esac
+EOF
+    cat > "${B}/docker" <<'EOF'
+#!/usr/bin/env bash
+echo "docker $*" >> "${STUB_LOG}"
+case "$*" in
+    "inspect -f {{.HostConfig.Memory}} k3d-easm-server-0") echo 0 ;;
+    *) echo "docker stub: unexpected: $*" >&2; exit 1 ;;
+esac
+EOF
+    chmod +x "${B}"/*
+    # EI's catalog model, as model-manager registers it (through the AI gateway).
+    local EIROW='{"model_name": "qwen2-5-coder-7b", "litellm_params": {"model": "openai/qwen2-5-coder-7b", "api_base": "http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen2-5-coder-7b/v1", "api_key": null}, "model_info": {"id": "ei-0001", "db_model": true}}'
+    echo "{\"data\": [${EIROW}]}" > "${S}/litellm.json"
+    mkdir -p "${S}/k3d-gpu-state"
+    echo "apiVersion: v1 # easm" > "${S}/k3d-gpu-state/kubeconfig-easm"
+    # /sys and /dev as agent_device_gid reads them: one xe render node, in this user's group.
+    mkdir -p "${S}/host/sys/bus/pci/drivers/xe" "${S}/host/sys/class/drm/renderD130/device" "${S}/host/dev/dri"
+    echo 0x8086 > "${S}/host/sys/class/drm/renderD130/device/vendor"
+    ln -s "${S}/host/sys/bus/pci/drivers/xe" "${S}/host/sys/class/drm/renderD130/device/driver"
+    : > "${S}/host/dev/dri/renderD130"
+    local GID
+    GID=$(id -g)
+
+    # m_cli <cmd_eas args...>: the launcher's cmd_eas in a subshell, the stubs first on PATH,
+    # the fit's host the B70 fixture and its model metadata the fit fixtures (no network).
+    m_cli() {
+        (export PATH="${B}:${PATH}" STUB_LOG="${LOG}" STUB_STATE="${S}" STUB_MASTER="${MASTER}" HOME="${S}/home" \
+            K3D_GPU_STATE_DIR="${S}/k3d-gpu-state" K3D_GPU_CLUSTER=easm K3D_GPU_EAS_DIR="${ROOT}/integrations/eas" \
+            K3D_GPU_SHARE="${ROOT}/share" K3D_GPU_FIT_HOST="${HOSTFX}" XDG_CACHE_HOME="${S}/cache"
+         unset KUBECONFIG K3D_GPU_KUBECONFIG K3D_GPU_CONTEXT
+         # shellcheck disable=SC1090
+         source <(sed '/^case "\${1:-help}" in$/,$d' "${LAUNCHER}")
+         # shellcheck disable=SC2034
+         SYSROOT="${S}/host"
+         fit_model_dir() { [ -d "${ROOT}/tests/fixtures/fit/models/${1//\//__}" ] && echo "${ROOT}/tests/fixtures/fit/models/${1//\//__}"; }
+         cmd_eas "$@") 2>&1
+    }
+    # m_refused <name> <message> <cmd_eas args...>: non-zero, the message, and no change to the
+    # cluster or LiteLLM.
+    m_refused() {
+        local name=$1 msg=$2 o r before
+        shift 2
+        : > "${LOG}"
+        before=$(cat "${S}/litellm.json")
+        o=$(m_cli "$@"); r=$?
+        if [ "${r}" -ne 0 ] && grep -qF -- "${msg}" <<< "${o}" \
+           && ! grep -Eq '^kubectl .* (apply|delete|create|patch|exec) |-X POST' "${LOG}" \
+           && [ "${before}" = "$(cat "${S}/litellm.json")" ]; then
+            ok "model: refused before any change: ${name}"
+        else
+            fail "model: refused before any change: ${name} (rc=${r}): $(head -c 700 <<< "${o}") | $(grep -E ' (apply|delete|exec) |-X POST' "${LOG}" | head -2)"
+        fi
+    }
+
+    # ---- add --dry-run -----------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(m_cli model add RedHatAI/Qwen3.8-27B-INT4 --dry-run); rc=$?
+    log=$(cat "${LOG}")
+    check "model: add --dry-run exits 0" 0 "${rc}"
+    m_has   "model: dry run prints the card decisions" "${out}" "fit -> sized for card2"
+    m_has   "model: dry run prints the fit on that card" "${out}" "fit: RedHatAI/Qwen3.8-27B-INT4 on 1 GPU via vllm, context 65536 x 5 seqs"
+    m_has   "model: dry run prints the family's parsers" "${out}" "tool parser qwen3_coder, reasoning parser qwen3"
+    m_has   "model: dry run prints the manifest" "${out}" '"gpu.intel.com/xe": "1"'
+    m_has   "model: dry run prints the registration" "${out}" "\"api_base\": \"${URL}\""
+    m_lacks "model: dry run applies nothing" "${log}" " apply "
+    m_lacks "model: dry run registers nothing" "${log}" "-X POST"
+
+    # ---- add ---------------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(HF_TOKEN="${HFTOK}" m_cli model add RedHatAI/Qwen3.8-27B-INT4); rc=$?
+    log=$(cat "${LOG}")
+    check "model: add exits 0" 0 "${rc}"
+    check "model: add applies the manifest server-side, its Secret before the Deployment" \
+        "['Namespace', 'Secret', 'PersistentVolumeClaim', 'Deployment', 'Service']" "$(m_json "${S}/applied.json" '[i["kind"] for i in d["items"]]')"
+    j='d["items"][3]["spec"]["template"]["spec"]'
+    check "model: add serves k3d-gpu's vLLM for Intel GPUs, by digest" "${IMAGE}" "$(m_json "${S}/applied.json" "${j}[\"containers\"][0][\"image\"]")"
+    check "model: add pins the commit the fit read" "--revision=${REV}" "$(m_json "${S}/applied.json" "${j}[\"containers\"][0][\"args\"][1]")"
+    check "model: add takes the render group from the host's render node" "{'supplementalGroups': [${GID}]}" "$(m_json "${S}/applied.json" "${j}[\"securityContext\"]")"
+    check "model: add sets agent up's vLLM XPU environment" "True" \
+        "$(m_json "${S}/applied.json" "{'name': 'VLLM_TARGET_DEVICE', 'value': 'xpu'} in ${j}[\"containers\"][0][\"env\"] and {'name': 'CCL_ZE_IPC_EXCHANGE', 'value': 'pidfd'} in ${j}[\"containers\"][0][\"env\"]")"
+    m_has   "model: add waits for the rollout" "${log}" "-n ${NS} rollout status deployment/${NAME}"
+    m_has   "model: add warms up from inside the pod, as JSON (#339)" "${log}" \
+        "exec deployment/${NAME} -c vllm -- curl -sS --max-time 600 http://127.0.0.1:8000/v1/chat/completions -H Content-Type: application/json"
+    check "model: add registers model-manager's payload" \
+        "{\"litellm_params\": {\"api_base\": \"${URL}\", \"api_key\": \"unused\", \"model\": \"openai/${NAME}\"}, \"model_name\": \"${NAME}\"}" \
+        "$(tail -1 "${S}/new-bodies")"
+    check "model: LiteLLM lists it beside EI's model" "['qwen2-5-coder-7b', '${NAME}']" "$(m_json "${S}/litellm.json" '[e["model_name"] for e in d["data"]]')"
+    m_before "model: applied before the rollout wait" "${log}" "apply --server-side" "rollout status"
+    m_before "model: warmed up before it is registered" "${log}" "exec deployment/" "/model/new"
+    m_has   "model: every LiteLLM call goes to eg-gateway with the master key" "${log}" "curl-auth master-key resolve=litellm.solutions.ai:443:172.18.0.2"
+    m_lacks "model: no LiteLLM call with a wrong key" "${log}" "curl-auth WRONG"
+    m_lacks "model: the master key is on no argument list" "${log}" "${MASTER}"
+    m_lacks "model: the master key is in no output" "${out}" "${MASTER}"
+    m_lacks "model: HF_TOKEN is on no argument list" "${log}" "${HFTOK}"
+    m_lacks "model: HF_TOKEN is in no output" "${out}" "${HFTOK}"
+    check "model: HF_TOKEN reaches the Secret through kubectl's stdin" "${HFTOK}" "$(m_json "${S}/applied.json" 'd["items"][1]["stringData"]["token"]')"
+    m_has   "model: add points at eas check" "${out}" "k3d-gpu eas check --model ${NAME}"
+    m_refused "a second add of the same model" "'${NAME}' is already added" model add RedHatAI/Qwen3.8-27B-INT4
+
+    # ---- list --------------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(m_cli model list); rc=$?
+    check "model: list exits 0" 0 "${rc}"
+    m_has "model: list shows the model add made, its commit, that it is Ready" "${out}" \
+        "${NAME}             k3d-gpu  RedHatAI/Qwen3.8-27B-INT4@91bd022d5b49"
+    m_has "model: list shows EI's model as EAS's" "${out}" "qwen2-5-coder-7b             eas"
+    m_lacks "model: list changes nothing" "$(cat "${LOG}")" "-X POST"
+
+    # ---- refusals ----------------------------------------------------------------------------
+    m_refused "a name LiteLLM serves from EI's catalog" "LiteLLM already serves 'qwen2-5-coder-7b' from http://ai-gateway" \
+        model add Qwen/Qwen3-4B --name qwen2-5-coder-7b
+    m_refused "a model too big for one B70" "exceed the GPU budget" model add Qwen/Qwen3.8-27B
+    m_refused "GGUF weights (vLLM does not serve them)" "vllm cannot serve these gguf weights" model add Intel/Qwen3.8-27B-q4km-AutoRound
+    STUB_PLUGIN=plugin-all.json STUB_NODES=nodes4.json m_refused "a busy card the plugin may hand out" "held outside the cluster" \
+        model add RedHatAI/Qwen3.8-27B-INT4 --name other-int4
+    STUB_PODS=pods-two.json m_refused "every card held" "is held by a pod" model add RedHatAI/Qwen3.8-27B-INT4 --name other-int4
+    m_refused "an id that is no Hugging Face id" "a Hugging Face model id" model add qwen
+    m_refused "a name that is no DNS-1035 label" "is no DNS-1035 label" model add Qwen/Qwen3-4B --name Bad_Name
+    m_refused "a context that is no number" "--ctx must be a whole number" model add Qwen/Qwen3-4B --ctx 4k
+    m_refused "an unknown option" "unknown eas model add option: --gpus" model add Qwen/Qwen3-4B --gpus 2
+    STUB_LITELLM_DOWN=1 m_refused "LiteLLM unreachable" "LiteLLM did not answer" model add Qwen/Qwen3-4B
+    STUB_UNREACHABLE=1 m_refused "an unreachable cluster" "is not reachable" model add Qwen/Qwen3-4B
+    m_refused "remove of EI's model" "'qwen2-5-coder-7b' was not added by 'k3d-gpu eas model add'" model remove qwen2-5-coder-7b
+    m_refused "remove without a name" "usage: k3d-gpu eas model remove NAME" model remove
+    m_refused "no model subcommand" "usage: k3d-gpu eas model add" model
+    echo inference > "${STATE}/layer"
+    m_refused "the inference layer (no LiteLLM)" "needs the agent toolkit" model add Qwen/Qwen3-4B
+    echo agent-toolkit > "${STATE}/layer"
+    mv "${STATE}/eas" "${STATE}/eas.away"
+    m_refused "nothing installed" "nothing installed by 'k3d-gpu eas up'" model list
+    mv "${STATE}/eas.away" "${STATE}/eas"
+
+    # ---- a registration LiteLLM refuses: the model stays for diagnosis, with the way back ----
+    : > "${LOG}"
+    out=$(STUB_NEW_FAIL=1 m_cli model add Qwen/Qwen3.8-27B-FP8 --name fp8-try); rc=$?
+    check "model: a refused registration exits 1" 1 "${rc}"
+    m_has "model: and names the way back" "${out}" "k3d-gpu eas model remove fp8-try"
+    : > "${LOG}"
+    out=$(m_cli model remove fp8-try); rc=$?
+    check "model: remove of a model LiteLLM never listed exits 0" 0 "${rc}"
+    m_has "model: and deletes its objects" "$(cat "${LOG}")" \
+        "-n k3d-gpu-eas-models delete deployment,service,persistentvolumeclaim -l app.kubernetes.io/managed-by=k3d-gpu-eas-model,app.kubernetes.io/name=fp8-try"
+    m_lacks "model: the namespace stays while a model is in it" "$(cat "${LOG}")" "delete namespace"
+
+    # ---- remove ------------------------------------------------------------------------------
+    : > "${LOG}"
+    out=$(m_cli model remove "${NAME}"); rc=$?
+    log=$(cat "${LOG}")
+    check "model: remove exits 0" 0 "${rc}"
+    check "model: remove deregisters only its own entry" "['qwen2-5-coder-7b']" "$(m_json "${S}/litellm.json" '[e["model_name"] for e in d["data"]]')"
+    m_before "model: deregistered before its server goes" "${log}" "/model/delete" " delete deployment,service"
+    m_has "model: the namespace goes with the last model" "${log}" "delete namespace k3d-gpu-eas-models"
+    m_lacks "model: remove: the master key is on no argument list" "${log}" "${MASTER}"
+}
+
+SECTIONS=(overlay config cli ready argv kcadm rediscli gwapi model)
 [ "$#" -gt 0 ] && SECTIONS=("$@")
 for s in "${SECTIONS[@]}"; do
     if declare -F "section_${s}" > /dev/null; then
