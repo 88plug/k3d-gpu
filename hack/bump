@@ -22,7 +22,8 @@
    tests/** only (hack/pinlib/goldens.py says which strings a test keeps).
 5. The hooks that render goldens from the files step 4 moved, in the group's
    order: report-html-goldens (tests/report_html_test.sh --update: each saved
-   facts/v1's report.html, whose footer is the sha256 of those facts).
+   facts/v1's report.html, whose footer is the sha256 of those facts); it also
+   runs whenever step 4 changed a tests/fixtures/*/facts.json.
 6. The group's tests (skipped by --dry-run and --no-tests).
 7. The policy verdict (hack/pins policy) of the resulting diff, and a PR body.
 
@@ -412,6 +413,8 @@ def hook_model_opt_goldens(root, ctx):
 
 
 REPORT_HTML_TEST = "tests/report_html_test.sh"
+# the facts tests/report_html_test.sh renders a report.html golden from
+REPORT_FACTS = re.compile(r"tests/fixtures/[^/]+/facts\.json")
 
 
 def hook_report_html_goldens(root, ctx):
@@ -680,9 +683,12 @@ def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True,
     golden = goldens.substitute(root, pairs)
     if golden:
         notes.append("golden substitution: %s" % ", ".join(golden))
-    for h in hooks:
-        if h in AFTER_GOLDENS:
-            HOOK_FNS[h](root, ctx)
+    after = [h for h in hooks if h in AFTER_GOLDENS]
+    # a saved facts.json the substitution moved, in any group (npu-umd's image is OVMS's)
+    if "report-html-goldens" not in after and any(REPORT_FACTS.fullmatch(p) for p in golden):
+        after.append("report-html-goldens")
+    for h in after:
+        HOOK_FNS[h](root, ctx)
     if vcs(root, "status", "--porcelain", "--", ".github").strip():
         raise BumpError("the bump changed .github/: a bumper never writes a workflow")
     # the sites and the goldens are written only where path_writable allows; a hook's

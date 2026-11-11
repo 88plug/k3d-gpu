@@ -125,7 +125,10 @@ A golden rendered from a substituted one needs more than substitution.
 of those facts' bytes. The hook runs `tests/report_html_test.sh --update`, which
 renders every report again from the moved facts, offline. The new digest is a pin
 token to `hack/pin-only-diff`, so it alone does not put the PR on review. Every group
-that moves one of those pins (`llama-cpp`, `ovms`) runs the hook and that test.
+that moves one of those pins (`llama-cpp`, `ovms`) runs the hook and that test. The
+bump also runs the hook in any other group whose substitution changed a saved
+`facts.json`: `NPU_UMD_IMAGE` (group `npu-umd`) is the same OVMS image, so once `ovms`
+has moved, an `npu-umd` bump moves the facts' OVMS pin.
 
 ## Hold a pin
 
