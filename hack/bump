@@ -15,11 +15,17 @@
    repin (the digests group), hf-meta (each moved Hugging Face repo's record in
    the saved metadata bundles, tests/fixtures/hf, read again at its new revision),
    model-opt-goldens (tests/model_opt_test.sh --update: the model optimizer's
-   goldens from those bundles); ledger-rules also runs whenever console/ changed.
+   goldens from those bundles), vllm-recipes (console/vllm-recipes.json at the
+   moved recipes pair, or the pinned one for a group that moved a pinned vLLM
+   version); ledger-rules also runs whenever console/ changed.
 4. hack/substitute-goldens: each exact old pin string becomes its new one in
    tests/** only (hack/pinlib/goldens.py says which strings a test keeps).
-5. The group's tests (skipped by --dry-run and --no-tests).
-6. The policy verdict (hack/pins policy) of the resulting diff, and a PR body.
+5. The hooks that render goldens from the files step 4 moved, in the group's
+   order: report-html-goldens (tests/report_html_test.sh --update: each saved
+   facts/v1's report.html, whose footer is the sha256 of those facts); it also
+   runs whenever step 4 changed a tests/fixtures/*/facts.json.
+6. The group's tests (skipped by --dry-run and --no-tests).
+7. The policy verdict (hack/pins policy) of the resulting diff, and a PR body.
 
 The bump writes the working tree it runs in (--dry-run too: run that in a scratch
 clone); it never commits, and never writes .github/.
@@ -39,6 +45,7 @@ Exit: 0 moved (or nothing to move: "moved": []), 1 a failure.
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -53,7 +60,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pinlib import goldens, http, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
 
 HOOKS = ("lock", "readme-history", "render-latest", "ppa-write", "convert-pins", "ledger-rules", "constraints",
-         "docs-lock", "flake-update", "repin", "hf-meta", "model-opt-goldens")
+         "docs-lock", "flake-update", "repin", "hf-meta", "model-opt-goldens", "vllm-recipes",
+         "report-html-goldens")
+# hooks that read the goldens hack/substitute-goldens moved run after it (step 5)
+AFTER_GOLDENS = ("report-html-goldens",)
 
 
 class BumpError(Exception):
@@ -364,26 +374,78 @@ def _dirty(root):
         vcs(root, "ls-files", "--others", "--exclude-standard").splitlines())
 
 
+def _dirty_digests(root):
+    """{path: sha256 of its bytes, or None when deleted} of each file that differs from
+    HEAD or is untracked."""
+    out = {}
+    for p in _dirty(root):
+        try:
+            with open(os.path.join(root, p), "rb") as f:
+                out[p] = hashlib.sha256(f.read()).hexdigest()
+        except OSError:
+            out[p] = None
+    return out
+
+
+def _update_goldens(root, ctx, hook, script):
+    """Run `<script> --update`, a suite that writes its goldens offline, and return the
+    files it changed (a file an earlier step changed already counts when its bytes
+    moved again); they are this bump's files. The suite's own result is the group
+    test's, not read here."""
+    if not os.path.isfile(os.path.join(root, script)):
+        raise BumpError("%s: no %s" % (hook, script))
+    before = _dirty_digests(root)
+    subprocess.run(["bash", script, "--update"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    after = _dirty_digests(root)
+    changed = sorted(p for p in after if before.get(p, "absent") != after[p])
+    ctx["touched"].update(changed)
+    return changed
+
+
 def hook_model_opt_goldens(root, ctx):
     """The model optimizer's goldens, written again by `tests/model_opt_test.sh
     --update`, offline from the saved metadata bundles (so after hf-meta): what the
     optimizer says about a moved repo at its new revision lands in the diff. The
-    suite's own result is the group test's, not read here. The goldens are no hook
-    output, so a line in them that is no pin move keeps the bump on review."""
-    if not os.path.isfile(os.path.join(root, MODEL_OPT_TEST)):
-        raise BumpError("model-opt-goldens: no %s" % MODEL_OPT_TEST)
-    before = _dirty(root)
-    subprocess.run(["bash", MODEL_OPT_TEST, "--update"], cwd=root, stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL)
-    for p in sorted(_dirty(root) - before):
+    goldens are no hook output, so a line in them that is no pin move keeps the bump
+    on review."""
+    for p in _update_goldens(root, ctx, "model-opt-goldens", MODEL_OPT_TEST):
         ctx["notes"].append("model-opt-goldens: %s" % p)
-        ctx["touched"].add(p)
+
+
+REPORT_HTML_TEST = "tests/report_html_test.sh"
+# the facts tests/report_html_test.sh renders a report.html golden from
+REPORT_FACTS = re.compile(r"tests/fixtures/[^/]+/facts\.json")
+
+
+def hook_report_html_goldens(root, ctx):
+    """Each saved facts/v1's report.html, written again by `tests/report_html_test.sh
+    --update`, offline, from the facts.json the golden substitution moved (so it runs
+    after that step): facts/v1 reports release pins (the launcher's OVMS and llama.cpp
+    Vulkan images), and the report's footer is the sha256 of the facts' canonical
+    bytes. That digest is a pin token to hack/pin-only-diff; any other line the
+    render changes keeps the bump on review."""
+    changed = _update_goldens(root, ctx, "report-html-goldens", REPORT_HTML_TEST)
+    if changed:
+        ctx["notes"].append("report-html-goldens: %s" % ", ".join(changed))
+
+
+def hook_vllm_recipes(root, ctx):
+    """console/vllm-recipes.json at the resolved recipes pair (the vllm-recipes pin), or
+    regenerated at the pinned pair for the vLLM versions the tree now pins; what moved
+    (hack/vllm-recipes diff against HEAD) goes in the PR notes."""
+    new = next((n for p, _, n in ctx["moves"] if p["id"] == "vllm-recipes"), None)
+    tool = os.path.join(root, "hack", "vllm-recipes")
+    sh(root, sys.executable, tool, "update", *(["--recipes-commit", new] if new else []), capture=False)
+    ctx["notes"] += ["vllm-recipes: %s" % ln for ln in
+                     sh(root, sys.executable, tool, "diff", "--base-ref", "HEAD").stdout.splitlines()]
+    ctx["touched"].add("console/vllm-recipes.json")
 
 
 HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,
             "ppa-write": hook_ppa_write, "convert-pins": hook_convert_pins, "ledger-rules": hook_ledger_rules,
             "constraints": hook_constraints, "docs-lock": hook_docs_lock, "flake-update": hook_flake_update,
-            "repin": hook_repin, "hf-meta": hook_hf_meta, "model-opt-goldens": hook_model_opt_goldens}
+            "repin": hook_repin, "hf-meta": hook_hf_meta, "model-opt-goldens": hook_model_opt_goldens,
+            "vllm-recipes": hook_vllm_recipes, "report-html-goldens": hook_report_html_goldens}
 
 
 # ---- known issues -------------------------------------------------------------------
@@ -598,7 +660,8 @@ def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True,
     for h in hooks:
         if h not in HOOK_FNS:
             raise BumpError("group %s: unknown hook %r" % (group, h))
-        HOOK_FNS[h](root, ctx)
+        if h not in AFTER_GOLDENS:
+            HOOK_FNS[h](root, ctx)
     changed = set(vcs(root, "diff", "--name-only").split())
     if any(p.startswith("console/") and p.endswith(".py") for p in changed) and "ledger-rules" not in hooks:
         hook_ledger_rules(root, ctx)
@@ -620,6 +683,12 @@ def bump(root, group, reason=None, dry_run=False, resolved=None, run_tests=True,
     golden = goldens.substitute(root, pairs)
     if golden:
         notes.append("golden substitution: %s" % ", ".join(golden))
+    after = [h for h in hooks if h in AFTER_GOLDENS]
+    # a saved facts.json the substitution moved, in any group (npu-umd's image is OVMS's)
+    if "report-html-goldens" not in after and any(REPORT_FACTS.fullmatch(p) for p in golden):
+        after.append("report-html-goldens")
+    for h in after:
+        HOOK_FNS[h](root, ctx)
     if vcs(root, "status", "--porcelain", "--", ".github").strip():
         raise BumpError("the bump changed .github/: a bumper never writes a workflow")
     # the sites and the goldens are written only where path_writable allows; a hook's

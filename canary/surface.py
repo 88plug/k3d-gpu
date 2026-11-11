@@ -125,6 +125,25 @@ def args_class_fields(tree):
     return out
 
 
+def parser_names(tree, var):
+    """The names a vLLM parser registry module registers: the string keys of the dict
+    literal assigned to `var` (vllm/tool_parsers/__init__.py _TOOL_PARSERS_TO_REGISTER,
+    vllm/reasoning/__init__.py _REASONING_PARSERS_TO_REGISTER) and the name of every
+    register_lazy_module call written with a string (name="x" or the first argument)."""
+    out = set()
+    for n in ast.walk(tree):
+        target = n.target if isinstance(n, ast.AnnAssign) else (
+            n.targets[0] if isinstance(n, ast.Assign) and len(n.targets) == 1 else None)
+        if isinstance(target, ast.Name) and target.id == var and isinstance(n.value, ast.Dict):
+            out.update(k.value for k in n.value.keys if isinstance(k, ast.Constant) and isinstance(k.value, str))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr == "register_lazy_module":
+            named = [k.value for k in n.keywords if k.arg == "name"]
+            first = n.args[0] if n.args else (named[0] if named else None)
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                out.add(first.value)
+    return out
+
+
 def env_names(tree):
     for n in tree.body:
         target = n.target if isinstance(n, ast.AnnAssign) else (n.targets[0] if isinstance(n, ast.Assign) and len(n.targets) == 1 else None)

@@ -1,0 +1,198 @@
+{
+  "schema": "k3d-gpu.eas-advisories/v1",
+  "checked": "2026-11-11",
+  "stock_release": "enterprise-inference v1.1.0",
+  "notes": [
+    "Published security advisories for the components EAS's inference layer deploys, read from the GitHub advisory database (gh api /advisories/<id>; gh api -X GET /advisories -f ecosystem=pip -f affects=<package>@<version>) on the checked date. `k3d-gpu eas check` reads the image tags the cluster's pods run (kubectl get pods -A -o json) and warns, never fails, for a version inside a listed range (eas-advisories.py). k3d-gpu keeps Intel's pins as shipped.",
+    "stock is the version enterprise-inference v1.1.0 (d035b1e, the EI commit EAS v1.2.0 pins) deploys; stock_source is where it is set. EI's vLLM runtime default_version is 0.24.0 (models.yaml#L550, #L567): the catalog models without server_version run it, and the same rows cover it.",
+    "clean is the first release outside every row of the component; on the checked date the advisory database listed no advisory affecting it (affects=litellm@1.100.4, affects=vllm@0.32.0).",
+    "Rows: every high or critical advisory that affects a release from stock up to clean, without the 'Duplicate Advisory' copies (GHSA-f623-hjm8-5wg5, GHSA-3cgq-c484-rx5j, GHSA-hfwf-hgvp-4rr8, GHSA-8qpc-6rxx-4pxf, each fixed by clean), and the medium ones the EI issue draft names (docs/intel/upstream-eat.md). For LiteLLM that is every advisory affecting those releases. For vLLM 0.28.0 the database lists 15 more of medium or low severity; 0.32.0 fixes each.",
+    "vulnerable holds each row's vulnerable_version_range and first_patched_version as the database gives them.",
+    "To re-check: gh api /advisories/<id> for each row, and the affects= query for stock and for clean; a new advisory affecting clean moves clean and adds its row."
+  ],
+  "components": [
+    {
+      "name": "litellm",
+      "label": "LiteLLM",
+      "package": "pip:litellm",
+      "images": [
+        "ghcr.io/berriai/litellm-database",
+        "ghcr.io/berriai/litellm",
+        "docker.litellm.ai/berriai/litellm",
+        "docker.litellm.ai/berriai/litellm-database"
+      ],
+      "stock": "1.84.0",
+      "stock_source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/litellm/defaults/main.yaml#L18",
+      "clean": "1.100.4",
+      "advisories": [
+        {
+          "id": "GHSA-g5ff-637f-6q2m",
+          "cve": null,
+          "severity": "high",
+          "published": "2026-10-27",
+          "summary": "LiteLLM: internal_user_viewer arbitrary local file read via `vertex_ai_credentials`",
+          "vulnerable": [
+            {
+              "range": "< 1.95.0",
+              "fixed": "1.95.0"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-hhww-mrg2-969h",
+          "cve": null,
+          "severity": "medium",
+          "published": "2026-10-27",
+          "summary": "LiteLLM vulnerable to reflected XSS in /sso/debug/callback",
+          "vulnerable": [
+            {
+              "range": ">= 1.65.5, < 1.85.0",
+              "fixed": "1.85.0"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-3cv6-jpf6-8222",
+          "cve": "CVE-2026-84377",
+          "severity": "medium",
+          "published": "2026-09-30",
+          "summary": "LiteLLM: Authenticated SSRF and provider-credential exfiltration via unvalidated request-body routing parameters",
+          "vulnerable": [
+            {
+              "range": "< 1.88.6",
+              "fixed": "1.88.6"
+            },
+            {
+              "range": ">= 1.89.0, < 1.89.7",
+              "fixed": "1.89.7"
+            },
+            {
+              "range": ">= 1.90.0, < 1.90.7",
+              "fixed": "1.90.7"
+            },
+            {
+              "range": ">= 1.91.0, < 1.91.5",
+              "fixed": "1.91.5"
+            },
+            {
+              "range": ">= 1.92.0, < 1.92.2",
+              "fixed": "1.92.2"
+            },
+            {
+              "range": ">= 1.93.0, < 1.93.2",
+              "fixed": "1.93.2"
+            },
+            {
+              "range": ">= 1.94.0, < 1.94.3",
+              "fixed": "1.94.3"
+            },
+            {
+              "range": ">= 1.95.0, < 1.95.1",
+              "fixed": "1.95.1"
+            },
+            {
+              "range": ">= 1.96.0, < 1.96.2",
+              "fixed": "1.96.2"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-7hp6-4w63-5g45",
+          "cve": "CVE-2026-114612",
+          "severity": "high",
+          "published": "2026-10-27",
+          "summary": "LiteLLM: Privilege Escalation to Proxy Admin via Cross-Domain Reuse of the Salt Key",
+          "vulnerable": [
+            {
+              "range": ">= 1.91.0, < 1.100.4",
+              "fixed": "1.100.4"
+            },
+            {
+              "range": ">= 1.101.0, < 1.101.3",
+              "fixed": "1.101.3"
+            },
+            {
+              "range": ">= 1.102.0, < 1.102.2",
+              "fixed": "1.102.2"
+            },
+            {
+              "range": ">= 1.103.0, < 1.103.1",
+              "fixed": "1.103.1"
+            },
+            {
+              "range": ">= 1.104.0rc1, < 1.104.0rc2",
+              "fixed": "1.104.0rc2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vllm",
+      "label": "vLLM",
+      "package": "pip:vllm",
+      "images": [
+        "vllm/vllm-openai-cpu",
+        "vllm/vllm-openai",
+        "vllm/vllm-openai-xpu"
+      ],
+      "stock": "0.28.0",
+      "stock_source": "https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L570-L571",
+      "clean": "0.32.0",
+      "advisories": [
+        {
+          "id": "GHSA-h3rc-6mm3-gc2m",
+          "cve": "CVE-2026-114053",
+          "severity": "high",
+          "published": "2026-10-27",
+          "summary": "vLLM: Request-controlled mm_processor_kwargs.code_revision allows remote code execution",
+          "vulnerable": [
+            {
+              "range": ">= 0.7.3, < 0.31.0",
+              "fixed": "0.31.0"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-6757-hggm-hp2w",
+          "cve": "CVE-2026-115912",
+          "severity": "high",
+          "published": "2026-10-28",
+          "summary": "vLLM: Public multimodal SHM handle forgery reaches worker-side `pickle.loads()` with insecure serialization disabled",
+          "vulnerable": [
+            {
+              "range": "< 0.32.0",
+              "fixed": "0.32.0"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-h3rc-j82p-2c3h",
+          "cve": "CVE-2026-115915",
+          "severity": "high",
+          "published": "2026-10-28",
+          "summary": "vLLM: Untrusted EPS inputs can trigger denial of service or Ghostscript RCE",
+          "vulnerable": [
+            {
+              "range": "< 0.32.0",
+              "fixed": "0.32.0"
+            }
+          ]
+        },
+        {
+          "id": "GHSA-gx7p-2j49-hfq4",
+          "cve": "CVE-2026-114055",
+          "severity": "high",
+          "published": "2026-10-23",
+          "summary": "vLLM : DoS via unvalidated mm_processor_kwargs in multimodal image processors (Isaac, InternVL, H2OVL, etc.)",
+          "vulnerable": [
+            {
+              "range": ">= 0.7.3, < 0.31.0",
+              "fixed": "0.31.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

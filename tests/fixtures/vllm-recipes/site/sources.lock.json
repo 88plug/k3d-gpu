@@ -1,0 +1,12 @@
+{
+  "latest": {
+    "vllm": {
+      "repo": "vllm-project/vllm",
+      "ref": "main",
+      "path": "recipes",
+      "sha": "960f5c1bb14533ed759344fdd745b623c474f901",
+      "tree_sha": "b1dcea5705d362666e7afaf22269f72bd7e88c77",
+      "resolved_at": "2026-11-11T02:03:43.961Z"
+    }
+  }
+}

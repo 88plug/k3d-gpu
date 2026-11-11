@@ -21,6 +21,8 @@ Thumbs.db
 
 # Docs site build output (mkdocs)
 site/
+# The vLLM recipes fixture's copy of the recipes repo (hack/vllm-recipes), not a docs build
+!tests/fixtures/vllm-recipes/site/
 
 # Package builds (packaging/check.sh, nix build)
 /dist/

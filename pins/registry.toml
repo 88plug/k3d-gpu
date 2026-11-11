@@ -52,33 +52,33 @@ outputs = ["hack/components/nri-balloons/component.conf", "hack/components/nri-b
            "share/nri-balloons.yml", "share/nri-balloons-guard.yml", "images.lock"]
 
 [groups.llama-cpp]
-tests = ["tests/image_pins_test.sh", "tests/llamacpp_test.sh"]
-hooks = ["lock", "ledger-rules"]
+tests = ["tests/image_pins_test.sh", "tests/llamacpp_test.sh", "tests/report_html_test.sh"]
+hooks = ["lock", "ledger-rules", "report-html-goldens"]
 outputs = ["images.lock", "console/ledger-rules.json"]
 
 [groups.vllm-cpu]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
-hooks = ["lock", "ledger-rules"]
-outputs = ["images.lock", "console/ledger-rules.json"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/vllm_recipes_test.sh"]
+hooks = ["lock", "ledger-rules", "vllm-recipes"]
+outputs = ["images.lock", "console/ledger-rules.json", "console/vllm-recipes.json"]
 
 [groups.vllm-xpu]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/model_opt_test.sh"]
-hooks = ["lock", "ledger-rules"]
-outputs = ["images.lock", "console/ledger-rules.json"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/model_opt_test.sh", "tests/vllm_recipes_test.sh"]
+hooks = ["lock", "ledger-rules", "vllm-recipes"]
+outputs = ["images.lock", "console/ledger-rules.json", "console/vllm-recipes.json"]
 
 [groups.llm-scaler]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
-hooks = ["lock", "ledger-rules"]
-outputs = ["images.lock", "console/ledger-rules.json"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/vllm_recipes_test.sh"]
+hooks = ["lock", "ledger-rules", "vllm-recipes"]
+outputs = ["images.lock", "console/ledger-rules.json", "console/vllm-recipes.json"]
 
 [groups.gaudi-vllm]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
-hooks = ["lock", "ledger-rules"]
-outputs = ["images.lock", "console/ledger-rules.json"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/vllm_recipes_test.sh"]
+hooks = ["lock", "ledger-rules", "vllm-recipes"]
+outputs = ["images.lock", "console/ledger-rules.json", "console/vllm-recipes.json"]
 
 [groups.ovms]
-tests = ["tests/image_pins_test.sh", "tests/console_test.sh"]
-hooks = ["lock", "ledger-rules"]
+tests = ["tests/image_pins_test.sh", "tests/console_test.sh", "tests/report_html_test.sh"]
+hooks = ["lock", "ledger-rules", "report-html-goldens"]
 outputs = ["images.lock", "console/ledger-rules.json"]
 
 [groups.npu-umd]
@@ -111,6 +111,14 @@ outputs = ["tests/fixtures/hf/*.json"]
 tests = ["tests/console_test.sh", "tests/model_opt_test.sh"]
 hooks = ["convert-pins"]
 outputs = ["console/convert-pins.json"]
+
+# The vllm-recipes hook also runs in every group that moves a pinned vLLM version
+# (vllm-cpu, vllm-xpu, llm-scaler, gaudi-vllm, eat-stock): the artifact carries each
+# pinned version's parser registries and serve flags.
+[groups.vllm-recipes]
+tests = ["tests/vllm_recipes_test.sh"]
+hooks = ["vllm-recipes"]
+outputs = ["console/vllm-recipes.json"]
 
 [groups.gguf-convert-pip]
 tests = ["tests/llamacpp_test.sh"]
@@ -153,9 +161,9 @@ hooks = ["constraints"]
 outputs = ["examples/agents/*/constraints.txt"]
 
 [groups.eat-stock]
-tests = ["tests/eat_test.sh", "tests/eas_test.sh", "tests/image_pins_test.sh"]
-hooks = ["lock"]
-outputs = ["images.lock"]
+tests = ["tests/eat_test.sh", "tests/eas_test.sh", "tests/image_pins_test.sh", "tests/vllm_recipes_test.sh"]
+hooks = ["lock", "vllm-recipes"]
+outputs = ["images.lock", "console/vllm-recipes.json"]
 
 [groups.images]
 tests = ["tests/image_pins_test.sh"]
@@ -798,6 +806,29 @@ notes = "hack/bump-convert-pins moves every pin of console/convert-pins.json tog
 source = { kind = "cmd", run = ["hack/bump-convert-pins", "--dry-run"], parse = "moved", key = "optimum-intel" }
 sites = [{ file = "console/convert-pins.json", regex = '"optimum-intel": "(?P<v>[0-9][^"]*)"' }]
 
+# vLLM's model recipes (vllm-project/vllm recipes/, Apache-2.0) as the source of model serving
+# facts for the vLLM agent and the EAT overlay: parsers, chat template, spec-decode modes, model
+# args and the xpu/cpu overrides, plus each pinned vLLM version's parser registries and flags.
+# The bumper resolves vllm-project/recipes main (the renderer, its taxonomy and
+# sources.lock.json); the vllm commit is the one that lock names, so the pair is the one
+# recipes.vllm.ai rendered. `hack/vllm-recipes resolve` keeps the pinned values when the
+# artifact's content would not change (no commit-only PRs); the hook regenerates
+# console/vllm-recipes.json. Nothing reads the artifact yet.
+[[pin]]
+id = "vllm-recipes"
+class = "ours"
+group = "vllm-recipes"
+family = "recipes"
+scheme = "hf-sha"
+writer = "hook"
+notes = "hack/vllm-recipes update writes console/vllm-recipes.json at the resolved pair; review: the notes list every model, parser registry and flag set that moved."
+source = { kind = "cmd", run = ["hack/vllm-recipes", "resolve"], parse = "kv" }
+sites = [
+  { file = "console/vllm-recipes.json", regex = '^ "recipes_commit": "(?P<v>[0-9a-f]{40})",?$' },
+  { file = "console/vllm-recipes.json", regex = '^ "vllm_commit": "(?P<vllm_commit>[0-9a-f]{40})",?$' },
+  { file = "console/vllm-recipes.json", regex = '^ "vllm_tree": "(?P<vllm_tree>[0-9a-f]{40})",?$' },
+]
+
 # =============================================================================
 # Telemetry and opt-in manifests
 # =============================================================================
@@ -1001,6 +1032,16 @@ scheme = "pep440"
 notes = "hack/bump-convert-pins reads PyPI requirements with it (the Freshness bump job, ci.yml's pins job)."
 source = { kind = "pypi", package = "packaging" }
 sites = [{ file = "hack/ci-tools.env", var = "PACKAGING_VERSION" }]
+
+[[pin]]
+id = "ci-pyyaml"
+class = "ours"
+group = "tools"
+family = "pypi"
+scheme = "pep440"
+notes = "hack/vllm-recipes reads the recipes with it (the Freshness plan and bump jobs, ci.yml's console-tests)."
+source = { kind = "pypi", package = "PyYAML" }
+sites = [{ file = "hack/ci-tools.env", var = "PYYAML_VERSION" }]
 
 [[pin]]
 id = "k3d"
