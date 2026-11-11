@@ -359,7 +359,8 @@ class Bump(unittest.TestCase):
     def setUp(self):
         self.d = pathlib.Path(tempfile.mkdtemp(prefix="vllm_recipes_bump."))
         r = self.r = self.d / "repo"
-        for rel in ("hack/vllm-recipes", "canary/surface.py"):
+        # the launcher and the canary table are what drift reads for k3d-gpu's side
+        for rel in ("hack/vllm-recipes", "canary/surface.py", "scripts/k3d-gpu", "canary/engines.toml"):
             (r / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / rel, r / rel)
         for pkg in ("vllmrecipes", "pinlib"):
@@ -374,7 +375,6 @@ outputs = ["console/vllm-recipes.json"]
 ''' + re.search(r'(?ms)^\[\[pin\]\]\nid = "vllm-recipes"\n.*?^\]\n', (ROOT / "pins" / "registry.toml").read_text()).group(0),
             "console/plan.py": 'AGENT_VLLM_VERSION = {"HPU": "0.32.0", "GPU": "0.33.0"}\n'
                                'v = "0.26.0" if backend == "llm-scaler" else None\n',
-            "scripts/k3d-gpu": 'AMX_TEST_IMAGE="${K3D_GPU_AMX_TEST_IMAGE:-vllm/vllm-openai-cpu:v0.32.0@sha256:%s}"\n' % ("0" * 64),
             "integrations/eat/vllm-values.yaml": 'image:\n  repository: vllm/vllm-openai-cpu\n  tag: "v0.33.0@sha256:%s"\n'
                                                  % ("0" * 64),
             "console/vllm-recipes.json": (FIX / "artifact.json").read_text(),
@@ -410,12 +410,35 @@ outputs = ["console/vllm-recipes.json"]
         s = json.loads(summary.read_text())
         self.assertEqual(s["moved"], [{"id": "vllm-recipes", "from": FIX_COMMIT, "to": NEW_COMMIT}])
         self.assertIn("vllm-recipes: recipes_commit %s -> %s" % (FIX_COMMIT[:12], NEW_COMMIT[:12]), s["notes"])
+        self.assertIn("vllm-recipes drift: no drift change", s["notes"])
         self.assertEqual(s["verdict"]["verdict"], "review")
         self.assertTrue(any("family recipes" in x for x in s["verdict"]["reasons"]), s["verdict"])
         self.git("add", "-A")
         self.git("commit", "-qm", "bump")
         p = run(ROOT / "hack" / "pin-only-diff", "--root", self.r, "--group", "vllm-recipes", "HEAD~1", "HEAD")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    def test_bump_notes_carry_the_drift_that_moved(self):
+        cur = json.loads((FIX / "artifact.json").read_text())
+        old = copy.deepcopy(cur)
+        del old["models"]["meta-llama/llama-3.3-70b-instruct"]
+        (self.r / "console" / "vllm-recipes.json").write_text(artifact.dumps(old))
+        self.git("commit", "-qam", "an artifact without Llama-3.3-70B")
+        resolved = self.d / "resolved.json"
+        resolved.write_text(json.dumps({"vllm-recipes": {"v": NEW_COMMIT, "vllm_commit": cur["vllm_commit"],
+                                                         "vllm_tree": cur["vllm_tree"]}}))
+        summary = self.d / "summary.json"
+        p = run(ROOT / "hack" / "bump", "vllm-recipes", "--resolved", resolved, "--no-tests", "--summary", summary,
+                "--root", self.r, env=self.env)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        notes = json.loads(summary.read_text())["notes"]
+        self.assertIn("vllm-recipes: model added: meta-llama/Llama-3.3-70B-Instruct", notes)
+        drift_notes = [n for n in notes if n.startswith("vllm-recipes drift: ")]
+        self.assertTrue(any(n.startswith("vllm-recipes drift: new: xpu --quantization: k3d-gpu unset; recipes fp8 x1 "
+                                         "(meta-llama/Llama-3.3-70B-Instruct variants.default) -> explained [policy, ")
+                            for n in drift_notes), drift_notes)
+        self.assertIn("vllm-recipes drift: new: xpu PYTHONUNBUFFERED: k3d-gpu unset; recipes 1 x1 "
+                      "(meta-llama/Llama-3.3-70B-Instruct) -> UNEXPLAINED", drift_notes)
 
     def test_resolve_keeps_the_pin_unless_the_content_moves(self):
         fixtures = self.d / "gh.json"

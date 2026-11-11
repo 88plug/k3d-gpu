@@ -63,7 +63,8 @@ done
 tree() {
     mkdir -p "$1"
     (cd "${ROOT}" && cp -r --parents Dockerfile scripts/k3d-gpu console/plan.py console/model_opt.py console/fit.py \
-        console/moe_predict.py bench/h54/h54.py integrations/eat/vllm-values.yaml packaging/install.sh share canary "$1")
+        console/moe_predict.py console/vllm-recipes.json bench/h54/h54.py integrations/eat/vllm-values.yaml \
+        packaging/install.sh share canary "$1")
 }
 
 # Exactly one match: a duplicated pin line is refused.
@@ -168,6 +169,10 @@ plan_auto "an OVMS manifest flag" "npu-umd ovms ovms-cpu" \
     edit scripts/k3d-gpu $'            - --rest_port=8000\n            - --model_path=/models/${AGENT_MODEL}\n' \
         $'            - --rest_port=8000\n            - --grpc_port=9000\n            - --model_path=/models/${AGENT_MODEL}\n'
 plan_auto "an unrelated launcher edit" "" edit scripts/k3d-gpu 'K3D_GPU_AGENT_STORAGE:-20Gi' 'K3D_GPU_AGENT_STORAGE:-30Gi'
+plan_auto "a parser list in the vLLM recipes" "eat-vllm-cpu gaudi-vllm llm-scaler vllm-cpu vllm-xpu" \
+    sed -i '0,/"tool_parsers": \[/s//"tool_parsers": ["a_new_parser",/' console/vllm-recipes.json
+plan_auto "a recipe value no image check reads" "" \
+    sed -i -E '0,/"context_length": [0-9]+/s//"context_length": 1/' console/vllm-recipes.json
 plan_auto "a golden" "llama-cpu" sed -i 's/"recorded_with": {/"recorded_with": {"note": "x", /' canary/goldens/llama-cpu.json
 plan_auto "one engine's table" "llama-cpu" sed -i 's/"-c", "2048", "-np"/"-c", "4096", "-np"/' canary/engines.toml
 all_ids=$(echo "${WANT_IDS}")
@@ -308,7 +313,8 @@ assert not re.search(r"\b(v?\d+\.\d+\.\d+)\b", re.sub(r"#.*", "", src)), "a vers
 PY
 
 # A pull request runs the canary when it changes any file the plan reads (canary/plan.py's
-# BASE_PATHS, each engine's locator, derived and flags_source files, the node's paths), or
+# BASE_PATHS, each engine's locator, derived and flags_source files, the node's paths, the
+# vLLM recipes artifact a surface names), or
 # a change that selects an engine would merge without its canary.
 python3 - "${ROOT}" <<'PY' && ok "canary.yml: pull_request paths cover every file the plan reads" || fail "canary.yml: pull_request paths miss a file the plan reads"
 import fnmatch, importlib.util, os, sys, yaml
@@ -323,6 +329,8 @@ for e in engines.values():
     need.update(d["file"] for d in e.get("derived", []))
     need.update(p.rstrip("/") for p in e.get("paths", []))
     need.update(s.split(":", 1)[0] for s in e.get("flags_source", []))
+    if (e.get("surface") or {}).get("recipes"):
+        need.add(e["surface"]["recipes"])
 w = yaml.safe_load(open(os.path.join(root, plan.WORKFLOW)))
 pats = (w.get(True) or w.get("on"))["pull_request"]["paths"]
 # GitHub's ** matches across directories; a directory is covered when a file in it is.

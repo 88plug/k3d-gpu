@@ -14,7 +14,7 @@ secrets.
 | Kind | Engines | What it proves |
 |---|---|---|
 | runtime | `vllm-cpu`, `ovms-cpu`, `llama-cpu`; `eat-vllm-cpu` (informational) | The pinned image serves a pinned Qwen3-0.6B under `docker run`, with the arguments and environment `engines.toml` gives it (the launcher's, or the fit's for vLLM on the CPU), not in the launcher's pod. It returns one completion (HTTP 200, `finish_reason` stop or length, tokens > 0, the text matches `/Paris/`) and one stream (at least 2 chunks, then `[DONE]`), and the server reports the version its tag names. |
-| surface | `vllm-xpu`, `llm-scaler`, `gaudi-vllm`, `llama-sycl`, `llama-vulkan`, `llama-full`, `dlstreamer`, `sglang-xeon`, `npu-umd`, `ovms` (and the runtime engines first) | Every flag and env name the launcher and `console/model_opt.py` emit (`canary/flags.sh`) exists in the image, and the constants derived from it still match: `console/plan.py`'s vLLM versions, and the NPU driver and firmware date. No device is needed. |
+| surface | `vllm-xpu`, `llm-scaler`, `gaudi-vllm`, `llama-sycl`, `llama-vulkan`, `llama-full`, `dlstreamer`, `sglang-xeon`, `npu-umd`, `ovms` (and the runtime engines first) | Every flag and env name the launcher and `console/model_opt.py` emit (`canary/flags.sh`) exists in the image, and the constants derived from it still match: `console/plan.py`'s vLLM versions, and the NPU driver and firmware date. For a vLLM image, every tool and reasoning parser `console/vllm-recipes.json` lists for the image's vLLM release is registered in it, and every `examples/<f>` chat template the recipes name is a file in the engine's `examples_dir`. No device is needed. |
 | node | `node` | The root Dockerfile builds. `k3d cluster create --image` it with the k3d `packaging/install.sh` pins and the arguments the launcher passes on a host without NVIDIA (no load balancer, no traefik, the node labelled `nvidia.com/gpu.present=false`). Within 5 minutes the node is Ready, every baked manifest is in place, every DaemonSet they define exists, and every pod in every namespace (kube-system, NFD, the device plugins) is Running and ready or Succeeded; then the pods hold for 20 s with no container restarting. A plugin that needs hardware gets no pod on a hosted runner (its node selector), so a pod still Pending at the timeout, such as one whose image does not pull, fails. |
 
 ## What it does not cover
@@ -42,7 +42,7 @@ through them. The fix was checked by hand on an Arc Pro B70, for `vllm-xpu` only
 | `plan.py` | Resolves the pins, plans the job matrix and merges the report. |
 | `run.sh` | Runtime and surface: disk, CPU flags, model, size, pull, surface, serve, probe, ISA. |
 | `probe.py` | The HTTP checks against a serving engine. |
-| `surface.py` | The flag, env and derived-constant check. It reads the engine's own `--help`, or for vLLM statically parses `arg_utils.py`, `entrypoints/**/cli_args.py` and `envs.py` inside the image, without importing them. |
+| `surface.py` | The flag, env and derived-constant check. It reads the engine's own `--help`, or for vLLM statically parses `arg_utils.py`, `entrypoints/**/cli_args.py`, `envs.py` and the parser registries (`tool_parsers/__init__.py`, `reasoning/__init__.py`) inside the image, without importing them. |
 | `flags.sh` | Lists the names k3d-gpu emits, per engine family. |
 | `node.sh` | The node canary. |
 | `goldens/<id>.json` | `{prompt, regex, exact, recorded_with}` for each runtime engine. |
