@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 17:36 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 18:06 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -20,19 +20,16 @@ None.
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 12d |
 | llama-cpp | `llama-cpp` | `v0.8.0` | `v0.9.0` | minor | 2026-11-04 | 7d |
 
-### Not resolved (4)
+### Not resolved (1)
 
-- `ppa-gmm` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
-- `ppa-libva` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
-- `ppa-media` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
 ## Open bot PRs (4)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #399 | gguf-convert-pip | auto | - |
 | #397 | llama-cpp | review | a human approval at the head |
-| #396 | gguf-convert-pip | auto | - |
 | #393 | hf-console-fallback | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 
@@ -158,7 +155,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -506,7 +506,7 @@
+@@ -509,7 +509,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
