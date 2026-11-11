@@ -207,6 +207,13 @@ class Generate(unittest.TestCase):
         self.assertNotEqual(before["vllm_tree"], after["vllm_tree"])
         self.assertEqual(artifact.content(before), artifact.content(after))
 
+    def test_every_fixture_file_is_one_git_keeps(self):
+        p = subprocess.run(["git", "ls-files", "--others", "--ignored", "--exclude-standard", "--",
+                            str(FIX.relative_to(ROOT))], capture_output=True, text=True, cwd=ROOT, env=GIT_ENV)
+        if p.returncode != 0:
+            self.skipTest("not a git checkout: %s" % p.stderr.strip())
+        self.assertEqual(p.stdout, "", "fixture files .gitignore drops (a clean checkout lacks them)")
+
     def test_no_image_install_or_prose_reaches_the_artifact(self):
         doc = json.loads((FIX / "artifact.json").read_text())
         dropped = {"docker_image", "docker_serve_command", "install", "install_note", "guide", "description", "label",
