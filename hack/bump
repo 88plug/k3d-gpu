@@ -13,8 +13,9 @@
 3. Hooks, in the group's order: lock (images.lock), readme-history, render-latest,
    ppa-write, convert-pins, ledger-rules, constraints, docs-lock, flake-update,
    repin (the digests group), hf-meta (each moved Hugging Face repo's record in
-   the saved metadata bundles, tests/fixtures/hf, read again at its new revision);
-   ledger-rules also runs whenever console/ changed.
+   the saved metadata bundles, tests/fixtures/hf, read again at its new revision),
+   model-opt-goldens (tests/model_opt_test.sh --update: the model optimizer's
+   goldens from those bundles); ledger-rules also runs whenever console/ changed.
 4. hack/substitute-goldens: each exact old pin string becomes its new one in
    tests/** only (hack/pinlib/goldens.py says which strings a test keeps).
 5. The group's tests (skipped by --dry-run and --no-tests).
@@ -52,7 +53,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from pinlib import goldens, http, ledgerinfo, lockfile, oci, policy, registry, sources  # noqa: E402
 
 HOOKS = ("lock", "readme-history", "render-latest", "ppa-write", "convert-pins", "ledger-rules", "constraints",
-         "docs-lock", "flake-update", "repin", "hf-meta")
+         "docs-lock", "flake-update", "repin", "hf-meta", "model-opt-goldens")
 
 
 class BumpError(Exception):
@@ -355,10 +356,34 @@ def hook_hf_meta(root, ctx):
             ctx["touched"].add("%s/%s" % (HF_FIXTURES, name))
 
 
+MODEL_OPT_TEST = "tests/model_opt_test.sh"
+
+
+def _dirty(root):
+    return set(vcs(root, "diff", "--name-only", "HEAD").splitlines()) | set(
+        vcs(root, "ls-files", "--others", "--exclude-standard").splitlines())
+
+
+def hook_model_opt_goldens(root, ctx):
+    """The model optimizer's goldens, written again by `tests/model_opt_test.sh
+    --update`, offline from the saved metadata bundles (so after hf-meta): what the
+    optimizer says about a moved repo at its new revision lands in the diff. The
+    suite's own result is the group test's, not read here. The goldens are no hook
+    output, so a line in them that is no pin move keeps the bump on review."""
+    if not os.path.isfile(os.path.join(root, MODEL_OPT_TEST)):
+        raise BumpError("model-opt-goldens: no %s" % MODEL_OPT_TEST)
+    before = _dirty(root)
+    subprocess.run(["bash", MODEL_OPT_TEST, "--update"], cwd=root, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+    for p in sorted(_dirty(root) - before):
+        ctx["notes"].append("model-opt-goldens: %s" % p)
+        ctx["touched"].add(p)
+
+
 HOOK_FNS = {"lock": hook_lock, "readme-history": hook_readme_history, "render-latest": hook_render_latest,
             "ppa-write": hook_ppa_write, "convert-pins": hook_convert_pins, "ledger-rules": hook_ledger_rules,
             "constraints": hook_constraints, "docs-lock": hook_docs_lock, "flake-update": hook_flake_update,
-            "repin": hook_repin, "hf-meta": hook_hf_meta}
+            "repin": hook_repin, "hf-meta": hook_hf_meta, "model-opt-goldens": hook_model_opt_goldens}
 
 
 # ---- known issues -------------------------------------------------------------------
