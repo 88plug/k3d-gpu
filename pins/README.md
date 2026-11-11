@@ -126,6 +126,9 @@ release below it; every other kind reads one newest version, and when that reach
 values). To freeze a pin at its version, set `max` to the first release after it
 (`v0.8.1` for llama.cpp `v0.8.0`, `5.21.0.post0` for PyPI `5.21.0`). `hack/pins check`
 fails once `review_by` has passed: review the hold, then move the date or drop it.
+A reason that states a ledger row's verdict ("H59w is PENDING") is checked against
+EXPERIMENTS.md by `tests/ledger_drift_check.py`, so the PR that scores the row drops
+the hold.
 
 ## Register a known issue
 
