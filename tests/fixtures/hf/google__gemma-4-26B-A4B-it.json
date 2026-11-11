@@ -387,6 +387,10 @@
     {
      "line": 28,
      "text": "* group_size: **128**"
+    },
+    {
+     "line": 131,
+     "text": "extra_body={\"chat_template_kwargs\": {\"enable_thinking\": \"true\"}},"
     }
    ],
    "chat_template_sha256": "6a1015c47ccfcfa67c3b772385bccee357a4d37c3cda37bd202e9047f391ab82",
@@ -587,7 +591,7 @@
    },
    "params_total": null,
    "pipeline_tag": "image-text-to-text",
-   "sha": "4e5885c3f03844f5887982def09708bdc9f53f7a",
+   "sha": "7b3cbc98e24a9946e561f82c752ae26cd53fc660",
    "tags": [
     "base_model:google/gemma-4-26B-A4B-it",
     "base_model:quantized:google/gemma-4-26B-A4B-it",
@@ -599,7 +603,7 @@
     "region:us"
    ],
    "tokenizer_max_length": 1000000000000000019884624838656,
-   "url": "https://huggingface.co/OpenVINO/gemma-4-26b-a4b-it-int4-ov/tree/4e5885c3f03844f5887982def09708bdc9f53f7a"
+   "url": "https://huggingface.co/OpenVINO/gemma-4-26b-a4b-it-int4-ov/tree/7b3cbc98e24a9946e561f82c752ae26cd53fc660"
   },
   "RedHatAI/gemma-4-26B-A4B-it": {
    "card": {
