@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 18:06 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 18:12 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -10,7 +10,7 @@ None.
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 3h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 4h |
 | examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 2h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
 | gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
@@ -28,9 +28,9 @@ None.
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #400 | hf-console-fallback | review | a human approval at the head |
 | #399 | gguf-convert-pip | auto | - |
 | #397 | llama-cpp | review | a human approval at the head |
-| #393 | hf-console-fallback | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 
 ## EAT stock (always review)
@@ -155,7 +155,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -509,7 +509,7 @@
+@@ -515,7 +515,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
@@ -166,7 +166,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
        - name: Install kubeconform and PyYAML
 --- a/.github/workflows/freshness.yml
 +++ b/.github/workflows/freshness.yml
-@@ -210,7 +210,7 @@
+@@ -223,7 +223,7 @@
  
        - name: Open or update the bump PR
          if: steps.s.outputs.changed == 'true'
@@ -175,7 +175,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
            branch: autobump/${{ matrix.group }}
            delete-branch: true
-@@ -255,7 +255,7 @@
+@@ -268,7 +268,7 @@
  
        - name: Open or update the workaround removal PR
          if: steps.s.outputs.changed == 'true' && steps.s.outputs.followup != ''
@@ -184,7 +184,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
            branch: autobump/ki-${{ steps.s.outputs.followup }}
            base: autobump/${{ matrix.group }}
-@@ -427,7 +427,7 @@
+@@ -440,7 +440,7 @@
          run: hack/autobump-branch-reset "autobump/amend-${ROW}"
  
        - name: Open or update the amendment PR
