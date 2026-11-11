@@ -29,6 +29,7 @@ mkdir -p "${T}/bin" "${T}/state" "${T}/dockerroot"
 # The docker shim. STUB_SERVER is the command a detached `docker run` starts ({port} is
 # the published host port); STUB_HELP the text --help prints; STUB_VERSION_TEXT what
 # --version prints; STUB_SITE the site-packages tree `surface.py inside` reads;
+# STUB_MISSING the image paths the surface check's [ -f ] run finds absent;
 # STUB_PULL_FAILS how many pulls fail first; STUB_IMAGE_BYTES the compressed image size.
 cat > "${T}/bin/docker" <<'SHIM'
 #!/usr/bin/env bash
@@ -84,6 +85,9 @@ if [ -n "${detach}" ]; then
 fi
 case " $* " in
     *" /canary/surface.py inside "*) shift; PYTHONPATH=${STUB_SITE:?} exec python3 "${canary}/surface.py" "$@" ;;
+    # surface.py missing_files: `sh -c '... missing:$f ...' sh PATH...`; STUB_MISSING names the absent ones
+    *"missing:"*) shift 3; for f in "$@"; do [[ " ${STUB_MISSING:-} " == *" ${f} "* ]] && echo "missing:${f}"; done
+                  echo checked; exit 0 ;;
     *" --help"*) cat "${STUB_HELP:?}"; exit 0 ;;
     *" --version "*) echo "${STUB_VERSION_TEXT:-}"; exit 0 ;;
     *) exit 0 ;;
@@ -231,6 +235,26 @@ VLLM_OK=(STUB_HELP="${VLLM_HELP}" STUB_SITE="${FIX}/vllm-0.32.0"
 run_case vllm vllm-cpu "${VLLM_OK[@]}"
 expect vllm verdict pass
 expect vllm hard true
+# The parser names console/vllm-recipes.json lists for the image's vLLM are registered in
+# it, and the chat templates it names are files in the engine's examples_dir.
+grep -qF "reasoning parsers console/vllm-recipes.json lists for vLLM ${VLLM_V} checked" <(field detail) \
+    && grep -qF "chat templates in /vllm-workspace/examples" <(field detail) \
+    && ok "vllm: the artifact's parsers and chat templates checked" || fail "vllm: detail is '$(field detail)'"
+grep -qE "^docker run .*--entrypoint sh .*/vllm-workspace/examples/tool_chat_template_gemma4\.jinja" "${STUB_STATE}/calls" \
+    && ok "vllm: one [ -f ] run in the image for the templates" || fail "vllm: no template check in $(grep -c . "${STUB_STATE}/calls") docker calls"
+
+# 9a. A parser the artifact lists that the image does not register, or a chat template
+# missing from examples_dir, fails the surface check.
+cp -r "${FIX}/vllm-0.32.0" "${T}/noparser-site"
+sed -i '/^    "hermes": ($/,/^    ),$/d' "${T}/noparser-site/vllm/tool_parsers/__init__.py"
+run_case vllm-parser vllm-cpu "${VLLM_OK[@]}" STUB_SITE="${T}/noparser-site"
+expect vllm-parser verdict fail
+grep -qF "lists tool parser hermes for vLLM ${VLLM_V}, which the image does not register" <(field detail) \
+    && ok "vllm-parser: detail names hermes" || fail "vllm-parser: detail is '$(field detail)'"
+run_case vllm-template vllm-cpu "${VLLM_OK[@]}" STUB_MISSING=/vllm-workspace/examples/tool_chat_template_gemma4.jinja
+expect vllm-template verdict fail
+grep -qF "names chat templates the image lacks: /vllm-workspace/examples/tool_chat_template_gemma4.jinja" <(field detail) \
+    && ok "vllm-template: detail names the template" || fail "vllm-template: detail is '$(field detail)'"
 
 # 9. A flag the launcher emits that the image's help lacks fails the surface check.
 grep -v -- '--served-model-name' "${VLLM_HELP}" > "${T}/vllm-help-missing.txt"
