@@ -184,8 +184,12 @@ class PlanRecipes(unittest.TestCase):
         self.assertEqual(set(doc["engines"]), set(self.art["engines"]))
         for v, e in doc["engines"].items():
             self.assertEqual(e, {k: self.art["engines"][v][k] for k in ("tool_parsers", "reasoning_parsers")})
-        self.assertIn("examples/tool_chat_template_gemma4.jinja", doc["templates"])
-        self.assertEqual(doc["templates"], sorted(set(doc["templates"])))
+        # every --chat-template examples/<f> the artifact holds, read from its text; no named
+        # template, so a recipes bump that renames one leaves this test as it is
+        text = json.dumps(self.art)
+        cited = {a or b for a, b in re.findall(r'"--chat-template", "(examples/[^"]+)"|"--chat-template=(examples/[^"]+)"',
+                                               text)}
+        self.assertEqual(doc["templates"], sorted(cited))
         self.assertTrue(all(re.fullmatch(r"examples/[^/]+", t) for t in doc["templates"]), doc["templates"])
         self.assertNotIn("recipes", self.plan.show("llama-sycl", ROOT))
 
@@ -207,7 +211,8 @@ class PlanRecipes(unittest.TestCase):
                 shutil.copy2(os.path.join(ROOT, rel), os.path.join(d, rel))
             before = {e: self.plan.fingerprint(e, d) for e in ("vllm-xpu", "llama-sycl")}
             art = json.loads(read(os.path.join(d, "console", "vllm-recipes.json")))
-            art["engines"]["0.33.0"]["tool_parsers"].append("new_parser")
+            # any pinned release: the artifact holds the tree's pinned vLLM versions only
+            art["engines"][max(art["engines"])]["tool_parsers"].append("new_parser")
             with open(os.path.join(d, "console", "vllm-recipes.json"), "w", encoding="utf-8") as f:
                 json.dump(art, f)
             self.assertNotEqual(self.plan.fingerprint("vllm-xpu", d), before["vllm-xpu"])
