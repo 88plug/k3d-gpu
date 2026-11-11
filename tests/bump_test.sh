@@ -13,7 +13,8 @@
 #     optimizer's goldens again from it, so the group's offline test passes;
 #   - in the groups that move a release pin facts/v1 reports (llama-cpp, ovms), renders
 #     the report.html goldens again from the substituted facts, so the offline report
-#     test passes (and the registry puts the hook in every such group);
+#     test passes (and the registry puts the hook in every such group), and does so in
+#     any group whose substitution moved a saved facts.json, and in no other;
 #   - leaves ledger (bench/), historical, eat-stock files and .github/ alone;
 #   - is a no-op when run a second time;
 #   - moves no held pin to or past its hold, from --resolved values and from a
@@ -688,6 +689,84 @@ for g in sorted(groups):
     assert "report-html-goldens" in conf.get("hooks", []), (g, conf)
     assert "tests/report_html_test.sh" in conf.get("tests", []), (g, conf)
 PY
+
+# a group without report-html-goldens whose pin string a saved facts.json holds (npu-umd:
+# NPU_UMD_IMAGE is the OVMS image, so once ovms has moved, an npu-umd bump substitutes
+# the facts' OVMS pin): the substitution moved a facts.json, so the reports are rendered
+# again all the same. A group whose bump moves no facts.json renders none.
+R11="${WORK}/repo11"
+mkdir -p "${R11}/pins" "${R11}/scripts" "${R11}/tests/fixtures/h"
+cp -R "${ROOT}/console" "${R11}/console" && rm -rf "${R11}/console/__pycache__"
+cp "${R10}/tests/report_html_test.sh" "${R11}/tests/report_html_test.sh"  # the report test of the cases above
+D_OTH=sha256:4444444444444444444444444444444444444444444444444444444444444444
+D_OTH2=sha256:5555555555555555555555555555555555555555555555555555555555555555
+cat > "${R11}/pins/registry.toml" <<'EOF'
+[groups.umd]
+tests = ["tests/report_html_test.sh"]
+
+[groups.other]
+tests = ["tests/report_html_test.sh"]
+
+[[pin]]
+id = "umd"
+class = "ours"
+group = "umd"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "x/rel", tag = "{v}" }
+sites = [{ file = "scripts/k3d-gpu", ref = "x/rel" }]
+
+[[pin]]
+id = "oth"
+class = "ours"
+group = "other"
+family = "tools"
+scheme = "semver"
+source = { kind = "oci", image = "x/oth", tag = "{v}" }
+sites = [{ file = "scripts/k3d-gpu", ref = "x/oth" }]
+EOF
+printf 'UMD_IMAGE="${K3D_GPU_UMD_IMAGE:-x/rel:7.7.1@%s}"\nOTH_IMAGE="${K3D_GPU_OTH_IMAGE:-x/oth:1.0.0@%s}"\n' \
+    "${D_OLD}" "${D_OTH}" > "${R11}/scripts/k3d-gpu"
+python3 - "${ROOT}" "${R11}" "${D_OLD}" <<'PY'
+import json, sys
+repo, root, old = sys.argv[1:]
+facts = json.load(open(repo + "/tests/fixtures/raptorlake-nvidia/facts.json"))
+facts["release"]["pins"] = {"llama.cpp": "x/none:2.0.0", "ovms": "x/rel:7.7.1@" + old}
+with open(root + "/tests/fixtures/h/facts.json", "w") as f:
+    f.write(json.dumps(facts, indent=2, sort_keys=True) + "\n")
+PY
+bash "${R11}/tests/report_html_test.sh" --update
+echo '{}' > "${R11}/images.lock"
+: > "${R11}/EXPERIMENTS.md"
+: > "${R11}/images.unpinned"
+git -C "${R11}" init -q -b main && git -C "${R11}" add -A && git -C "${R11}" commit -qm base
+FIX11="${WORK}/fixtures11.json"
+cat > "${FIX11}" <<EOF
+{"https://registry-1.docker.io/v2/x/rel/manifests/7.7.2": {"status": 200, "headers": {"Docker-Content-Digest": "${D_NEW}"}, "body": ""},
+ "https://registry-1.docker.io/v2/x/oth/manifests/1.0.1": {"status": 200, "headers": {"Docker-Content-Digest": "${D_OTH2}"}, "body": ""}}
+EOF
+echo '{"oth": {"v": "1.0.1", "tag": "1.0.1"}, "umd": {"v": "7.7.2", "tag": "7.7.2"}}' > "${WORK}/resolved11.json"
+out=$(PINLIB_FIXTURES="${FIX11}" python3 "${ROOT}/hack/bump" --root "${R11}" --resolved "${WORK}/resolved11.json" \
+    other --summary "${WORK}/oth11.json" 2>&1); rc=$?
+check "a bump that moves no facts.json exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "a bump that moves no facts.json renders no report.html" \
+    test -z "$(git -C "${R11}" status --porcelain -- tests)" -a "$(grep -c report-html-goldens "${WORK}/oth11.json")" -eq 0
+git -C "${R11}" add -A && git -C "${R11}" commit -qm other
+out=$(PINLIB_FIXTURES="${FIX11}" python3 "${ROOT}/hack/bump" --root "${R11}" --resolved "${WORK}/resolved11.json" \
+    umd --summary "${WORK}/umd11.json" 2>&1); rc=$?
+check "a group without report-html-goldens: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "a group without report-html-goldens: the substitution moved the saved facts and their report" \
+    grep -q "x/rel:7.7.2@${D_NEW}" "${R11}/tests/fixtures/h/facts.json" "${R11}/tests/fixtures/h/report.html"
+check "a group without report-html-goldens: the offline report test passes on the bumped tree" \
+    bash "${R11}/tests/report_html_test.sh"
+check "a group without report-html-goldens: the group's report test passed in the bump" \
+    python3 -c 'import json, sys; t = json.load(open(sys.argv[1]))["tests"]; sys.exit(t != [["tests/report_html_test.sh", "passed"]])' \
+    "${WORK}/umd11.json"
+check "a group without report-html-goldens: the summary notes the report rendered again" \
+    grep -q "report-html-goldens: tests/fixtures/h/report.html" "${WORK}/umd11.json"
+git -C "${R11}" add -A && git -C "${R11}" commit -qm umd
+out=$(python3 "${ROOT}/hack/pin-only-diff" --root "${R11}" --group umd HEAD~1 HEAD 2>&1); rc=$?
+check "a group without report-html-goldens: the diff is pin moves only (rc ${rc}: ${out})" test "${rc}" -eq 0
 
 # render-latest then lock (the nri group): the manifest render-component writes (the
 # component's OUTPUT) is this bump's file too, so the lock hook names it in
