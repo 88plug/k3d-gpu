@@ -63,6 +63,7 @@ k3d-gpu eas up [--agent-toolkit] [--eas-ref R] [--ei-ref R] [--eat-ref R] \
 k3d-gpu eas status     # EAS status, pins, overlay decisions, gateway IP, pods not Ready
 k3d-gpu eas check      # with --agent-toolkit: advisory warnings, Intel's validate, then chat through the EAS gateway with a minted LiteLLM key, the guard and the sandbox step
 k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes it)
+k3d-gpu eas model add <hf-id> [--name NAME] [--dry-run] | list | remove NAME   # a model on one Arc B60/B70, registered with EAS's LiteLLM
 
 k3d-gpu eat up [--legacy] [eas up options]   # EAT 2.0 = eas up --agent-toolkit; --legacy: EAT 1.x's eat-up.sh (from a checkout)
 k3d-gpu eat status | down | check [--legacy] [--model NAME]
@@ -407,8 +408,11 @@ not change. k3d-gpu keeps Intel's pins as shipped, so a stock install warns on b
 
 - **Xeon CPU path only.** That is what EAS and EAT ship for a cluster like this one
   (sources [above](#what-full-eas-covers)). An Arc GPU or a Gaudi on the node is not used by
-  EAS; serve it with `k3d-gpu agent up`. Registering such an engine behind EAS's LiteLLM,
-  as [`eat-remote.sh`](../../integrations/eat/README.md) does for EAT 1.x, is a follow-up.
+  EAS's own models. `k3d-gpu eas model add` serves a model on one Arc B60 or B70 with vLLM
+  for Intel GPUs and registers it with EAS's LiteLLM, as EI's model-manager registers its
+  own ([integrations/eas/README.md](../../integrations/eas/README.md#models-on-an-arc-b60-or-b70-eas-model-add));
+  it ran once on a Xeon 6741P with a B70 ([record](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985)).
+  A Gaudi stays with `k3d-gpu agent up`.
 - **ERAG is not wired in yet.** EAS wires Intel Enterprise RAG in as a further layer
   ([repos.erag.yaml](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.erag.yaml#L22-L28)),
   and `k3d-gpu eas up` does not install it. Its default flavour, `chatqna`, is a Xeon (CPU)
