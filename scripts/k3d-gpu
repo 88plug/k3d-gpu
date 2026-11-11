@@ -11900,17 +11900,15 @@ plan_predict_model() {
 # for the model and where its value comes from (user env, ledger row, vLLM recipe,
 # k3d-gpu default, fit). Offline: no cluster, no fetch; the fit's own section follows.
 plan_vllm_args() {
-    local dir=$1 facts=$2 matrix=$3 ff pf pv base extra=() model="" i
+    local dir=$1 facts=$2 matrix=$3 pj pv base extra=() model="" i
     shift 3
     for ((i = 1; i < $#; i++)); do
         [ "${!i}" != --model ] || { i=$((i + 1)); model=${!i}; }
     done
-    ff=$(mktemp)
-    pf=$(mktemp)
-    printf '%s\n' "${facts}" > "${ff}"
-    python3 "${dir}/plan.py" --mode json --matrix "${matrix}" "$@" < "${ff}" > "${pf}" 2>/dev/null || : > "${pf}"
-    pv=$(python3 "${dir}/recipes.py" plan --facts "${ff}" --plan "${pf}" --backend "${K3D_GPU_AGENT_BACKEND:-}" 2>/dev/null) || pv=""
-    rm -f "${ff}" "${pf}"
+    # No temp files: plan --explain runs only the tools tests/sim_matrix_test.sh lists.
+    pj=$(printf '%s\n' "${facts}" | python3 "${dir}/plan.py" --mode json --matrix "${matrix}" "$@" 2>/dev/null) || pj=""
+    pv=$(python3 "${dir}/recipes.py" plan --facts <(printf '%s\n' "${facts}") --plan <(printf '%s\n' "${pj}") \
+        --backend "${K3D_GPU_AGENT_BACKEND:-}" 2>/dev/null) || pv=""
     local PV_DEVICE="" PV_PCI="" PV_PLATFORM="" PV_HW_CLASS="" PV_OPT="" PV_MODEL="" PV_REVISION="" PV_REQUESTED=""
     local PV_TARGET="" PV_TOOL="" PV_REASONING="" PV_ARGS_JSON="[]"
     eval "${pv}"
