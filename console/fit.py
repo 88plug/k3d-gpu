@@ -1036,10 +1036,10 @@ def convert_plan(cfg, fmt):
                            and w.get("type") == "float" and w.get("num_bits") == 8):
         return {"args": ["--outtype", "bf16", "--fp8-as-q8"], "error": None}
     if method in ("bitnet", "gptq", "compressed-tensors", "modelopt", "modelopt_mixed"):
-        return {"args": None, "error": "llama.cpp v0.8.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
+        return {"args": None, "error": "llama.cpp v0.9.0's convert_hf_to_gguf.py dequantizes quant_method %s to 16 bits "
                                        "(conversion/base.py dequant_model), a GGUF larger than the weights this fit "
                                        "sized; a bf16 or FP8 checkpoint of this model converts" % method}
-    return {"args": None, "error": "llama.cpp v0.8.0's convert_hf_to_gguf.py does not read quant_method %s "
+    return {"args": None, "error": "llama.cpp v0.9.0's convert_hf_to_gguf.py does not read quant_method %s "
                                    "(conversion/base.py:575); a bf16 or FP8 checkpoint of this model converts" % method}
 
 
