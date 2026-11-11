@@ -61,7 +61,7 @@ and EAT 2.0 lists "Intel® Arc™ (XPU) deployment" as not in the release
 k3d-gpu eas up [--agent-toolkit] [--eas-ref R] [--ei-ref R] [--eat-ref R] \
                [--model NAME] [--reset-env] [--dry-run] [--explain] [-- <ansible-playbook args>]
 k3d-gpu eas status     # EAS status, pins, overlay decisions, gateway IP, pods not Ready
-k3d-gpu eas check      # with --agent-toolkit: Intel's validate, then chat through the EAS gateway with a minted LiteLLM key, the guard and the sandbox step
+k3d-gpu eas check      # with --agent-toolkit: advisory warnings, Intel's validate, then chat through the EAS gateway with a minted LiteLLM key, the guard and the sandbox step
 k3d-gpu eas down       # EAS teardown; the cluster stays (k3d-gpu down removes it)
 
 k3d-gpu eat up [--legacy] [eas up options]   # EAT 2.0 = eas up --agent-toolkit; --legacy: EAT 1.x's eat-up.sh (from a checkout)
@@ -309,6 +309,34 @@ master-key command line and the EAT 1.1.x findings) are listed in
 [intel.md, Upstream findings](../intel.md#upstream-findings), with unsent issue drafts in
 [upstream-eat.md](upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent) and, at the
 GA tags, [upstream-eat.md](upstream-eat.md#issue-drafts-at-the-ga-tags-2026-11-07-unsent).
+
+## Component advisories
+
+`eas check` first reads the image of every pod (`kubectl get pods -A -o json`) and warns when
+a deployed LiteLLM or vLLM version is inside a published security advisory. It only warns:
+the check goes on to Intel's `validate` and the end-to-end steps, and its exit status does
+not change. k3d-gpu keeps Intel's pins as shipped, so a stock install warns on both.
+
+| Component | Intel's stock (EI `v1.1.0`) | Advisories it is inside | First release outside every listed range |
+|---|---|---|---|
+| LiteLLM (`ghcr.io/berriai/litellm-database`) | `v1.84.0` ([main.yaml#L18](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/litellm/defaults/main.yaml#L18)) | [GHSA-g5ff-637f-6q2m](https://github.com/advisories/GHSA-g5ff-637f-6q2m) (high, fixed in 1.95.0), [GHSA-hhww-mrg2-969h](https://github.com/advisories/GHSA-hhww-mrg2-969h) (medium, 1.85.0), [GHSA-3cv6-jpf6-8222](https://github.com/advisories/GHSA-3cv6-jpf6-8222) (medium, 1.88.6 with backports to 1.96.2) | 1.100.4: [GHSA-7hp6-4w63-5g45](https://github.com/advisories/GHSA-7hp6-4w63-5g45) (high) covers 1.91.0 to 1.100.3 |
+| vLLM CPU (`vllm/vllm-openai-cpu`) | `v0.28.0` ([models.yaml#L570-L571](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L570-L571)); `v0.24.0` for catalog models without `server_version` | [GHSA-h3rc-6mm3-gc2m](https://github.com/advisories/GHSA-h3rc-6mm3-gc2m) (high, 0.31.0), [GHSA-gx7p-2j49-hfq4](https://github.com/advisories/GHSA-gx7p-2j49-hfq4) (high, 0.31.0), [GHSA-6757-hggm-hp2w](https://github.com/advisories/GHSA-6757-hggm-hp2w) (high, 0.32.0), [GHSA-h3rc-j82p-2c3h](https://github.com/advisories/GHSA-h3rc-j82p-2c3h) (high, 0.32.0) | 0.32.0 |
+
+- The table is [`integrations/eas/advisories.json`](../../integrations/eas/advisories.json)
+  (schema `k3d-gpu.eas-advisories/v1`), read from the GitHub advisory database with
+  `gh api /advisories/<id>` and `gh api -X GET /advisories -f ecosystem=pip -f affects=<package>@<version>`
+  on 2026-11-11. Each row keeps the database's `vulnerable_version_range` and
+  `first_patched_version`. The database listed no advisory for LiteLLM 1.100.4 or vLLM 0.32.0.
+- The rows are every high or critical advisory affecting a release from the stock version up
+  to the first release outside them, and the two medium LiteLLM ones the EI issue draft names.
+  For vLLM 0.28.0 the database lists 15 more, of medium or low severity, all fixed by 0.32.0.
+  The "Duplicate Advisory" copies are left out.
+- The version is the image tag's (`v0.28.0@sha256:...` reads 0.28.0, `v1.83.14-stable.patch.2`
+  reads 1.83.14). An image named by digest alone is an info line, not graded. A Succeeded or
+  Failed pod is skipped.
+- Moving the stock pins is EI's call: the issue draft is in
+  [upstream-eat.md](upstream-eat.md#ei-v110-the-stock-litellm-and-vllm-cpu-images-are-below-published-fixes).
+  H62r's B5 arm ran the stock versions and stays that way.
 
 ## State and secrets
 

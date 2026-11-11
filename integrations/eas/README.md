@@ -108,9 +108,14 @@ CRDs (EAS #42); 0007 is the same on `release-1.2`.
 ## What `eas check` does
 
 `eas check` (and `eat check`) needs the agent toolkit (LiteLLM and the sandbox come with it).
-It runs Intel's own `es_auto_installer.sh validate agent-toolkit --env k3d-gpu` in the
-bastion first, with install's extra vars (every enabled component's validate checks; a
-failure stops with its reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`.
+It first runs `eas-advisories.py` on `kubectl get pods -A -o json`: a deployed LiteLLM or vLLM
+image whose tag is inside a published security advisory of `advisories.json` prints a
+warning with each advisory, its fix and the first release outside them all. Intel's stock
+LiteLLM v1.84.0 and vLLM CPU v0.28.0 both warn. Warnings never stop the check or change its
+exit status ([eas.md](../../docs/intel/eas.md#component-advisories)). Next it runs Intel's
+own `es_auto_installer.sh validate agent-toolkit --env k3d-gpu` in the bastion, with
+install's extra vars (every enabled component's validate checks; a failure stops with its
+reason), then `integrations/eat/eat-check.sh` with `EAT_MODE=eas`.
 Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` validate so its
 `redis-cli` takes the Redis password from the pod's environment, not from `-a <value>`:
 
@@ -154,7 +159,8 @@ Before Intel's validate runs, `eat-redis-cli.sh` patches EAT's `redis_stack` val
 | `images.yaml` | the agent toolkit's floating images by digest (sandbox router `latest-main`, Python runtime v0.5.0) |
 | `known-issues.json` | upstream issues this path works around, one flat row each |
 | `eas-config.py`, `pins.json` | the choice generator and the pins it reads; `pins.json`'s release profile follows EAS's latest release (pin `eas-release`, `hack/eas-release-pins`) |
-| `eas-ready.py` | the stack readiness check `eas check` runs first (stdin: `kubectl get pods,daemonsets -A -o json`) |
+| `eas-ready.py` | the stack readiness check `eas check` runs before its first request (stdin: `kubectl get pods,daemonsets -A -o json`) |
+| `eas-advisories.py`, `advisories.json` | the advisory warning `eas check` prints first (stdin: `kubectl get pods -A -o json`), and its table: LiteLLM and vLLM advisories from the GitHub advisory database, with ranges and fixes as the database gives them, Intel's stock versions and the first release outside every row |
 | `overlay.py`, `overlay.json`, `patches/` | the k3s/k3d patch overlay |
 | `ei-kcadm.sh`, `patches/ei/` | enterprise-inference's `keycloak_config` patch (variant a for EI `main`, b for `release-1.1`), applied after `init`: kcadm gets the Keycloak admin password from its environment and the client secret from Keycloak, never as an argument; stops the install when the task changed shape. With `auth_provider: litellm` (the agent toolkit) EI runs no `keycloak_config` |
 | `eat-redis-cli.sh`, `patches/eat/` | enterprise-agent-toolkit's `redis_stack` validate patch (release-2.0.0), applied after `init` and before each `validate`: `redis-cli` gets the Redis password as `REDISCLI_AUTH` from the `REDIS_PASSWORD` the chart sets in the pod, never as `-a <value>`; stops when the task changed shape or another `redis-cli` call in EAT's roles, playbooks or charts passes the password as an argument |

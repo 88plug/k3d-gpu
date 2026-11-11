@@ -543,25 +543,54 @@ unattended (H62 amendment V2 met it at `v1.2.0-rc.1`).
 
 ### EI `v1.1.0`: the stock LiteLLM and vLLM CPU images are below published fixes
 
-**Where:** `roles/litellm/defaults/main.yaml`, `litellm_version: "v1.84.0"`
+Re-read on 2026-11-11 with `gh api /advisories/<id>` and
+`gh api -X GET /advisories -f ecosystem=pip -f affects=<package>@<version>`. The 2026-11-07
+text named 1.95.0 as LiteLLM's floor; 1.95.0 is still inside GHSA-3cv6 (fixed in 1.95.1)
+and GHSA-7hp6 (1.91.0 to 1.100.3), so the floor below is 1.100.4. Two more high vLLM
+advisories that 0.31.0 and 0.32.0 fix are added.
+
+**Title:** LiteLLM v1.84.0 and vLLM CPU v0.28.0 in v1.1.0 are inside published security advisories
+
+**Versions:** intel/enterprise-inference `v1.1.0` `d035b1e`, the commit EAS `v1.2.0` pins.
+
+**Where:** `roles/litellm/defaults/main.yaml`, `litellm_version: "v1.84.0"`, the image tag of
+`ghcr.io/berriai/litellm-database`
 ([#L18](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/roles/litellm/defaults/main.yaml#L18)),
-and the vLLM CPU catalog default `0.28.0` (`model_manager/models.yaml`, e.g.
-[#L300](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L300)).
+and the vLLM CPU runtime `0.28.0`, `docker.io/vllm/vllm-openai-cpu:v0.28.0`, which the tuned
+catalog models and the Qwen3Guard guard model pin (`model_manager/models.yaml`
+[#L570-L571](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L570-L571),
+e.g. [#L416](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L416)).
+The runtime's `default_version` is `0.24.0`
+([#L550](https://github.com/intel/enterprise-inference/blob/d035b1ef1981fbf5084ff05c9a337e620478bb87/model_manager/models.yaml#L550)),
+for the catalog models with no `server_version`.
 
-**What happens:** LiteLLM `1.84.0` is inside the ranges of
-[GHSA-g5ff-637f-6q2m](https://github.com/advisories/GHSA-g5ff-637f-6q2m) (high, fixed in
-1.95.0), [GHSA-hhww-mrg2-969h](https://github.com/advisories/GHSA-hhww-mrg2-969h) (medium,
-fixed in 1.85.0) and [GHSA-3cv6-jpf6-8222](https://github.com/advisories/GHSA-3cv6-jpf6-8222)
-(medium, fixed in 1.88.6); vLLM `0.28.0` is inside
-[GHSA-h3rc-6mm3-gc2m](https://github.com/advisories/GHSA-h3rc-6mm3-gc2m) (high, fixed in
-0.31.0) and [GHSA-6757-hggm-hp2w](https://github.com/advisories/GHSA-6757-hggm-hp2w) (high,
-fixed in 0.32.0). Read from the GitHub advisory database on 2026-11-07; the newest releases
-were LiteLLM 1.108.2 and vLLM 0.33.0.
+**What happens:** each version is inside the ranges of published GitHub advisories:
 
-**Suggested change:** a `release-1.1` patch release with LiteLLM at or above 1.95.0 and the
-vLLM CPU default at or above 0.32.0. A newer LiteLLM answers a guardrail block with HTTP 200
-and `finish_reason: content_filter` instead of HTTP 500 (the draft above), so the guardrail
-docs would change with it. `k3d-gpu eas` keeps Intel's pins as shipped.
+| Component | Advisory | Severity | Range | Fixed in |
+|---|---|---|---|---|
+| LiteLLM 1.84.0 | [GHSA-g5ff-637f-6q2m](https://github.com/advisories/GHSA-g5ff-637f-6q2m) | high | < 1.95.0 | 1.95.0 |
+| LiteLLM 1.84.0 | [GHSA-hhww-mrg2-969h](https://github.com/advisories/GHSA-hhww-mrg2-969h) | medium | >= 1.65.5, < 1.85.0 | 1.85.0 |
+| LiteLLM 1.84.0 | [GHSA-3cv6-jpf6-8222](https://github.com/advisories/GHSA-3cv6-jpf6-8222) (CVE-2026-84377) | medium | < 1.88.6, and backport ranges up to >= 1.96.0, < 1.96.2 (1.95.0 included) | 1.88.6 |
+| vLLM 0.28.0 and 0.24.0 | [GHSA-h3rc-6mm3-gc2m](https://github.com/advisories/GHSA-h3rc-6mm3-gc2m) (CVE-2026-114053) | high | >= 0.7.3, < 0.31.0 | 0.31.0 |
+| vLLM 0.28.0 and 0.24.0 | [GHSA-gx7p-2j49-hfq4](https://github.com/advisories/GHSA-gx7p-2j49-hfq4) (CVE-2026-114055) | high | >= 0.7.3, < 0.31.0 | 0.31.0 |
+| vLLM 0.28.0 and 0.24.0 | [GHSA-6757-hggm-hp2w](https://github.com/advisories/GHSA-6757-hggm-hp2w) (CVE-2026-115912) | high | < 0.32.0 | 0.32.0 |
+| vLLM 0.28.0 and 0.24.0 | [GHSA-h3rc-j82p-2c3h](https://github.com/advisories/GHSA-h3rc-j82p-2c3h) (CVE-2026-115915) | high | < 0.32.0 | 0.32.0 |
+
+Between 1.84.0 and the floor, [GHSA-7hp6-4w63-5g45](https://github.com/advisories/GHSA-7hp6-4w63-5g45)
+(high, CVE-2026-114612) covers LiteLLM 1.91.0 to 1.100.3. For vLLM 0.28.0 the database lists
+15 more advisories of medium or low severity; 0.32.0 fixes each. It lists none for LiteLLM
+1.100.4 or vLLM 0.32.0. The newest releases on PyPI are LiteLLM 1.109.0 and vLLM 0.33.0,
+inside no advisory.
+
+**Suggested change:** a `release-1.1` patch release with LiteLLM at 1.100.4 or later and the
+vLLM CPU runtime at 0.32.0 or later, for both the pinned version and `default_version`. A newer
+LiteLLM answers a guardrail block with HTTP 200 and `finish_reason: content_filter` instead of
+HTTP 500 (the draft above), so the guardrail docs would change with it.
+
+`k3d-gpu eas` keeps Intel's pins as shipped. `k3d-gpu eas check` warns, and goes on, when
+the deployed images are inside these ranges
+([eas.md](eas.md#component-advisories), table
+[`integrations/eas/advisories.json`](../../integrations/eas/advisories.json)).
 
 ### EAT `redis_stack` validate passes the Redis password as `redis-cli -a`
 
