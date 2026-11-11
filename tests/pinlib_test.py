@@ -378,7 +378,7 @@ class EasRelease(Fixtures):
 
 class Llama(Fixtures):
     def test_release_maps_to_its_build_tag(self):
-        commit = "8642541b255bfb5dc39cd351a178be09013a55d6"
+        commit = "cd959bae99ff4bed22bef2604f45241c09bbb8c8"
         self.serve({
             GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.8.0", commit=commit)),
             GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([
@@ -492,7 +492,7 @@ class Holds(Fixtures):
             GH + "repos/ggml-org/llama.cpp/releases/latest": ok(rel("v0.9.0", commit=SHA_B)),
             GH + "repos/ggml-org/llama.cpp/releases?per_page=100&page=1": ok([
                 rel("b12100", prerelease=True, commit=SHA_B),
-                rel("b11960", prerelease=True, commit="8642541b255bfb5dc39cd351a178be09013a55d6")]),
+                rel("b11960", prerelease=True, commit="cd959bae99ff4bed22bef2604f45241c09bbb8c8")]),
         })
         self.assertNotIn("hold", PINS["llama-cpp"])
         r = sources.resolve(PINS["llama-cpp"], "v0.8.0")
