@@ -94,7 +94,8 @@ else
 fi
 out=$(K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_MODEL_OPT=off "${K3D_GPU}" plan --facts "${GOLD}/xeon-b70.facts.json" --model Qwen/Qwen3-8B --explain 2>&1)
 if grep -q '^vLLM server args: Qwen/Qwen3-8B on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM ' <<< "${out}" \
-    && grep -q '^  --reasoning-parser=qwen3  *\[recipe vllm@' <<< "${out}"; then
+    && grep -q '^  --reasoning-parser=qwen3  *\[recipe vllm@' <<< "${out}" \
+    && grep -q '^  Qwen/Qwen3-8B  *\[user model, served as given\]$' <<< "${out}"; then
     ok "vllm: plan --model with K3D_GPU_MODEL_OPT=off lists the model as given, with its recipe"
 else
     fail "vllm: plan --model with K3D_GPU_MODEL_OPT=off: $(grep -A30 'vLLM server args' <<< "${out}")"

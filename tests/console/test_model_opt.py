@@ -837,6 +837,48 @@ class RecipeFacts(unittest.TestCase):
         finally:
             recipes.MEASURED[:] = saved
 
+    def test_measured_row_beats_the_recipe_parser(self):
+        # agent up --model hands the launcher's merge the optimizer's parser as k3d-gpu's
+        # value, so the optimizer itself applies a MEASURED row: SUPPORTED sets the row's
+        # parser, REFUTED keeps the family table's over the recipe's.
+        import recipes
+        art = copy.deepcopy(self.art)
+        art["models"]["qwen/qwen3.8-27b"]["features"]["tool_calling"]["args"] = [
+            "--enable-auto-tool-choice", "--tool-call-parser", "qwen3_xml"]
+        saved = list(recipes.MEASURED)
+        try:
+            recipes.MEASURED[:] = [{"family": "H98", "match": {"model": QWEN, "class_token": "Battlemage"},
+                                    "flag": "tool-call-parser", "value": "hermes"}]
+            for verdict, want in (("SUPPORTED", "hermes"), ("REFUTED", "qwen3_coder"), ("INCONCLUSIVE", "qwen3_xml")):
+                ledger = "## Hypotheses\n| H98 | tool parser on Battlemage | p | m | %s |\n" % verdict
+                d = self.opt(QWEN, recipes=art, ledger=ledger, hw_class="gpu:Battlemage")
+                self.assertEqual(d["tool_parser"], want, verdict)
+                self.assertEqual(d["reasoning_parser"], "qwen3", verdict)
+                if verdict != "INCONCLUSIVE":
+                    self.assertTrue(any(c["fact"] == "ledger EXPERIMENTS.md H98 (%s, Battlemage)" % verdict for c in d["choices"]),
+                                    verdict)
+        finally:
+            recipes.MEASURED[:] = saved
+
+    def test_measured_row_beats_the_recipe_chat_template(self):
+        # The optimizer passes a located recipe template as its own engine argument; a REFUTED
+        # row keeps the model's own template.
+        import recipes
+        saved, dirs = list(recipes.MEASURED), dict(recipes.EXAMPLES_DIR)
+        try:
+            recipes.EXAMPLES_DIR["vllm-xpu"] = "/workspace/vllm/examples"
+            self.assertIn("--chat-template", self.opt(GEMMA)["engine_args"])
+            recipes.MEASURED[:] = [{"family": "H97", "match": {"model": "Google/gemma-4-26B-A4B-it", "class_token": "Battlemage"},
+                                    "flag": "chat-template", "value": None}]
+            ledger = "## Hypotheses\n| H97 | gemma4 template on Battlemage | p | m | REFUTED |\n"
+            d = self.opt(GEMMA, ledger=ledger, hw_class="gpu:Battlemage")
+            self.assertNotIn("--chat-template", d["engine_args"])
+            self.assertTrue(any(c["fact"] == "ledger EXPERIMENTS.md H97 (REFUTED, Battlemage)" for c in d["choices"]))
+        finally:
+            recipes.MEASURED[:] = saved
+            recipes.EXAMPLES_DIR.clear()
+            recipes.EXAMPLES_DIR.update(dirs)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
