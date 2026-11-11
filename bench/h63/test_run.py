@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Tests for the H63 runner (bench/h63: run.py, arm.sh, hold.sh, hold-run.sh, prep.sh, k3d-shim.sh,
-reproduce.sh; EXPERIMENTS.md "H63 amendment R1"). Offline: Od and Ls render through the real
+reproduce.sh; EXPERIMENTS.md "H63 amendment R1" and "H63w amendment R1"). Offline: Od and Ls render through the real
 `k3d-gpu agent manifest` against the fit fixtures with H59's kubectl stand-in, which answers only
 for the hold's own context; arm.sh runs every registered hold against a local OpenAI-compatible
 server and h63.py scores the records; hold.sh's guards, prep.sh's steps (with `hf` and `docker`
@@ -148,6 +148,8 @@ class Tables(unittest.TestCase):
         self.assertEqual((d["load1_max"], d["disk_gb"], d["mem_gib"], d["cap_s"], d["arms_end_s"]), (24, 15, 20, 4500, 4470))
         self.assertEqual((d["vendors"], d["k3s_args"], d["prefix"], d["pcores"]), ("hybrid", h59run.C1, "k3dgpu-d-h63-", 16))
         self.assertEqual((w["load1_max"], w["vendors"], w["k3s_args"], w["prefix"]), (12, "auto,-nvidia,-intel", h59run.W3, "k3dgpu-w-h63-"))
+        # The GPU co-tenants: read on the desktop; on wildct no GPU is read (rule W8).
+        self.assertEqual((d["gpus"], w["gpus"]), ("read", "none"))
         self.assertEqual(R.LOAD_PHASES, {"warmup": (3, 1, 256), "n1": (8, 1, 256), "n4": (16, 4, 256), "ttft": (4, 1, 16)})
 
     def test_render_env_scrubs_and_pins(self):
@@ -532,10 +534,39 @@ class HoldGuards(unittest.TestCase):
         r = self.hold("desktop", "1")
         self.assertEqual(r.returncode, 4, r.stderr)
 
-    def test_the_desktop_only(self):
+    def test_wildct_guards_pass_to_the_lock(self):
+        # H63w (H63w amendment R1): the i7-13700, exactly; its holds' records under results/H63w.
+        put(os.path.join(self.d, "cpuinfo"), "processor\t: 0\nmodel name\t: 13th Gen Intel(R) Core(TM) i7-13700\n")
         r = self.hold("wildct", "1")
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("its own amendment", r.stderr)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertTrue(os.path.isdir(os.path.join(self.g, "results", "H63w", "hold1")))
+        r = self.hold("wildct", "smoke")
+        self.assertEqual(r.returncode, 4, r.stderr)
+        for name in ("13th Gen Intel(R) Core(TM) i7-13700K", "13th Gen Intel(R) Core(TM) i9-13900T"):
+            put(os.path.join(self.d, "cpuinfo"), f"processor\t: 0\nmodel name\t: {name}\n")
+            r = self.hold("wildct", "1")
+            self.assertEqual(r.returncode, 2, (name, r.stderr))
+            self.assertIn("not the i7-13700", r.stderr)
+        self.assertEqual(self.hold("nowhere", "1").returncode, 2)
+
+    def cotenants(self, gpus):
+        """hold.sh's own cotenants() with the profile's gpus value, docker and nvidia-smi stand-ins."""
+        put(os.path.join(self.d, "bin", "docker"), "#!/bin/sh\n[ \"$1\" = ps ] && echo c1 || echo /prod-1 running t restarts=0\n", 0o755)
+        put(os.path.join(self.d, "bin", "nvidia-smi"), f"#!/bin/sh\ntouch {self.d}/nvidia-smi.ran\necho 0, GPU, 1 MiB\n", 0o755)
+        fn = subprocess.run(["sed", "-n", "/^cotenants() {/,/^}/p", os.path.join(HERE, "hold.sh")], capture_output=True,
+                            text=True).stdout
+        self.assertIn("cotenants()", fn)
+        return subprocess.run(["bash", "-c", fn + "\ncotenants"], env=dict(self.env, GPUS=gpus, ROW="H63w"),
+                              capture_output=True, text=True, timeout=30)
+
+    def test_wildct_reads_no_gpu(self):
+        r = self.cotenants(R.PROFILES["wildct"]["gpus"])
+        self.assertIn("/prod-1 running t restarts=0", r.stdout)
+        self.assertIn("GPUs: not read (H63w, rule W8)", r.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.d, "nvidia-smi.ran")))
+        r = self.cotenants(R.PROFILES["desktop"]["gpus"])
+        self.assertIn("0, GPU, 1 MiB", r.stdout)
+        self.assertTrue(os.path.exists(os.path.join(self.d, "nvidia-smi.ran")))
 
     def test_cpu_class_is_the_exact_model_number(self):
         for name, ok in (("13th Gen Intel(R) Core(TM) i9-13900TE", False), ("13th Gen Intel(R) Core(TM) i9-13900", False),
@@ -777,8 +808,21 @@ class Prep(unittest.TestCase):
             holder.kill()
             holder.wait()
 
-    def test_wildct_is_not_wired_here(self):
-        r = subprocess.run(["bash", os.path.join(self.repo, "bench", "h63", "prep.sh"), "wildct"], env=self.env,
+    def test_wildct_prep_in_the_profiles_directory(self):
+        # H63w (H63w amendment R1): with G unset, the wildct profile's directory under HOME; the same steps.
+        env = {k: v for k, v in self.env.items() if k != "G"}
+        r = subprocess.run(["bash", os.path.join(self.repo, "bench", "h63", "prep.sh"), "wildct"], env=env,
+                           capture_output=True, text=True, timeout=300)
+        self.assertEqual(r.returncode, 0, r.stdout[-3000:] + r.stderr[-3000:])
+        g = os.path.join(self.d, "k3dgpu-bench-wildct", "h63")
+        with patched():
+            self.assertEqual(R.models_ready(g), [])
+        self.assertEqual(jl(os.path.join(g, "prep", "drafter-check.json")), {"Ld-mtp": "ok", "Ls": "ok"})
+        self.assertFalse(os.path.exists(self.g))
+        self.assertEqual(len(rd(os.path.join(self.stub, "hf.log")).splitlines()), 3)
+
+    def test_an_unknown_host_downloads_nothing(self):
+        r = subprocess.run(["bash", os.path.join(self.repo, "bench", "h63", "prep.sh"), "nowhere"], env=self.env,
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 2)
         self.assertFalse(os.path.exists(os.path.join(self.stub, "hf.log")))
