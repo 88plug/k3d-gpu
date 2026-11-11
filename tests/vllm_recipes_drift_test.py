@@ -12,7 +12,9 @@ and applies nothing. Run by tests/vllm_recipes_test.sh. No network.
   - names and values compare as vLLM reads them: --a_b is --a-b, --no-X is X off, 0.90 is 0.9
   - a flag differs both ways; an env name only where a recipe block sets it
   - every DRIFT_REASONS entry is used by a difference on the fixture (a stale reason fails),
-    names a file that exists, and has a known kind; review prints REVIEW
+    cites a file in the tree that holds each name the source gives after it (a ledger
+    reason: a SUPPORTED or REFUTED EXPERIMENTS.md row), and has a known kind; review
+    prints REVIEW
   - --base/--base-ref prints only the differences that moved, for a bump PR's notes
   - the shipped artifact's drift is printed into the log and never fails the run
 
@@ -20,6 +22,7 @@ Usage: python3 tests/vllm_recipes_drift_test.py
 """
 
 import copy
+import importlib.util
 import json
 import pathlib
 import re
@@ -35,6 +38,10 @@ sys.path.insert(0, str(ROOT / "hack"))
 sys.dont_write_bytecode = True
 
 from vllmrecipes import drift  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location("ledger_drift_check", ROOT / "tests" / "ledger_drift_check.py")
+LEDGER = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(LEDGER)
 
 
 def run(*args):
@@ -64,6 +71,23 @@ def one_model(gen, args=None, env=None, variant=None):
 
 def rows(art, gen):
     return {r["name"]: r for r in drift.report(art, ROOT)["generations"][gen]["rows"]}
+
+
+def citation_problems(root, reason):
+    """What a reason's `source` cites that the tree does not hold: the file, each name
+    after it (a function or variable the file must contain), and for a ledger reason a
+    SUPPORTED or REFUTED row of EXPERIMENTS.md's Hypotheses table (read as
+    tests/ledger_drift_check.py reads it)."""
+    path, *names = reason["source"].split()
+    if not (root / path).is_file():
+        return ["%s is not a file in the tree" % path]
+    if reason["kind"] == "ledger":
+        if path != "EXPERIMENTS.md" or len(names) != 1:
+            return ["a ledger reason cites EXPERIMENTS.md <row>, not %r" % reason["source"]]
+        verdict = LEDGER.ledger(root).get(names[0])
+        return [] if verdict in ("SUPPORTED", "REFUTED") else ["EXPERIMENTS.md row %s is %s" % (names[0], verdict)]
+    text = (root / path).read_text(encoding="utf-8")
+    return ["%s does not contain %s" % (path, n) for n in names if n not in text]
 
 
 class Golden(unittest.TestCase):
@@ -163,10 +187,25 @@ class Reasons(unittest.TestCase):
         for key, r in drift.DRIFT_REASONS.items():
             self.assertIn(r["kind"], drift.KINDS, key)
             self.assertTrue(r["why"], key)
-            path = r["source"].split()[0]
-            self.assertTrue((ROOT / path).exists(), "%s cites %s, which is not in the tree" % (key, path))
-            if r["kind"] == "ledger":
-                self.assertRegex(r["source"], r"^EXPERIMENTS\.md H\w+", key)
+            self.assertEqual(citation_problems(ROOT, r), [], key)
+
+    def test_a_citation_is_checked_against_what_it_names(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "console").mkdir()
+            (root / "console" / "fit.py").write_text("def _flags():\n    pass\n")
+            (root / "EXPERIMENTS.md").write_text("## Hypotheses\n\n| # | Claim | Verdict |\n|---|---|---|\n"
+                                                 "| H1 | a | REFUTED |\n| H2 | b | INCONCLUSIVE |\n")
+            for source, kind, ok in (("console/fit.py _flags", "fit", True),
+                                     ("console/fit.py", "fit", True),
+                                     ("console/fit.py _sizes", "fit", False),
+                                     ("console/gone.py", "fit", False),
+                                     ("EXPERIMENTS.md H1", "ledger", True),
+                                     ("EXPERIMENTS.md H2", "ledger", False),
+                                     ("EXPERIMENTS.md H3", "ledger", False),
+                                     ("console/fit.py _flags", "ledger", False)):
+                got = citation_problems(root, {"kind": kind, "source": source})
+                self.assertEqual(got == [], ok, (source, kind, got))
 
 
 class Moves(unittest.TestCase):
