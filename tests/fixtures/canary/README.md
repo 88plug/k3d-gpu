@@ -12,6 +12,8 @@ them, nothing imports them.
 | `vllm/engine/arg_utils.py` | `vllm/engine/arg_utils.py` at v0.32.0 |
 | `vllm/envs.py` | `vllm/envs.py` at v0.32.0 |
 | `vllm/entrypoints/launchers/cli_args.py` | `vllm/entrypoints/launchers/cli_args.py` at v0.32.0 (the frontend flags moved here from `entrypoints/openai/cli_args.py`) |
+| `vllm/tool_parsers/__init__.py` | `vllm/tool_parsers/__init__.py` at v0.32.0 (the tool parser registry) |
+| `vllm/reasoning/__init__.py` | `vllm/reasoning/__init__.py` at v0.32.0 (the reasoning parser registry) |
 | `vllm/__init__.py` | empty: the package marker only |
 | `vllm-0.32.0+cpu.dist-info/METADATA` | the two header lines of the `vllm-openai-cpu:v0.32.0` image's metadata |
 

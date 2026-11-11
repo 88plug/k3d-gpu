@@ -47,8 +47,7 @@ COMMIT_KEYS = ("recipes_commit", "vllm_commit", "vllm_tree")
 RECIPES_REPO = "vllm-project/recipes"
 VLLM_REPO = "vllm-project/vllm"
 LICENSE_HEAD = re.compile(r"^\s*Apache License\s+Version 2\.0, January 2004\b")
-REGISTRIES = {"tool_parsers": ("vllm/tool_parsers/__init__.py", "_TOOL_PARSERS_TO_REGISTER"),
-              "reasoning_parsers": ("vllm/reasoning/__init__.py", "_REASONING_PARSERS_TO_REGISTER")}
+REGISTRIES = {k: ("vllm/" + rel, var) for k, (rel, var) in surface.VLLM_REGISTRIES.items()}
 
 
 class GenError(Exception):

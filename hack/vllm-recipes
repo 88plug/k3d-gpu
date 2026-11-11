@@ -19,6 +19,12 @@
   hack/vllm-recipes diff (--base-ref REF | --base FILE) [--head FILE]
       offline: what moved between two artifacts (models, parsers, flags, unported), one
       line each, for a bump PR's notes. A base with no artifact counts as empty.
+  hack/vllm-recipes drift [--json] [--artifact FILE] [--base-ref REF | --base FILE]
+      offline: k3d-gpu's own vLLM arguments on an Intel GPU (xpu) and a Xeon (cpu) next
+      to the recipes' hardware_overrides, each difference labelled with its reason
+      (hack/vllmrecipes/drift.py DRIFT_REASONS) or UNEXPLAINED. A report: it applies
+      nothing. With a base, only the differences that moved since that artifact (the
+      bump hook's notes).
 
 The YAML is read as recipes.vllm.ai reads it (js-yaml 4.1.1); that needs PyYAML
 (hack/ci-tools.env PYYAML_VERSION). VLLM_RECIPES_PYTHON, when set, is the interpreter
@@ -45,7 +51,7 @@ ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 sys.dont_write_bytecode = True  # no __pycache__ in the tree a bump writes
 
-from vllmrecipes import artifact, source  # noqa: E402
+from vllmrecipes import artifact, drift, source  # noqa: E402
 
 ARTIFACT = "console/vllm-recipes.json"
 
@@ -56,6 +62,14 @@ def load(path):
             return json.load(f)
     except FileNotFoundError:
         return None
+
+
+def base_artifact(root, a):
+    """The artifact at --base-ref (None when that commit has none) or in --base."""
+    if a.base_ref:
+        p = subprocess.run(["git", "show", "%s:%s" % (a.base_ref, ARTIFACT)], cwd=root, capture_output=True, text=True)
+        return json.loads(p.stdout) if p.returncode == 0 else None
+    return load(a.base)
 
 
 def build(root, recipes_commit):
@@ -88,6 +102,12 @@ def main(argv):
     base.add_argument("--base-ref")
     base.add_argument("--base")
     d.add_argument("--head")
+    dr = sub.add_parser("drift")
+    dr.add_argument("--json", action="store_true")
+    dr.add_argument("--artifact")
+    dbase = dr.add_mutually_exclusive_group()
+    dbase.add_argument("--base-ref")
+    dbase.add_argument("--base")
     a = ap.parse_args(argv)
     root = os.path.abspath(a.root)
     path = os.path.join(root, ARTIFACT)
@@ -113,14 +133,17 @@ def main(argv):
             for k, out in (("v", "recipes_commit"), ("vllm_commit", "vllm_commit"), ("vllm_tree", "vllm_tree")):
                 print("%s=%s" % (k, doc[out]))
         elif a.cmd == "diff":
-            if a.base_ref:
-                p = subprocess.run(["git", "show", "%s:%s" % (a.base_ref, ARTIFACT)], cwd=root, capture_output=True,
-                                   text=True)
-                old = json.loads(p.stdout) if p.returncode == 0 else None
+            print("\n".join(artifact.diff(base_artifact(root, a), load(a.head or path))) or "no change")
+        elif a.cmd == "drift":
+            art = load(a.artifact or path)
+            if art is None:
+                raise artifact.GenError("drift: no %s" % (a.artifact or ARTIFACT))
+            doc = drift.report(art, root)
+            if a.base_ref or a.base:
+                print("\n".join(drift.moves(drift.report(base_artifact(root, a) or {}, root), doc)) or "no drift change")
             else:
-                old = load(a.base)
-            print("\n".join(artifact.diff(old, load(a.head or path))) or "no change")
-    except artifact.GenError as e:
+                sys.stdout.write(drift.dumps(doc) if a.json else drift.render(doc))
+    except (artifact.GenError, drift.DriftError) as e:
         sys.stderr.write("hack/vllm-recipes: %s\n" % e)
         return 1
     return 0

@@ -10,7 +10,8 @@ Runs with no device: nothing here needs a GPU, an NPU or a Gaudi.
   surface.py inside --pkg NAME [--root DIR]
       inside an image (docker run --entrypoint python3 -v canary:/canary:ro ...): finds the
       installed package on sys.path without importing it and prints what its sources
-      define, as JSON {root, version, flags, envs}; exit 3 with {error} when unparseable
+      define, as JSON {root, version, flags, envs} (vllm: and tool_parsers,
+      reasoning_parsers); exit 3 with {error} when unparseable
 
 Drivers (engines.toml surface.driver):
   vllm           `vllm serve --help=all` gives the flags when it runs on the CPU; otherwise
@@ -20,7 +21,12 @@ Drivers (engines.toml surface.driver):
                  --no-X counts as present when --X is (BooleanOptionalAction). Env names
                  are always the keys of vllm/envs.py's environment_variables dict; the
                  version is the package's dist-info. Underscores and dashes are one flag
-                 (vLLM's FlexibleArgumentParser).
+                 (vLLM's FlexibleArgumentParser). With `recipes` (console/vllm-recipes.json,
+                 canary/plan.py show reads it): every tool and reasoning parser the
+                 artifact lists for the image's vLLM release is in the image's parser
+                 registries (vllm/tool_parsers/__init__.py, vllm/reasoning/__init__.py),
+                 and with `examples_dir`, every examples/<f> chat template the artifact
+                 names is a file there.
   llama-server   llama-server --help
   llama-convert  convert_hf_to_gguf.py --help, and llama-quantize must answer --help
   ovms           ovms --help; with `deb`, that package's version (dpkg-query); with
@@ -125,6 +131,12 @@ def args_class_fields(tree):
     return out
 
 
+# The vLLM parser registries, relative to the vllm package: what `--tool-call-parser` and
+# `--reasoning-parser` accept (hack/vllmrecipes reads the same modules at each vLLM tag).
+VLLM_REGISTRIES = {"tool_parsers": ("tool_parsers/__init__.py", "_TOOL_PARSERS_TO_REGISTER"),
+                   "reasoning_parsers": ("reasoning/__init__.py", "_REASONING_PARSERS_TO_REGISTER")}
+
+
 def parser_names(tree, var):
     """The names a vLLM parser registry module registers: the string keys of the dict
     literal assigned to `var` (vllm/tool_parsers/__init__.py _TOOL_PARSERS_TO_REGISTER,
@@ -204,6 +216,13 @@ def static_package(site, pkg):
         flags |= add_argument_flags(t) | args_class_fields(t)
     envs = env_names(parse(os.path.join(root, "envs.py")))
     doc.update(flags=flags, envs=envs, files=[engine] + clis + [os.path.join(root, "envs.py")])
+    for key, (rel, var) in VLLM_REGISTRIES.items():
+        p = os.path.join(root, rel)
+        names = parser_names(parse(p), var)
+        if not names:
+            raise Unparseable("%s registers no parser (no %s)" % (p, var))
+        doc[key] = names
+        doc["files"].append(p)
     return doc
 
 
@@ -320,6 +339,46 @@ def missing(want, flags, envs, driver, lenient_no=False):
     return out
 
 
+def template_paths(templates, examples_dir):
+    """Where the image holds each examples/<f> chat template the artifact names, in the
+    image's examples directory (engines.toml surface.examples_dir); none without one."""
+    if not examples_dir:
+        return []
+    return [examples_dir.rstrip("/") + "/" + t.split("/", 1)[1] for t in templates]
+
+
+def recipes_check(rec, st, examples_dir, missing_files):
+    """(problems, notes) of console/vllm-recipes.json against an image. Every tool and
+    reasoning parser the artifact lists for the image's vLLM release is one the image
+    registers (a recipe's parser is used only when that list has it), and every chat
+    template it names is a file in examples_dir. A parser the image registers beyond the
+    list is a note: such a recipe parser is dropped, never emitted unregistered."""
+    problems, notes = [], []
+    v, art = release(st["version"]), rec["file"]
+    eng = rec["engines"].get(v)
+    if eng is None:
+        problems.append("%s has no vLLM %s, the image's release (hack/vllm-recipes update)" % (art, v))
+    else:
+        for key, what in (("tool_parsers", "tool parser"), ("reasoning_parsers", "reasoning parser")):
+            have, listed = set(st[key]), set(eng[key])
+            lost, extra = sorted(listed - have), sorted(have - listed)
+            if lost:
+                problems.append("%s lists %s %s for vLLM %s, which the image does not register"
+                                % (art, what, ", ".join(lost), v))
+            if extra:
+                notes.append("the image also registers %s %s, which %s does not list for vLLM %s"
+                             % (what, ", ".join(extra), art, v))
+        notes.append("%d tool and %d reasoning parsers %s lists for vLLM %s checked"
+                     % (len(eng["tool_parsers"]), len(eng["reasoning_parsers"]), art, v))
+    if not examples_dir:
+        notes.append("no examples_dir: the %d chat templates %s names are not checked" % (len(rec["templates"]), art))
+    elif missing_files:
+        problems.append("%s names chat templates the image lacks: %s" % (art, ", ".join(missing_files)))
+    else:
+        notes.append("%d chat templates in %s" % (len(rec["templates"]), examples_dir))
+    return problems, notes
+
+
 def derived_mismatch(derived, facts):
     bad = []
     for d in derived:
@@ -370,11 +429,20 @@ def inside(image, pkg, canary, python="python3"):
     return doc
 
 
+def missing_files(image, paths):
+    """The paths that are not regular files in the image, from one container."""
+    script = 'for f do [ -f "$f" ] || echo "missing:$f"; done; echo checked'
+    rc, out = run_image(image, ["-c", script, "sh", *paths], "sh")
+    if rc != 0 or "checked" not in out.split():
+        raise Unparseable("sh -c [ -f ] in the image exited %d: %s" % (rc, tail(out)))
+    return [ln[len("missing:"):] for ln in out.splitlines() if ln.startswith("missing:")]
+
+
 def check(doc, canary):
     image, sv = doc["ref"], doc.get("surface") or {}
     driver = sv.get("driver")
     want = doc.get("flags", [])
-    facts, notes, method = {}, [], "help"
+    facts, notes, method, problems = {}, [], "help", []
     flags, envs, lenient = set(), set(), False
     try:
         if driver == "vllm":
@@ -385,6 +453,12 @@ def check(doc, canary):
             except Unparseable as e:
                 flags, lenient, method = set(st["flags"]), True, "static"
                 notes.append("vllm serve --help=all did not run here (%s), flags from the sources" % e)
+            rec = doc.get("recipes")
+            if rec:
+                paths = template_paths(rec["templates"], sv.get("examples_dir"))
+                p, n = recipes_check(rec, st, sv.get("examples_dir"), missing_files(image, paths) if paths else [])
+                problems += p
+                notes += n
         elif driver == "llama-server":
             flags = help_of(image, ["--help"])
         elif driver == "llama-convert":
@@ -428,7 +502,6 @@ def check(doc, canary):
     lost = missing(want, flags, envs, driver, lenient_no=lenient)
     notes += ["%s is argparse's abbreviation of %s" % kv for kv in sorted(abbreviations(want, flags, driver).items())]
     bad = derived_mismatch(doc.get("derived", []), facts)
-    problems = []
     if lost:
         problems.append("not in the image: " + ", ".join("%s (%s)" % (m["name"], m["source"]) for m in lost))
     for d in bad:
@@ -498,8 +571,9 @@ def main():
         except Unparseable as e:
             print(json.dumps({"error": str(e)}))
             return 3
-        print(json.dumps({"root": doc["root"], "version": doc["version"], "flags": sorted(doc["flags"]),
-                          "envs": sorted(doc["envs"])}))
+        print(json.dumps(dict({"root": doc["root"], "version": doc["version"], "flags": sorted(doc["flags"]),
+                               "envs": sorted(doc["envs"])},
+                              **{k: sorted(doc[k]) for k in VLLM_REGISTRIES if k in doc})))
         return 0
     with open(a.engine, encoding="utf-8") as f:
         doc = json.load(f)

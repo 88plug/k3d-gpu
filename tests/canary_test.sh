@@ -29,6 +29,7 @@ mkdir -p "${T}/bin" "${T}/state" "${T}/dockerroot"
 # The docker shim. STUB_SERVER is the command a detached `docker run` starts ({port} is
 # the published host port); STUB_HELP the text --help prints; STUB_VERSION_TEXT what
 # --version prints; STUB_SITE the site-packages tree `surface.py inside` reads;
+# STUB_MISSING the image paths the surface check's [ -f ] run finds absent;
 # STUB_PULL_FAILS how many pulls fail first; STUB_IMAGE_BYTES the compressed image size.
 cat > "${T}/bin/docker" <<'SHIM'
 #!/usr/bin/env bash
@@ -84,6 +85,9 @@ if [ -n "${detach}" ]; then
 fi
 case " $* " in
     *" /canary/surface.py inside "*) shift; PYTHONPATH=${STUB_SITE:?} exec python3 "${canary}/surface.py" "$@" ;;
+    # surface.py missing_files: `sh -c '... missing:$f ...' sh PATH...`; STUB_MISSING names the absent ones
+    *"missing:"*) shift 3; for f in "$@"; do [[ " ${STUB_MISSING:-} " == *" ${f} "* ]] && echo "missing:${f}"; done
+                  echo checked; exit 0 ;;
     *" --help"*) cat "${STUB_HELP:?}"; exit 0 ;;
     *" --version "*) echo "${STUB_VERSION_TEXT:-}"; exit 0 ;;
     *) exit 0 ;;
@@ -225,12 +229,66 @@ grep -q -- '--pull --source_model=OpenVINO/Qwen3-0.6B-int8-ov' "${STUB_STATE}/ca
 grep -q 'HF_ENDPOINT=http://127.0.0.1:9' "${STUB_STATE}/calls" && ok "ovms: the pull step cannot fetch" \
     || fail "ovms: the pull step is not offline"
 
+# The vLLM sites below are the v0.32.0 tree reporting the version a pin names, with
+# parser registries that register what console/vllm-recipes.json lists for that release.
+# The surface check reads the artifact at the image's release, and the artifact holds the
+# pinned releases only, so a site fixed at v0.32.0 fails once a pin or the recipes move.
+# vllm_site <dir> <version> <release> [<tool parser left out>]
+vllm_site() {
+    rm -rf "$1"
+    cp -r "${FIX}/vllm-0.32.0" "$1"
+    sed -i "s/^Version: .*/Version: $2/" "$1/vllm-0.32.0+cpu.dist-info/METADATA"
+    python3 - "${ROOT}/console/vllm-recipes.json" "$1/vllm" "$3" "${4:-}" <<'PY' || fail "vllm_site: console/vllm-recipes.json has no vLLM $3"
+import json, os, sys
+art, pkg, release, drop = sys.argv[1:]
+eng = json.load(open(art, encoding="utf-8"))["engines"][release]
+for key, rel, var in (("tool_parsers", "tool_parsers/__init__.py", "_TOOL_PARSERS_TO_REGISTER"),
+                      ("reasoning_parsers", "reasoning/__init__.py", "_REASONING_PARSERS_TO_REGISTER")):
+    names = [n for n in eng[key] if not (key == "tool_parsers" and n == drop)]
+    with open(os.path.join(pkg, rel), "w", encoding="utf-8") as f:
+        f.write("%s = {\n%s}\n" % (var, "".join("    %r: (%r, %r),\n" % (n, "m", "C") for n in names)))
+PY
+}
+# What the recipes give the vllm-cpu engine (canary/plan.py show): a tool parser listed
+# for its release, its examples_dir and its first chat template (empty when none is named).
+read -r VLLM_TOOL VLLM_EXDIR VLLM_TPL < <(python3 "${ROOT}/canary/plan.py" show vllm-cpu | python3 -c 'import json, sys
+d = json.load(sys.stdin)
+r, t = d["recipes"], d["recipes"]["templates"]
+print(r["engines"][sys.argv[1]]["tool_parsers"][0], d["surface"]["examples_dir"], t[0].split("/", 1)[1] if t else "")' "${VLLM_V}")
+
 # 8. vLLM: help output and the static parse of v0.32.0's sources both pass.
-VLLM_OK=(STUB_HELP="${VLLM_HELP}" STUB_SITE="${FIX}/vllm-0.32.0"
+vllm_site "${T}/vllm-site" "${VLLM_V}+cpu" "${VLLM_V}"
+VLLM_OK=(STUB_HELP="${VLLM_HELP}" STUB_SITE="${T}/vllm-site"
          STUB_SERVER="python3 ${STUB} --port {port} --text '${GOLD}' --version ${VLLM_V}+cpu")
 run_case vllm vllm-cpu "${VLLM_OK[@]}"
 expect vllm verdict pass
 expect vllm hard true
+# The parser names console/vllm-recipes.json lists for the image's vLLM are registered in
+# it, and the chat templates it names are files in the engine's examples_dir.
+grep -qF "reasoning parsers console/vllm-recipes.json lists for vLLM ${VLLM_V} checked" <(field detail) \
+    && grep -qF "chat templates in ${VLLM_EXDIR}" <(field detail) \
+    && ok "vllm: the artifact's parsers and chat templates checked" || fail "vllm: detail is '$(field detail)'"
+if [ -n "${VLLM_TPL}" ]; then
+    awk -v p="${VLLM_EXDIR}/${VLLM_TPL}" '/^docker run / && index($0, "--entrypoint sh ") && index($0, p) { f = 1 }
+                                          END { exit !f }' "${STUB_STATE}/calls" \
+        && ok "vllm: one [ -f ] run in the image for the templates" || fail "vllm: no template check in $(grep -c . "${STUB_STATE}/calls") docker calls"
+fi
+
+# 9a. A parser the artifact lists that the image does not register, or a chat template
+# missing from examples_dir, fails the surface check.
+vllm_site "${T}/noparser-site" "${VLLM_V}+cpu" "${VLLM_V}" "${VLLM_TOOL}"
+run_case vllm-parser vllm-cpu "${VLLM_OK[@]}" STUB_SITE="${T}/noparser-site"
+expect vllm-parser verdict fail
+grep -qF "lists tool parser ${VLLM_TOOL} for vLLM ${VLLM_V}, which the image does not register" <(field detail) \
+    && ok "vllm-parser: detail names ${VLLM_TOOL}" || fail "vllm-parser: detail is '$(field detail)'"
+if [ -n "${VLLM_TPL}" ]; then
+    run_case vllm-template vllm-cpu "${VLLM_OK[@]}" STUB_MISSING="${VLLM_EXDIR}/${VLLM_TPL}"
+    expect vllm-template verdict fail
+    grep -qF "names chat templates the image lacks: ${VLLM_EXDIR}/${VLLM_TPL}" <(field detail) \
+        && ok "vllm-template: detail names the template" || fail "vllm-template: detail is '$(field detail)'"
+else
+    echo "skip vllm-template: console/vllm-recipes.json names no chat template"
+fi
 
 # 9. A flag the launcher emits that the image's help lacks fails the surface check.
 grep -v -- '--served-model-name' "${VLLM_HELP}" > "${T}/vllm-help-missing.txt"
@@ -239,7 +297,7 @@ expect vllm-flag verdict fail
 grep -q -- '--served-model-name' <(field detail) && ok "vllm-flag: detail names the flag" || fail "vllm-flag: detail is '$(field detail)'"
 
 # 10. Sources the static parse cannot read are unparseable, never skipped.
-cp -r "${FIX}/vllm-0.32.0" "${T}/broken-site"
+vllm_site "${T}/broken-site" "${VLLM_V}+cpu" "${VLLM_V}"
 rm "${T}/broken-site/vllm/envs.py"
 run_case vllm-unparseable vllm-cpu "${VLLM_OK[@]}" STUB_SITE="${T}/broken-site"
 expect vllm-unparseable verdict unparseable
@@ -332,10 +390,8 @@ grep -q -- '--tp (bench/h54/h54.py:sglang_args)' <(field detail) && ok "sglang-a
 # 17. llm-scaler: its vLLM reports the setuptools-scm version of a tag with patches
 # (intel/llm-scaler-vllm 1.5: 0.26.1.dev0+g568afb3a1.d<date>, vLLM v0.26.0's commit),
 # which the X.Y.Z the tree derives (SCALER_V) matches; a build commits after a tag does not.
-scaler_site() { # scaler_site <version>: the v0.32.0 tree, reporting <version>
-    rm -rf "${T}/scaler-site"
-    cp -r "${FIX}/vllm-0.32.0" "${T}/scaler-site"
-    sed -i "s/^Version: .*/Version: $1/" "${T}/scaler-site/vllm-0.32.0+cpu.dist-info/METADATA"
+scaler_site() { # scaler_site <version>: the v0.32.0 tree reporting <version>, with SCALER_V's parsers
+    vllm_site "${T}/scaler-site" "$1" "${SCALER_V}"
 }
 SCALER_NEXT=${SCALER_V%.*}.$((${SCALER_V##*.} + 1))  # setuptools-scm's next version of the tag
 scaler_site "${SCALER_NEXT}.dev0+g568afb3a1.d20260907.xpu"

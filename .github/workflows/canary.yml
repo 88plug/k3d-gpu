@@ -6,7 +6,9 @@ name: Canary
 #            pinned image, serve a pinned 0.6B model the way the launcher would, one real
 #            and one streamed completion, the version the server reports;
 #   surface  every engine image: the flags and env names the launcher emits exist in it,
-#            and the constants k3d-gpu derives from it still match (no device needed);
+#            and the constants k3d-gpu derives from it still match, and a vLLM image
+#            registers the parsers and holds the chat templates console/vllm-recipes.json
+#            names (no device needed);
 #   node     build the node image, start a k3d cluster on it, everything baked comes up.
 # A pull request or `engines=auto` runs the engines whose pin, flags, settings or golden
 # differ from merge-base(origin/main, HEAD), or from the pull request's base branch
@@ -41,6 +43,7 @@ on:
       - console/plan.py
       - console/model_opt.py
       - console/fit.py
+      - console/vllm-recipes.json # the parser names and chat templates the vLLM surface checks read
       - bench/h54/h54.py # sglang_args, the sglang flags the surface check reads
       - 'canary/**'
       - packaging/install.sh
