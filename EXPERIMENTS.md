@@ -18397,6 +18397,55 @@ nothing on the desktop is recorded here.
 **Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
 (H63d and H63w).
 
+### H63w amendment R1: the wildct wiring (2026-11-11)
+
+Recorded 2026-11-11, after H63 amendment R1 (the desktop runner, #398) and before any H63w setup,
+smoke or hold. It is the runner amendment that H63 amendment R1 leaves to H63w: the
+`bench/wildct/row.sh` rows `h63w`, `h63w-prep` and `h63w smoke`, and the wildct steps of
+`prep.sh`. The box owner's approval of H63w on wildct is H63 amendment A1 (#407). Mechanics only:
+no row's arms, model files, statistic, quality gate, 1.2 bar, load gate, hold count, cap, order,
+prior or prediction changes. `bench/h63/h63.py` is unchanged, and so is everything the desktop
+runs.
+
+**Runner change.**
+
+- `bench/h63/hold.sh` and `prep.sh` take `wildct` as well as `desktop`; any other host exits 2.
+  `run.py`'s wildct profile is H63 amendment R1's, as registered: `H63w`, the i7-13700 exactly,
+  `~/k3dgpu-bench-wildct/h63`, clusters `k3dgpu-w-h63-<hold>`, `load1` <= 12, 15 GB and 20 GiB
+  floors, `K3D_GPU_VENDORS=auto,-nvidia,-intel` (W8) and W3's kubelet thresholds. One field is
+  added to both profiles, `gpus`: `read` on the desktop, `none` on wildct. `hold.sh` reads the GPU
+  co-tenants only where it is `read`. On wildct it writes `GPUs: not read (H63w, rule W8)`
+  instead, as the H63w column registers ("no GPU is read or used, so no GPU co-tenant reading").
+- `row.sh h63w HOLD [REPEATS]` runs `bench/h63/hold.sh wildct` with `G=~/k3dgpu-bench-wildct/h63`,
+  `LOCK=~/k3dgpu-bench-wildct/inner.lock` (a private lock inside W1's), `K3D_REAL` the campaign's
+  k3d and `H63_IMAGE` the release node image. It refuses (exit 2) an `IMAGE` not pinned by digest
+  and a `~/k3dgpu-bench-wildct/h63/bin/k3d` that is not `bench/h63/k3d-shim.sh`. Holds 1-4 take no
+  other argument; a spare 5 or 6 names the hold it repeats, and `hold.sh` applies the spare rule.
+  `row.sh h63w smoke` is the wiring smoke, with hold 1's environment line for line.
+- `row.sh h63w-prep` runs `bench/h63/prep.sh wildct` outside `bench/wildct/hold.sh` (inside one it
+  exits 2). `LOCK` is rule W1's `~/k3dgpu-bench-wildct/live.lock`, which each step takes, and
+  `~/k3dgpu-bench-wildct/hfvenv/bin` comes first on `PATH`, so the downloads use the `hf` of
+  `bench/wildct/install.sh` (huggingface_hub 1.21.0). The steps are H63 amendment R1's: the
+  downloads at the registered revisions, checked against the committed sha256 lists;
+  `bench/h57d/convert.sh`; the committed Ls drafter Job; both drafters' sha256 and size.
+- A hold runs as `bench/wildct/hold.sh H63w-<hold> 4600 45 bench/wildct/row.sh h63w <hold>
+  [REPEATS]`, and the smoke as `bench/wildct/hold.sh H63w-smoke 4600 45 bench/wildct/row.sh h63w
+  smoke`. That gives each rule W1's lock, `load1` <= 12 start rule, health checks and cleanup of
+  `k3dgpu-w-*`, W4's RAPL reader, W5's sampler, and W6's floor (15 + 45 GB, the watchdog at 15 GB).
+- `pins/classes`: the `bench/wildct/**` line lists H63w, with H63 among its aliases.
+
+**Tests** (in CI). `bench/h63/test_run.py`, 37 tests: on wildct, `hold.sh`'s guards pass to the
+lock for a hold and for the smoke with the i7-13700, and refuse the i7-13700K and the i9-13900T;
+`cotenants()`, as `hold.sh` defines it, reads no GPU with wildct's profile and reads them with the
+desktop's; `prep.sh wildct` with the stand-ins leaves the layout the holds check, in the profile's
+directory; an unknown host downloads nothing. `tests/wildct_hold_test.sh`: each new row's printed
+environment, the smoke's equal to hold 1's, `h63w-prep`'s lock and `PATH`, `run.py`'s wildct
+profile against the wildct pre-registration's W3; the guards (no digest, no shim, prep inside a
+hold); and the arguments check mode accepts and refuses.
+
+**Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
+(H63d and H63w).
+
 ## Scope corrections
 
 Limits on what a SUPPORTED verdict may be quoted as saying.

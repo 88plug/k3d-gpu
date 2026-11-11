@@ -28,6 +28,12 @@
 #                environment (H59 amendment R5): hold 1's arms, no scored request, not a hold
 #   h59w-prep    bench/h59/prep.sh wildct: the downloads, then the drafter conversion under the
 #                host lock; not in a hold
+#   h63w HOLD [REPEATS]  H63w: bench/h63/hold.sh wildct (inner lock; H63w amendment R1): holds 1-3
+#                perf and 4 quality in their registered orders; a spare 5 or 6 names the hold it
+#                repeats; HOLD smoke is the wiring smoke, with the holds' environment: hold 1's
+#                arms, no scored request, not a hold
+#   h63w-prep    bench/h63/prep.sh wildct: the downloads with hfvenv's hf, both drafters and their
+#                checks, each step under the host lock; not in a hold
 # Env: IMAGE  the release node image as name:tag@sha256:digest (every row but h52w and h57wb)
 #      OUT    output directory (default ~/k3dgpu-bench-wildct/runs/${WILDCT_HOLD:-ROW}/out)
 #      WILDCT_ROW_PRINT=1  print the environment (one NAME=value per line) and the command, run nothing
@@ -129,6 +135,21 @@ case ${row} in
         [ -z "${WILDCT_HOLD:-}" ] || { echo "row.sh: h59w-prep runs outside hold.sh" >&2; exit 2; }
         E=(G="${W}/h59" LOCK="${W}/live.lock" PY_HF="${W}/hfvenv/bin/python")
         ARGV=(bash "${REPO}/bench/h59/prep.sh" wildct) ;;
+    h63w)
+        need_image
+        case ${2:-}:${3:-}:$# in
+            [1234]::2 | [56]:[1234]:3 | smoke::2) ;;
+            *) echo "row.sh: h63w ${*:2}: holds 1-3 perf, 4 quality and smoke take no other argument; a spare 5 or 6 names the hold it repeats" >&2; exit 2 ;;
+        esac
+        E=(G="${W}/h63" LOCK="${W}/inner.lock" K3D_REAL="${W}/bin/k3d" H63_IMAGE="${IMAGE}")
+        ARGV=(bash "${REPO}/bench/h63/hold.sh" wildct "${@:2}")
+        [ "${WILDCT_ROW_PRINT:-0}" = 1 ] || cmp -s "${REPO}/bench/h63/k3d-shim.sh" "${W}/h63/bin/k3d" \
+            || { echo "row.sh: ${W}/h63/bin/k3d is not bench/h63/k3d-shim.sh (install it first)" >&2; exit 2; } ;;
+    h63w-prep)
+        # prep.sh takes the host lock itself for every step, so it never runs inside hold.sh.
+        [ -z "${WILDCT_HOLD:-}" ] || { echo "row.sh: h63w-prep runs outside hold.sh" >&2; exit 2; }
+        E=(G="${W}/h63" LOCK="${W}/live.lock" PATH="${W}/hfvenv/bin:${PATH}")
+        ARGV=(bash "${REPO}/bench/h63/prep.sh" wildct) ;;
     *) echo "row.sh: unknown row ${row}" >&2; exit 2 ;;
 esac
 [ "${WILDCT_ROW_CHECK:-0}" != 1 ] || exit 0

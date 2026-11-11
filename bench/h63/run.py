@@ -128,14 +128,15 @@ MODES = {1: "perf", 2: "perf", 3: "perf", 4: "quality"}
 SPARES = (5, 6)
 
 # Host profiles (H63 pre-registration, "Hosts"). cpu: the model number /proc/cpuinfo must name;
-# pcores: the P-core balloon's CPUs a render must request.
+# pcores: the P-core balloon's CPUs a render must request; gpus: whether hold.sh reads the GPU
+# co-tenants (desktop: read, before and after each hold; wildct: none, rule W8 reads no GPU).
 PROFILES = {
     "desktop": {"row": "H63d", "cpu": "i9-13900T", "g": "~/k3dgpu-h63", "prefix": "k3dgpu-d-h63-",
                 "load1_max": 24, "mem_gib": 20, "disk_gb": 15, "cap_s": 4500, "arms_end_s": 4470,
-                "vendors": "hybrid", "k3s_args": h59run.C1, "pcores": 16},
+                "vendors": "hybrid", "k3s_args": h59run.C1, "pcores": 16, "gpus": "read"},
     "wildct": {"row": "H63w", "cpu": "i7-13700", "g": "~/k3dgpu-bench-wildct/h63", "prefix": "k3dgpu-w-h63-",
                "load1_max": 12, "mem_gib": 20, "disk_gb": 15, "cap_s": 4500, "arms_end_s": 4470,
-               "vendors": "auto,-nvidia,-intel", "k3s_args": h59run.W3, "pcores": 16},
+               "vendors": "auto,-nvidia,-intel", "k3s_args": h59run.W3, "pcores": 16, "gpus": "none"},
 }
 # Phases (H63 pre-registration, "Measurement"): (requests, concurrency, max_tokens).
 LOAD_PHASES = {"warmup": (3, 1, 256), "n1": (8, 1, 256), "n4": (16, 4, 256), "ttft": (4, 1, 16)}
