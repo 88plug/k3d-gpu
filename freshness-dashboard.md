@@ -1,57 +1,38 @@
 # Freshness dashboard
 
-Updated 2026-11-11 16:37 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 17:36 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-stale:watchdog.yml
+None.
 
-## Pins behind (6)
+## Pins behind (9)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 2h |
-| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 1h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 3h |
+| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 2h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
+| gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
+| gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 5d |
 | hf-console-fallback | `hf-gemma4-26b-int4-ov` | `4e5885c3f03844f5887982def09708bdc9f53f7a` | `7b3cbc98e24a9946e561f82c752ae26cd53fc660` | revision | 2026-11-05 | 6d |
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 4d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 12d |
+| llama-cpp | `llama-cpp` | `v0.8.0` | `v0.9.0` | minor | 2026-11-04 | 7d |
 
 ### Not resolved (4)
 
-- `ppa-gmm` (ppa): ppa-gmm: hack/ppa-pins failed: pa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-
-gzip: stdin: unexpected end of file
-ppa-pins: cannot fetch the PPA's noble index
-- `ppa-libva` (ppa): ppa-libva: hack/ppa-pins failed: pa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-
-gzip: stdin: unexpected end of file
-ppa-pins: cannot fetch the PPA's noble index
-- `ppa-media` (ppa): ppa-media: hack/ppa-pins failed: pa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-curl: (6) Could not resolve host: ppa.launchpadcontent.net
-
-gzip: stdin: unexpected end of file
-ppa-pins: cannot fetch the PPA's noble index
+- `ppa-gmm` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
+- `ppa-libva` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
+- `ppa-media` (ppa): Command '['hack/ppa-pins']' timed out after 600 seconds
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (2)
+## Open bot PRs (4)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #397 | llama-cpp | review | a human approval at the head |
+| #396 | gguf-convert-pip | auto | - |
 | #393 | hf-console-fallback | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 
@@ -177,7 +158,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
          with:
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
-@@ -505,7 +505,7 @@
+@@ -506,7 +506,7 @@
        - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
        - name: Tool versions (hack/ci-tools.env)
          run: grep -E '^[A-Z0-9_]+=' hack/ci-tools.env >> "$GITHUB_ENV"
