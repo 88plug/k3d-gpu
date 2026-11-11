@@ -960,18 +960,36 @@ def optimize(bundle, engine, device, opts=None):
                          "state": rf["state"], "file": rf["file"]}
         ftool, freason = (fam or {}).get("vllm") or (None, None)
         tool, reasoning = rf["tool_parser"] or ftool, rf["reasoning_parser"] or freason
-        doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning
         if rf["tool_parser"] or rf["reasoning_parser"]:
             choose("recipe %s (%s)" % (rf["id"], rf["ref"]), "tool parser %s, reasoning parser %s" % (tool or "none", reasoning or "none"),
                    "%s features.tool_calling, features.reasoning" % rf["file"])
         if (tool and tool != rf["tool_parser"]) or (reasoning and reasoning != rf["reasoning_parser"]):
             choose("model family %s" % facts["model_type"], "the parser the recipe does not give: tool %s, reasoning %s" % (
                 tool or "none", reasoning or "none"), fam["source"])
+        # The launcher's merge takes the optimizer's values as k3d-gpu's, so a ledger row in
+        # recipes.MEASURED is applied here: SUPPORTED sets the row's value, REFUTED keeps
+        # k3d-gpu's default (the family table's parser, no chat template).
+        rows = recipes.measured(ledger_from_text(o.get("ledger")), o.get("hw_class"), [rf["id"]])
+
+        def ledger_beats(flag, value, default):
+            hit = rows.get(flag)
+            if not hit:
+                return value
+            got = hit[0] if hit[2] == "SUPPORTED" else default
+            choose("ledger EXPERIMENTS.md %s (%s, %s)" % (hit[1], hit[2], hit[3]),
+                   "--%s %s" % (flag, got) if got else "no --%s" % flag, "console/recipes.py MEASURED")
+            return got
+        tool = ledger_beats("tool-call-parser", tool, ftool)
+        reasoning = ledger_beats("reasoning-parser", reasoning, freason)
+        doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning
         doc["notes"] += ["vLLM recipe: " + w for w in rf["warnings"]]
         for it in rf["items"]:
             if it["name"] == "chat-template" and it["action"] == "adopt":
-                doc["engine_args"] += ["--chat-template", it["value"]]
-                choose("recipe %s %s" % (rf["id"], it["path"]), "--chat-template %s" % it["value"], it["why"])
+                template = ledger_beats("chat-template", it["value"], None)
+                if template:
+                    doc["engine_args"] += ["--chat-template", template]
+                if template and template == it["value"]:
+                    choose("recipe %s %s" % (rf["id"], it["path"]), "--chat-template %s" % template, it["why"])
     elif fam and engine in ("vllm", "ovms") and engine in fam:
         tool, reasoning = fam[engine]
         doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning

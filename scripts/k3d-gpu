@@ -9134,12 +9134,15 @@ vllm_arg_source() {
 vllm_base_lines() {
     local a m="k3d-gpu default (agent_config)"
     [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || m="user env K3D_GPU_AGENT_MODEL"
-    [ -z "${AGENT_OPT_MODEL:-}" ] || m="model optimizer"
+    # The model the user named, served as given (K3D_GPU_MODEL_OPT=off, no metadata), else
+    # the optimizer's pick (AGENT_OPT_TARGET is set only from its decision).
+    [ -z "${AGENT_OPT_MODEL:-}" ] || m="user model, served as given"
+    [ -z "${AGENT_OPT_TARGET:-}" ] || m="model optimizer"
     printf '%s\t%s\n' "${AGENT_MODEL}" "${m}"
     for a in ${AGENT_REVISION:+"--revision=${AGENT_REVISION}"} "--served-model-name=${AGENT_MODEL_NAME}" --port=8000; do
         m=$(vllm_arg_source "${a}" agent_config)
         # The optimizer pins the revision of the variant it picked.
-        [ -z "${AGENT_OPT_MODEL:-}" ] || [[ "${a}" != --revision=* ]] || [[ "${m}" = "user env"* ]] || m="model optimizer"
+        [ -z "${AGENT_OPT_TARGET:-}" ] || [[ "${a}" != --revision=* ]] || [[ "${m}" = "user env"* ]] || m="model optimizer"
         printf '%s\t%s\n' "${a}" "${m}"
     done
     while read -r a; do
