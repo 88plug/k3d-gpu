@@ -1,17 +1,17 @@
 # Freshness dashboard
 
-Updated 2026-11-11 18:12 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 18:27 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 None.
 
-## Pins behind (9)
+## Pins behind (10)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 4h |
-| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 2h |
+| examples | `examples-langchain-core` | `1.7.7` | `1.8.0` | minor | 2026-11-11 | 3h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.108.4` | `v1.108.4` | `v1.109.0` | minor | ? | ? |
 | gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
 | gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 5d |
@@ -19,6 +19,7 @@ None.
 | hf-console-fallback | `hf-qwen3.8-27b` | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` | `37561816e66b5b9153b1b64c10968c18c1e6f4a0` | revision | 2026-11-07 | 4d |
 | hf-console-fallback | `hf-qwen3.8-27b-int4-ov` | `7b20ea8c7df7223a85ff27bab5c473f0cb038943` | `d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e` | revision | 2026-10-30 | 12d |
 | llama-cpp | `llama-cpp` | `v0.8.0` | `v0.9.0` | minor | 2026-11-04 | 7d |
+| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `0eb50b4a3505ce2cd22d0d131ed5c22d11d2d980` | revision | ? | ? |
 
 ### Not resolved (1)
 
@@ -28,8 +29,8 @@ None.
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #400 | hf-console-fallback | review | a human approval at the head |
-| #399 | gguf-convert-pip | auto | - |
+| #403 | gguf-convert-pip | auto | - |
+| #402 | hf-console-fallback | review | a human approval at the head |
 | #397 | llama-cpp | review | a human approval at the head |
 | #384 | examples | review | a human approval at the head |
 
@@ -113,7 +114,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59 | cryptoandcoffee/k3d-gpu 0.1.83; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b11960; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | no |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.102; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.103; llama.cpp b11960; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
