@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
-# hold.sh HOST HOLD [REPEATS]: one H63 hold (EXPERIMENTS.md "H63 pre-registration" and "H63
-# amendment R1") on HOST = desktop (H63d, i9-13900T). HOLD: 1-3 perf in the orders (Od, Ld-mtp,
-# Ls), (Ld-mtp, Ls, Od), (Ls, Od, Ld-mtp); 4 quality in (Ls, Od, Ld-mtp); a spare 5 or 6 repeats
-# hold REPEATS in its order, when the record standing for it (the hold, or spare 5's repeat of it)
-# left an arm not measured; spare 6 runs only after spare 5. Smoke runs hold 1's arms with no
-# scored request (discarded, disclosed). Each hold runs once: a hold that started (its `started`
-# file, written once the floors pass) counts, failed or interrupted.
+# hold.sh HOST HOLD [REPEATS]: one H63 hold (EXPERIMENTS.md "H63 pre-registration", "H63
+# amendment R1" and "H63w amendment R1") on HOST = desktop (H63d, i9-13900T) or wildct (H63w,
+# i7-13700, run as bench/wildct/hold.sh's command: bench/wildct/row.sh h63w). HOLD: 1-3 perf in
+# the orders (Od, Ld-mtp, Ls), (Ld-mtp, Ls, Od), (Ls, Od, Ld-mtp); 4 quality in (Ls, Od, Ld-mtp);
+# a spare 5 or 6 repeats hold REPEATS in its order, when the record standing for it (the hold, or
+# spare 5's repeat of it) left an arm not measured; spare 6 runs only after spare 5. Smoke runs
+# hold 1's arms with no scored request (discarded, disclosed). Each hold runs once: a hold that
+# started (its `started` file, written once the floors pass) counts, failed or interrupted.
 #
 # Before the lock it refuses (exit 2) a host whose CPU class is not the profile's (the model
 # number the optimizer matches, exactly: run.py cpu), a node image not pinned by digest or not
 # the one the row's first hold ran, a ${G}/bin/k3d that is not bench/h63/k3d-shim.sh, and model
 # files prep.sh has not left in ${G}/models (both drafters and Od's graph.pbtxt checked by
-# sha256). Then the desktop's rules (run.py profile): its lock (LOCK, flock -w 21600); the
+# sha256). Then the host's rules (run.py profile): its lock (LOCK, flock -w 21600); the
 # hold-start rule (load1 <= load1_max, 2-min polls, at most 60 min, then the hold runs flagged);
 # the floors (disk_gb free on / and MemAvailable >= mem_gib), or no hold (exit 5). It reads the
-# co-tenants (every container's state and restart count, and the GPUs' memory in use) before and
-# after, creates cluster <prefix><HOLD>, runs the arms (hold-run.sh) under `timeout -k 30 <cap_s>`
-# with a disk watchdog, and deletes this campaign's clusters at the end, also on failure.
+# co-tenants (every container's state and restart count, and, where the profile's gpus is read,
+# the GPUs' memory in use; wildct reads no GPU, rule W8) before and after, creates cluster
+# <prefix><HOLD>, runs the arms (hold-run.sh) under `timeout -k 30 <cap_s>` with a disk watchdog,
+# and deletes this campaign's clusters at the end, also on failure.
 # Records: ${G}/results/<row>/hold<HOLD>/ (smoke: ${G}/smoke/<row>-<UTC>/).
 #   G  campaign dir (default from the profile);  H63_IMAGE  the k3d-gpu node image, name:tag@sha256
-#   LOCK  the host lock;  K3D_REAL  the shim's real k3d
+#   LOCK  the host lock (desktop ~/k3dgpu-bench.lock; wildct's private inner lock, inside rule W1's)
+#   K3D_REAL  the shim's real k3d
 #   SUDO_ASKPASS or K3D_GPU_RAPL_EXEC  for energy.sh's RAPL reader
 #   H63_CPUINFO  the cpuinfo file the host check reads (default /proc/cpuinfo)
 set -uo pipefail
@@ -28,10 +31,9 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "${HERE}/../.." && pwd)
 RUN=${HERE}/run.py
 python3 "${RUN}" profile "${HOST}" > /dev/null || exit 2
-[ "${HOST}" = desktop ] || { echo "hold.sh: ${HOST}: H63w's wildct wiring comes with its own amendment" >&2; exit 2; }
 pfield() { python3 "${RUN}" profile "${HOST}" | sed -n "s/^$1=//p"; }
 ROW=$(pfield row) PREFIX=$(pfield prefix) CPU=$(pfield cpu) L1MAX=$(pfield load1_max)
-DISKMIN=$(pfield disk_gb) MEMMIN=$(pfield mem_gib) CAP=$(pfield cap_s)
+DISKMIN=$(pfield disk_gb) MEMMIN=$(pfield mem_gib) CAP=$(pfield cap_s) GPUS=$(pfield gpus)
 G=${G:-$(pfield g)}
 G=${G/#\~/${HOME}}
 order=$(python3 "${RUN}" hold "${HOLD}" ${REPEATS:+"${REPEATS}"}) || exit 2
@@ -63,12 +65,17 @@ log() { echo "== ${ROW}-hold${HOLD} $* $(date -u +%FT%TZ)" | tee -a "${G}/result
 free_gb() { df -P -B1G / | awk 'NR==2 {print $4}'; }
 memavail_gib() { awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo; }
 snapshot() { date -u +%FT%TZ; uptime; free -m; ps -eo pcpu,pid,user,comm --sort=-pcpu | head -11; df -P / "$(readlink -f "${G}")" | tail -2; }
-# The co-tenants, read only: every container's state, start time and restart count, and the GPUs'
-# memory in use (no arm uses a GPU; the node has no GPU device plugin).
+# The co-tenants, read only: every container's state, start time and restart count, and, where
+# the profile reads them, the GPUs' memory in use (no arm uses a GPU; the node has no GPU device
+# plugin). On wildct no GPU is read (rule W8).
 cotenants() {
     date -u +%FT%TZ
     docker ps -aq | xargs -r docker inspect -f '{{.Name}} {{.State.Status}} {{.State.StartedAt}} restarts={{.RestartCount}}' 2>/dev/null | sort
-    nvidia-smi --query-gpu=index,name,memory.used --format=csv,noheader 2>/dev/null || echo "nvidia-smi: not available"
+    if [ "${GPUS}" = read ]; then
+        nvidia-smi --query-gpu=index,name,memory.used --format=csv,noheader 2>/dev/null || echo "nvidia-smi: not available"
+    else
+        echo "GPUs: not read (${ROW}, rule W8)"
+    fi
 }
 # This campaign's clusters only (${PREFIX}*).
 mine() { k3d cluster list -o json 2>/dev/null | python3 -c 'import json,sys; print(" ".join(c["name"] for c in json.load(sys.stdin) if c["name"].startswith(sys.argv[1])))' "${PREFIX}"; }
