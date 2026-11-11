@@ -9,7 +9,8 @@
 #     it, and a bare version only in recorded files (prose and records no test reads
 #     hold nothing back);
 #   - with the hf-meta hook, re-reads the saved Hugging Face metadata of each moved
-#     repo at its new revision;
+#     repo at its new revision, and in the hf-console-fallback group writes the model
+#     optimizer's goldens again from it, so the group's offline test passes;
 #   - leaves ledger (bench/), historical, eat-stock files and .github/ alone;
 #   - is a no-op when run a second time;
 #   - moves no held pin to or past its hold, from --resolved values and from a
@@ -502,6 +503,80 @@ check "hf-meta: the summary notes the refreshed bundle" \
 git -C "${R7}" add -A && git -C "${R7}" commit -qm bump
 check "hack/pin-only-diff passes on the hf-meta bump" \
     python3 "${ROOT}/hack/pin-only-diff" --root "${R7}" --group hf HEAD~1 HEAD
+
+# the hf-console-fallback group as pins/registry.toml has it (tests, hooks, outputs):
+# a refreshed record changes what the model optimizer says (the target ships a new
+# chat template at its new revision, so its OpenVINO variant's differs: a note), and
+# the bumped tree passes the group's offline test with that note in the golden.
+# tests/model_opt_test.sh here keeps the real suite's contract: offline, from the
+# saved bundles; --update rewrites the golden first.
+R9="${WORK}/repo9"
+mkdir -p "${R9}/pins" "${R9}/console" "${R9}/tests/fixtures/hf" "${R9}/tests/console/model-opt"
+cp "${ROOT}/console/model_opt.py" "${ROOT}/console/convert-pins.json" "${R9}/console/"
+python3 - "${ROOT}" "${R9}" "${HF_OLD}" "${HF_BASE}" <<'PY'
+import hashlib, json, sys, tomllib
+repo, root, old, base = sys.argv[1:]
+group = tomllib.load(open(repo + "/pins/registry.toml", "rb"))["groups"]["hf-console-fallback"]
+with open(root + "/pins/registry.toml", "w") as f:
+    f.write("[groups.hf-console-fallback]\n")
+    for k in ("tests", "hooks", "outputs"):
+        f.write("%s = %s\n" % (k, json.dumps(group.get(k, []))))
+    f.write('\n[[pin]]\nid = "hf-m"\nclass = "ours"\ngroup = "hf-console-fallback"\nfamily = "hf"\nscheme = "hf-sha"\n'
+            'source = { kind = "hf", model = "o/m" }\n'
+            'sites = [{ file = "console/fallback.txt", regex = \'"o/m": \\{"revision": "(?P<v>[0-9a-f]{40})"\' }]\n')
+def rec(rid, sha, files, **kw):
+    return dict({"id": rid, "sha": sha, "url": "https://huggingface.co/%s/tree/%s" % (rid, sha), "files": files,
+                 "card": {}, "card_lines": [], "library_name": None, "pipeline_tag": None, "params_total": None,
+                 "tags": [], "chat_template_sha256": hashlib.sha256(b"T1").hexdigest()}, **kw)
+b = {"schema": "k3d-gpu.hfmeta/v1", "requested": "o/m", "target": "o/m", "revision": "main", "source": "huggingface",
+     "searches": [], "repos": {
+         "o/m": rec("o/m", old, ["chat_template.jinja", "model.safetensors"], chat_template_thinking=[]),
+         "o/m-int4-ov": rec("o/m-int4-ov", base, ["chat_template.jinja", "openvino_config.json", "openvino_model.xml"],
+                            openvino_config={"quantization_config": {"bits": 4, "group_size": 128, "sym": False}})}}
+with open(root + "/tests/fixtures/hf/o__m.json", "w") as f:
+    f.write(json.dumps(b, indent=1, sort_keys=True) + "\n")
+PY
+printf '"o/m": {"revision": "%s"}\n' "${HF_OLD}" > "${R9}/console/fallback.txt"
+cat > "${R9}/tests/model_opt_test.sh" <<'EOF'
+#!/usr/bin/env bash
+# the explain golden of o/m from the saved bundle, offline; --update rewrites it first
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+g="${ROOT}/tests/console/model-opt/o.explain.golden"
+out=$(python3 "${ROOT}/console/model_opt.py" optimize --bundle "${ROOT}/tests/fixtures/hf/o__m.json" \
+    --engine ovms --device GPU --format explain) || exit 1
+if [ "${1:-}" = --update ]; then printf '%s\n' "${out}" > "${g}"; fi
+[ "${out}" = "$(cat "${g}")" ]
+EOF
+bash "${R9}/tests/model_opt_test.sh" --update
+: > "${R9}/EXPERIMENTS.md"
+: > "${R9}/images.unpinned"
+git -C "${R9}" init -q -b main && git -C "${R9}" add -A && git -C "${R9}" commit -qm base
+FIX9="${WORK}/fixtures9.json"
+cat > "${FIX9}" <<EOF
+{"https://huggingface.co/api/models/o/m/revision/${HF_NEW}": {"status": 200, "headers": {},
+  "json": {"id": "o/m", "sha": "${HF_NEW}", "siblings": [{"rfilename": "chat_template.jinja"}, {"rfilename": "model.safetensors"}]}},
+ "https://huggingface.co/o/m/resolve/${HF_NEW}/chat_template.jinja": {"status": 200, "headers": {}, "body": "T2\n"}}
+EOF
+echo "{\"hf-m\": {\"v\": \"${HF_NEW}\"}}" > "${WORK}/resolved9.json"
+out=$(PINLIB_FIXTURES="${FIX9}" python3 "${ROOT}/hack/bump" --root "${R9}" --resolved "${WORK}/resolved9.json" \
+    hf-console-fallback --summary "${WORK}/hf9.json" 2>&1); rc=$?
+NOTE9="note: o/m-int4-ov ships a chat template other than o/m's: serve it with o/m's chat_template.jinja (https://huggingface.co/o/m/blob/${HF_NEW}/chat_template.jinja)"
+check "hf-console-fallback: bump exits 0 (rc ${rc}: ${out##*$'\n'})" test "${rc}" -eq 0
+check "hf-console-fallback: the refreshed record carries the new chat template's digest" \
+    grep -q "$(python3 -c 'import hashlib; print(hashlib.sha256(b"T2").hexdigest())')" "${R9}/tests/fixtures/hf/o__m.json"
+check "hf-console-fallback: the golden says the variant's chat template differs, at the new revision" \
+    grep -qxF "  ${NOTE9}" "${R9}/tests/console/model-opt/o.explain.golden"
+check "hf-console-fallback: the group's test passed in the bump" \
+    python3 -c 'import json, sys; t = json.load(open(sys.argv[1]))["tests"]; assert t == [["tests/model_opt_test.sh", "passed"]], t' \
+    "${WORK}/hf9.json"
+check "hf-console-fallback: the offline test passes on the bumped tree" bash "${R9}/tests/model_opt_test.sh"
+check "hf-console-fallback: the summary notes the rewritten golden" \
+    grep -q "model-opt-goldens: tests/console/model-opt/o.explain.golden" "${WORK}/hf9.json"
+git -C "${R9}" add -A && git -C "${R9}" commit -qm bump
+out=$(python3 "${ROOT}/hack/pin-only-diff" --root "${R9}" --group hf-console-fallback HEAD~1 HEAD 2>&1); rc=$?
+check "hf-console-fallback: the new note is the one line that is no pin move: review (rc ${rc}: ${out})" \
+    test "${rc}" -eq 1 -a "$(grep -c '^not a pin move: ' <<< "${out}")" -eq 1 -a \
+    "$(grep -c "^not a pin move: tests/console/model-opt/o.explain.golden:[0-9]*: +${NOTE9:0:60}" <<< "${out}")" -eq 1
 
 # render-latest then lock (the nri group): the manifest render-component writes (the
 # component's OUTPUT) is this bump's file too, so the lock hook names it in
