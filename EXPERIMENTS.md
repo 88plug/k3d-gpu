@@ -10276,7 +10276,8 @@ k3d-gpu:         release 0.1.89 (aur-v0.1.89, .deb sha256 8f94d69ccc999e4f67295f
 bench scripts:   main at fd822b33 (amendment R8's merge), shipped as the archive repo-fd822b337155, as for H28w's
                  repeat; its scripts/k3d-gpu equals 0.1.89's apart from VERSION (launcher.diff empty in every
                  hold), its share/ equals 0.1.89's. bench/h57d, bench/h54, bench/llm_load.py and bench/energy.sh
-                 are unchanged from fd822b33 to main at fe27f8c5 (amendment R11's merge); row.sh's h57w path too
+                 are unchanged from fd822b33 to main at fe27f8c5 (amendment R11's merge) apart from 16 H54
+                 record files added under bench/h54/results (no code); row.sh's h57w path too
 node image:      cryptoandcoffee/k3d-gpu:0.1.89@sha256:2e53b5114e081d0b86f034edd6c2550eab2156dc3e2f6acaa1a42b99297cd2f4;
                  k3d v5.9.0, helm v4.3.1, kubectl v1.37.2
 runtimes:        Od: openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58

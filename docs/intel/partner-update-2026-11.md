@@ -59,8 +59,10 @@ rate of k3d-gpu's OVMS pick (CI 1.31-1.34), so OVMS did not lead at one stream t
 the drafter added 1.13x over llama.cpp alone (CI 1.11-1.14), short of the pre-registered 1.2x, with
 GSM8K 50 of 50 for every arm ([run](../../EXPERIMENTS.md#h57w-run-wildct-i7-13700-2026-11-11)). Neither moves a default: the class keeps OVMS
 by the engine-choice row, and gets no QAT MTP drafter by default. With them the wildct campaign
-ended on 2026-11-11, and everything it created on the host was removed but the box owner's
-kernel-module file and a build cache left for the owner to clear.
+ended on 2026-11-11, and what it created on the host was removed but the box owner's
+kernel-module file, a build cache left for the owner to clear, and the OVMS image, kept because
+it was pulled seconds before the host's own image list was taken and so cannot be told from a
+pre-existing one.
 
 **Intel's documented EAT 2.0 install, at the GA tags, finished in a KVM guest and served EAT's
 banking flow as well as k3d-gpu's CPU stack.** H62r repeated H62 at the GA tags: Intel's
