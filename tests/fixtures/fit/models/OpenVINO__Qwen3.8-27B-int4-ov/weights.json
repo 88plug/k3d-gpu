@@ -53,6 +53,6 @@
   ],
   "format": "openvino",
   "schema": "k3d-gpu.weights/v1",
-  "source": "OpenVINO/Qwen3.8-27B-int4-ov@7b20ea8c7df7223a85ff27bab5c473f0cb038943",
+  "source": "OpenVINO/Qwen3.8-27B-int4-ov@d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e",
   "total_bytes": 15940072097
 }
