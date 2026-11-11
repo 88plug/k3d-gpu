@@ -385,12 +385,15 @@ def hook_model_opt_goldens(root, ctx):
 def hook_vllm_recipes(root, ctx):
     """console/vllm-recipes.json at the resolved recipes pair (the vllm-recipes pin), or
     regenerated at the pinned pair for the vLLM versions the tree now pins; what moved
-    (hack/vllm-recipes diff against HEAD) goes in the PR notes."""
+    (hack/vllm-recipes diff against HEAD) and the drift that moved against k3d-gpu's own
+    xpu and cpu arguments (hack/vllm-recipes drift --base-ref HEAD) go in the PR notes."""
     new = next((n for p, _, n in ctx["moves"] if p["id"] == "vllm-recipes"), None)
     tool = os.path.join(root, "hack", "vllm-recipes")
     sh(root, sys.executable, tool, "update", *(["--recipes-commit", new] if new else []), capture=False)
     ctx["notes"] += ["vllm-recipes: %s" % ln for ln in
                      sh(root, sys.executable, tool, "diff", "--base-ref", "HEAD").stdout.splitlines()]
+    ctx["notes"] += ["vllm-recipes drift: %s" % ln for ln in
+                     sh(root, sys.executable, tool, "drift", "--base-ref", "HEAD").stdout.splitlines()]
     ctx["touched"].add("console/vllm-recipes.json")
 
 

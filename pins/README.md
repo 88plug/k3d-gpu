@@ -96,7 +96,11 @@ now differs from the target's) is in the diff, and the group's test passes on it
 The goldens are not `outputs`, so a golden line that is no pin move keeps the PR on
 review. `vllm-recipes` regenerates `console/vllm-recipes.json`
 (`hack/vllm-recipes update`) at the moved recipes pair, or at the pinned one when the
-group moved a pinned vLLM version, and puts `hack/vllm-recipes diff` in the PR notes.
+group moved a pinned vLLM version, and puts `hack/vllm-recipes diff` in the PR notes,
+with `hack/vllm-recipes drift --base-ref HEAD`: each difference between k3d-gpu's own
+xpu and cpu vLLM arguments and the recipes' hardware_overrides that the move added,
+changed or removed, labelled with its reason or UNEXPLAINED. Drift is a report; it
+never changes an argument k3d-gpu emits.
 
 ## Goldens
 
