@@ -634,6 +634,27 @@ p = run.PROFILES["wildct"]
 sys.exit(not (p["k3s_args"] == sys.argv[2] and p["vendors"] == "auto,-nvidia,-intel" and p["load1_max"] == 12
               and p["prefix"].startswith("k3dgpu-w-")))' "${ROOT}" "${W3_LEDGER}" \
         || { echo "bench/h59/run.py's wildct profile is not the registration's"; return 1; }
+    # H63w (H63w amendment R1): bench/h63/hold.sh wildct, as H59w runs, and its wiring smoke with
+    # hold 1's environment; h63w-prep with rule W1's lock and hfvenv's hf first on PATH.
+    has h63w 2 -- "G=${HOME}/k3dgpu-bench-wildct/h63" "LOCK=${HOME}/k3dgpu-bench-wildct/inner.lock" \
+        "K3D_REAL=${HOME}/k3dgpu-bench-wildct/bin/k3d" "H63_IMAGE=${IMG}" "bash ${ROOT}/bench/h63/hold.sh wildct 2" || return 1
+    has h63w 6 4 -- "bash ${ROOT}/bench/h63/hold.sh wildct 6 4" || return 1
+    has h63w smoke -- "bash ${ROOT}/bench/h63/hold.sh wildct smoke" || return 1
+    [ "$(rowprint h63w smoke | sed '$d')" = "$(rowprint h63w 1 | sed '$d')" ] \
+        || { echo "h63w smoke's environment is not hold 1's"; diff <(rowprint h63w smoke) <(rowprint h63w 1); return 1; }
+    has h63w-prep -- "G=${HOME}/k3dgpu-bench-wildct/h63" "LOCK=${HOME}/k3dgpu-bench-wildct/live.lock" \
+        "bash ${ROOT}/bench/h63/prep.sh wildct" || return 1
+    [[ "$(rowprint h63w-prep | grep '^PATH=')" == "PATH=${HOME}/k3dgpu-bench-wildct/hfvenv/bin:"* ]] \
+        || { echo "row.sh h63w-prep: hfvenv's bin is not first on PATH"; rowprint h63w-prep; return 1; }
+    python3 -c 'import importlib.util, sys
+sys.path.insert(0, sys.argv[1] + "/bench/h63")
+spec = importlib.util.spec_from_file_location("h63run", sys.argv[1] + "/bench/h63/run.py")
+run = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(run)
+p = run.PROFILES["wildct"]
+sys.exit(not (p["k3s_args"] == sys.argv[2] and p["vendors"] == "auto,-nvidia,-intel" and p["load1_max"] == 12
+              and p["prefix"].startswith("k3dgpu-w-") and p["g"] == "~/k3dgpu-bench-wildct/h63" and p["gpus"] == "none"))' \
+        "${ROOT}" "${W3_LEDGER}" || { echo "bench/h63/run.py's wildct profile is not the registration's"; return 1; }
     has h18w -- "bash ${ROOT}/bench/sandbox_round.sh (runs 1-3)" || return 1
     # H52w's procedure: `hold.sh H52w 1800 3 bench/wildct/h52w.sh <out>`; h52w.sh sets its own
     # cluster, opt-out and W3, and runs the installed release's default node image (no IMAGE).
@@ -752,6 +773,9 @@ row_guards() {
     WILDCT_HOLD=X bash "${ROW}" h57w-convert 2> /dev/null; [ $? = 2 ] || { echo "h57w-convert ran inside a hold"; return 1; }
     IMAGE=${IMG} bash "${ROW}" h59w 1 2> /dev/null; [ $? = 2 ] || { echo "h59w ran without the k3d shim"; return 1; }
     WILDCT_HOLD=X bash "${ROW}" h59w-prep 2> /dev/null; [ $? = 2 ] || { echo "h59w-prep ran inside a hold"; return 1; }
+    IMAGE=${IMG} bash "${ROW}" h63w 1 2> /dev/null; [ $? = 2 ] || { echo "h63w ran without the k3d shim"; return 1; }
+    IMAGE=${IMG%@*} bash "${ROW}" h63w 1 2> /dev/null; [ $? = 2 ] || { echo "h63w ran with IMAGE not pinned by digest"; return 1; }
+    WILDCT_HOLD=X bash "${ROW}" h63w-prep 2> /dev/null; [ $? = 2 ] || { echo "h63w-prep ran inside a hold"; return 1; }
     # WILDCT_ROW_CHECK=1 (launch's pre-check): every check, the k3d shim included; runs nothing.
     local a
     chk() { WILDCT_ROW_CHECK=1 IMAGE=${IMG} bash "${ROW}" "$@" > "${W}/chk.out" 2>&1; }
@@ -775,6 +799,17 @@ row_guards() {
     for a in "" 5 7 0 "1 2" "5 5" "6 0" "1 perf" "5 1 O" "smoke 1" "5 smoke" "Smoke"; do
         # shellcheck disable=SC2086 # the row's arguments, split on purpose
         chk h59w ${a}; [ $? = 2 ] || { echo "check mode passed h59w ${a}"; return 1; }
+    done
+    chk h63w 1; [ $? = 2 ] || { echo "check mode passed h63w without the k3d shim"; return 1; }
+    install -D -m 0755 "${ROOT}/bench/h63/k3d-shim.sh" "${HOME}/k3dgpu-bench-wildct/h63/bin/k3d"
+    for a in 1 2 3 4 "5 1" "5 4" "6 2" smoke; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h63w ${a} || { echo "check mode refused h63w ${a}: $(cat "${W}/chk.out")"; return 1; }
+        [ ! -s "${W}/chk.out" ] || { echo "check mode printed or ran something for h63w ${a}"; return 1; }
+    done
+    for a in "" 5 7 0 "1 2" "5 5" "6 0" "1 perf" "5 1 Ls" "smoke 1" "5 smoke" "Smoke"; do
+        # shellcheck disable=SC2086 # the row's arguments, split on purpose
+        chk h63w ${a}; [ $? = 2 ] || { echo "check mode passed h63w ${a}"; return 1; }
     done
     chk h25w || { echo "check mode refused h25w: $(cat "${W}/chk.out")"; return 1; }
     [ "$(calls '')" = 0 ] || { echo "check mode ran a command: $(cat "${W}/calls.log")"; return 1; }
@@ -931,7 +966,7 @@ check "h52w.sh: detect, doctor, up, each pod poll, test and down are bounded" h5
 check "row.sh: every row's environment matches the wildct pre-registration" row_envs_match_the_registration
 check "RESUME.md: every launch line names a row row.sh runs, with the registered CAP and NEED" resume_launch_lines_match_the_registration
 check "RESUME.md: docker ps and strays.py checks read as empty print their rc" resume_empty_checks_print_their_rc
-check "row.sh: digest-pinned IMAGE, the H57 k3d shim, convert outside a hold, unknown rows" row_guards
+check "row.sh: digest-pinned IMAGE, the H57, H59 and H63 k3d shims, prep and convert outside a hold, unknown rows" row_guards
 check "H28w's probe.sh keeps hold.sh's RAPL reader (W4); its default is unchanged" probe_keeps_the_given_rapl_reader
 check "H28w's plain k3d cluster create disables both baked Intel GPU stacks (W8), keeps W3" h28w_cluster_disables_the_intel_gpu_stacks
 check "H28w's plain k3d cluster create labels nvidia.com/gpu.present=false, as up does (W8, R8)" h28w_cluster_keeps_the_nvidia_plugin_off
