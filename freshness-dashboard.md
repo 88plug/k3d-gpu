@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 19:38 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-11 19:57 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -25,10 +25,12 @@ stale:freshness.yml
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (4)
+## Open bot PRs (6)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #411 | vllm-recipes | review | a human approval at the head |
+| #410 | docs-build | auto | - |
 | #408 | examples | review | a human approval at the head |
 | #404 | llama-cpp | review | a human approval at the head |
 | #403 | gguf-convert-pip | auto | - |
