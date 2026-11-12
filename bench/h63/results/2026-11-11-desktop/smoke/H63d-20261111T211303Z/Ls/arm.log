@@ -1,0 +1,4 @@
+2026-11-11T21:16:20Z Ls start perf (4273 s of the hold left)
+2026-11-11T21:18:04Z Ls ready after 54 s
+concurrency=1 ok=1/1 ttft_median=1.004s ttft_p90=1.004s latency_median=2.460s tok/s_median=6.5 aggregate_tok/s=6.5
+2026-11-11T21:18:08Z Ls status smoke: ready; wiring checks in smoke-*.json
