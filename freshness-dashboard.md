@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-12 05:07 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 07:36 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -10,21 +10,24 @@ None.
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 14h |
-| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 6h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 17h |
+| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 9h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.0` | `v1.109.0` | `v1.109.1` | patch | ? | ? |
-| packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 2h |
+| packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 5h |
 | tools | `ci-chrome` | `157.0.8103.50` | `157.0.8103.78` | patch | ? | ? |
-| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `2025c2f84909c0b99b4cbe2eb2d9e2b0972f8724` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `dd121f2acda105cf3b5c6e246036a8c373e20adf` | revision | ? | ? |
 
 ### Not resolved (1)
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (2)
+## Open bot PRs (5)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #428 | tools | auto | - |
+| #427 | packaging-images | review | a human approval at the head |
+| #426 | examples | auto | - |
 | #423 | vllm-recipes | review | a human approval at the head |
 | #422 | docs-build | auto | - |
 
