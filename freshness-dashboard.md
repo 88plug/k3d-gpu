@@ -1,11 +1,10 @@
 # Freshness dashboard
 
-Updated 2026-11-12 03:05 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 03:06 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-blind-spot:gguf-huggingface-hub
-blind-spot:gguf-transformers
+None.
 
 ## Pins behind (6)
 
@@ -26,8 +25,8 @@ blind-spot:gguf-transformers
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #423 | vllm-recipes | review | a human approval at the head |
 | #422 | docs-build | auto | - |
-| #411 | vllm-recipes | review | a human approval at the head |
 
 ## EAT stock (always review)
 
