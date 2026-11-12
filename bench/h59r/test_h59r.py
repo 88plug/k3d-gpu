@@ -60,6 +60,14 @@ KUBECTL = T.KUBECTL.replace('elif "allocatable" in s:',
 assert KUBECTL != T.KUBECTL
 
 put, rd, jl = T.put, T.rd, T.jl
+# The drafter H59 served: prep's build on crescent (H59 run, Reproduce header).
+H59_DRAFTER = {"sha256": "f6f80c368d692c9e78ed673c6785827ca21c332e8cdab0263ce4dcdf0b184018", "bytes": 321145312}
+
+
+def put_drafter_manifest(g, m):
+    """The drafter's manifest.json as convert.sh writes it, naming sha256 and bytes."""
+    put(os.path.join(g, "models", run.DRAFT_DIR, "manifest.json"),
+        json.dumps({"source": f"{run.DRAFT_REPO}@{run.DRAFT_REV}", "convert": "--outtype bf16", "quantize": "Q4_0", **m}))
 
 # ---- the launcher with H59r's pins ---------------------------------------------------------------
 
@@ -219,6 +227,30 @@ class Tables(unittest.TestCase):
         self.assertIn(verdict, ("PENDING", "SUPPORTED", "REFUTED", "INCONCLUSIVE"))
         self.assertTrue(mo.family_of("H59r", "H59"))
         self.assertEqual(mo.row_classes(text), ["6741p"])
+
+    def test_the_drafter_must_be_h59s(self):
+        # H59's drafter (prep's build on crescent, H59 run); a desktop build at full-b12110 with the
+        # current pip set and with R1's gave the same file (H59r pre-registration).
+        self.assertEqual(run.DRAFTER, H59_DRAFTER)
+        g = tempfile.mkdtemp()
+        try:
+            for p in run.h59run.models_ready(g):
+                put(p, "x")
+            self.assertEqual(len(run.models_ready(g)), 1)          # the manifest reads "x"
+            put_drafter_manifest(g, H59_DRAFTER)
+            self.assertEqual(run.models_ready(g), [])
+            for bad in ({"sha256": "1" * 64, "bytes": H59_DRAFTER["bytes"]}, dict(H59_DRAFTER, bytes=1)):
+                put_drafter_manifest(g, bad)
+                why = run.models_ready(g)
+                self.assertEqual(len(why), 1, why)
+                self.assertIn("not H59's", why[0])
+            os.remove(os.path.join(g, "models", run.DRAFT_DIR, "model.gguf"))
+            self.assertEqual(run.models_ready(g), [os.path.join(g, "models", run.DRAFT_DIR, "model.gguf")])
+            r = subprocess.run([sys.executable, os.path.join(HERE, "run.py"), "models", g], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("missing", r.stdout)
+        finally:
+            shutil.rmtree(g)
 
     def test_docker_argv_checks_the_conversion_pins(self):
         spec = {"name": "gguf-convert-x", "image": run.LLAMA_FULL_IMAGE, "command": ["bash", "/scripts/convert.sh"],
@@ -450,8 +482,9 @@ class HoldGuards(unittest.TestCase):
         put(os.path.join(self.d, "cpuinfo"), CPUINFO)
         os.makedirs(os.path.join(self.g, "bin"))
         shutil.copy(os.path.join(HERE, "k3d-shim.sh"), os.path.join(self.g, "bin", "k3d"))
-        for p in run.models_ready(self.g):
+        for p in run.h59run.models_ready(self.g):
             put(p, "x")
+        put_drafter_manifest(self.g, H59_DRAFTER)
         self.assertEqual(run.models_ready(self.g), [])
         # flock stands in so a hold that passes every guard stops at the lock (exit 4).
         put(os.path.join(self.d, "bin", "flock"), "#!/bin/sh\nexit 1\n", 0o755)
@@ -507,6 +540,12 @@ class HoldGuards(unittest.TestCase):
         r = self.hold("crescent", "1")
         self.assertEqual(r.returncode, 2)
         self.assertIn("bench/h59r/prep.sh", r.stderr)
+
+    def test_a_drafter_other_than_h59s_stops_the_hold(self):
+        put_drafter_manifest(self.g, {"sha256": "0" * 64, "bytes": H59_DRAFTER["bytes"]})
+        r = self.hold("crescent", "1")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("not H59's", r.stderr)
 
 
 class Shim(unittest.TestCase):

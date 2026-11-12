@@ -18468,7 +18468,8 @@ governs.
 - H59 is SUPPORTED at b11960: llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter decoded
   3.50x OVMS's per-request rate at N=4 (CI 3.42-3.61), with GSM8K 49 against 50. It is the row that
   makes llama.cpp the CPU engine default for the 6741P. `hack/ledger-freshness` lists it in the
-  re-measure queue ("llama.cpp b11960 -> b12110 (minor)") and suggests H59r.
+  re-measure queue ("llama.cpp b11960 -> b12110 (minor)"), and before this row existed it suggested
+  H59r as the follow-up id.
 - H59 keeps its verdict and its records. It measured b11960, not the build k3d-gpu now ships, so
   H59r asks H59's question at b12110.
 
@@ -18497,7 +18498,8 @@ and the amendments that govern H59, as written:
   <= 12 and no aiperf process runs (2-minute polls, at most 60 min, then flagged); `/` at most 97%
   used; a 2,400 s cap with the arms ending by 2,370 s; `K3D_GPU_VENDORS=amx` and C1; no balloon;
   H54's void rule (amendment R4 of H54) through `run.py gate`. Amendments R3 (OVB's model files)
-  and R4 (L's `--cache-ram 0` and `-ctxcp 4`) as well. R2 and R5 govern H59d and H59w only.
+  and R4 (L's `--cache-ram 0` and `-ctxcp 4`) as well. R2 (H59d and H59w) and R5 (H59w) do not
+  govern H59.
 
 H59 ran beside the two serving pairs on the B70s and their routers, which were never stopped; its
 start rule needs no aiperf process, not an idle host. H59r runs the same way. The owner-approved
