@@ -18,8 +18,10 @@
 # and not at all while a ci.yml run of a human PR is queued: a pull_request run,
 # not on an autobump/* branch, at the head SHA of an open PR. A queued run at any
 # other SHA (an older push of an open PR, a closed or merged PR's) serves no one;
-# GitHub can leave one queued for hours, refusing to cancel or delete it. A
-# deferred PR is picked up by the next call (.github/workflows/bot-sweep.yml, hourly).
+# GitHub can leave one queued for hours, refusing to cancel or delete it. Such a run
+# is left out only when its SHA reads and the open PR list came back whole (under
+# its limit of 200); otherwise it counts. A deferred PR is picked up by the next
+# call (.github/workflows/bot-sweep.yml, hourly).
 #
 # --workflow canary.yml dispatches with -f engines=auto, and only for a head whose
 # `hack/pins policy MB SHA` (MB: the merge-base of origin/main and SHA, so the PR's
@@ -78,7 +80,8 @@ canary_engines() {
   hack/pins policy "$mb" "$2" | jq -ce '.canary | arrays'
 }
 
-prs=$(gh_retry pr list --state open --base main --limit 200 \
+prlim=200
+prs=$(gh_retry pr list --state open --base main --limit "$prlim" \
       --json number,headRefName,headRefOid,baseRefName,isCrossRepository,author) \
   || { echo "error: cannot list open PRs"; exit 1; }
 cands=$(jq -r --arg only "$only" '
@@ -97,11 +100,12 @@ inflight=$(jq '[.[] | select(.status != "completed" and ((.headBranch // "") | s
 if [ "$wf" != ci.yml ]; then
   recent=$(gh_retry run list -w ci.yml -L 100 --json status,event,headBranch,headSha) || { echo "error: cannot list ci.yml runs"; exit 1; }
 fi
-heads=$(jq -c 'map(.headRefOid)' <<<"$prs")
+# heads: every open PR's head SHA, or null when the list hit its limit and may miss one.
+heads=$(jq -c --argjson lim "$prlim" 'if length < $lim then map(.headRefOid) else null end' <<<"$prs")
 human=$(jq --argjson heads "$heads" '
   [.[] | select(.event == "pull_request" and (.status | IN("queued", "requested", "pending", "waiting"))
                 and ((.headBranch // "") | startswith("autobump/") | not)
-                and (.headSha | IN($heads[])))] | length' <<<"$recent")
+                and ($heads == null or (.headSha // "") == "" or (.headSha | IN($heads[]))))] | length' <<<"$recent")
 [[ $inflight =~ ^[0-9]+$ && $human =~ ^[0-9]+$ ]] || { echo "error: cannot read the run pool from gh run list"; exit 1; }
 # busy LINE: print LINE with the reason and succeed when the pool has no room.
 busy() {

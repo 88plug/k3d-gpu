@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # hack/bot-ci-dispatch against a fake gh (no network).
-# The fake keeps open PRs in prs.json and workflow runs in runs.json. `gh run
-# list` filters runs like the API (-w workflow file, -c head SHA, -b branch,
-# -e event, -L count, newest first) and prints only the --json fields.
-# `gh workflow run` appends a queued workflow_dispatch run at the branch's head,
-# unless the branch is listed in
+# The fake keeps open PRs in prs.json and workflow runs in runs.json. `gh pr
+# list` prints the first -L PRs (default 30). `gh run list` filters runs like the
+# API (-w workflow file, -c head SHA, -b branch, -e event, -L count, newest first)
+# and prints only the --json fields. `gh workflow run` appends a queued
+# workflow_dispatch run at the branch's head, unless the branch is listed in
 # no_dispatch (its workflow file lacks the trigger: HTTP 422) or dispatch_fail
 # exists (HTTP 500). dispatch_fail_n (a count) fails that many dispatches with an
 # HTTP 502 first; dispatch_lands_502 queues the run and still answers HTTP 502;
@@ -32,7 +32,10 @@ echo "gh $*" >> "$F/calls"
 # countdown NAME: true (and one less) while the count in $F/NAME is above 0.
 countdown() { local n; n=$(cat "$F/$1" 2>/dev/null || echo 0); [ "$n" -gt 0 ] || return 1; echo $((n - 1)) > "$F/$1"; }
 case "$1 $2" in
-  "pr list") cat "$F/prs.json"; exit 0;;
+  "pr list")
+    shift 2; L=30
+    while [ $# -gt 0 ]; do case $1 in -L|--limit) L=$2; shift 2;; *) shift;; esac; done
+    jq --argjson L "$L" '.[:$L]' "$F/prs.json"; exit 0;;
   "run list")
     countdown runlist_fail_n && { echo "HTTP 502: Server Error (https://api.github.com/repos/o/r/actions/runs)" >&2; exit 1; }
     shift 2; wf= c= b= e= q= j= L=1000
@@ -165,6 +168,20 @@ BOT_CI_MAX_INFLIGHT=10 bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a && ! grep -q 'human' <<<"$OUT"; then
   ok "human_superseded: a queued run at an open PR's older head defers nothing"
 else fail "human_superseded: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a run whose head SHA reads null or empty counts: nothing shows it is at no open PR's head.
+fixture human_no_sha "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" "[$(run 5 ci.yml pull_request claude/x '' queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then ok "human_no_sha: deferred"
+else fail "human_no_sha: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a PR list cut at its limit (200) can miss the open PR a queued run is at (#202, past
+# the first 200 here): then every queued human run counts, as before heads were read.
+fixture human_list_cut "$(jq -c --argjson a "$(pr 1 autobump/a a111)" --argjson h "$HUMAN" \
+  '[$a] + [range(2; 203) | {number: ., headRefName: "claude/p\(.)", headRefOid: "p\(.)", baseRefName: "main",
+                          isCrossRepository: false, author: $h}]' <<<null)" \
+  "[$(run 5 ci.yml pull_request claude/p202 p202 queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then ok "human_list_cut: deferred"
+else fail "human_list_cut: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 
 # 4. idempotent: a second call dispatches nothing more.
 fixture idempotent "[$(pr 1 autobump/a a111),$(pr 2 autobump/b b222)]" '[]'
