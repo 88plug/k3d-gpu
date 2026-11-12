@@ -1,0 +1,280 @@
+== before-smoke6 2026-11-11T22:40:33Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-smoke6 2026-11-11T22:42:17Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-h63w-prep 2026-11-11T22:42:30Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-h63w-prep 2026-11-11T22:56:59Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-H63w-smoke 2026-11-11T22:56:59Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-H63w-smoke 2026-11-11T23:01:21Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-H63w-1 2026-11-11T23:01:30Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-H63w-1 2026-11-11T23:47:31Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-H63w-2 2026-11-11T23:47:31Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-H63w-2 2026-11-12T00:33:32Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-H63w-3 2026-11-12T00:33:32Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-H63w-3 2026-11-12T01:19:33Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== before-H63w-4 2026-11-12T01:19:33Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== after-H63w-4 2026-11-12T02:18:04Z
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18

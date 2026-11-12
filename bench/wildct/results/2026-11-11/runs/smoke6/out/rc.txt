@@ -1,0 +1,4 @@
+up rc=0 in 38 s
+pods ready: yes after 30 s
+GPU-SCAN clean
+down rc=0

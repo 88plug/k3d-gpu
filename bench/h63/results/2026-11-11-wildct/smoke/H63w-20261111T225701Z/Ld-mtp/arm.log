@@ -1,0 +1,4 @@
+2026-11-11T22:59:16Z Ld-mtp start perf (4335 s of the hold left)
+2026-11-11T22:59:41Z Ld-mtp ready after 24 s
+concurrency=1 ok=1/1 ttft_median=1.377s ttft_p90=1.377s latency_median=2.420s tok/s_median=6.6 aggregate_tok/s=6.6
+2026-11-11T22:59:45Z Ld-mtp status smoke: ready; wiring checks in smoke-*.json
