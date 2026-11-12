@@ -4,7 +4,9 @@
   hack/pin-guard --base REF [--head REF] [--autobump] [--branch NAME] [--classes FILE]
 
   a. historical path (a historical line, or a ledger line whose rows all have a
-     verdict in BASE's Hypotheses table): any modification, deletion or rename fails
+     verdict in BASE's Hypotheses table): any modification, deletion or rename fails,
+     except a modification HEAD's pins/rewrites lists as "<path> <sha256 at the
+     merge-base> <sha256 at HEAD>" (one line approves that one change of that file)
   b. historical-ref: each string occurs in its file as often as at the merge-base
      (a string the merge-base does not hold yet is being recorded, and passes)
   c. arm path (a ledger line with a PENDING row in BASE's table), outside */results/,
@@ -24,8 +26,9 @@
      add itself to the line in HEAD's pins/classes in the same diff), or adds a
      PENDING row to the line in HEAD's pins/classes with an amendment naming it (the
      amendment moves that row's arm onto this runner, and is held to the rule above).
-  d. --autobump (an autobump/* branch): touching .github/ or pins/classes fails, and
-     touching EXPERIMENTS.md fails unless the branch is autobump/amend-*
+  d. --autobump (an autobump/* branch): touching .github/, pins/classes or
+     pins/rewrites fails, and touching EXPERIMENTS.md fails unless the branch is
+     autobump/amend-*
   e. a changed file under bench/ or oracle/ that holds a pin token and no line
      classifies fails: classify it in pins/classes
 
@@ -37,6 +40,7 @@ predate pins/classes). Exit 0 clean, 1 on a failure, 2 on a usage or git error.
 import argparse
 import collections
 import datetime
+import hashlib
 import importlib.machinery
 import importlib.util
 import os
@@ -58,6 +62,8 @@ RUN_RE = re.compile(r"^###\s+(?P<names>.+?)\s+(?:re-)?run\b")
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})\)\s*$")
 ROW_RANGE = re.compile(r"^H(\d+)([a-z]{0,2})-H(\d+)([a-z]{0,2})$")
 TABLE_ROW = re.compile(r"^\|\s*(H\d+[a-z]{0,2})\s*\|")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+REWRITES_FILE = "pins/rewrites"
 
 
 class Git:
@@ -82,6 +88,26 @@ class Git:
             return p.stdout.decode("utf-8")
         except UnicodeDecodeError:
             return None
+
+    def blob(self, rev, path):
+        """The file's bytes at rev, or None when rev has no such file."""
+        p = self.run("cat-file", "blob", "%s:%s" % (rev, path), ok=(0, 128))
+        return None if p.returncode else p.stdout
+
+
+def rewrites_of(text):
+    """{(path, sha256 at the merge-base, sha256 at HEAD)} from pins/rewrites."""
+    out = set()
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.rsplit(None, 2)
+        if len(parts) != 3 or not all(SHA256.match(h) for h in parts[1:]):
+            raise ValueError("%s: bad line %r: want <path> <sha256 at the merge-base> <sha256 at HEAD>"
+                             % (REWRITES_FILE, line))
+        out.add(tuple(parts))
+    return out
 
 
 def names_of(text):
@@ -147,6 +173,7 @@ class Guard:
             self.head_lines, head_refs = pc.parse(head_text) if head_text else ([], [])
             seen = {(r.glob, r.ref) for r in base_refs}
             self.refs = base_refs + [r for r in head_refs if (r.glob, r.ref) not in seen]
+        self.rewrites = rewrites_of(self.git.show(self.head, REWRITES_FILE))
         base_exp = self.git.show(self.base, "EXPERIMENTS.md")
         self.ledger = ledger_of(base_exp)
         self.head_ledger = ledger_of(self.git.show(self.head, "EXPERIMENTS.md"))
@@ -242,6 +269,8 @@ class Guard:
             if code in "MDRT":
                 kind, ln = self.effective(old)
                 if kind == "historical":
+                    if code == "M" and self.rewritten(old):
+                        continue
                     what = {"M": "modified", "D": "deleted", "R": "renamed to " + new, "T": "changed type"}[code]
                     why = ("%s line %d" % (pc.CLASSES_FILE, ln.n)) if ln else pc.CLASSES_FILE
                     self.fail("%s: historical record %s (%s: %s)" % (old, what, why, self.state_of(ln)))
@@ -259,6 +288,14 @@ class Guard:
         self.check_refs({p for _, paths in changes for p in paths})
         return self.fails, self.warns
 
+    def rewritten(self, path):
+        """A modification pins/rewrites lists: path, the file's sha256 at the merge-base
+        and its sha256 at HEAD."""
+        before, after = self.git.blob(self.mb, path), self.git.blob(self.head, path)
+        if before is None or after is None:
+            return False
+        return (path, hashlib.sha256(before).hexdigest(), hashlib.sha256(after).hexdigest()) in self.rewrites
+
     def state_of(self, ln):
         if ln is None or ln.kind != "ledger":
             return "historical" + (" (%s)" % ln.reason if ln and ln.reason else "")
@@ -271,6 +308,8 @@ class Guard:
             self.fail("%s: an autobump branch never touches .github/" % path)
         elif path == pc.CLASSES_FILE:
             self.fail("%s: an autobump branch never reclassifies pins" % path)
+        elif path == REWRITES_FILE:
+            self.fail("%s: an autobump branch never approves a record rewrite" % path)
         elif path == "EXPERIMENTS.md" and not (self.branch or "").startswith("autobump/amend-"):
             self.fail("EXPERIMENTS.md: only an autobump/amend-* branch touches the ledger (branch %s)" % (self.branch or "?"))
 

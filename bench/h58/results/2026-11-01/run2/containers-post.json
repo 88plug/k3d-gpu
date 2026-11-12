@@ -56,7 +56,7 @@
  {
   "name": "xe-exporter",
   "id": "c6517dcbc9a1",
-  "image": "farmgpu/xe-exporter:latest",
+  "image": "private/xe-exporter:latest",
   "restarts": 0,
   "started_at": "2026-09-15T22:50:34.933539948Z",
   "running": true,

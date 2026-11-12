@@ -12,8 +12,8 @@ loki grafana/loki:3.7.4 Up 4 weeks
 muse-litellm docker.litellm.ai/berriai/litellm:main-latest Exited (0) 4 weeks ago
 muse-pinggy alpine:3.20 Exited (137) 4 weeks ago
 muse-pinggy-watch alpine:3.20 Exited (137) 4 weeks ago
-muse-vllm-028-mal farmgpu/vllm-openai-xpu:v0.28.0-muse-swa1 Exited (0) 4 weeks ago
-muse-vllm-028-xpu farmgpu/vllm-openai-xpu:v0.28.0-muse-swa1 Exited (0) 5 weeks ago
+muse-vllm-028-mal private/vllm-openai-xpu:v0.28.0-muse-swa1 Exited (0) 4 weeks ago
+muse-vllm-028-xpu private/vllm-openai-xpu:v0.28.0-muse-swa1 Exited (0) 5 weeks ago
 node-exporter prom/node-exporter:v1.12.1 Up 4 weeks
 otel-collector otel/opentelemetry-collector-contrib:0.157.0 Up 4 weeks
 prometheus prom/prometheus:v3.13.2 Up 4 weeks
@@ -22,5 +22,5 @@ qwen38-a-hr feb7b9130eff Up 37 hours
 qwen38-b feb7b9130eff Exited (0) 37 hours ago
 qwen38-b-hr feb7b9130eff Up 37 hours
 tempo grafana/tempo:3.0.2 Up 4 weeks
-xe-exporter farmgpu/xe-exporter:latest Up 4 weeks
+xe-exporter private/xe-exporter:latest Up 4 weeks
 xpumd ghcr.io/intel/xpumanager/xpumd:v2.0.1 Up 4 weeks

@@ -663,5 +663,4 @@ auth off the chart sets no `REDIS_PASSWORD`, and redis-cli connects without one,
 | See the patch pack and its static checks | [integrations/eat/upstream/README.md](../../integrations/eat/upstream/README.md) |
 | Install EAS (EAT 2.0) on k3d-gpu with these patches as an overlay | [eas.md](eas.md) |
 | See what was measured and how | [technical-report.md](technical-report.md) |
-| See what we can hand over, in one list | [partner-update-2026-11.md](partner-update-2026-11.md) |
 | See EAT on k3d-gpu today | [docs/intel.md](../intel.md) |

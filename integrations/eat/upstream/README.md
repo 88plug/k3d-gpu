@@ -1,6 +1,6 @@
 # Upstream pack: k3s/k3d as a BYO target for Intel's agent platform
 
-These are drafts for Intel's repos. **None of them has been filed, opened or pushed upstream.** A maintainer of this repo sends them by hand, one at a time.
+These are drafts for the upstream repos below. **None of them has been filed, opened or pushed upstream.** A maintainer of this repo sends them by hand, one at a time.
 
 ## Which repo owns what
 
@@ -27,7 +27,7 @@ These are drafts for Intel's repos. **None of them has been filed, opened or pus
 
 ## Patches
 
-| # | Repo | What it does | Why it is upstreamable |
+| # | Repo | What it does | Why it fits upstream |
 |---|---|---|---|
 | [0002](patches/0002-eas-istio-global-platform.patch) | EAS | Adds `istio_platform` (default `""`) and passes it to the Istio chart as `global.platform`, on install and upgrade | Istio's platform prerequisites page sets `global.platform` for k3d and k3s. The cni chart's k3d, k3s, microk8s and openshift profiles move the CNI conf/bin dirs (openshift also switches to multus); gke blanks the bin dir and minikube moves the netns dir, so the knob is not k3s-only. The default renders byte-for-byte as today. |
 | [0003](patches/0003-eas-pin-nri-balloons-chart.patch) | EAS | Pins the nri-plugins balloons chart to `v0.15.0` via `nri_cpu_balloons_chart_version` | Matches how the repo pins its other charts (`seaweedfs_chart_version`, `istio_csr_helm_chart_version`, ...). v0.15.0 is today's newest release, so no fresh install changes now. |

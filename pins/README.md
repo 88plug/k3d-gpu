@@ -12,7 +12,7 @@ updates them: Dependabot keeps only the GitHub Actions SHAs, and the old nightly
 | ours | Freshness PRs, policy-gated (below) |
 | eat-stock | Freshness PRs, always reviewed; it follows Intel's latest EAS release for EAT 2.x (pin `eas-release`) and EAT's newest 1.x release for `integrations/eat` |
 | arm (a ledger path whose row is PENDING) | only a dated ledger amendment in the same PR; never a bumper |
-| historical | never |
+| historical | never, but for one exact rewrite of a file listed in `pins/rewrites` (path, sha256 before, sha256 after; never by a bot) |
 | `.github/**` | never by a bot |
 
 Until `pins/classes` exists, `hack/pinlib/classes.py` gives every path its class

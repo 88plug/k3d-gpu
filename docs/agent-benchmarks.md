@@ -141,8 +141,8 @@ k3d-gpu bench agent report run/H42-* --ref B1 --out run/H42-report
   sent upstream only, never logged or written to `facts.json`:
 
   ```bash
-  chmod 600 farmgpu.env
-  k3d-gpu bench agent proxy --upstream https://gaudi.farmgpu.net --key-file farmgpu.env \
+  chmod 600 remote.env
+  k3d-gpu bench agent proxy --upstream https://remote.example --key-file remote.env \
     --max-requests 20 --sampling agent_remote --log run/H48/proxy.jsonl --port 18080
   ```
 - `report` writes `report.json` and `report.md`: success with Wilson intervals, strict
