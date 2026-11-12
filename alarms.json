@@ -5,7 +5,7 @@
     "opened_at": "2026-11-12T00:10:50Z",
     "updated_at": "2026-11-12T00:10:50Z",
     "notified_at": "2026-11-12T00:10:50Z",
-    "acked": false
+    "acked": true
   },
   "blind-spot:gguf-transformers": {
     "title": "gguf-transformers is 5d behind upstream with no open PR",
