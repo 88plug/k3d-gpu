@@ -174,7 +174,7 @@ found", not "new idea".
 
 - **Anticipated:** no. No source covers E5.
 - **Taught-as-combination:** **yes.**
-  - The nri-plugins release notes hand over the exact configuration.
+  - The nri-plugins release notes give the exact configuration.
   - k3s's containerd template turns NRI off only when k3s runs in a user namespace (`pkg/agent/templates/templates.go` on k3s master: `{{ if .IsRunningInUserNS }} … disable = true`). A privileged node keeps containerd's default.
   - A competent engineer who wants E-core background pods on a hybrid dev box *would* install the balloons chart, and could reasonably expect it to work.
 - **What remains is packaging and defaults:**

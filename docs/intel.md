@@ -7,8 +7,7 @@ hybrid client CPUs. One command (`k3d-gpu up`) detects them from sysfs, starts
 the matching Intel device plugins baked into the node image, and checks that
 each detected engine is advertised to the scheduler.
 
-This page is for Intel's open-source, AI PC and partner engineering teams. It
-says what is shipped, what has run on real hardware, and what has only run
+This page says what is shipped, what has run on real hardware, and what has only run
 against a simulated sysfs. Measured results are filled in from a ledger and are
 never estimated. Every "no other" claim refers to the search log in
 [provenance.md](https://github.com/88plug/k3d-gpu/blob/cbbc84e55d7f9a8270ccce9a7cec870304b76597/docs/provenance.md).
@@ -185,8 +184,8 @@ machine. There are two paths, one per EAT generation:
   sandbox through the EAS gateway with a minted, then deleted, LiteLLM key) and `eat down`;
   `k3d-gpu eas` is the same with the layer named, and `eat up --legacy` runs EAT 1.x.
 
-What the EAS, enterprise-inference and EAT 1.1.x runs found upstream, and the drafts we
-can hand over, are listed under [Upstream findings](#upstream-findings).
+What the EAS, enterprise-inference and EAT 1.1.x runs found upstream, and the unsent issue
+drafts, are listed under [Upstream findings](#upstream-findings).
 
 Pins and upstream changes, Release 1.1.0
 ([PR #21](https://github.com/intel/enterprise-agent-toolkit/pull/21)) included:
@@ -355,7 +354,7 @@ reads each verdict and its scope.
 
 Found while running EAS, enterprise-inference (EI) and EAT on k3d-gpu, each at a pinned
 commit. A finding is a fact about upstream code, with what `k3d-gpu` does about it. The issue
-drafts are unsent, ready to hand over, and live in
+drafts are unsent and live in
 [upstream-eat.md](intel/upstream-eat.md#issue-drafts-from-the-2026-11-01-runs-unsent).
 
 | Upstream | Finding | What k3d-gpu does |
