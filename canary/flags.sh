@@ -74,6 +74,21 @@ emit() { # emit <family> <source> <kind>: one line per name on stdin
 
 {
     fn_body vllm_manifest | shell_flags | emit vllm scripts/k3d-gpu:vllm_manifest flag
+    # The device flags and the base arguments vllm_manifest renders: the --flag words
+    # these two functions print.
+    for f in vllm_device_args vllm_base_lines; do
+        fn_body "${f}" | { grep -oE -- "(^|[[:space:]\"])--[A-Za-z][A-Za-z0-9_-]*" || true; } | tr -d ' "' \
+            | emit vllm "scripts/k3d-gpu:${f}" flag
+    done
+    # The recipe flags console/recipes.py may adopt (its ADOPT allowlist).
+    [ ! -f "${ROOT}/console/recipes.py" ] || python3 - "${ROOT}/console/recipes.py" <<'PY' | emit vllm console/recipes.py:ADOPT flag
+import ast
+import sys
+for node in ast.parse(open(sys.argv[1], encoding="utf-8").read()).body:
+    if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "ADOPT" for t in node.targets):
+        for name in sorted(ast.literal_eval(node.value)):
+            print("--" + name)
+PY
     for a in VLLM_XPU_ENV VLLM_HPU_ENV; do
         array_body "${a}" | sed -nE 's/^[[:space:]]*"?(VLLM_[A-Z0-9_]+)=.*/\1/p' | emit vllm "scripts/k3d-gpu:${a}" env
     done

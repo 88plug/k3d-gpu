@@ -55,6 +55,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+# console/recipes.py (vLLM's model recipes, stdlib only) is imported where a vLLM decision
+# reads it, so ledger-rules runs from a copy of this file alone (hack/gate_lib.sh rules_stale).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 META_SCHEMA = "k3d-gpu.hfmeta/v1"
 OPT_SCHEMA = "k3d-gpu.modelopt/v1"
 MEASURE_SCHEMA = "k3d-gpu.variant-measurements/v1"
@@ -937,9 +941,58 @@ def optimize(bundle, engine, device, opts=None):
                        "EXPERIMENTS.md %s is SUPPORTED for %s or " % (row, hw_class or "this hardware class") if row else "", r["id"]),
                    r.get("promotion") or ("EXPERIMENTS.md %s not run" % row if row else "no measurement yet"))
 
-    # Parsers by model family.
+    # Parsers: on vLLM, the model's own recipe (console/recipes.py, opts["recipes"]),
+    # else by model family. A parser the recipe does not give (none, or gated off for
+    # this vLLM version) falls back to the family table.
+    rf = None
+    if engine == "vllm" and o.get("recipes"):
+        import recipes
+        rf = recipes.facts(o["recipes"], pick["id"] if pick and pick["id"] != "qat-convert" else target,
+                           requested=bundle.get("requested", target), target=target, device=device,
+                           pci_id=o.get("pci_id"), cpu_brand=o.get("cpu_brand"),
+                           engine_version=".".join(map(str, vllm_version)), engine=o.get("vllm_engine") or "vllm-xpu",
+                           config=trec.get("config"))
+        o["recipe_facts"] = rf
+        if rf is None:
+            choose("no vLLM recipe for %s at %s" % (target, "vllm@" + recipes.sha12(o["recipes"])),
+                   "parsers from the model family table", "console/vllm-recipes.json")
     fam = FAMILY_PARSERS.get(facts["model_type"] or "")
-    if fam and engine in ("vllm", "ovms") and engine in fam:
+    if engine == "vllm" and rf:
+        doc["recipe"] = {"id": rf["id"], "ref": "%s@vllm-%s" % (rf["id"], recipes.sha12(o["recipes"])),
+                         "state": rf["state"], "file": rf["file"]}
+        ftool, freason = (fam or {}).get("vllm") or (None, None)
+        tool, reasoning = rf["tool_parser"] or ftool, rf["reasoning_parser"] or freason
+        if rf["tool_parser"] or rf["reasoning_parser"]:
+            choose("recipe %s (%s)" % (rf["id"], rf["ref"]), "tool parser %s, reasoning parser %s" % (tool or "none", reasoning or "none"),
+                   "%s features.tool_calling, features.reasoning" % rf["file"])
+        if (tool and tool != rf["tool_parser"]) or (reasoning and reasoning != rf["reasoning_parser"]):
+            choose("model family %s" % facts["model_type"], "the parser the recipe does not give: tool %s, reasoning %s" % (
+                tool or "none", reasoning or "none"), fam["source"])
+        # The launcher's merge takes the optimizer's values as k3d-gpu's, so a ledger row in
+        # recipes.MEASURED is applied here: SUPPORTED sets the row's value, REFUTED keeps
+        # k3d-gpu's default (the family table's parser, no chat template).
+        rows = recipes.measured(ledger_from_text(o.get("ledger")), o.get("hw_class"), [rf["id"]])
+
+        def ledger_beats(flag, value, default):
+            hit = rows.get(flag)
+            if not hit:
+                return value
+            got = hit[0] if hit[2] == "SUPPORTED" else default
+            choose("ledger EXPERIMENTS.md %s (%s, %s)" % (hit[1], hit[2], hit[3]),
+                   "--%s %s" % (flag, got) if got else "no --%s" % flag, "console/recipes.py MEASURED")
+            return got
+        tool = ledger_beats("tool-call-parser", tool, ftool)
+        reasoning = ledger_beats("reasoning-parser", reasoning, freason)
+        doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning
+        doc["notes"] += ["vLLM recipe: " + w for w in rf["warnings"]]
+        for it in rf["items"]:
+            if it["name"] == "chat-template" and it["action"] == "adopt":
+                template = ledger_beats("chat-template", it["value"], None)
+                if template:
+                    doc["engine_args"] += ["--chat-template", template]
+                if template and template == it["value"]:
+                    choose("recipe %s %s" % (rf["id"], it["path"]), "--chat-template %s" % template, it["why"])
+    elif fam and engine in ("vllm", "ovms") and engine in fam:
         tool, reasoning = fam[engine]
         doc["tool_parser"], doc["reasoning_parser"] = tool, reasoning
         if tool or reasoning:
@@ -1126,8 +1179,9 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
     cfg = None
     if chosen.get("mtp"):
         cfg = {"method": "mtp", "num_speculative_tokens": 3}
+        src = recipe_spec_tokens(cfg, o)
         choose("%s has a built-in MTP head (%s)" % (chosen["id"], chosen.get("mtp_source")),
-               "--speculative-config %s" % json.dumps(cfg), VLLM_SPEC_DOC + " (MTPModelTypes -> mtp); https://huggingface.co/RedHatAI/Qwen3.8-27B-INT4 README (num_speculative_tokens 3)")
+               "--speculative-config %s" % json.dumps(cfg), src or VLLM_SPEC_DOC + " (MTPModelTypes -> mtp); https://huggingface.co/RedHatAI/Qwen3.8-27B-INT4 README (num_speculative_tokens 3)")
     else:
         for d in fit:
             if d["drafter"] == "assistant":
@@ -1142,6 +1196,7 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
                 src = d["url"] + " (README vllm serve command)"
             else:
                 continue
+            src = recipe_spec_tokens(cfg, o) or src
             choose("drafter %s [%s]" % (d["id"], TIER_NAMES[d["tier"]]), "--speculative-config %s" % json.dumps(cfg), src)
             break
     if cfg is None:
@@ -1149,6 +1204,32 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         return
     doc["speculative"] = {"kind": cfg["method"], "model": cfg.get("model"), "config": cfg,
                           "args": ["--speculative-config", json.dumps(cfg, sort_keys=True)]}
+
+
+def recipe_spec_tokens(cfg, o):
+    """Sets cfg's num_speculative_tokens from the model's vLLM recipe when one of its
+    spec_decoding modes is this method and drafter (allowed for the served variant and
+    the hardware); a SUPPORTED or REFUTED ledger row in recipes.MEASURED beats it. The
+    source, or None when nothing changed the number."""
+    rf = o.get("recipe_facts")
+    if not rf:
+        return None
+    import recipes
+    rows = recipes.measured(ledger_from_text(o.get("ledger")), o.get("hw_class"), [rf["id"]])
+    hit = rows.get("speculative-config.num_speculative_tokens")
+    if hit:
+        if hit[2] == "SUPPORTED" and hit[0]:
+            cfg["num_speculative_tokens"] = hit[0]
+        return "EXPERIMENTS.md %s (%s, %s)" % (hit[1], hit[2], hit[3])
+    for mk, m in rf["spec_modes"].items():
+        mc = m.get("config") or {}
+        # A drafter matches the mode that names it; the built-in MTP head, the mtp mode with no model.
+        same = (mc.get("model") or "").lower() == cfg["model"].lower() if cfg.get("model") \
+            else mc.get("method") == "mtp" and not mc.get("model")
+        if same and isinstance(mc.get("num_speculative_tokens"), int) and not isinstance(mc["num_speculative_tokens"], bool):
+            cfg["num_speculative_tokens"] = mc["num_speculative_tokens"]
+            return "recipe %s (%s) %s (num_speculative_tokens %d)" % (rf["id"], rf["ref"], m["path"], mc["num_speculative_tokens"])
+    return None
 
 
 def conversion_job(src, sha, out):
@@ -1226,6 +1307,7 @@ def shell_lines(doc, host=None):
     kv = {
         "OPT_ENGINE": doc["engine"],
         "OPT_MODEL": doc["model"] or "",
+        "OPT_TARGET": doc["target"] or "",
         "OPT_REVISION": doc["revision"] or "",
         "OPT_TOOL_PARSER": doc["tool_parser"] or "",
         "OPT_REASONING_PARSER": doc["reasoning_parser"] or "",
@@ -1251,6 +1333,17 @@ def eat_patch(doc):
             "speculative_config": json.dumps(doc["speculative"]["config"], sort_keys=True) if doc["speculative"] and doc["speculative"].get("config") else None,
             "reasoning_parser": doc["reasoning_parser"], "tool_parser": doc["tool_parser"],
             "explain": explain_lines(doc), "summary": summary_line(doc)}
+
+
+def vllm_recipes(engine):
+    """The vendored vLLM recipes for a vLLM decision (K3D_GPU_VLLM_RECIPES=off: none)."""
+    if engine != "vllm" or os.environ.get("K3D_GPU_VLLM_RECIPES", "auto") == "off":
+        return None
+    import recipes
+    art, why = recipes.load()
+    if art is None:
+        sys.stderr.write("model_opt: vLLM recipes unavailable (%s): parsers from the model family table\n" % why)
+    return art
 
 
 def read_text(path):
@@ -1287,6 +1380,8 @@ def main(argv):
     p.add_argument("--draft", choices=("auto", "off", "mtp"))
     p.add_argument("--prefix-caching", choices=("true", "false"))
     p.add_argument("--hw-class")
+    p.add_argument("--pci-id")
+    p.add_argument("--vllm-engine")
     # No backend was set: on the CPU, the ledger's H59 family may pick llama.cpp over OVMS.
     p.add_argument("--engine-from-ledger", action="store_true")
     p.add_argument("--host")
@@ -1340,7 +1435,8 @@ def main(argv):
         "vllm_version": a.vllm_version, "thinking": a.thinking, "variant": a.variant, "precision": a.precision,
         "draft": a.draft, "prefix_caching": None if a.prefix_caching is None else a.prefix_caching == "true",
         "hw_class": a.hw_class, "ledger": read_text(a.ledger), "measurements": meas,
-        "engine_from_ledger": a.engine_from_ledger})
+        "engine_from_ledger": a.engine_from_ledger, "pci_id": a.pci_id, "vllm_engine": a.vllm_engine,
+        "recipes": vllm_recipes(a.engine)})
     if a.format == "json":
         sys.stdout.write(json.dumps(doc, indent=1, sort_keys=True) + "\n")
     elif a.format == "shell":
