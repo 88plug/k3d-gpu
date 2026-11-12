@@ -1,0 +1,51 @@
+== H63w end (rule W6) 2026-11-12T02:18:39Z
+/dev/nvme0n1p2             3667G 2859G      621G      83% /
+-- clusters and containers (pass: empty, rc 0)
+
+list rc=0
+ps rc=0
+lock-free
+hold.sh procs: none
+-- volumes and networks against setup/*-before.txt (only k3d-k3dgpu-w-* would be removed)
+-- images: a ref is removed only when its ID is not in setup/images-before.txt
+rmi 9f30cace3b34 cryptoandcoffee/k3d-gpu@sha256:417e53f3b6c13e26fd084bb75f788ac0e5dedbae28b86413fcd628f329cdc331 rc=0
+rmi 1931b2906173 ghcr.io/k3d-io/k3d-tools:5.9.0 rc=0
+absent ghcr.io/k3d-io/k3d-proxy:5.9.0
+rmi bdfc738a8a86 python@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb rc=0
+rmi a69a456a28ce ghcr.io/ggml-org/llama.cpp@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e rc=0
+rmi 113f30287a0c ghcr.io/ggml-org/llama.cpp@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf rc=0
+rmi 6348136997e0 openvino/model_server@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58 rc=0
+-- images now not in images-before.txt (report only)
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          489       42        573GB     204.9GB (35%)
+Containers      43        18        16.68GB   16.49GB (98%)
+Local Volumes   142       33        612GB     89.46GB (14%)
+Build Cache     1434      0         106.2GB   8.69GB
+-- files
+31G	/home/andrew/k3dgpu-bench-wildct
+rm rc=0 exists=no
+-- last check
+/dev/nvme0n1p2             3667G 2822G      659G      82% /
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+ps rc=0
+-- production after the cleanup
+/bmd-telemetry-jaeger-1 running 2026-10-29T09:11:27.91961244Z rc=0
+/bmd-telemetry-prometheus-1 running 2026-10-29T09:11:27.949546379Z rc=0
+/feed-my-algorithm-app-1 running 2026-10-29T09:11:27.936156879Z rc=0
+/feed-my-algorithm-controller-1 running 2026-10-29T09:11:27.939661363Z rc=0
+/feed-my-algorithm-db-1 running 2026-10-29T09:11:27.932636735Z rc=0
+/feed-my-algorithm-redroid-1 running 2026-10-29T09:11:27.907167381Z rc=0
+/feed-my-algorithm-worker-1 running 2026-10-29T09:11:27.938381448Z rc=0
+/know-my-neighbor-db-1 running 2026-10-29T09:11:27.946670984Z rc=0
+/proxmox-dc-manager running 2026-10-29T09:11:27.95058685Z rc=0
+/searxng-core running 2026-10-29T09:11:27.943106017Z rc=0
+/searxng-valkey running 2026-10-29T09:11:27.920115646Z rc=0
+/state-of-my-town-app running 2026-10-29T09:11:27.933239949Z rc=0
+/state-of-my-town-archivebox running 2026-10-29T09:11:27.915974301Z rc=0
+/state-of-my-town-postgres running 2026-10-29T09:11:27.948938903Z rc=0
+/tos-rate-calculator running 2026-10-29T09:11:27.934425305Z rc=0
+/webapp-adminer-1 running 2026-10-29T09:11:27.945114439Z rc=0
+/webapp-db-1 running 2026-10-29T09:11:27.950054666Z rc=0
+/webapp-web-1 running 2026-10-29T09:11:27.947765425Z rc=0
+running: 18
+== end 2026-11-12T02:18:53Z

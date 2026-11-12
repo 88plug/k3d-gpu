@@ -1,0 +1,4 @@
+== H63w-2 waiting for the lock 2026-11-11T23:47:31Z
+== H63w-2 lock taken 2026-11-11T23:47:31Z
+== H63w-2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h63w 2 2026-11-11T23:47:32Z
+== H63w-2 rc=0; clusters deleted: none; now: ; / 621 GB available 2026-11-12T00:33:12Z

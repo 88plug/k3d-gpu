@@ -1,0 +1,31 @@
+{
+ "arm": "Ld-mtp",
+ "fit": null,
+ "requests": {
+  "cpu": "16",
+  "memory": "6Gi"
+ },
+ "limits": null,
+ "image": "ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312",
+ "args": [
+  "-m",
+  "/models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf",
+  "--host",
+  "0.0.0.0",
+  "--port",
+  "8080",
+  "--alias",
+  "gemma",
+  "-t",
+  "8",
+  "-C",
+  "0x5555",
+  "--cpu-strict",
+  "1",
+  "--jinja",
+  "-md",
+  "/models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf",
+  "--spec-type",
+  "draft-mtp"
+ ]
+}

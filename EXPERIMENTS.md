@@ -109,7 +109,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59d measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59d measurement). Result ([H59d run](#h59d-run-i9-13900t-2026-11-01)): 4 holds, no spare. L was not deliverable in holds 1 and 3: each time it followed O in the hold, its server was OOMKilled 7 times at the fit's 45Gi pod limit (4 x 262,144 tokens) and never answered within 900 s. The same render served in holds 2 and 4, where L ran first. So INCONCLUSIVE (L not deliverable in two holds). Not gated, from hold 2 only: N=4 L/O 1.05, N=1 1.19; GSM8K L 50/50, O 49/50; the idle-window load read matched (L 2.14, O 2.01 CPU-s/s). | INCONCLUSIVE |
 | H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). The runner: [H59 amendment R1](#h59-amendment-r1-the-runner-and-the-host-profiles-2026-10-29) (2026-10-29, before any H59w measurement). The load gate reads each arm's 60 s idle window; the N=4 reading is recorded, not gated: [H59 amendment R2](#h59-amendment-r2-h59ds-and-h59ws-load-gate-reads-each-arms-idle-window-2026-10-31) (2026-10-31, the owner's decision of 2026-10-29, before any H59w measurement). H59w's wiring smoke, the archive it and the holds run from, and the cap its holds count against: [H59 amendment R5](#h59-amendment-r5-h59ws-wiring-smoke-its-archive-and-its-holds-on-wildct-2026-11-10) (2026-11-10, before any H59w hold or wiring smoke). Result ([H59w run](#h59w-run-wildct-i7-13700-2026-11-10)): 4 holds, every arm measured, no spare, load matched (idle windows L 0.29, O 0.31 CPU-s/s). N=4 L/O 1.002 (95% CI 0.982-1.020), per hold 0.997, 1.012, 0.979; GSM8K L 50/50, O 50/50, gate passed; so REFUTED (CI upper bound < 1.2). Not gated: N=1 L/O 1.09; 1,000-token TTFT L 27.9 s, O 51.4 s; added-agent prefix TTFT L 4.06 s, O 6.35 s; the package sat at its 35 W PL1 in every window, so RAPL's net J/token is about 0. | REFUTED |
 | H63d | A one-stream engine default on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX) with Gemma 4 26B-A4B QAT: for an agent deployed for one stream (`K3D_GPU_AGENT_MAX_NUM_SEQS=1`), k3d-gpu's own llama.cpp render (Ls: `agent manifest` of Google's QAT Q4_0 GGUF with the QAT MTP drafter, one slot, `server-b11960`) decodes one request at least 1.2x faster than the class's CPU default today, OVMS 2026.4.1 with OpenVINO's base-model int4 IR (Od, H57d's arm), with GSM8K within 2 of 50. SUPPORTED makes llama.cpp with the QAT MTP drafter the CPU engine for one-stream agents of the i9-13900T class only; with more than one sequence the H59 family decides, as it does now. | Written 2026-11-11, before any H63 measurement. N=1 Ls/Od 1.20 (0.90-1.50) (0.5); Ld-mtp/Od 1.0 (0.7-1.45) (0.5); Ls/Ld-mtp >= 1.0 (0.55); Ls's GSM8K >= 48/50 (0.85). SUPPORTED (0.25), REFUTED (0.3), INCONCLUSIVE (0.45). Not gated: Ld-mtp/Od and Ls/Ld-mtp at N=1, the N=4 phase (Ls's one slot queues it), TTFT on a 1,000-token prompt, package J/token. | [H63 pre-registration](#h63-pre-registration-a-single-stream-engine-default-on-the-hybrid-client-cpu-2026-11-11): arms Od and Ld-mtp as H57w ran them, and Ls, one serving at a time on the P-core balloon; 3 performance holds in rotated order (60 s idle, 3 warmup, N=1: 8 requests, N=4: 16, TTFT: 4; 256 tokens, greedy, `ignore_eos`) and a quality hold (GSM8K 0-49); at most 6 holds of at most 75 min under the desktop's lock and start rule. Statistic: the ratio of Ls's to Od's median N=1 `decode_tokens_per_s` over the 24 pooled requests per arm, H54's bootstrap CI (10,000 resamples of each arm, seed 1, percentiles 2.5 and 97.5), and the per-hold ratios. SUPPORTED: CI lower bound >= 1.2, Ls faster than Od in each performance hold, and the quality gate (Ls's GSM8K >= Od's - 2) passed. REFUTED: CI upper bound < 1.2, or the quality gate failed. INCONCLUSIVE otherwise, also when Ls or Od is not deliverable in two holds or the load gate (H59 amendment R2's, over each arm's idle windows, Ls and Od) is unmatched. Scorer `bench/h63/h63.py`. | PENDING |
-| H63w | H63d's hypothesis on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, PL1 35 W): for an agent deployed for one stream (`K3D_GPU_AGENT_MAX_NUM_SEQS=1`), k3d-gpu's own llama.cpp render (Ls: Google's QAT Q4_0 GGUF with the QAT MTP drafter, one slot, `server-b11960`) decodes one request at least 1.2x faster than the class's CPU default, OVMS 2026.4.1 with OpenVINO's base-model int4 IR (Od, which H59w keeps), with GSM8K within 2 of 50. SUPPORTED makes llama.cpp with the QAT MTP drafter the CPU engine for one-stream agents of the i7-13700 class only; with more than one sequence H59w still keeps OVMS. | Written 2026-11-11, before any H63 measurement. N=1 Ls/Od 1.10 (1.00-1.30) (0.6); Ld-mtp/Od 1.33 (1.25-1.40) (0.6); Ls/Ld-mtp 0.82 (0.75-0.95) (0.55); Ls's GSM8K >= 48/50 (0.85). SUPPORTED (0.15), REFUTED (0.55), INCONCLUSIVE (0.3). Not gated: as H63d. | As H63d (the [H63 pre-registration](#h63-pre-registration-a-single-stream-engine-default-on-the-hybrid-client-cpu-2026-11-11)), under wildct's rules W1-W8, its hold-start `load1` <= 12 and a 15 + 45 GB disk floor; no setup on wildct before the box owner approves this use of the host in a dated amendment. Same arms, statistic, gates and outcome rules, scored by `bench/h63/h63.py`. | PENDING |
+| H63w | H63d's hypothesis on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX, PL1 35 W): for an agent deployed for one stream (`K3D_GPU_AGENT_MAX_NUM_SEQS=1`), k3d-gpu's own llama.cpp render (Ls: Google's QAT Q4_0 GGUF with the QAT MTP drafter, one slot, `server-b11960`) decodes one request at least 1.2x faster than the class's CPU default, OVMS 2026.4.1 with OpenVINO's base-model int4 IR (Od, which H59w keeps), with GSM8K within 2 of 50. SUPPORTED makes llama.cpp with the QAT MTP drafter the CPU engine for one-stream agents of the i7-13700 class only; with more than one sequence H59w still keeps OVMS. | Written 2026-11-11, before any H63 measurement. N=1 Ls/Od 1.10 (1.00-1.30) (0.6); Ld-mtp/Od 1.33 (1.25-1.40) (0.6); Ls/Ld-mtp 0.82 (0.75-0.95) (0.55); Ls's GSM8K >= 48/50 (0.85). SUPPORTED (0.15), REFUTED (0.55), INCONCLUSIVE (0.3). Not gated: as H63d. | As H63d (the [H63 pre-registration](#h63-pre-registration-a-single-stream-engine-default-on-the-hybrid-client-cpu-2026-11-11)), under wildct's rules W1-W8, its hold-start `load1` <= 12 and a 15 + 45 GB disk floor; no setup on wildct before the box owner approves this use of the host in a dated amendment. Same arms, statistic, gates and outcome rules, scored by `bench/h63/h63.py`. The box owner's approval of this use of wildct: [H63 amendment A1](#h63-amendment-a1-the-box-owner-approves-h63w-on-wildct-and-the-storage-cleanup-before-its-setup-2026-11-11) (2026-11-11, before any H63w setup). The runner: [H63 amendment R1](#h63-amendment-r1-the-desktop-runner-2026-11-11) and its wildct wiring, [H63w amendment R1](#h63w-amendment-r1-the-wildct-wiring-2026-11-11) (2026-11-11, before any H63w setup). Result ([H63w run](#h63w-run-wildct-i7-13700-2026-11-11)): 4 holds on release 0.1.106, every arm measured, no spare, load matched (idle windows Ls 0.26, Od 0.25 CPU-s/s). N=1 Ls/Od 1.111 (95% CI 1.090-1.131), per hold 1.106, 1.087, 1.158, so Ls was faster than Od in each hold; GSM8K Ls 50/50, Od 49/50, gate passed; so REFUTED (CI upper bound < 1.2). Not gated: Ld-mtp/Od 1.320 (CI 1.299-1.340), Ls/Ld-mtp 0.842 (CI 0.822-0.861); N=4 aggregate Ls 9.3-9.6 tok/s (one slot), Od 12.7, Ld-mtp 15.9-16.0; 1,000-token TTFT Ls 27.4 s, Od 51.4 s; the package sat at its 35 W PL1 in every window. | REFUTED |
 
 ## Falsification log
 
@@ -18445,6 +18445,234 @@ hold); and the arguments check mode accepts and refuses.
 
 **Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
 (H63d and H63w).
+
+### H63w run (wildct, i7-13700, 2026-11-11)
+
+**Reproduce:**
+
+```text
+# provenance
+date:            2026-11-11T23:01:30Z (hold 1 start) to 2026-11-12T02:17:36Z (hold 4 end), 4 lock holds, no spare
+hypothesis:      H63w (H63 pre-registration; H63 amendments R1 and A1; H63w amendment R1)
+host:            wildct, reached by IP 100.66.38.121: 13th Gen Intel(R) Core(TM) i7-13700 (P = CPUs 0-15, E = 16-23),
+                 avx_vnni on all 24 CPUs, no amx_*, no avx512*; microcode 0x137; MemTotal 131524088 kB; RAPL PL1
+                 35 W, PL2 40 W; governor powersave, EPP performance; kernel 6.6.156-2-MANJARO; up since
+                 2026-10-29T09:11Z; Docker 29.7.2, live-restore off, cgroup systemd/2
+step 1:          bench/wildct/RESUME.md's H1-H10 at 2026-11-11T22:39:55Z, every check passed (probe rc=0, load1 1.05,
+                 / 657 GB available, br_netfilter vxlan loaded, NFPROBE clean with the 0.1.106 node image)
+bench scripts:   main at 25b04b78 (H63w amendment R1's merge), shipped to wildct as the archive repo-25b04b788be5;
+                 rule W7's check passed at every start (launcher.diff empty): its scripts/k3d-gpu and share/ equal
+                 release 0.1.106's, version line included
+k3d-gpu:         release 0.1.106 (tag aur-v0.1.106 at c8ad2fe9, on main after H63 amendment R1's merge 9899e920;
+                 its launcher equals 25b04b78's); 0.1.107-0.1.110 were cut during the holds, not installed; .deb sha256 322124963f7bfedf86b82447b62754144f9ec5e6988d05e113c75b3c79ae19ec
+                 checked against the release's SHA256SUMS; node image
+                 cryptoandcoffee/k3d-gpu:0.1.106@sha256:417e53f3b6c13e26fd084bb75f788ac0e5dedbae28b86413fcd628f329cdc331
+                 (results/H63w/node-image, recorded by hold 1 and run by every hold)
+tools:           k3d v5.9.0, helm v4.3.1, kubectl v1.37.2 (bench/wildct/install.sh's checksums), behind the H63 k3d
+                 shim; huggingface_hub 1.21.0 (hfvenv) for the downloads
+runtimes:        Od openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58;
+                 Ld-mtp ghcr.io/ggml-org/llama.cpp:server-b11749@sha256:9fbaa06d7f4449e2ae0d02b40e0431f7c212dcf231c9e3a7777a6afc2cc8f312;
+                 Ls ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220;
+                 drafter conversions ghcr.io/ggml-org/llama.cpp:full-b11749@sha256:aefb375acf22d45551b0650af7e96361ad1a3abc65ad2bde215f23488da2711e
+                 (Ld-mtp's, transformers 5.20.2) and full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf
+                 (Ls's, the committed Job gguf-convert-b459c9c78d78)
+models:          google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be (gemma-4-26B_q4_0-it.gguf sha256 3eca3b8f...);
+                 OpenVINO/gemma-4-26b-a4b-it-int4-ov @ 4e5885c3 (openvino_language_model.bin sha256 0f887130...);
+                 google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant @ 95371415; downloaded on wildct, 32 files
+                 checked against the committed sha256 lists, 0 problems (run.py weights-check); drafters built on
+                 wildct: Ld-mtp's 8eb21d5b..., 321,145,696 bytes, Ls's f6f80c36..., 321,145,312 bytes, both the
+                 registered builds (prep/drafter-check.json); Od's graph.pbtxt c57ecf35..., served in every hold
+lock:            ~/k3dgpu-bench-wildct/live.lock (rule W1) for every prep step, the smoke and each hold, and the
+                 private inner lock inside each hold (H63w amendment R1)
+cluster:         k3dgpu-w-h63-<hold>, `k3d-gpu up` with K3D_GPU_VENDORS=auto,-nvidia,-intel (rule W8) and rule W3's
+                 kubelet thresholds; every up printed "opted out by K3D_GPU_VENDORS: nvidia intel", the node's
+                 allocatable listed cpu, ephemeral-storage, hugepages, memory and pods only, and no GPU device plugin
+                 pod ran; the models bound read-only at /var/apb-models by the k3d shim
+energy source:   RAPL package-0 through energy.sh and rule W4's reader (K3D_GPU_RAPL_EXEC, container k3dgpu-w-rapl)
+co-tenants:      the box owner's 18 production containers, running throughout, each started
+                 2026-10-29T09:11:27Z with restart count 0 at every snapshot (host/h63w.txt); no GPU read (rule W8)
+records:         bench/h63/results/2026-11-11-wildct/: H63w/holdK/ (reproduce.txt, load.jsonl, node.json, up.log,
+                 pre.txt, post.txt, cotenants-pre.txt, cotenants-post.txt, hold.log; per arm deploy.yaml, check.json,
+                 fit.json, cpus.txt, boot.json, describe.txt, pods.txt, server.log, load-*.json, energy-*.json,
+                 phases.jsonl, quality.json in hold 4, agent.yaml and render-env.txt for Od and Ls, graph.pbtxt for
+                 Od, affinity.json for Ld-mtp), H63w/node-image, campaign.log, smoke/, prep/, weights.sha256,
+                 verdict.json; bench/wildct/results/2026-11-11/: runs/H63w-1..4, runs/H63w-smoke, runs/smoke6,
+                 runs/h63w-prep (bench/wildct/hold.sh's records: pre.txt, post.txt, sample.jsonl, launcher.diff, rc)
+                 with their .out and after-H63w-K.txt, campaign-h63w.log, chain-h63w.log, resume-health-h63w.txt,
+                 install-0.1.106.log; host/h63w-setup.txt, host/h63w.txt (production snapshots), host/end-h63w.txt,
+                 host/restore-h63w.txt; the hold kubeconfigs are left out. The 544 copied files equal wildct's by
+                 sha256
+```
+
+Commands, on wildct from the archive (`W=~/k3dgpu-bench-wildct`, `R=$W/repo`, `IMAGE=$(cat $W/runs/IMAGE)`);
+each long step started under `setsid nohup systemd-run --user --scope --quiet --collect --expand-environment=no`
+(wildct amendment R9), the holds through `bench/wildct/RESUME.md`'s `launch`, one at a time, each followed by
+step 6's after-hold checks and a production snapshot before the next:
+
+```bash
+bash $R/bench/wildct/install.sh 0.1.106                                       # RESUME.md step 3c
+install -D -m 0755 $R/bench/h63/k3d-shim.sh $W/h63/bin/k3d
+launch smoke6 900 3 smoke                                                    # rule W1's wiring smoke, new release
+bash $R/bench/wildct/row.sh h63w-prep                                         # not a hold
+launch H63w-smoke 4600 45 h63w smoke                                         # H63w amendment R1's smoke
+for n in 1 2 3 4; do launch H63w-$n 4600 45 h63w $n; done                    # bench/wildct/hold.sh H63w-<n> 4600 45 bash bench/wildct/row.sh h63w <n>
+```
+
+The score, from the committed records (identical to `verdict.json`, byte for byte):
+
+```bash
+python3 bench/h63/h63.py score bench/h63/results/2026-11-11-wildct/H63w
+```
+
+**Start gates.** Each gate the registration names was read and met before the step it governs.
+
+- The runner amendments: H63 amendment R1 (#398) merged as `9899e920`, H63w amendment R1 (#412) as
+  `25b04b78`, the commit shipped to wildct.
+- The owner's approval: H63 amendment A1 (#407), merged as `9aa3e364`.
+- The node image: release 0.1.106's tag is on main at `c8ad2fe9`, after `9899e920`, so its
+  launcher is that merge commit's or later; it also equals `25b04b78`'s. It was the newest k3d-gpu
+  release when the setup began. Hold 1 recorded its node image by digest, and every hold ran it.
+- The CPU class: `run.py cpu` read the i7-13700, exactly, before every hold's lock.
+- The floors: `/` had 657 GB available at step 1 and 621 GB at every hold start (W6: 15 + 45 GB);
+  MemAvailable read 113.9 GiB at every hold start (need 20 GiB).
+- The start rule: `load1` read 2.35, 7.88, 5.34 and 6.00 at the outer starts of holds 1-4 (2.24,
+  7.33, 5.34 and 6.00 at the inner ones), all <= 12. No hold waited (`wait_s` 0, outer and inner)
+  and none was flagged. Holds 2-4 started 5-20 s after the hold before them ended, so their
+  `load1` still carried that hold's last arm.
+
+**Setup and preparation (not holds).** Wildct held no campaign directory when this began (the
+wildct campaign's end removed it). The step 1 checks passed at 22:39:55Z. Release 0.1.106 was
+installed and checked: four `ok` lines, `LAUNCHER-MATCH`, an empty `share/` diff, and the node
+image's digest. The 0.1.106 node image had not run on wildct before, so rule W1's wiring smoke ran
+again, as `smoke6` (RESUME.md step 5's rule for a release other than 0.1.89; 22:40:33Z to
+22:41:44Z, rc 0). It printed `up rc=0 in 38 s`, `pods ready: yes after 30 s`, `GPU-SCAN clean` and
+`down rc=0`. The node container read `devices=[] gpus=[] restarts=0`, nvidia and intel were named
+as opted out, and every pod was Running or Completed. `smoke6` is discarded and disclosed, and is
+not a hold of any row. `h63w-prep` ran from 22:42:31Z to 22:56:26Z, outside any hold, each step
+under `live.lock`. It downloaded the three repos at the registered revisions, and `run.py
+weights-check` matched all 32 listed files. It built Ld-mtp's drafter and Od's `graph.pbtxt` with
+`convert.sh`, then Ls's drafter with the committed Job. `drafter-check.json` reads `ok` for both
+drafters, and `run.py models` passed.
+
+**The wiring smoke** (`H63w-smoke`, 22:57:00Z to 23:01:05Z, rc 0) ran hold 1's arms, one 16-token
+request and one `chat_template_kwargs` chat each, then each arm was deleted. All three answered
+(Od ready after 78 s, Ld-mtp 24 s, Ls 34 s), each render check found no problem, and each chat
+returned `finish_reason` stop. It scored nothing and is discarded.
+
+**Holds.** Every hold returned rc 0. The perf holds took 45.6-45.9 min of the 75-minute cap and
+the quality hold 57.9 min. Every render passed `run.py check` (12 of 12 with no problem), and every
+arm in every hold reached `measured`, so the spare rule allows no spare.
+
+- Each server's cgroup cpuset was 0-15, the P-core balloon. Od's 157 threads and Ls's 43 floated
+  over 0-15. Ld-mtp pinned 9 threads to single CPUs (CPUs 0, 2, ..., 14, two on CPU 0) in every
+  hold, so H57dp amendment R1's affinity check reads as registered (not gated).
+- Ls rendered `-c 262144 -np 1` with a 39Gi limit in every hold and in the smoke, with `--threads 8
+  --threads-batch 16 --load-mode mmap+mlock --cache-ram 0 -ctxcp 4 --jinja --reasoning off` and
+  the drafter by sha256. Od rendered 5 sequences of 65,536 tokens with a 94Gi limit.
+- Readiness: Od 57-77 s, Ld-mtp 25-34 s, Ls 24-35 s, each far inside 900 s. Ls ran after Od
+  (with Ld-mtp between them) in hold 1, after Ld-mtp in hold 2, and first in hold 3 and in the
+  quality hold. It served every time, with no OOMKill: the H59d risk the pre-registration names
+  did not recur here.
+
+| Hold | Order | Od | Ld-mtp | Ls |
+|---|---|---|---|---|
+| 1 | Od, Ld-mtp, Ls | measured | measured | measured |
+| 2 | Ld-mtp, Ls, Od | measured | measured | measured |
+| 3 | Ls, Od, Ld-mtp | measured | measured | measured |
+| 4 (quality) | Ls, Od, Ld-mtp | GSM8K 49/50 | GSM8K 50/50 | GSM8K 50/50 |
+
+**Load (H59 amendment R2's gate, over Ls's and Od's 60 s idle windows in holds 1-3).** The foreign
+P-core load read means of Ls 0.26 and Od 0.25 CPU-s/s, spread 0.008 <= 2.00: matched. Recorded,
+not gated: over the N=1 phases Ls 0.14 and Od 0.09 (matched); over all three arms' idle windows
+Ld-mtp 0.27 (matched). Over the four holds rule W5's sampler read `load1` 1.6-16.3 (the arm itself
+included), foreign CPU 0.40-1.88 CPU-s/s (p90 1.21), the other containers 0.04-0.40 CPU-s/s,
+MemAvailable 80.1-114.0 GiB, package 59-71 C and `/` 645.6-666.8 GB available.
+
+**H63w: REFUTED** (`h63.py score`): "N=1 CI upper bound < 1.2". Pooled over the 24 N=1 requests per
+arm, Ls's median decode is 9.946 tok/s and Od's 8.950. Ls/Od is 1.111, 95% CI 1.090-1.131. Per hold
+it is 1.106, 1.087 and 1.158: Ls was faster than Od in each hold, by less than the bar. Ls and Od
+were deliverable in every hold, each was measured in 3 performance holds, the quality gate passed
+(Ls 50, Od 49, need 47) and the load gate matched, so the rule reaches its last step, and the CI
+upper bound is below 1.2.
+
+Reported, not gated (`verdict.json`'s `reported` and `arms`; per-hold values in holds 1, 2, 3):
+
+| | Od (OVMS 2026.4.1, OVB int4, 5 sequences) | Ld-mtp (llama.cpp b11749, pinned, QAT GGUF and drafter) | Ls (llama.cpp b11960, the launcher's one-slot render, QAT GGUF and drafter) |
+|---|---|---|---|
+| N=1 decode tok/s per request, median | 8.950 (8.950, 8.962, 8.938) | 11.815 (11.520, 11.861, 12.033) | 9.946 (9.900, 9.740, 10.353) |
+| N=4 decode tok/s per request, median | 3.61 | 4.37 | 10.00 (one at a time) |
+| N=4 aggregate tok/s | 12.66-12.71 | 15.94-16.04 | 9.30-9.63 |
+| N=4 median TTFT | 9.8 s | 5.4 s | 81.6 s (queued behind the one slot) |
+| TTFT, H54's 1,000-token prompt | 51.4 s | 27.4 s | 27.4 s |
+| RAPL J per output token, N=1, gross | 4.25-4.26 | 3.10-3.22 | 3.54-3.76 |
+| GSM8K 0-49 (hold 4) | 49/50 | 50/50 | 50/50 |
+
+| Ratio, N=1 | Value (95% CI) | Per hold |
+|---|---|---|
+| Ls/Od (gated) | 1.111 (1.090-1.131) | 1.106, 1.087, 1.158 |
+| Ld-mtp/Od | 1.320 (1.299-1.340) | 1.287, 1.323, 1.346 |
+| Ls/Ld-mtp | 0.842 (0.822-0.861) | 0.859, 0.821, 0.860 |
+
+The package read 34.9-35.0 W in every energy window, idle windows included: it sat at its 35 W PL1
+whether or not an arm was serving, as in H59w. So the net-of-idle J/token figures are about 0, and
+the gross ones differ only by the arms' token rates. At N=4 Ls's one slot served the four requests
+in turn, so its per-request decode is its one-stream rate and its aggregate is below both other
+arms'; this is what the concurrency guard keeps out of the rule.
+
+Predictions against the record (not gated):
+
+| Prediction (row, 2026-11-11) | Result |
+|---|---|
+| N=1 Ls/Od 1.10 (1.00-1.30) (0.6) | 1.111: inside |
+| Ld-mtp/Od 1.33 (1.25-1.40) (0.6) | 1.320: inside |
+| Ls/Ld-mtp 0.82 (0.75-0.95) (0.55) | 0.842: inside |
+| Ls's GSM8K >= 48/50 (0.85) | 50/50: held |
+| SUPPORTED (0.15), REFUTED (0.55), INCONCLUSIVE (0.3) | REFUTED |
+
+Confounds and scope:
+
+- **Stacks as shipped.** Od serves OpenVINO's base-model int4 IR, Ls and Ld-mtp Google's QAT GGUF,
+  as H57w and H59w ran them: engine, weights and settings all differ.
+- **Power-limited package.** The 35 W PL1 held the package at its limit in every window. The ratio
+  is this host's at that limit, not the i7-13700's at a higher PL1.
+- **Shared production host.** The box owner's 18 containers ran throughout. Arms were rotated over
+  holds, not interleaved per request, and the idle-window load matched.
+- **Od's sequences.** Od ran at the fit's 5 sequences, as registered; an operator who sets
+  `K3D_GPU_AGENT_MAX_NUM_SEQS=1` gets OVMS with one sequence, which this row did not run.
+
+**What the verdict changes.** Nothing ships. As the pre-registration's REFUTED branch says, no rule
+is wired for the i7-13700, and OVMS stays that class's CPU engine at every sequence count; H63 is
+not in `console/model_opt.py`'s `RULE_FAMILIES`, so `console/ledger-rules.json` does not change.
+A REFUTED H63-family row for this class wins over a later SUPPORTED one. Ld-mtp/Od read 1.320 in
+the same holds, at or above 1.2, so by the pre-registration the gap between the launcher's render
+and H57w's (llama.cpp `b11960` against `b11749`, unpinned against strictly pinned threads,
+`--threads-batch 16`, `mmap+mlock`, one slot) is a lead for a new row, registered on its own. It
+does not change this verdict.
+
+**Holds counted.** H63w used 4 of its 6 holds and no spare. The wiring smoke and `smoke6` are not
+holds.
+
+**Host and cleanup.** The production snapshots before and after `smoke6`, `h63w-prep`, the smoke
+and each hold read the same: the 18 containers running, each started 2026-10-29T09:11:27Z with
+restart count 0 (`host/h63w.txt`, against `host/h63w-setup.txt` read before any setup). Each
+hold's `cotenants-pre.txt` and `cotenants-post.txt` read the same, and no GPU was read. After each
+hold the after-hold checks passed: no `k3dgpu-w-*` cluster or container, no process of the hold,
+`live.lock` free. After the records were copied and their sha256 compared, the end step
+(`host/end-h63w.txt`, 2026-11-12T02:18:39Z) removed `~/k3dgpu-bench-wildct` (31 GB: the models,
+both drafters, the tools and the archive) and the images this run pulled: the 0.1.106 node image,
+`k3d-tools:5.9.0`, the RAPL reader's `python:3.13-slim`, and both `full-` conversion images. It
+also removed the OVMS image `openvino/model_server@sha256:a928903f...` (ID `6348136997e0`). That
+image was on wildct before this run (the wildct campaign's end kept it), but it is untagged, and
+`docker images` without `--all` does not list an untagged image, so `setup/images-before.txt` did
+not name it. It was pulled again by the same digest at 02:19:24Z (`host/restore-h63w.txt`), and
+the ID is the same. After that `docker system df` read 490 images (574.1 GB), 142 volumes and 1,434
+build-cache records, as before the setup (`/` 658 GB available). The run's xet logs, kubectl's
+caches for its six clusters and k3d's six `/tmp` hostsfiles were removed too. Left: 14.3 MB of
+`uv`'s cache from `install.sh`'s `uv pip install huggingface_hub==1.21.0`, a cache the box owner's
+own `uv` shares. The 18 kernel modules and their `modules-load.d` file stay the box owner's, as the
+wildct campaign left them.
+
+**Ledger after it.** 85 rows: 23 SUPPORTED, 25 REFUTED, 36 INCONCLUSIVE and 1 PENDING (H63d).
 
 ## Scope corrections
 

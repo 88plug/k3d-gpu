@@ -1,0 +1,4 @@
+== H63w-holdsmoke waiting for the lock (mode perf, arms: Od Ld-mtp Ls) 2026-11-11T22:57:01Z
+== H63w-holdsmoke lock taken 2026-11-11T22:57:01Z
+== H63w-holdsmoke start: Od Ld-mtp Ls 2026-11-11T22:57:01Z
+== H63w-holdsmoke rc=0; clusters deleted: k3dgpu-w-h63-smoke; now:  2026-11-11T23:01:02Z

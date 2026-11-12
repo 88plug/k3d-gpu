@@ -1,0 +1,12 @@
+2026-11-11T23:19:12Z Ld-mtp start perf (3410 s of the hold left)
+2026-11-11T23:19:37Z Ld-mtp ready after 25 s
+energy: zone=intel-rapl:0 (package-0) joules=2099.796 seconds=60.012 avg_watts=34.990 command_seconds=60.001 samples=13 exit=0
+concurrency=1 ok=3/3 ttft_median=1.528s ttft_p90=1.608s latency_median=22.955s tok/s_median=11.2 aggregate_tok/s=11.2
+energy: zone=intel-rapl:0 (package-0) joules=2403.152 seconds=68.853 avg_watts=34.903 command_seconds=68.849 samples=15 exit=0
+concurrency=1 ok=8/8 ttft_median=1.503s ttft_p90=1.589s latency_median=23.724s tok/s_median=10.8 aggregate_tok/s=10.8
+energy: zone=intel-rapl:0 (package-0) joules=6591.475 seconds=188.963 avg_watts=34.882 command_seconds=188.947 samples=39 exit=0
+concurrency=4 ok=16/16 ttft_median=5.154s ttft_p90=6.270s latency_median=63.034s tok/s_median=4.1 aggregate_tok/s=16.0
+energy: zone=intel-rapl:0 (package-0) joules=8925.305 seconds=255.553 avg_watts=34.925 command_seconds=255.541 samples=53 exit=0
+concurrency=1 ok=4/4 ttft_median=27.433s ttft_p90=27.858s latency_median=28.401s tok/s_median=0.6 aggregate_tok/s=0.6
+energy: zone=intel-rapl:0 (package-0) joules=3994.989 seconds=114.483 avg_watts=34.896 command_seconds=114.468 samples=24 exit=0
+2026-11-11T23:31:06Z Ld-mtp status measured: perf phases recorded
