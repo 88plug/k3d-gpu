@@ -1,17 +1,17 @@
 # Freshness dashboard
 
-Updated 2026-11-12 09:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 10:23 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 red:freshness.yml
+stale:bot-sweep.yml
 stale:freshness.yml
 
-## Pins behind (2)
+## Pins behind (1)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 7h |
 | vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | revision | ? | ? |
 
 ### Not resolved (1)
@@ -22,7 +22,7 @@ stale:freshness.yml
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #427 | packaging-images | review | a human approval at the head |
+| #434 | digests | auto | - |
 | #423 | vllm-recipes | review | a human approval at the head |
 
 ## EAT stock (always review)
