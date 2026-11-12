@@ -158,15 +158,17 @@ B12110_CPU = ("ghcr.io/ggml-org/llama.cpp:server-b12110@sha256:"
               "1145e8de3111dc9358c6d8daffb755c4cf8a862d93391c26ba521b9a810bbe3e")
 B12110_FULL = ("ghcr.io/ggml-org/llama.cpp:full-b12110@sha256:"
                "93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41")
-PIP = "transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
+PIP = "transformers==5.22.2 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0"
+H59_PIP = "transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"   # H59 amendment R1
 
 
 class Tables(unittest.TestCase):
     def test_the_pins_are_the_ones_404_merged(self):
         # release v0.9.0 (tag b12110, commit cd959bae), the images #404 pinned; the conversion's
-        # pip set is the launcher's at #404's merge, the set H59 amendment R1 registered.
+        # pip set is the launcher's since #416, not the one H59 amendment R1 registered.
         self.assertEqual((run.LLAMA_CPU_IMAGE, run.LLAMA_FULL_IMAGE), (B12110_CPU, B12110_FULL))
         self.assertEqual(run.GGUF_CONVERT_PIP, PIP)
+        self.assertNotEqual(run.GGUF_CONVERT_PIP, H59_PIP)
         self.assertEqual(run.OVMS_IMAGE, H59RUN.OVMS_IMAGE)
         self.assertNotEqual(run.LLAMA_CPU_IMAGE, H59RUN.LLAMA_CPU_IMAGE)
         self.assertNotEqual(run.LLAMA_FULL_IMAGE, H59RUN.LLAMA_FULL_IMAGE)
@@ -226,12 +228,12 @@ class Tables(unittest.TestCase):
         self.assertIn(run.LLAMA_FULL_IMAGE, a)
         self.assertIn("GGUF_CONVERT_PIP=" + PIP, a)
         with self.assertRaises(SystemExit):
-            run.docker_argv(dict(spec, env={"GGUF_CONVERT_PIP": PIP.replace("5.21.0", "5.22.2")}), "/m", "/s")
+            run.docker_argv(dict(spec, env={"GGUF_CONVERT_PIP": H59_PIP}), "/m", "/s")
         with self.assertRaises(SystemExit):
             run.docker_argv(dict(spec, image=H59RUN.LLAMA_FULL_IMAGE), "/m", "/s")
         d = tempfile.mkdtemp()
         try:
-            put(os.path.join(d, "job.json"), json.dumps(dict(spec, env={"GGUF_CONVERT_PIP": "transformers==5.22.2"})))
+            put(os.path.join(d, "job.json"), json.dumps(dict(spec, env={"GGUF_CONVERT_PIP": H59_PIP})))
             r = subprocess.run([sys.executable, os.path.join(HERE, "run.py"), "docker-argv", os.path.join(d, "job.json"),
                                 "/m", "/s"], capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)

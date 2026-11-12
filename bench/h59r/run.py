@@ -34,9 +34,10 @@ _spec.loader.exec_module(h59run)
 LLAMA_CPU_IMAGE = "ghcr.io/ggml-org/llama.cpp:server-b12110@sha256:1145e8de3111dc9358c6d8daffb755c4cf8a862d93391c26ba521b9a810bbe3e"
 LLAMA_FULL_IMAGE = "ghcr.io/ggml-org/llama.cpp:full-b12110@sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41"
 OVMS_IMAGE = h59run.OVMS_IMAGE
-# The conversion Job's pip set, the launcher's GGUF_CONVERT_PIP at #404's merge (H59 amendment
-# R1's set, unchanged).
-GGUF_CONVERT_PIP = "transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
+# The conversion Job's pip set, the launcher's GGUF_CONVERT_PIP since PR #416 (transformers 5.22.2
+# and huggingface-hub 2.4.0; H59 amendment R1 registered 5.21.0 and 2.3.0, with the same
+# tokenizers and safetensors).
+GGUF_CONVERT_PIP = "transformers==5.22.2 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0"
 
 ARMS = h59run.ARMS
 ARMS["O"]["env"] = {"K3D_GPU_AGENT_BACKEND": "ovms"}
