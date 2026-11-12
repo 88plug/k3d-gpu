@@ -135,7 +135,8 @@ Include relevant details:
   and tracks the newest stable release; `eat-stock` tracks Intel EAT's newest
   release; a `ledger` path is a ledger row's runner: while a listed row is PENDING
   its pins move only with a dated amendment in the same PR, and once every listed
-  row has a verdict it is `historical`, a finished run's record that is never edited.
+  row has a verdict it is `historical`, a finished run's record that is never edited
+  (`pins/rewrites` lists the only exceptions: one exact modification of one file each).
   `repin` never touches ledger or historical paths. CI's `pin-guard` job runs
   `hack/pin-guard` on every PR (`tests/pin_guard_test.sh` shows each rule) and
   `hack/pin-classes coverage`, which fails on a pin-bearing file under `bench/` or

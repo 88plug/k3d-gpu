@@ -1,0 +1,21 @@
+# Approved rewrites of finished records. hack/pin-guard fails any modification,
+# deletion or rename of a historical path (pins/classes) except a modification listed
+# here by path, the file's sha256 at the merge-base and its sha256 at HEAD. One line
+# approves one change of one file; a later change of that file needs its own line.
+#
+#   <path> <sha256 at the merge-base> <sha256 at HEAD>
+#
+# Name substitutions only: the values, counts and verdicts these records back are
+# unchanged (each SHA256SUMS verifies; H58's score.json re-scores byte for byte).
+bench/eatflow/results/2026-10-20/H52/inventory/containers-before.txt 6c392690d048a6e0a257bedca4e343bacf77e290919035bbdf7e179f72bfad8b 03f28e55286a6a33cf2f9559d9137314cdb8d7e836cc897c08b9f98d9a4900f6
+bench/eatflow/results/2026-10-20/H52/inventory/images-before.txt 4fdd17e08dbdac1e46c48687440460d905b009d5626f9459444115bae007b4bf 27af550230c6d04ddebfea34642c57b1ceb3fe7993bb63ea3fab57ac90014a30
+bench/eatflow/results/2026-10-20/H52/inventory/images-now.txt 24feb80fa2182d654a30d7379369b280b3e112a6c0e8719613c36efdd5469eaf c42e78f82078512acd7bad8e3025ed0960f7f2cf44c5a699d3d89060653ac512
+bench/eatflow/results/2026-10-20/H52/inventory/networks-before.txt 8e1a826205ce8c900c296bb25d4dbb37047d44061454406b05339b5bb09280e3 67ded673745af3f4e795e17e3c7c3b52582f093137b0f2a920a100b5ddd9a1be
+bench/eatflow/results/2026-10-20/H52/inventory/SHA256SUMS 113e90dc0a46d2b5c0928d968f58ea20ba67bdb91c4bdb80888e6b940f728cbb cd5bb29db4c7a87d1b6fbe340fe8f0590db4da00084d0c19d0225ee73d36d4a9
+bench/eatflow/results/2026-10-20/H52/inventory/volumes-before.txt 73e49f62c28a2bea6c7f1bf2d9267efc8caf9e38ab1411971a34a306c976f513 176e32d27d2124dc61381569526a3d98190f7f247fb04a23a2ef998b7a2eed11
+bench/h54/results/2026-10-20/host/deleted-bak-listing.txt.gz be973c25a17669560a2246794a8072ce004047d091cfbc7c6d5a1ef18e740476 a77edd5322012397cb59e410f883b5dfbaf2bc049e9ddc99f91dc54703d00b9a
+bench/h54/results/2026-10-20/host/SHA256SUMS d7989a1881bf1b232f0bb344e47f6220004bcc7f86bf6f629f2042f52118baf4 4f2e4aa46543e2d73f4f48a1cb1a2832f7d8716ff2524c3459ccd324e51fff6a
+bench/h58/results/2026-11-01/run1/containers-post.json d189a5c699ad6182ce21528055e71489ad08d13f103f490cac6e9b579f739bf6 09cf5734f4b1018d4c0bcc0ae2a9b3ead9684c97cf38bc102d08772369d892c9
+bench/h58/results/2026-11-01/run1/containers-pre.json d189a5c699ad6182ce21528055e71489ad08d13f103f490cac6e9b579f739bf6 09cf5734f4b1018d4c0bcc0ae2a9b3ead9684c97cf38bc102d08772369d892c9
+bench/h58/results/2026-11-01/run2/containers-post.json d189a5c699ad6182ce21528055e71489ad08d13f103f490cac6e9b579f739bf6 09cf5734f4b1018d4c0bcc0ae2a9b3ead9684c97cf38bc102d08772369d892c9
+bench/h58/results/2026-11-01/run2/containers-pre.json d189a5c699ad6182ce21528055e71489ad08d13f103f490cac6e9b579f739bf6 09cf5734f4b1018d4c0bcc0ae2a9b3ead9684c97cf38bc102d08772369d892c9

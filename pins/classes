@@ -17,7 +17,8 @@
 #             with a dated amendment in the same diff whose heading names a PENDING
 #             listed row or an alias ("### <alias> amendment <ID>: <title> (YYYY-MM-DD)").
 #             Once a listed row has a verdict and none is PENDING it is historical.
-# historical  a finished run's record: never modified, deleted or renamed.
+# historical  a finished run's record: never modified, deleted or renamed (pins/rewrites
+#             lists the only exceptions, each one exact modification of one file).
 # historical-ref  a finished run's pin inside a live runner: it keeps occurring as
 #             often as it does.
 

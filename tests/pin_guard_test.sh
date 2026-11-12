@@ -229,6 +229,47 @@ branch bot-classes; echo "bench/x/** ours" >> "$R/pins/classes"; commit x
 expect "--autobump touching pins/classes fails" 1 "never reclassifies pins" --autobump --branch autobump/k3s
 expect "a human branch may touch .github and pins/classes" 0 "^ok"
 
+# --- pins/rewrites: one exact modification of a finished record -------------------------
+# rewrite <path>: list "<path> <sha256 at main> <sha256 in the work tree>" in pins/rewrites.
+rewrite() {
+    printf '%s %s %s\n' "$1" "$(git -C "$R" show "main:$1" | sha256sum | cut -c1-64)" \
+        "$(sha256sum < "$R/$1" | cut -c1-64)" >> "$R/pins/rewrites"
+}
+
+branch rw-ok; bump "foo/old:1.0" "foo/new:1.0" bench/old/run.sh; rewrite bench/old/run.sh; commit x
+expect "a historical edit pins/rewrites lists by both sha256s passes" 0 "^ok"
+
+branch rw-ledger; bump "foo/ref:1.0" "foo/x:1.0" bench/refuted/run.sh; rewrite bench/refuted/run.sh; commit x
+expect "a finished ledger row's record edit pins/rewrites lists passes" 0 "^ok"
+
+branch rw-space; echo "echo again" >> "$R/bench/old/two words.sh"; rewrite "bench/old/two words.sh"; commit x
+expect "a listed rewrite of a file whose name has a space passes" 0 "^ok"
+
+branch rw-after; bump "foo/old:1.0" "foo/new:1.0" bench/old/run.sh; rewrite bench/old/run.sh
+bump "foo/new:1.0" "foo/other:1.0" bench/old/run.sh; commit x
+expect "a historical edit other than the listed one fails" 1 "bench/old/run.sh: historical record modified"
+
+branch rw-before; bump "foo/old:1.0" "foo/new:1.0" bench/old/run.sh
+printf 'bench/old/run.sh %s %s\n' "$(printf x | sha256sum | cut -c1-64)" \
+    "$(sha256sum < "$R/bench/old/run.sh" | cut -c1-64)" >> "$R/pins/rewrites"; commit x
+expect "a pins/rewrites line whose merge-base sha256 differs fails" 1 "bench/old/run.sh: historical record modified"
+
+branch rw-other; bump "foo/old:1.0" "foo/new:1.0" bench/old/run.sh; rewrite bench/old/run.sh
+echo "echo again" >> "$R/bench/old/two words.sh"; commit x
+expect "a listed rewrite does not cover another historical file" 1 "bench/old/two words.sh: historical record modified"
+
+branch rw-del; printf 'bench/old/run.sh %s %s\n' "$(sha256sum < "$R/bench/old/run.sh" | cut -c1-64)" \
+    "$(sha256sum < "$R/bench/old/run.sh" | cut -c1-64)" >> "$R/pins/rewrites"
+git -C "$R" rm -q bench/old/run.sh; commit x
+expect "a historical deletion fails even when pins/rewrites names the file" 1 "bench/old/run.sh: historical record deleted"
+
+branch rw-bad; echo "bench/old/run.sh deadbeef" >> "$R/pins/rewrites"; commit x
+expect "a malformed pins/rewrites line is a usage error (exit 2)" 2 "pins/rewrites: bad line"
+
+branch bot-rewrites; bump "foo/old:1.0" "foo/new:1.0" bench/old/run.sh; rewrite bench/old/run.sh; commit x
+expect "--autobump touching pins/rewrites fails" 1 "pins/rewrites: an autobump branch never approves a record rewrite" \
+    --autobump --branch autobump/k3s
+
 # The ledger's real headings parse to the names the guard matches rows and aliases by.
 if out=$(python3 - "${ROOT}/EXPERIMENTS.md" "${GUARD}" 2>&1 <<'PY'
 import importlib.machinery, importlib.util, sys
