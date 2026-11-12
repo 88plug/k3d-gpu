@@ -1,0 +1,18 @@
+2026-11-12T01:32:20Z
+ 01:32:20 up 57 days,  2:46,  9 users,  load average: 2.87, 3.52, 3.26
+               total        used        free      shared  buff/cache   available
+Mem:          515397       98978      269310        5512      156457      416418
+Swap:              0           0           0
+%CPU     PID USER     COMMAND
+ 100  492294 devcloud ps
+41.7  467682 root     sglang::schedul
+41.6  467684 root     sglang::schedul
+39.7  468000 root     sglang::schedul
+39.5  468001 root     sglang::schedul
+17.7  466634 root     python
+17.4  466966 root     python
+15.2  872705 65532    epp
+ 6.4  492241 root     kworker/94:2-mm_percpu_wq
+ 2.6    3911 nobody   node_exporter
+/dev/nvme0n1p1  3637102748 1213833208 2423253156      34% /
+/dev/nvme0n1p1  3637102748 1213833208 2423253156      34% /

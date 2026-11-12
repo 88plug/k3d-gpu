@@ -1,0 +1,37 @@
+{
+ "arm": "L",
+ "host": "crescent",
+ "problems": [],
+ "job": {
+  "name": "gguf-convert-9fc347f23770",
+  "image": "ghcr.io/ggml-org/llama.cpp:full-b12110@sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41",
+  "command": [
+   "bash",
+   "/scripts/convert.sh"
+  ],
+  "args": [
+   "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant",
+   "9537141506fe8875b3ed45b264af13580cb29166",
+   "/models/gguf/google__gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant@9537141506fe8875b3ed45b264af13580cb29166",
+   "4294967296",
+   "Q4_0",
+   "--outtype",
+   "bf16"
+  ],
+  "env": {
+   "GGUF_CONVERT_PIP": "transformers==5.22.2 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0",
+   "HOME": "/tmp",
+   "HF_HUB_DISABLE_XET": "1"
+  },
+  "resources": {
+   "requests": {
+    "cpu": "2",
+    "memory": "8Gi"
+   },
+   "limits": {
+    "memory": "64Gi"
+   }
+  }
+ },
+ "notes": []
+}

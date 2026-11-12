@@ -1,0 +1,88 @@
+[32m==>[0m Accelerators: amx
+[32m==>[0m Experimental features (auto): dra image-volume
+[32m==>[0m Pulling node image cryptoandcoffee/k3d-gpu:0.1.110@sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166...
+docker.io/cryptoandcoffee/k3d-gpu@sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166: Pulling from cryptoandcoffee/k3d-gpu
+44136fa355b3: Already exists
+79e22369f21a: Pulling fs layer
+38421a625f70: Pulling fs layer
+7e3858f063cc: Pulling fs layer
+3cf31ea66fa6: Pulling fs layer
+0795253ee357: Pulling fs layer
+e9ad705f56dd: Pulling fs layer
+0ab5c20cc44d: Pulling fs layer
+d3ed6eafcf37: Pulling fs layer
+69c3a8f194ae: Pulling fs layer
+8c2d1632c50a: Pulling fs layer
+633b33a67a8c: Pulling fs layer
+f1f75836f337: Pulling fs layer
+10a68eeab871: Pulling fs layer
+b79a11a8863d: Pulling fs layer
+4d664e019f11: Pulling fs layer
+ff3f2565aafe: Pulling fs layer
+d3ed6eafcf37: Already exists
+69c3a8f194ae: Already exists
+0795253ee357: Download complete
+8c2d1632c50a: Download complete
+07567188e6d7: Download complete
+79e22369f21a: Download complete
+0ab5c20cc44d: Download complete
+7e3858f063cc: Download complete
+3cf31ea66fa6: Download complete
+e9ad705f56dd: Download complete
+10a68eeab871: Download complete
+633b33a67a8c: Download complete
+38421a625f70: Download complete
+f1f75836f337: Download complete
+b79a11a8863d: Download complete
+4d664e019f11: Download complete
+38421a625f70: Pull complete
+ff3f2565aafe: Download complete
+d3ed6eafcf37: Pull complete
+69c3a8f194ae: Pull complete
+8c2d1632c50a: Pull complete
+0ab5c20cc44d: Pull complete
+7e3858f063cc: Pull complete
+d3ed6eafcf37: Pull complete
+69c3a8f194ae: Pull complete
+0795253ee357: Pull complete
+8c2d1632c50a: Pull complete
+79e22369f21a: Pull complete
+0ab5c20cc44d: Pull complete
+7e3858f063cc: Pull complete
+3cf31ea66fa6: Pull complete
+e9ad705f56dd: Pull complete
+10a68eeab871: Pull complete
+633b33a67a8c: Pull complete
+f1f75836f337: Pull complete
+b79a11a8863d: Pull complete
+4d664e019f11: Pull complete
+ff3f2565aafe: Pull complete
+Digest: sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166
+Status: Downloaded newer image for cryptoandcoffee/k3d-gpu@sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166
+docker.io/cryptoandcoffee/k3d-gpu:0.1.110@sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166
+[32m==>[0m Creating k3d cluster 'k3dgpu-g-h59r-smoke' with image cryptoandcoffee/k3d-gpu:0.1.110@sha256:b4771ae36aafa83f72d2466132c0d4d5b8e304627e83e6824e3ad1ec44417166...
+[36mINFO[0m[0000] Prep: Network                                
+[36mINFO[0m[0000] Created network 'k3d-k3dgpu-g-h59r-smoke'    
+[36mINFO[0m[0000] Created image volume k3d-k3dgpu-g-h59r-smoke-images 
+[36mINFO[0m[0000] Starting new tools node...                   
+[36mINFO[0m[0000] Starting node 'k3d-k3dgpu-g-h59r-smoke-tools' 
+[36mINFO[0m[0001] Creating node 'k3d-k3dgpu-g-h59r-smoke-server-0' 
+[36mINFO[0m[0001] Using the k3d-tools node to gather environment information 
+[36mINFO[0m[0001] HostIP: using network gateway 172.19.0.1 address 
+[36mINFO[0m[0001] Starting cluster 'k3dgpu-g-h59r-smoke'       
+[36mINFO[0m[0001] Starting servers...                          
+[36mINFO[0m[0001] Starting node 'k3d-k3dgpu-g-h59r-smoke-server-0' 
+[36mINFO[0m[0004] All agents already running.                  
+[36mINFO[0m[0004] All helpers already running.                 
+[36mINFO[0m[0004] Injecting records for hostAliases (incl. host.k3d.internal) and for 1 network members into CoreDNS configmap... 
+[36mINFO[0m[0006] Cluster 'k3dgpu-g-h59r-smoke' created successfully! 
+[36mINFO[0m[0006] --kubeconfig-update-default=false --> sets --kubeconfig-switch-context=false 
+[36mINFO[0m[0006] You can now use it like this:                
+export KUBECONFIG=$(/home/devcloud/k3dgpu-h59r/opt/k3d-v5.9.0 kubeconfig write k3dgpu-g-h59r-smoke)
+kubectl cluster-info
+[32m==>[0m kubectl for this cluster: export KUBECONFIG=/home/devcloud/k3dgpu-h59r/smoke/H59r-20261112T012727Z/kubeconfig
+[32m==>[0m Waiting for nodes Ready...
+node/k3d-k3dgpu-g-h59r-smoke-server-0 condition met
+[32m==>[0m Waiting for cluster DNS (CoreDNS)...
+[32m==>[0m Verifying accelerators are schedulable...
+[32m==>[0m Accelerators schedulable: amx=1. Try: k3d-gpu test
