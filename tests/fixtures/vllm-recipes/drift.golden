@@ -1,0 +1,22 @@
+vLLM recipes drift: k3d-gpu against the recipes' hardware_overrides (a report; nothing is applied)
+recipes d9862f5cba9e, vllm@960f5c1bb145
+xpu: k3d-gpu scripts/k3d-gpu vllm_manifest (Intel GPU, no K3D_GPU_* set) + VLLM_XPU_ENV; recipes 8 hardware_overrides blocks
+  --attention-backend: k3d-gpu unset; recipes flash_attn x2 (Google/gemma-4-12B-it, Google/gemma-4-26B-A4B-it) -> UNEXPLAINED
+  --disable-sliding-window: k3d-gpu unset; recipes on x2 (meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-30B-A3B) -> UNEXPLAINED
+  --dtype: k3d-gpu float16; recipes unset -> REVIEW [scripts/k3d-gpu vllm_manifest]: float16 is the Intel Arc runtime's value the launcher follows; the recipes leave dtype to the checkpoint (bf16 on most Arc recipes); k3d-gpu changes it only on a measured bf16 against float16 row on the B70
+  --kv-cache-dtype: k3d-gpu unset; recipes fp8 x1 (meta-llama/Llama-3.3-70B-Instruct variants.default) -> explained [fit, console/fit.py _flags]: the fit sets --kv-cache-dtype to the KV element size it counted for the host and the model
+  --max-model-len: k3d-gpu 8192; recipes 5120 x2 (Google/gemma-4-12B-it, Google/gemma-4-26B-A4B-it), 9472 x2 (meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-30B-A3B) -> explained [fit, console/fit.py _flags]: the fit sizes context for the host's cards and the model (K3D_GPU_AGENT_MAX_LEN, default 8192); a recipe's value sizes its own node
+  --max-num-batched-tokens: k3d-gpu 2048; recipes 8192 x4 (Google/gemma-4-12B-it, Google/gemma-4-26B-A4B-it, meta-llama/Llama-3.3-70B-Instruct, Qwen/Qwen3-30B-A3B) -> explained [intel-runtime, scripts/k3d-gpu vllm_manifest]: 2048 is the Intel Arc runtime's value the launcher follows; the vLLM agent served Qwen3-4B with it on an Arc Pro B70 (bench/vllm-agent/results/2026-11-08)
+  --quantization: k3d-gpu unset; recipes fp8 x1 (meta-llama/Llama-3.3-70B-Instruct variants.default) -> explained [policy, console/model_opt.py]: the served precision is the optimizer's variant pick or K3D_GPU_AGENT_PRECISION, never an in-place quantization from a recipe
+  --tensor-parallel-size: k3d-gpu 1; recipes 2 x1 (Google/gemma-4-12B-it), 4 x1 (Google/gemma-4-26B-A4B-it) -> explained [fit, console/fit.py _flags]: one card per rank, as many as the fit picks (K3D_GPU_AGENT_GPUS, default 1); a recipe's value sizes its own node
+  --trust-remote-code: k3d-gpu unset; recipes on x2 (Google/gemma-4-12B-it, Google/gemma-4-26B-A4B-it) -> UNEXPLAINED
+  PYTHONUNBUFFERED: k3d-gpu unset; recipes 1 x1 (meta-llama/Llama-3.3-70B-Instruct) -> UNEXPLAINED
+  TORCH_LLM_ALLREDUCE: k3d-gpu unset; recipes 1 x1 (meta-llama/Llama-3.3-70B-Instruct) -> explained [policy, scripts/k3d-gpu VLLM_XPU_ENV]: an IPEX setting; neither pinned XPU image (vllm-openai-xpu, llm-scaler) uses IPEX
+  agree: --block-size 64 x2, --enable-prefix-caching off x4, --enforce-eager on x7, --gpu-memory-utilization 0.9 x4, VLLM_ALLOW_LONG_MAX_MODEL_LEN 1 x1, VLLM_WORKER_MULTIPROC_METHOD spawn x1
+cpu: k3d-gpu canary/engines.toml vllm-cpu (vLLM on the CPU as the fit sizes it); recipes 2 hardware_overrides blocks
+  --dtype: k3d-gpu bfloat16; recipes unset -> explained [intel-runtime, bench/eatflow/results/2026-10-20/H51/B1-hold1/values.yaml]: EAT's own vLLM CPU defaults (defaultModelConfigs.extraCmdArgs) pass --dtype bfloat16, which k3d-gpu's EAT overlay keeps
+  --gpu-memory-utilization: k3d-gpu unset; recipes 0.8 x2 (Qwen/Qwen3-30B-A3B, Qwen/Qwen3-8B) -> explained [fit, console/fit.py _flags]: on the CPU the fit sizes the KV cache with VLLM_CPU_KVCACHE_SPACE (GiB)
+  --max-model-len: k3d-gpu 2048; recipes unset -> explained [fit, console/fit.py _flags]: the fit sizes context for the host and the model
+  --max-num-batched-tokens: k3d-gpu unset; recipes 16384 x2 (Qwen/Qwen3-30B-A3B, Qwen/Qwen3-8B) -> UNEXPLAINED
+  --max-num-seqs: k3d-gpu 1; recipes unset -> explained [fit, console/fit.py _flags]: the fit sizes concurrency for the host and the model
+16 differences: 10 explained, 1 REVIEW, 5 UNEXPLAINED

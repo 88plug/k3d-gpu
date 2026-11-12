@@ -84,6 +84,16 @@ for i in "server-intel ${SYCL_IMAGE}" "server ${CPU_IMAGE}" "full ${FULL_IMAGE}"
         exit 1
     fi
 done
+# The pip set the conversion Job installs: the launcher's GGUF_CONVERT_PIP (pin group
+# gguf-convert-pip), read from it for the same reason. One line of name==version
+# requirements, transformers among them (tests/llamacpp_pip_test.sh moves it).
+GGUF_PIP=$(sed -n 's/^GGUF_CONVERT_PIP="\([^"]*\)"$/\1/p' "${K3D_GPU}")
+PIP_REQ='[A-Za-z0-9][A-Za-z0-9._-]*==[0-9][0-9A-Za-z.+!]*'
+if ! grep -qxE "(${PIP_REQ} )*${PIP_REQ}" <<< "${GGUF_PIP}" || [ "$(wc -l <<< "${GGUF_PIP}")" -ne 1 ] \
+    || ! grep -qE '(^| )transformers==' <<< "${GGUF_PIP}"; then
+    echo "FAIL scripts/k3d-gpu has no GGUF_CONVERT_PIP of name==version requirements, transformers among them (read '${GGUF_PIP}')"
+    exit 1
+fi
 
 # render <name> [env...] -- [agent args...]: manifest in ${WORK}/<name>.yaml, stderr in .err
 render() {
@@ -229,7 +239,8 @@ if render fn "${XEON_ENV[@]}" -- --model "${FN}" \
     && has fn 'kind: Job' && has fn "image: ${FULL_IMAGE}$" \
     && has fn '^            - "Qwen/Qwen3.8-Flash-Next"$' && has fn "^            - \"${FNREV}\"\$" \
     && has fn '^            - "--outtype"$' && has fn '^            - "bf16"$' && ! has fn 'fp8-as-q8' \
-    && has fn 'value: "transformers==5.21.0 ' && has fn 'name: wait-gguf' \
+    && grep -A1 -- '- name: GGUF_CONVERT_PIP$' "${WORK}/fn.yaml" | grep -qxF "              value: \"${GGUF_PIP}\"" \
+    && has fn 'name: wait-gguf' \
     && has fn "for d in /models/gguf/Qwen__Qwen3.8-Flash-Next@${FNREV}; do" \
     && has fn 'kind: ConfigMap' && has fn '^    gguf_convert () $' && ! has fn 'load-mode' \
     && grep -q 'requests:' "${WORK}/fn.yaml" && ! grep -q '^              cpu: "2"$' <(sed -n '/name: llamacpp$/,$p' "${WORK}/fn.yaml") \
@@ -266,12 +277,12 @@ EOF
 chmod +x "${CV}/bin/pip" "${CV}/bin/python3"
 sed -n '/^    gguf_convert () $/,$p' "${WORK}/fn.yaml" | sed -n '1,/^    gguf_convert "\$@"$/p' | sed 's/^    //' > "${CV}/convert.sh"
 cv() {
-    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="transformers==5.21.0" PATH="${CV}/bin:${PATH}" \
+    env CV_LOG="${CV}/log" REAL_PY="$(command -v python3)" GGUF_CONVERT_PIP="${GGUF_PIP}" PATH="${CV}/bin:${PATH}" \
         bash "${CV}/convert.sh" Qwen/Qwen3.8-Flash-Next "${FNREV}" "${CV}/models/gguf/fn" 1000 - --outtype bf16
 }
 if cv > "${CV}/out1" 2>&1 && [ -s "${CV}/models/gguf/fn/model.gguf" ] && [ -f "${CV}/models/gguf/fn/manifest.json" ] \
     && [ ! -e "${CV}/models/gguf/fn.src" ] && [ ! -e "${CV}/models/gguf/fn.partial" ] \
-    && grep -q '^pip install -q --target /tmp/pydeps' "${CV}/log" \
+    && grep -qxF "pip install -q --target /tmp/pydeps ${GGUF_PIP}" "${CV}/log" \
     && grep -q "convert_hf_to_gguf.py --outtype bf16 --outfile ${CV}/models/gguf/fn.partial/model.gguf ${CV}/models/gguf/fn.src" "${CV}/log" \
     && : > "${CV}/log" && cv > "${CV}/out2" 2>&1 && grep -q 'already built' "${CV}/out2" && [ ! -s "${CV}/log" ]; then
     ok "gguf_convert: downloads the pinned revision, converts, writes the manifest last; a second run does nothing"

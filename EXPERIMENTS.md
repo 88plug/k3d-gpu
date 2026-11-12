@@ -18304,6 +18304,148 @@ for h in 1 2 3 4; do bench/h63/hold.sh desktop $h; done      # spares 5 and 6 on
 python3 bench/h63/h63.py score ~/k3dgpu-h63/results/H63d > verdict.json
 ```
 
+### H63 amendment A1: the box owner approves H63w on wildct, and the storage cleanup before its setup (2026-11-11)
+
+Recorded 2026-11-11, after the H63 pre-registration and before any H63w setup. It is the dated
+amendment the pre-registration's host table asks for before any setup on wildct ("A dated
+amendment records the approval of this use of the host (disk, the downloads, the holds)").
+Mechanics only: no row's hypothesis, arms, model files, statistic, quality gate, 1.2 bar, load
+gate, hold count, cap, order, prior or prediction changes, and no runner changes. No H63 arm has
+been rendered on wildct, deployed or sent a request, and no H63 file has been downloaded there.
+
+**The approval.** The box owner's answer to the question whether H63w may run on wildct, given on
+2026-11-11 at about 10:10 PST (about 18:10Z). Verbatim, apart from the credential it names, which
+is not recorded in the repository:
+
+> [credential redacted] is the sudo pass on this machine and on wildct etc - and manage the
+> storage by deleting any llms or models just aking up disk space
+
+It is read as two approvals: H63w on wildct, and deleting LLM and model files that only take up
+disk space, on wildct and on this desktop ("this machine", `p360ultra`). The statement does not
+repeat the question's terms. It is read as approving H63w because it answers that question, gives
+sudo access on wildct, and asks for disk to be freed there.
+
+**Its scope, as the gate defines it.** This use of wildct for H63w as registered, and nothing
+beyond it:
+
+- **Disk.** H63w's files on `/`, under rule W6 as the H63w column sets it: `/` at least 15 + 45 GB
+  available, the watchdog at 15 GB.
+- **The downloads.** On wildct, from the Hub, at the registered revisions, each file checked
+  against the committed sha256 lists: the GGUF repo's `gemma-4-26B_q4_0-it.gguf` only, the QAT
+  assistant and OVB. Also the images the arms and both drafter builds name, by digest, and the
+  k3d-gpu release and its node image under rule W7.
+- **The holds.** Prep (the downloads, their checks and both drafter builds), one wiring smoke,
+  holds 1-4, and spares 5 and 6 as the spare rule allows. Each runs under rule W1's lock and its
+  `load1` <= 12 start rule, at most 75 min inside W1's 4600 s, with rules W1-W8 as the H63w
+  column applies them: nothing of the owner's touched, the production snapshots before and after
+  each hold, no GPU read or used.
+
+It approves nothing outside the pre-registration and rules W1-W8. The sudo access changes no rule:
+RAPL stays rule W4's reader container, as the H63w column registers it. H63w's wildct wiring is not
+in the desktop runner amendment (H63 amendment R1, pull request #398, which leaves the
+`bench/wildct/row.sh` rows `h63w`, `h63w-prep` and `h63w smoke` to their own dated amendment). So
+no H63w setup, smoke or hold runs before that amendment is merged. "Order and changes" closes H63w
+as not run if the owner has not approved it by 2027-01-31; the approval came first, so that clause
+does not apply.
+
+**The storage cleanup before setup (wildct).** Done under the statement's second part on
+2026-11-11 at 18:22Z, after the statement and before any H63w setup. No hold or campaign was on the
+host: rule W1's lock file did not exist, since the campaign directory was removed at the end of
+the wildct campaign. The cleanup's manifest, written before any deletion, lists each entry with
+its bytes, the newest mtime inside it and why it is unused (`storage-wildct-manifest.txt`, 133
+entries, sha256 `12088b7d...`; not committed, since it lists the box owner's own directories).
+Each entry passed every check before it was deleted: no container mount, running or stopped (43
+containers, 54 mount sources); no open file, memory map or working directory of any process; no
+systemd unit or cron entry naming it; `ollama.service` inactive and disabled; the newest mtime
+inside it older than 24 h; not an H63 model.
+
+| Kind | Entries | Bytes |
+|---|---|---|
+| Hugging Face hub caches | 46 | 89,525,576,913 |
+| Ollama model stores (two of them in docker volumes no container references) | 4 | 105,106,971,040 |
+| Model directories in two other docker volumes no container references (the volumes kept) | 3 | 11,817,507,751 |
+| Weight files of local model directories (their configs kept) | 56 | 236,655,197,680 |
+| Exported ONNX files in a scratch directory | 2 | 258,277,209 |
+| Torch hub and whisper download caches | 2 | 720,892,889 |
+| Model files and directories, together | 113 | 444,084,423,482 |
+| Build-cache records of the campaign's own H28w-prep model-payload builds | 20 | 17,184,000,082 |
+| Listed | 133 | 461,268,423,564 |
+
+The 20 build-cache records are the ones the campaign's end step listed and did not prune
+(`bench/wildct/results/2026-11-11/host/end.txt`); rule W6 deletes everything a campaign creates on
+wildct at its end. Readings around the cleanup:
+
+- `/` (`df -B1`): 244,648,390,656 bytes available, 94% used (228G by `df -h`), at 18:22:14Z;
+  705,985,548,288 bytes, 82% used (658G), at 18:22:59Z. So 461,337,157,632 bytes were freed: the
+  listed bytes and 68,734,068 bytes more, which the listing does not account for.
+- `docker system df`: 490 images (574.1 GB) and 142 volumes before and after, so no image or
+  volume was removed; the OVMS image Od names is among them (`end.txt` kept it at the campaign's
+  end). Build cache: 1,454 records (123.4 GB) before, 1,434 (106.2 GB) after.
+- The box owner's 18 production containers read the same before (18:11:03Z) and after
+  (18:23:07Z): each running, started 2026-10-29T09:11:27Z, restart count 0. MemAvailable
+  119,973,624 kB before, 119,684,176 kB after.
+
+**No model H63 needs was deleted.** H63w's three model repos were not on wildct: H57w's copies
+lived in `~/k3dgpu-bench-wildct`, removed at the end of the campaign on 2026-11-11 (`end.txt`). No
+listed entry is a Gemma 4 26B-A4B file, and no image was removed. H63w's prep downloads its models
+on wildct at the registered revisions, as the pre-registration requires (weights are never copied
+between hosts). At 18:22:59Z `/` had 658G available, above W6's 15 + 45 GB.
+
+This amendment records the cleanup on wildct only. H63d needs no approval (the host table), and
+nothing on the desktop is recorded here.
+
+**Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
+(H63d and H63w).
+
+### H63w amendment R1: the wildct wiring (2026-11-11)
+
+Recorded 2026-11-11, after H63 amendment R1 (the desktop runner, #398) and before any H63w setup,
+smoke or hold. It is the runner amendment that H63 amendment R1 leaves to H63w: the
+`bench/wildct/row.sh` rows `h63w`, `h63w-prep` and `h63w smoke`, and the wildct steps of
+`prep.sh`. The box owner's approval of H63w on wildct is H63 amendment A1 (#407). Mechanics only:
+no row's arms, model files, statistic, quality gate, 1.2 bar, load gate, hold count, cap, order,
+prior or prediction changes. `bench/h63/h63.py` is unchanged, and so is everything the desktop
+runs.
+
+**Runner change.**
+
+- `bench/h63/hold.sh` and `prep.sh` take `wildct` as well as `desktop`; any other host exits 2.
+  `run.py`'s wildct profile is H63 amendment R1's, as registered: `H63w`, the i7-13700 exactly,
+  `~/k3dgpu-bench-wildct/h63`, clusters `k3dgpu-w-h63-<hold>`, `load1` <= 12, 15 GB and 20 GiB
+  floors, `K3D_GPU_VENDORS=auto,-nvidia,-intel` (W8) and W3's kubelet thresholds. One field is
+  added to both profiles, `gpus`: `read` on the desktop, `none` on wildct. `hold.sh` reads the GPU
+  co-tenants only where it is `read`. On wildct it writes `GPUs: not read (H63w, rule W8)`
+  instead, as the H63w column registers ("no GPU is read or used, so no GPU co-tenant reading").
+- `row.sh h63w HOLD [REPEATS]` runs `bench/h63/hold.sh wildct` with `G=~/k3dgpu-bench-wildct/h63`,
+  `LOCK=~/k3dgpu-bench-wildct/inner.lock` (a private lock inside W1's), `K3D_REAL` the campaign's
+  k3d and `H63_IMAGE` the release node image. It refuses (exit 2) an `IMAGE` not pinned by digest
+  and a `~/k3dgpu-bench-wildct/h63/bin/k3d` that is not `bench/h63/k3d-shim.sh`. Holds 1-4 take no
+  other argument; a spare 5 or 6 names the hold it repeats, and `hold.sh` applies the spare rule.
+  `row.sh h63w smoke` is the wiring smoke, with hold 1's environment line for line.
+- `row.sh h63w-prep` runs `bench/h63/prep.sh wildct` outside `bench/wildct/hold.sh` (inside one it
+  exits 2). `LOCK` is rule W1's `~/k3dgpu-bench-wildct/live.lock`, which each step takes, and
+  `~/k3dgpu-bench-wildct/hfvenv/bin` comes first on `PATH`, so the downloads use the `hf` of
+  `bench/wildct/install.sh` (huggingface_hub 1.21.0). The steps are H63 amendment R1's: the
+  downloads at the registered revisions, checked against the committed sha256 lists;
+  `bench/h57d/convert.sh`; the committed Ls drafter Job; both drafters' sha256 and size.
+- A hold runs as `bench/wildct/hold.sh H63w-<hold> 4600 45 bench/wildct/row.sh h63w <hold>
+  [REPEATS]`, and the smoke as `bench/wildct/hold.sh H63w-smoke 4600 45 bench/wildct/row.sh h63w
+  smoke`. That gives each rule W1's lock, `load1` <= 12 start rule, health checks and cleanup of
+  `k3dgpu-w-*`, W4's RAPL reader, W5's sampler, and W6's floor (15 + 45 GB, the watchdog at 15 GB).
+- `pins/classes`: the `bench/wildct/**` line lists H63w, with H63 among its aliases.
+
+**Tests** (in CI). `bench/h63/test_run.py`, 37 tests: on wildct, `hold.sh`'s guards pass to the
+lock for a hold and for the smoke with the i7-13700, and refuse the i7-13700K and the i9-13900T;
+`cotenants()`, as `hold.sh` defines it, reads no GPU with wildct's profile and reads them with the
+desktop's; `prep.sh wildct` with the stand-ins leaves the layout the holds check, in the profile's
+directory; an unknown host downloads nothing. `tests/wildct_hold_test.sh`: each new row's printed
+environment, the smoke's equal to hold 1's, `h63w-prep`'s lock and `PATH`, `run.py`'s wildct
+profile against the wildct pre-registration's W3; the guards (no digest, no shim, prep inside a
+hold); and the arguments check mode accepts and refuses.
+
+**Ledger after it.** Unchanged: 85 rows: 23 SUPPORTED, 24 REFUTED, 36 INCONCLUSIVE and 2 PENDING
+(H63d and H63w).
+
 ### H63d run (i9-13900T, 2026-11-11)
 
 **Reproduce:**

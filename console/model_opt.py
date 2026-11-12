@@ -98,8 +98,8 @@ VLLM_SPEC_DOC = "https://github.com/vllm-project/vllm/blob/v0.33.0/vllm/config/s
 VLLM_MTP_DOC = "https://github.com/vllm-project/vllm/blob/v0.33.0/docs/features/speculative_decoding/mtp.md"
 VLLM_HW_TABLE = "https://github.com/vllm-project/vllm/blob/v0.33.0/docs/features/README.md (hardware table, L67)"
 VLLM_GAUDI_SD = "https://github.com/vllm-project/vllm-gaudi/blob/v0.30.0/docs/features/supported_features.md (L25, L27)"
-LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 -md)"
-LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
+LLAMACPP_ARGS = "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4322 -md)"
+LLAMACPP_SPEC = "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4322 --spec-draft-model, L4330 --spec-type)"
 RECIPES = "https://github.com/vllm-project/vllm/blob/d90f5573a3bc6e7f31051841552ee4b78a95d023/recipes/models/"
 
 # Tool and reasoning parsers by model family (config model_type), per engine.
@@ -158,16 +158,16 @@ FALLBACK = {
         "revision": "4d7ae4984b7db7de8f8457170b3f1a419ee76d52",
         "model_type": "gemma4", "multimodal": True, "thinking_default": False,
         "variants": {
-            "OpenVINO/gemma-4-26b-a4b-it-int4-ov": {"revision": "4e5885c3f03844f5887982def09708bdc9f53f7a", "format": "openvino-ir", "precision": "int4"},
+            "OpenVINO/gemma-4-26b-a4b-it-int4-ov": {"revision": "7b3cbc98e24a9946e561f82c752ae26cd53fc660", "format": "openvino-ir", "precision": "int4"},
             "google/gemma-4-26B-A4B-it-qat-q4_0-unquantized": {"revision": "f1e06dc520982d9b9edd76859fdb7ab209449949", "format": "safetensors", "precision": "bf16", "qat": True},
             "google/gemma-4-26B-A4B-it-assistant": {"revision": "6e5aaaf4c42b98394530b8fda2e95cadd65c151c", "format": "safetensors", "precision": "bf16", "drafter": "assistant"},
         },
     },
     "Qwen/Qwen3.8-27B": {
-        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "revision": "37561816e66b5b9153b1b64c10968c18c1e6f4a0",
         "model_type": "qwen3_5", "multimodal": True, "thinking_default": True, "mtp": True,
         "variants": {
-            "OpenVINO/Qwen3.8-27B-int4-ov": {"revision": "7b20ea8c7df7223a85ff27bab5c473f0cb038943", "format": "openvino-ir", "precision": "int4", "mtp": True},
+            "OpenVINO/Qwen3.8-27B-int4-ov": {"revision": "d15f4d91eccd11dd44f615ffdb539c61bf1f1e6e", "format": "openvino-ir", "precision": "int4", "mtp": True},
         },
     },
 }
@@ -1093,7 +1093,7 @@ def spec_decide(doc, choose, engine, device, pick, drafters, target, facts, draf
         if chosen.get("mtp"):
             doc["speculative"] = {"kind": "mtp", "args": ["--spec-type", "draft-mtp", "--spec-draft-n-max", "3"]}
             choose("%s carries an MTP head (%s)" % (chosen["id"], chosen.get("mtp_source")),
-                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.8.0/common/arg.cpp (L4196, L4330); llama.cpp PR 22673")
+                   "--spec-type draft-mtp --spec-draft-n-max 3", "https://github.com/ggml-org/llama.cpp/blob/v0.9.0/common/arg.cpp (L4196, L4330); llama.cpp PR 22673")
         elif gg:
             doc["speculative"] = {"kind": "draft", "model": gg[0]["id"], "args": ["-md", gg[0]["id"]]}
             choose("GGUF drafter %s" % gg[0]["id"], "-md (draft model)", LLAMACPP_ARGS)

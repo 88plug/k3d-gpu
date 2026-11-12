@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# prep.sh HOST: the H63 model files on this host (EXPERIMENTS.md "H63 pre-registration", Models;
-# "H63 amendment R1"). Preparations are not holds. Every step runs inside the host lock (LOCK,
-# flock -w 21600), each step taking it on its own:
+# prep.sh HOST: the H63 model files on this host, HOST = desktop or wildct (EXPERIMENTS.md "H63
+# pre-registration", Models; "H63 amendment R1", "H63w amendment R1"). Preparations are not
+# holds: on wildct it runs as bench/wildct/row.sh h63w-prep, outside bench/wildct/hold.sh, with
+# LOCK rule W1's lock and hfvenv's `hf` on PATH. Every step runs inside the host lock (LOCK, flock
+# -w 21600), each step taking it on its own:
 #   1. Downloads at the registered revisions into ${G}/models, in H57d's layout: Google's QAT GGUF
 #      (gemma-4-26B_q4_0-it.gguf only), the QAT assistant's checkpoint, OpenVINO's int4 IR (OVB);
 #      each with a .pinned-revision file. Every file the committed sha256 lists name is checked
@@ -23,7 +25,7 @@ HOST=${1:?usage: prep.sh HOST}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(cd "${HERE}/../.." && pwd)
 RUN=${HERE}/run.py
-[ "${HOST}" = desktop ] || { echo "prep.sh: ${HOST}: H63w's wildct wiring comes with its own amendment" >&2; exit 2; }
+python3 "${RUN}" profile "${HOST}" > /dev/null || exit 2
 pfield() { python3 "${RUN}" profile "${HOST}" | sed -n "s/^$1=//p"; }
 G=${G:-$(pfield g)}
 G=${G/#\~/${HOME}}

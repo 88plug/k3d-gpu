@@ -264,6 +264,9 @@ jobs:
       # The llama.cpp agent backend the fit picks (GGUF download, one-time GGUF conversion,
       # MTP on request) and `up` leaving busy Intel cards out of the device plugin.
       - run: tests/llamacpp_test.sh
+      # The same suite in a copy whose launcher moved GGUF_CONVERT_PIP, as a gguf-convert-pip
+      # bump does: it passes on another pinned set and stops at the read on an unpinned one.
+      - run: tests/llamacpp_pip_test.sh
 
   tune-tests:
     name: k3d-gpu tune tests
