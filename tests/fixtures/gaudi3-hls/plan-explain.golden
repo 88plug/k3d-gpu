@@ -7,6 +7,18 @@ matrix: 2 cells, 0 on a target of this host
 decision:
   unmeasured: no green cell for this box; quickstart and agent up still pick by device
   bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+vLLM server args: Qwen/Qwen3-4B on vllm (HPU, vLLM 0.30.0)
+  recipe: not consulted: Qwen/Qwen3-4B is the vLLM agent's default model, served with k3d-gpu's validated arguments
+  Qwen/Qwen3-4B                      [k3d-gpu default (agent_config)]
+  --revision=1cfa9a7208912126459214e8b04321603b3df60c [k3d-gpu default (agent_config; K3D_GPU_AGENT_REVISION unset)]
+  --served-model-name=Qwen3-4B       [k3d-gpu default (agent_config; K3D_GPU_AGENT_MODEL_NAME unset)]
+  --port=8000                        [k3d-gpu default (agent_config)]
+  --dtype=bfloat16                   [k3d-gpu default (vllm_device_args)]
+  --max-model-len=8192               [k3d-gpu default (vllm_device_args; K3D_GPU_AGENT_MAX_LEN unset)]
+  --tensor-parallel-size=1           [k3d-gpu default (vllm_manifest; K3D_GPU_AGENT_GPUS unset)]
+  --enable-auto-tool-choice          [k3d-gpu default (agent_config: Qwen3 family)]
+  --tool-call-parser=hermes          [k3d-gpu default (agent_config: Qwen3 family)]
+  --reasoning-parser=qwen3           [k3d-gpu default (agent_config: Qwen3 family)]
 exit=0
 --- calls
 k3d cluster get gpu

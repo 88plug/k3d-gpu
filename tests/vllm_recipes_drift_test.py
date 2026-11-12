@@ -6,9 +6,9 @@ and applies nothing. Run by tests/vllm_recipes_test.sh. No network.
 
   - on the frozen fixture artifact (tests/fixtures/vllm-recipes/artifact.json) the text
     report is drift.golden, byte for byte, twice
-  - k3d-gpu's side is read from the tree: the Intel GPU branch of vllm_manifest with its
-    tensor-parallel item and VLLM_XPU_ENV, rendered with no K3D_GPU_* set, and the vllm-cpu
-    canary engine's arguments
+  - k3d-gpu's side is read from the tree: the Intel GPU branch of vllm_device_args, the
+    tensor-parallel item of vllm_base_lines and VLLM_XPU_ENV, rendered with no K3D_GPU_* set,
+    and the vllm-cpu canary engine's arguments
   - names and values compare as vLLM reads them: --a_b is --a-b, --no-X is X off, 0.90 is 0.9
   - a flag differs both ways; an env name only where a recipe block sets it
   - every DRIFT_REASONS entry is used by a difference on the fixture (a stale reason fails),

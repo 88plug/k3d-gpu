@@ -1001,6 +1001,22 @@ other backend first so its GPU is free; `agent down` and `agent status` cover bo
 The chat UI below and other clients that use `svc/ovms` at `/v3` need
 `http://vllm.k3d-gpu-agent.svc:8000/v1` instead.
 
+Any other model you name (`K3D_GPU_AGENT_MODEL`, or `agent up --model`) takes its tool
+and reasoning parsers, and the model flags k3d-gpu adopts, from vLLM's own model recipes,
+vendored in `console/vllm-recipes.json` (pin `vllm-recipes`, read offline; the pod is
+annotated `k3d-gpu.io/vllm-recipe`). `plan --explain` lists every server argument with
+its source: user env, an `EXPERIMENTS.md` row, the recipe (`vllm@<commit>`), k3d-gpu's
+default, or the fit. Recipes never pick the image, the vLLM version, tensor parallelism,
+context or memory, and never rewrite a device flag k3d-gpu already sets. A parser absent
+from the image's vLLM, a parser that needs a plugin file, `--trust-remote-code` for a
+model whose `config.json` has no `auto_map`, and a chat template not yet located in the
+image are left out with a warning. The default model keeps the arguments above.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K3D_GPU_VLLM_RECIPES` | `auto` | `off` uses k3d-gpu's defaults only; `K3D_GPU_AGENT_TOOL_PARSER` / `_REASONING_PARSER` win either way |
+| `K3D_GPU_VLLM_RECIPES_FILE` | `console/vllm-recipes.json` | another vendored recipes file (tests, air-gapped review) |
+
 **Status: `vllm` is verified end to end on an Arc Pro B70 at release 0.1.94.** On
 2026-11-08, release 0.1.94, installed by the public `packaging/install.sh`, ran
 `k3d-gpu up` and `K3D_GPU_AGENT_BACKEND=vllm k3d-gpu agent up` with the defaults and no

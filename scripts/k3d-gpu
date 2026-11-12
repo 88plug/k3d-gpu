@@ -75,7 +75,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.106"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
+VERSION="0.1.110"  # kept in lockstep with packaging/aur PKGBUILD by auto-release.yml
 CLUSTER="${K3D_GPU_CLUSTER:-gpu}"
 # The node image defaults to the tag built from this launcher's own release
 # (build-and-push.yml publishes <repo>:<VERSION>), so launcher and baked plugins
@@ -475,6 +475,12 @@ Environment:
                         (default: off, for agent workloads)
   K3D_GPU_AGENT_PRECISION agent up --model on vLLM: bf16 | int4 (default: bf16)
   K3D_GPU_MODEL_OPT     auto | off: off serves --model exactly as given (default: auto)
+  K3D_GPU_VLLM_RECIPES  auto | off: vLLM agent. auto takes each model's tool and reasoning
+                        parsers and model flags from the vLLM recipes vendored in
+                        console/vllm-recipes.json (pinned; plan --explain shows each
+                        value's source); the default model keeps k3d-gpu's own. off uses
+                        k3d-gpu's defaults only (default: auto)
+  K3D_GPU_VLLM_RECIPES_FILE  another vendored recipes file (tests, air-gapped review)
   K3D_GPU_HF_FIXTURES   directory of saved model metadata bundles to read instead of
                         Hugging Face (tests, air-gapped hosts)
   K3D_GPU_AGENT_CONVERT_TIMEOUT  seconds agent up waits for a GGUF conversion (default: 43200)
@@ -8746,17 +8752,17 @@ AGENT_BACKEND="${AGENT_BACKEND,,}"
 AGENT_HPU=""    # set by agent_select when the device is a Gaudi
 AGENT_SEL=""    # "<device> <resource>", set by agent_select
 # llama.cpp server on Vulkan, the engine plan() may pick for a GPU cell other
-# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960, the multi-arch
-# index built from release v0.8.0 (tag b11960, commit 8642541b255bfb5dc39cd351a178be09013a55d6).
-LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960@sha256:c9aba1a673382ad356a72fb63e6cd73e8c021797e904b6c099bfe130217df62e}"
-# The llama.cpp agent backend: release v0.8.0 (tag b11960, commit
-# 8642541b255bfb5dc39cd351a178be09013a55d6), the latest release on 2026-10-28; its image
+# than OVMS: ghcr.io/ggml-org/llama.cpp:server-vulkan-b12110, the multi-arch
+# index built from release v0.9.0 (tag b12110, commit cd959bae99ff4bed22bef2604f45241c09bbb8c8).
+LLAMA_VULKAN_IMAGE="${K3D_GPU_LLAMA_VULKAN_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-vulkan-b12110@sha256:dd0ca57c2543cbd99ec09890b2601a86930f086d6f6543faf49698421df907a4}"
+# The llama.cpp agent backend: release v0.9.0 (tag b12110, commit
+# cd959bae99ff4bed22bef2604f45241c09bbb8c8), the latest release on 2026-10-28; its image
 # tags are server-intel-b11960 (SYCL, Level Zero and compute-runtime 26.18 inside) for an
 # Intel GPU, server-b11960 (CPU) otherwise, and full-b11960 (convert_hf_to_gguf.py and
 # llama-quantize) for a one-time GGUF conversion. Multi-arch indexes, pinned by digest.
-LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b11960@sha256:068cd41cdc292bed89b4a6b7740ea7a33df8ba26bf880d0e12ac75972dce1700}"
-LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b11960@sha256:8052c13edd987de8858f8150031e025ac3d66823f09cf3ec8220899c4abce220}"
-LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b11960@sha256:7afc81bfe7a93de287324044fe86ccc70b1b7ac8832ed8e6ea658e11fb448ddf}"
+LLAMA_SYCL_IMAGE="${K3D_GPU_LLAMA_SYCL_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-intel-b12110@sha256:738f507eef7069c31fcd643852a8e1a58d2425fa745424248c55bdc523165e8f}"
+LLAMA_CPU_IMAGE="${K3D_GPU_LLAMA_CPU_IMAGE:-ghcr.io/ggml-org/llama.cpp:server-b12110@sha256:1145e8de3111dc9358c6d8daffb755c4cf8a862d93391c26ba521b9a810bbe3e}"
+LLAMA_FULL_IMAGE="${K3D_GPU_LLAMA_FULL_IMAGE:-ghcr.io/ggml-org/llama.cpp:full-b12110@sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41}"
 AGENT_STORAGE="${K3D_GPU_AGENT_STORAGE:-20Gi}"
 AGENT_TIMEOUT="${K3D_GPU_AGENT_TIMEOUT:-1800}" # seconds: first run downloads the model
 # openvino/model_server:2026.4.1-gpu (CPU, GPU and NPU plugins, compute-runtime inside).
@@ -8825,10 +8831,12 @@ agent_config() {
         fi
         AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-qwen3}"
         AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-${AGENT_DEFAULT_REVISION}}"
+        AGENT_PARSER_SRC="k3d-gpu default (agent_config: Qwen3 family)"
     else
         AGENT_TOOL_PARSER="${K3D_GPU_AGENT_TOOL_PARSER-}"
         AGENT_REASONING_PARSER="${K3D_GPU_AGENT_REASONING_PARSER-}"
         AGENT_REVISION="${K3D_GPU_AGENT_REVISION:-}"
+        AGENT_PARSER_SRC=""
     fi
     AGENT_PROXY="/api/v1/namespaces/${AGENT_NS}/services/${AGENT_APP}:http/proxy"
 }
@@ -9393,6 +9401,148 @@ vllm_gpu_check() {
     warn "vLLM on Intel GPUs is validated on Arc B-series (Battlemage); this host's Intel GPU is ${names:-not visible here} — K3D_GPU_AGENT_BACKEND=ovms runs on any Intel GPU"
 }
 
+# vllm_device_args <GPU|HPU>: the vLLM server flags of the device, one per line.
+# On an Intel GPU, flags from Intel's Arc runtime (models.yaml *-xpu): float16,
+# 64-token blocks, eager mode (XPU graphs are experimental), no prefix caching.
+# On a Gaudi, bfloat16 and vllm-gaudi's own defaults (--max-model-len also
+# bounds its warm-up buckets).
+# --trust-remote-code is left out: Qwen3 is a built-in vLLM architecture and
+# needs no code from the model repo.
+vllm_device_args() {
+    if [ "$1" = HPU ]; then
+        printf '%s\n' --dtype=bfloat16 "--max-model-len=${AGENT_MAX_LEN}"
+    else
+        printf '%s\n' --dtype=float16 --block-size=64 "--max-model-len=${AGENT_MAX_LEN}" --max-num-batched-tokens=2048 \
+            "--gpu-memory-utilization=${AGENT_GPU_UTIL:-0.9}" --enforce-eager --no-enable-prefix-caching
+    fi
+}
+
+# vllm_arg_source <arg> <where k3d-gpu sets it>: where a vLLM server argument's value
+# comes from, for plan --explain and the recipe merge: the fit, the user's environment,
+# or k3d-gpu's default.
+vllm_arg_source() {
+    local var="" fit=""
+    case "$1" in
+        --max-model-len=*) var=K3D_GPU_AGENT_MAX_LEN fit=1 ;;
+        --tensor-parallel-size=*) var=K3D_GPU_AGENT_GPUS fit=1 ;;
+        --max-num-seqs=*) var=K3D_GPU_AGENT_MAX_NUM_SEQS fit=1 ;;
+        --gpu-memory-utilization=*|--kv-cache-dtype=*) fit=1 ;;
+        --revision=*) var=K3D_GPU_AGENT_REVISION ;;
+        --served-model-name=*) var=K3D_GPU_AGENT_MODEL_NAME ;;
+    esac
+    if [ -n "${fit}" ] && [ -n "${AGENT_FIT_ANN}" ]; then
+        echo "k3d-gpu fit"
+    elif [ -n "${var}" ] && [ -n "${!var+x}" ]; then
+        echo "user env ${var}"
+    else
+        echo "k3d-gpu default ($2${var:+; ${var} unset})"
+    fi
+}
+
+# vllm_base_lines <GPU|HPU>: the server arguments k3d-gpu builds before any recipe,
+# one "<arg><TAB><source>" line each, in manifest order: the model, its revision and
+# served name, the port, the device flags, the fit's sequence count and KV cache type,
+# and one device per tensor-parallel rank.
+vllm_base_lines() {
+    local a m="k3d-gpu default (agent_config)"
+    [ -z "${K3D_GPU_AGENT_MODEL:-}" ] || m="user env K3D_GPU_AGENT_MODEL"
+    # The model the user named, served as given (K3D_GPU_MODEL_OPT=off, no metadata), else
+    # the optimizer's pick (AGENT_OPT_TARGET is set only from its decision).
+    [ -z "${AGENT_OPT_MODEL:-}" ] || m="user model, served as given"
+    [ -z "${AGENT_OPT_TARGET:-}" ] || m="model optimizer"
+    printf '%s\t%s\n' "${AGENT_MODEL}" "${m}"
+    for a in ${AGENT_REVISION:+"--revision=${AGENT_REVISION}"} "--served-model-name=${AGENT_MODEL_NAME}" --port=8000; do
+        m=$(vllm_arg_source "${a}" agent_config)
+        # The optimizer pins the revision of the variant it picked.
+        [ -z "${AGENT_OPT_TARGET:-}" ] || [[ "${a}" != --revision=* ]] || [[ "${m}" = "user env"* ]] || m="model optimizer"
+        printf '%s\t%s\n' "${a}" "${m}"
+    done
+    while read -r a; do
+        printf '%s\t%s\n' "${a}" "$(vllm_arg_source "${a}" vllm_device_args)"
+    done < <(vllm_device_args "$1")
+    for a in ${AGENT_MAX_NUM_SEQS:+"--max-num-seqs=${AGENT_MAX_NUM_SEQS}"} ${AGENT_KV_DTYPE:+"--kv-cache-dtype=${AGENT_KV_DTYPE}"} \
+        "--tensor-parallel-size=${AGENT_GPUS}"; do
+        printf '%s\t%s\n' "${a}" "$(vllm_arg_source "${a}" vllm_manifest)"
+    done
+}
+
+# vllm_recipes_on: K3D_GPU_VLLM_RECIPES is auto (the default); off says so and fails.
+vllm_recipes_on() {
+    case "${K3D_GPU_VLLM_RECIPES:-auto}" in
+        auto) return 0 ;;
+        off) info "vLLM recipes off (K3D_GPU_VLLM_RECIPES=off): ${AGENT_MODEL} gets k3d-gpu's defaults only" >&2; return 1 ;;
+        *) err "K3D_GPU_VLLM_RECIPES must be auto or off, not '${K3D_GPU_VLLM_RECIPES}'" ;;
+    esac
+}
+
+# The source console/recipes.py names the optimizer's own server arguments by (it lists
+# them after the parsers, as vllm_manifest renders them).
+OPT_ARGS_SOURCE="model optimizer (engine args)"
+
+# vllm_recipes_py <GPU|HPU> <vllm_base_lines output> <shell|explain> [recipes.py merge options]:
+# console/recipes.py merge for the agent's model: the base (and the optimizer's arguments)
+# on stdin, the device's PCI id (RECIPE_PCI, else this host's first Intel GPU), the
+# hardware class (RECIPE_HW_CLASS, else agent_hw_class), the parsers and where each came
+# from, the ledger, and the model's config.json when the fit cache already holds it
+# (nothing is fetched).
+vllm_recipes_py() {
+    local device=$1 base=$2 fmt=$3 dir pci="" cfg ledger a tsrc rsrc ver
+    shift 3
+    dir=$(console_dir) || return 1
+    [ "${device}" != GPU ] || pci=${RECIPE_PCI:-$(agent_pci_id)}
+    cfg="$(fit_cache)/${AGENT_MODEL//\//__}@${AGENT_REVISION:-main}/config.json"
+    [ -f "${cfg}" ] || cfg=""
+    ledger=$(model_opt_ledger)
+    ver=$(agent_vllm_version)
+    [ -z "${K3D_GPU_AGENT_IMAGE:-}" ] || ver=unknown
+    tsrc=${AGENT_PARSER_SRC:-k3d-gpu default}
+    rsrc=${tsrc}
+    [ -z "${K3D_GPU_AGENT_TOOL_PARSER+x}" ] || tsrc="env"
+    [ -z "${K3D_GPU_AGENT_REASONING_PARSER+x}" ] || rsrc="env"
+    { printf '%s\n' "${base}"
+      for a in ${AGENT_OPT_ARGS[@]+"${AGENT_OPT_ARGS[@]}"}; do printf '%s\t%s\n' "${a}" "${OPT_ARGS_SOURCE}"; done; } \
+        | python3 "${dir}/recipes.py" merge --model "${AGENT_MODEL}" ${AGENT_OPT_MODEL:+--requested "${AGENT_OPT_MODEL}"} \
+            ${AGENT_OPT_TARGET:+--target "${AGENT_OPT_TARGET}"} --device "${device}" --engine "$(agent_vllm_engine)" \
+            --engine-version "${ver}" ${pci:+--pci-id "${pci}"} --hw-class "${RECIPE_HW_CLASS:-$(agent_hw_class)}" \
+            ${ledger:+--ledger "${ledger}"} ${cfg:+--config "${cfg}"} \
+            --tool-parser "${AGENT_TOOL_PARSER}" --tool-parser-from "${tsrc}" \
+            --reasoning-parser "${AGENT_REASONING_PARSER}" --reasoning-parser-from "${rsrc}" \
+            --base-file - --format "${fmt}" "$@"
+}
+
+# vllm_recipe_merge <GPU|HPU> <vllm_base_lines output>: the vLLM recipe of a model the
+# user chose (console/recipes.py over the pinned console/vllm-recipes.json): its tool
+# and reasoning parsers and the model flags k3d-gpu adopts, merged into the base.
+# Sets RECIPE_RAN, RECIPE_ARGS (arguments to add after the base), RECIPE_TOOL_PARSER,
+# RECIPE_REASONING_PARSER and RECIPE_REF (<recipe id>@vllm-<12 hex>, empty when no
+# recipe matched). The default model, K3D_GPU_VLLM_RECIPES=off or any failure leaves
+# RECIPE_RAN empty: k3d-gpu's own arguments, as without recipes.
+vllm_recipe_merge() {
+    local device=$1 base=$2 out errf
+    local RECIPE_ARGS_JSON="[]" RECIPE_SUMMARY="" RECIPE_WARNINGS=""
+    RECIPE_RAN="" RECIPE_ARGS=() RECIPE_TOOL_PARSER="" RECIPE_REASONING_PARSER="" RECIPE_REF=""
+    [ "${AGENT_MODEL}" != "${AGENT_DEFAULT_MODEL}" ] || return 0
+    vllm_recipes_on || return 0
+    if ! console_dir >/dev/null || ! command -v python3 >/dev/null 2>&1; then
+        warn "vLLM recipes unavailable (needs python3 and console/recipes.py): ${AGENT_MODEL} gets k3d-gpu's defaults only"
+        return 0
+    fi
+    errf=$(mktemp)
+    out=$(vllm_recipes_py "${device}" "${base}" shell 2>"${errf}") || {
+        warn "vLLM recipes: $(tr '\n' ' ' < "${errf}")— ${AGENT_MODEL} gets k3d-gpu's defaults only"
+        rm -f "${errf}"
+        return 0
+    }
+    rm -f "${errf}"
+    eval "${out}"
+    RECIPE_RAN=1
+    if [ "${RECIPE_ARGS_JSON}" != "[]" ]; then
+        mapfile -t RECIPE_ARGS < <(python3 -c 'import json, sys; [print(a) for a in json.loads(sys.argv[1])]' "${RECIPE_ARGS_JSON}")
+    fi
+    [ -z "${RECIPE_SUMMARY}" ] || info "${RECIPE_SUMMARY}" >&2
+    [ -z "${RECIPE_WARNINGS}" ] || warn "vLLM recipe: ${RECIPE_WARNINGS}"
+}
+
 # The vLLM Namespace, PVC, Deployment and Service, on an Intel GPU or a Gaudi
 # (HPU). Called from agent_manifest, whose locals (device res gid hybrid cpus) it reads.
 vllm_manifest() {
@@ -9407,42 +9557,31 @@ vllm_manifest() {
     [ "${device}" = HPU ] || vllm_gpu_check
     info "agent: ${AGENT_BACKEND} serving ${AGENT_MODEL} as '${AGENT_MODEL_NAME}' on ${AGENT_GPUS}x ${res}${hybrid:+, P-cores}, ${cpus} CPU(s)" >&2
 
-    # On an Intel GPU, flags from Intel's Arc runtime (models.yaml *-xpu): float16,
-    # 64-token blocks, eager mode (XPU graphs are experimental), no prefix caching.
-    # On a Gaudi, bfloat16 and vllm-gaudi's own defaults (--max-model-len also
-    # bounds its warm-up buckets). One device per tensor-parallel rank.
-    # --trust-remote-code is left out: Qwen3 is a built-in vLLM architecture and
-    # needs no code from the model repo.
-    local item="            - " args e podlabels="" podspec="" env="" command="" cap="" shm=2Gi
+    local item="            - " args="" a s base tparser=${AGENT_TOOL_PARSER} rparser=${AGENT_REASONING_PARSER}
+    local e podlabels="" podspec="" env="" command="" cap="" shm=2Gi recipe_ann=""
     local -a envs=("${VLLM_XPU_ENV[@]}")
-    args="${item}${AGENT_MODEL}"
-    [ -z "${AGENT_REVISION}" ] || args+=$'\n'"${item}--revision=${AGENT_REVISION}"
-    args+=$'\n'"${item}--served-model-name=${AGENT_MODEL_NAME}"
-    args+=$'\n'"${item}--port=8000"
     if [ "${device}" = HPU ]; then
         envs=("${VLLM_HPU_ENV[@]}")
-        args+=$'\n'"${item}--dtype=bfloat16"
-        args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
         command=$'\n          command: [vllm, serve]'
         # Intel runs these containers with --cap-add=sys_nice.
         cap=$'\n          securityContext:\n            capabilities:\n              add: [SYS_NICE]'
         # Intel runs vLLM on Gaudi with --ipc=host; the pod gets a larger /dev/shm instead.
         shm=8Gi
-    else
-        args+=$'\n'"${item}--dtype=float16"
-        args+=$'\n'"${item}--block-size=64"
-        args+=$'\n'"${item}--max-model-len=${AGENT_MAX_LEN}"
-        args+=$'\n'"${item}--max-num-batched-tokens=2048"
-        args+=$'\n'"${item}--gpu-memory-utilization=${AGENT_GPU_UTIL:-0.9}"
-        args+=$'\n'"${item}--enforce-eager"
-        args+=$'\n'"${item}--no-enable-prefix-caching"
     fi
-    [ -z "${AGENT_MAX_NUM_SEQS}" ] || args+=$'\n'"${item}--max-num-seqs=${AGENT_MAX_NUM_SEQS}"
-    [ -z "${AGENT_KV_DTYPE}" ] || args+=$'\n'"${item}--kv-cache-dtype=${AGENT_KV_DTYPE}"
-    args+=$'\n'"${item}--tensor-parallel-size=${AGENT_GPUS}"
-    [ -z "${AGENT_TOOL_PARSER}" ] \
-        || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${AGENT_TOOL_PARSER}"
-    [ -z "${AGENT_REASONING_PARSER}" ] || args+=$'\n'"${item}--reasoning-parser=${AGENT_REASONING_PARSER}"
+    base=$(vllm_base_lines "${device}")
+    while IFS=$'\t' read -r a s; do
+        args+="${args:+$'\n'}${item}${a}"
+    done <<< "${base}"
+    # A model the user chose: its vLLM recipe's parsers and model flags (vllm_recipe_merge).
+    vllm_recipe_merge "${device}" "${base}"
+    if [ -n "${RECIPE_RAN}" ]; then
+        for a in ${RECIPE_ARGS[@]+"${RECIPE_ARGS[@]}"}; do args+=$'\n'"${item}'${a}'"; done
+        tparser=${RECIPE_TOOL_PARSER} rparser=${RECIPE_REASONING_PARSER}
+        [ -z "${RECIPE_REF}" ] || recipe_ann=$'\n'"        k3d-gpu.io/vllm-recipe: \"${RECIPE_REF}\""
+    fi
+    [ -z "${tparser}" ] \
+        || args+=$'\n'"${item}--enable-auto-tool-choice"$'\n'"${item}--tool-call-parser=${tparser}"
+    [ -z "${rparser}" ] || args+=$'\n'"${item}--reasoning-parser=${rparser}"
     args+=$(agent_opt_items "${item}")
     for e in "${envs[@]}"; do
         env+=$'\n'"            - name: ${e%%=*}"$'\n'"              value: \"${e#*=}\""
@@ -9495,7 +9634,7 @@ spec:
         app: vllm${podlabels}
       annotations:
         k3d-gpu.io/agent-device: ${device}
-        k3d-gpu.io/agent-backend: ${AGENT_BACKEND}$(agent_fit_annotation)
+        k3d-gpu.io/agent-backend: ${AGENT_BACKEND}$(agent_fit_annotation)${recipe_ann}
     spec:${podspec}
       containers:
         # The Intel GPU images take 'vllm serve' arguments (their entrypoints run
@@ -9614,7 +9753,7 @@ fit_draft_args() {
 # pip pins the conversion adds on PYTHONPATH (bench/h57d/convert.sh's approach): the image's
 # transformers 4.57.6 cannot read transformers-5 tokenizer configs (extra_special_tokens as
 # a list); huggingface-hub fetches the pinned revision.
-GGUF_CONVERT_PIP="transformers==5.21.0 huggingface-hub==2.3.0 tokenizers==0.23.3 safetensors==0.8.0"
+GGUF_CONVERT_PIP="transformers==5.22.2 huggingface-hub==2.4.0 tokenizers==0.23.3 safetensors==0.8.0"
 AGENT_CONVERT_TIMEOUT="${K3D_GPU_AGENT_CONVERT_TIMEOUT:-43200}" # seconds: a 360 GB checkpoint downloads, then converts
 AGENT_CONVERT_MEMORY="${K3D_GPU_AGENT_CONVERT_MEMORY:-64Gi}"
 
@@ -12067,6 +12206,58 @@ plan_predict_model() {
     python3 "${dir}/moe_predict.py" "${src[@]}" --sysroot "${SYSROOT}" ${args[@]+"${args[@]}"}
 }
 
+# plan_vllm_args <console dir> <facts/v1 JSON> <matrix> [plan.py options]: plan --explain's
+# "vLLM server args" block when the agent's engine is vLLM (K3D_GPU_AGENT_BACKEND vllm or
+# llm-scaler, the model optimizer's engine, or a Gaudi): every argument agent up renders
+# for the model and where its value comes from (user env, ledger row, vLLM recipe,
+# k3d-gpu default, fit). Offline: no cluster, no fetch; the fit's own section follows.
+plan_vllm_args() {
+    local dir=$1 facts=$2 matrix=$3 pj pv base extra=() model="" i
+    shift 3
+    for ((i = 1; i < $#; i++)); do
+        [ "${!i}" != --model ] || { i=$((i + 1)); model=${!i}; }
+    done
+    # No temp files: plan --explain runs only the tools tests/sim_matrix_test.sh lists.
+    pj=$(printf '%s\n' "${facts}" | python3 "${dir}/plan.py" --mode json --matrix "${matrix}" "$@" 2>/dev/null) || pj=""
+    pv=$(python3 "${dir}/recipes.py" plan --facts <(printf '%s\n' "${facts}") --plan <(printf '%s\n' "${pj}") \
+        --backend "${K3D_GPU_AGENT_BACKEND:-}" 2>/dev/null) || pv=""
+    local PV_DEVICE="" PV_PCI="" PV_PLATFORM="" PV_HW_CLASS="" PV_OPT="" PV_MODEL="" PV_REVISION="" PV_REQUESTED=""
+    local PV_TARGET="" PV_TOOL="" PV_REASONING="" PV_ARGS_JSON="[]"
+    eval "${pv}"
+    [ -n "${PV_DEVICE}" ] || return 0
+    (
+        AGENT_BACKEND=${K3D_GPU_AGENT_BACKEND:-vllm}
+        [ "${AGENT_BACKEND}" = llm-scaler ] || AGENT_BACKEND=vllm
+        AGENT_HPU=""
+        [ "${PV_DEVICE}" != HPU ] || AGENT_HPU=1
+        agent_config
+        AGENT_FIT_ANN="" AGENT_GPU_UTIL="" AGENT_KV_DTYPE="" AGENT_MAX_NUM_SEQS="" AGENT_OPT_ARGS=()
+        if [ -n "${PV_OPT}" ] && [ -n "${PV_MODEL}" ]; then
+            AGENT_OPT_MODEL=${PV_REQUESTED} AGENT_OPT_TARGET=${PV_TARGET} AGENT_MODEL=${PV_MODEL}
+            AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${PV_REQUESTED##*/}}
+            AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-${PV_REVISION}}
+            [ -n "${K3D_GPU_AGENT_TOOL_PARSER+x}" ] || AGENT_TOOL_PARSER=${PV_TOOL}
+            [ -n "${K3D_GPU_AGENT_REASONING_PARSER+x}" ] || AGENT_REASONING_PARSER=${PV_REASONING}
+            AGENT_PARSER_SRC="model optimizer"
+            mapfile -t AGENT_OPT_ARGS < <(python3 -c 'import json, sys; [print(a) for a in json.loads(sys.argv[1])]' "${PV_ARGS_JSON}")
+        elif [ -n "${model}" ]; then
+            # No optimizer decision (no metadata, K3D_GPU_MODEL_OPT=off): agent up serves --model as given.
+            AGENT_OPT_MODEL=${model} AGENT_MODEL=${model} AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${model##*/}}
+            AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
+            AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-} AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
+        fi
+        base=$(vllm_base_lines "${PV_DEVICE}")
+        if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
+            extra=(--no-recipe "${AGENT_MODEL} is the vLLM agent's default model, served with k3d-gpu's validated arguments")
+        elif [ "${K3D_GPU_VLLM_RECIPES:-auto}" = off ]; then
+            extra=(--no-recipe "K3D_GPU_VLLM_RECIPES=off")
+        fi
+        RECIPE_PCI=${PV_PCI} RECIPE_HW_CLASS=${PV_HW_CLASS} vllm_recipes_py "${PV_DEVICE}" "${base}" explain \
+            --title "${AGENT_MODEL} on ${AGENT_BACKEND}" ${PV_PLATFORM:+--platform "${PV_PLATFORM}"} ${extra[@]+"${extra[@]}"} \
+            || warn "plan: could not list the vLLM server args"
+    )
+}
+
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
 #      [--device D] [--model M] [--bind ADDR] [--port N]
 # plan --predict SKU|auto|list [--json] [--mts N] [--channels N]
@@ -12124,6 +12315,11 @@ cmd_plan() {
         fi
     fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
+    # --explain: the vLLM agent's server arguments, each with its source (text, --json and
+    # --hash print what plan.py printed).
+    if [ "${rc}" -eq 0 ] && [ "${mode}" = explain ]; then
+        plan_vllm_args "${dir}" "${out}" "${matrix}" ${args[@]+"${args[@]}"}
+    fi
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
     # With the model optimizer, the fit is of the variant it picked, at its revision and
@@ -12785,6 +12981,7 @@ autoquant_select() { autoquant_run "${1:-}" select; }
 AGENT_OPT_MODEL=""   # agent up --model
 AGENT_OPT_ARGS=()    # extra server arguments the optimizer chose
 AGENT_OPT_SPEC=""    # its speculative decoding kind, when it chose one
+AGENT_OPT_TARGET=""  # the base model it optimized for (a quantized repo's base)
 
 model_opt_cache() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/hf"; }
 model_opt_measurements() { echo "${XDG_CACHE_HOME:-${HOME}/.cache}/k3d-gpu/variant-measurements.json"; }
@@ -12882,12 +13079,36 @@ fit_dir_format() {
     python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("format") or "")' "$1/weights.json" 2>/dev/null || true
 }
 
+# The vLLM version of the agent's pinned image (vllm-openai-xpu, llm-scaler, or the
+# Gaudi image); canary/engines.toml derives each from its image.
+agent_vllm_version() {
+    local vver=0.33.0
+    case "${AGENT_BACKEND}" in llm-scaler) vver=0.26.0 ;; esac
+    [ -z "${AGENT_HPU:-}" ] || vver=0.30.0
+    echo "${vver}"
+}
+
+# The canary engine id of the agent's vLLM image (canary/engines.toml): where
+# console/recipes.py EXAMPLES_DIR locates vLLM's examples/.
+agent_vllm_engine() {
+    if [ -n "${AGENT_HPU:-}" ]; then echo gaudi-vllm
+    elif [ "${AGENT_BACKEND}" = llm-scaler ]; then echo llm-scaler
+    else echo vllm-xpu; fi
+}
+
+# The PCI device id of the host's first Intel GPU (0xe223), or nothing.
+agent_pci_id() {
+    local e
+    detect_intel
+    for e in ${INTEL_DRIVERS[@]+"${INTEL_DRIVERS[@]}"}; do echo "${e#* }"; return 0; done
+}
+
 # Applies the optimizer's choices for AGENT_OPT_MODEL to the agent settings.
 agent_optimize() {
     [ -n "${AGENT_OPT_MODEL}" ] || return 0
-    local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver=0.33.0 draft=auto ledger meas
+    local dir bundle out errf engine=${AGENT_APP/#llamacpp/llama.cpp} device=${AGENT_SEL%% *} vver pci="" draft=auto ledger meas
     local follow=() OPT_ENGINE="" OPT_MODEL="" OPT_REVISION="" OPT_TOOL_PARSER="" OPT_REASONING_PARSER="" OPT_SPEC=""
-    local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING=""
+    local OPT_CONVERSION="" OPT_ARGS_JSON="[]" OPT_SUMMARY="" OPT_FALLBACK_MODEL="" OPT_FALLBACK_REVISION="" OPT_WARNING="" OPT_TARGET=""
     AGENT_MODEL=${AGENT_OPT_MODEL}
     AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
     AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
@@ -12913,8 +13134,8 @@ agent_optimize() {
         AGENT_MODEL=${AGENT_OPT_MODEL} AGENT_MODEL_NAME=${K3D_GPU_AGENT_MODEL_NAME:-${AGENT_OPT_MODEL##*/}}
         engine=llama.cpp
     fi
-    case "${AGENT_BACKEND}" in llm-scaler) vver=0.26.0 ;; esac
-    [ -z "${AGENT_HPU:-}" ] || vver=0.30.0
+    vver=$(agent_vllm_version)
+    [ "${device}" != GPU ] || pci=$(agent_pci_id)
     # An explicit Fast Draft device (auto, CPU, GPU, NPU) is agent_draft's: the optimizer then adds none.
     case "${K3D_GPU_AGENT_DRAFT:-}" in "") ;; [Mm][Tt][Pp]) draft=mtp ;; *) draft=off ;; esac
     bundle=$(mktemp)
@@ -12935,7 +13156,8 @@ agent_optimize() {
     esac
     errf=$(mktemp)
     out=$(python3 "${dir}/model_opt.py" optimize --bundle "${bundle}" --engine "${engine}" --device "${device}" ${follow[@]+"${follow[@]}"} \
-        --vllm-version "${vver}" --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
+        --vllm-version "${vver}" --vllm-engine "$(agent_vllm_engine)" ${pci:+--pci-id "${pci}"} \
+        --thinking "${K3D_GPU_AGENT_THINKING:-off}" --draft "${draft}" \
         --hw-class "$(agent_hw_class)" --host "$(agent_host_text)" ${K3D_GPU_AGENT_VARIANT:+--variant "${K3D_GPU_AGENT_VARIANT}"} \
         ${K3D_GPU_AGENT_PRECISION:+--precision "${K3D_GPU_AGENT_PRECISION}"} \
         ${K3D_GPU_AGENT_PREFIX_CACHING:+--prefix-caching "${K3D_GPU_AGENT_PREFIX_CACHING}"} \
@@ -12979,6 +13201,7 @@ agent_optimize() {
     [ -n "${K3D_GPU_AGENT_REVISION:-}" ] || AGENT_REVISION=${OPT_REVISION}
     [ -n "${K3D_GPU_AGENT_TOOL_PARSER+x}" ] || AGENT_TOOL_PARSER=${OPT_TOOL_PARSER}
     [ -n "${K3D_GPU_AGENT_REASONING_PARSER+x}" ] || AGENT_REASONING_PARSER=${OPT_REASONING_PARSER}
+    AGENT_PARSER_SRC="model optimizer" AGENT_OPT_TARGET=${OPT_TARGET}
     AGENT_OPT_SPEC=${OPT_SPEC}
     AGENT_OPT_ARGS=()
     if [ "${OPT_ARGS_JSON}" != "[]" ]; then

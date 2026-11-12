@@ -1,0 +1,148 @@
+{
+  "tool": "k3d-gpu/bench/llm_load.py",
+  "schema": 1,
+  "started_at": "2026-11-11T23:10:29Z",
+  "config": {
+    "base_url": "http://127.0.0.1:19617/v1",
+    "model": "gemma",
+    "prompt": "Section 1. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 2. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 3. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 4. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 5. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 6. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 7. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM bank, reads a burst of sixty-four bytes and returns it over the channel. Prefetchers watch the stream of addresses and fetch lines before they are needed, and the out-of-order engine keeps other instructions moving while a miss is pending. Section 8. A processor core reads data through a hierarchy of caches. The level-one cache is small and close to the execution units, the level-two cache is larger and a little slower, and the last-level cache is shared by every core on the die. When a load misses in every level, the request goes to the memory controller, which opens a row in a DRAM\n\nSummarize the passage above in one sentence.",
+    "max_tokens": 16,
+    "temperature": 0.0,
+    "ignore_eos": false,
+    "extra_body": null,
+    "unique_prompts": true,
+    "requests": 4,
+    "concurrency": "1",
+    "warmup": 0,
+    "timeout": 1800.0,
+    "label": "H63 Ld-mtp ttft",
+    "out": "/home/andrew/k3dgpu-h63/results/H63d/hold3/Ld-mtp/load-ttft.json",
+    "run_id": "7f361667"
+  },
+  "phases": [
+    {
+      "concurrency": 1,
+      "requests": 4,
+      "ok": 4,
+      "errors": 0,
+      "wall_s": 68.58009550347924,
+      "output_tokens_total": 64,
+      "aggregate_tokens_per_s": 0.9332153816664358,
+      "requests_per_s": 0.05832596135415224,
+      "stats": {
+        "first_chunk_s": {
+          "n": 4,
+          "median": 15.675983959343284,
+          "p90": 15.96290940232575,
+          "min": 15.234017106704414,
+          "max": 15.96290940232575
+        },
+        "ttft_s": {
+          "n": 4,
+          "median": 15.914265494793653,
+          "p90": 16.21054396778345,
+          "min": 15.463101689703763,
+          "max": 16.21054396778345
+        },
+        "latency_s": {
+          "n": 4,
+          "median": 17.167714336887002,
+          "p90": 17.48424018919468,
+          "min": 16.758744458667934,
+          "max": 17.48424018919468
+        },
+        "output_tokens": {
+          "n": 4,
+          "median": 16.0,
+          "p90": 16,
+          "min": 16,
+          "max": 16
+        },
+        "tokens_per_s": {
+          "n": 4,
+          "median": 0.9320306649906506,
+          "p90": 0.9547254592646112,
+          "min": 0.9151098261557888,
+          "max": 0.9547254592646112
+        },
+        "decode_tokens_per_s": {
+          "n": 4,
+          "median": 11.485310046570646,
+          "p90": 13.872472124992422,
+          "min": 10.847877935884883,
+          "max": 13.872472124992422
+        }
+      },
+      "samples": [
+        {
+          "index": 0,
+          "ok": true,
+          "error": null,
+          "chunks": 16,
+          "content_chunks": 13,
+          "text_chars": 51,
+          "finish_reason": "length",
+          "first_chunk_s": 15.234017106704414,
+          "ttft_s": 15.463101689703763,
+          "latency_s": 16.758744458667934,
+          "output_tokens": 16,
+          "tokens_per_s": 0.9547254592646112,
+          "decode_tokens_per_s": 11.577265245722062,
+          "prompt_tokens": 1029,
+          "finished": true
+        },
+        {
+          "index": 1,
+          "ok": true,
+          "error": null,
+          "chunks": 16,
+          "content_chunks": 13,
+          "text_chars": 51,
+          "finish_reason": "length",
+          "first_chunk_s": 15.49662027694285,
+          "ttft_s": 15.727049722336233,
+          "latency_s": 17.043606627732515,
+          "output_tokens": 16,
+          "tokens_per_s": 0.9387684396544091,
+          "decode_tokens_per_s": 11.393354847419232,
+          "prompt_tokens": 1029,
+          "finished": true
+        },
+        {
+          "index": 2,
+          "ok": true,
+          "error": null,
+          "chunks": 16,
+          "content_chunks": 13,
+          "text_chars": 51,
+          "finish_reason": "length",
+          "first_chunk_s": 15.85534764174372,
+          "ttft_s": 16.101481267251074,
+          "latency_s": 17.48424018919468,
+          "output_tokens": 16,
+          "tokens_per_s": 0.9151098261557888,
+          "decode_tokens_per_s": 10.847877935884883,
+          "prompt_tokens": 1029,
+          "finished": true
+        },
+        {
+          "index": 3,
+          "ok": true,
+          "error": null,
+          "chunks": 16,
+          "content_chunks": 13,
+          "text_chars": 54,
+          "finish_reason": "length",
+          "first_chunk_s": 15.96290940232575,
+          "ttft_s": 16.21054396778345,
+          "latency_s": 17.29182204604149,
+          "output_tokens": 16,
+          "tokens_per_s": 0.925292890326892,
+          "decode_tokens_per_s": 13.872472124992422,
+          "prompt_tokens": 1029,
+          "finished": true
+        }
+      ]
+    }
+  ]
+}

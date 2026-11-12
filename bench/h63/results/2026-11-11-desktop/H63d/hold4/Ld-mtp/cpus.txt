@@ -1,0 +1,14 @@
+cmdline /app/llama-server -m /models/google_gemma-4-26B-A4B-it-qat-q4_0-gguf/gemma-4-26B_q4_0-it.gguf --host 0.0.0.0 --port 8080 --alias gemma -t 8 -C 0x5555 --cpu-strict 1 --jinja -md /models/k3dgpu/gemma-4-26B-A4B-it-qat-assistant-gguf/gemma-4-26B-A4B-it-qat-assistant-q4_0.gguf --spec-type draft-mtp 
+cpuset 0-15
+Cpus_allowed_list:	0
+avx512f 0 amx 0 avx_vnni 32 nproc 16
+server threads by affinity:
+      2 0
+     34 0-15
+      1 10
+      1 12
+      1 14
+      1 2
+      1 4
+      1 6
+      1 8

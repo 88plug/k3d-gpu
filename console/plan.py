@@ -323,6 +323,13 @@ def add_optimizer(doc, facts, meta, opts):
     engine, device, t = agent_target(facts, doc, backend)
     o.setdefault("vllm_version", "0.26.0" if backend == "llm-scaler" else AGENT_VLLM_VERSION.get(device, "0.33.0"))
     o["hw_class"] = hw_class(t)
+    # The recipe hardware profile (console/recipes.py target_for) reads the GPU's PCI id.
+    o.setdefault("pci_id", t.get("device_id") if t["kind"] == "gpu" else None)
+    o.setdefault("cpu_brand", next(((c.get("cpu") or {}).get("model_name") for c in facts["targets"] if c["kind"] == "cpu"), None))
+    if engine == "vllm":
+        # The canary engine id of the agent's vLLM image (canary/engines.toml).
+        o.setdefault("vllm_engine", "gaudi-vllm" if device == "HPU" else "llm-scaler" if backend == "llm-scaler" else "vllm-xpu")
+        o.setdefault("recipes", model_opt.vllm_recipes(engine))
     # No backend set: as `agent up`, the CPU engine follows the ledger (model_opt.py H59).
     o.setdefault("engine_from_ledger", backend is None)
     opt = model_opt.optimize(meta, engine, device, o)

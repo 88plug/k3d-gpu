@@ -1,0 +1,55 @@
+facts: sha256:c0f1825fc929670909fccf97d296c7752b2b24b51398211dd0636d967c16de83
+targets:
+  cpu: Intel(R) Xeon(R) 6960P, family:model 6:173, AMX, 6 NUMA nodes; usable
+  gpu:0000:03:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: model=Qwen/Qwen3.8-27B
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: Qwen/Qwen3.8-27B on vllm (GPU), metadata from huggingface
+  dense qwen3_5, 27781427952 params -> no MoE adjustment [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json]
+  2 safetensors candidate(s); top: Qwen/Qwen3.8-27B [official] -> serve Qwen/Qwen3.8-27B@37561816e66b [https://huggingface.co/Qwen/Qwen3.8-27B/tree/37561816e66b5b9153b1b64c10968c18c1e6f4a0]
+  recipe Qwen/Qwen3.8-27B (vllm@960f5c1bb145) -> tool parser qwen3_coder, reasoning parser qwen3 [recipes/models/Qwen/Qwen3.8-27B.yaml features.tool_calling, features.reasoning]
+  chat template thinks on by default, reasoning_effort in xhigh/medium/low -> thinking off for agents, pinned server-side: --default-chat-template-kwargs '{"enable_thinking": false, "reasoning_effort": "medium"}' (a request's own kwargs still win; K3D_GPU_AGENT_THINKING=on|off|model) [vllm entrypoints cli_args.py default_chat_template_kwargs (v0.14.0+); https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/chat_template (line 46)]
+  card: non-thinking sampling min_p=0.0, presence_penalty=1.5, repetition_penalty=1.0, temperature=0.7, top_k=20, top_p=0.8 -> --override-generation-config (thinking is off) [https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/README.md (L253); vLLM arg_utils.py --override-generation-config (v0.24.0+)]
+  vision tower in config.json; agents send text -> --language-model-only (no encoder memory, larger KV pool) [https://github.com/vllm-project/vllm/blob/v0.33.0/vllm/engine/arg_utils.py (L1460, v0.17.0+)]
+  Qwen/Qwen3.8-27B has a built-in MTP head (https://huggingface.co/Qwen/Qwen3.8-27B/blob/37561816e66b5b9153b1b64c10968c18c1e6f4a0/config.json (mtp_num_hidden_layers)) -> --speculative-config {"method": "mtp", "num_speculative_tokens": 3} [recipe Qwen/Qwen3.8-27B (vllm@960f5c1bb145) features.spec_decoding.modes.mtp (num_speculative_tokens 3)]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. Qwen/Qwen3.8-27B [official], MTP head
+    2. RedHatAI/Qwen3.8-27B [RedHatAI], MTP head
+    excluded: Intel/Qwen3.8-27B-bpw2.8-AutoRound (int2, the vLLM target on GPU is bf16)
+    excluded: Intel/Qwen3.8-27B-q2ks-AutoRound (gguf, vllm serves safetensors)
+    excluded: Intel/Qwen3.8-27B-q4km-AutoRound (gguf, vllm serves safetensors)
+    excluded: OpenVINO/Qwen3.8-27B-int4-ov (openvino-ir, vllm serves safetensors)
+    excluded: OpenVINO/Qwen3.8-27B-int8-ov (openvino-ir, vllm serves safetensors)
+    excluded: RedHatAI/Qwen3.8-27B-INT4 (int4, the vLLM target on GPU is bf16)
+    excluded: RedHatAI/Qwen3.8-27B-MXFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: RedHatAI/Qwen3.8-27B-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+  engine args: --default-chat-template-kwargs {"enable_thinking": false, "reasoning_effort": "medium"} --override-generation-config {"min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0, "temperature": 0.7, "top_k": 20, "top_p": 0.8} --language-model-only --speculative-config {"method": "mtp", "num_speculative_tokens": 3}
+summary: Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked Qwen/Qwen3.8-27B on vllm (GPU) with MTP; thinking off for agents; why -> plan --model Qwen/Qwen3.8-27B --explain
+vLLM server args: Qwen/Qwen3.8-27B on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM 0.33.0)
+  recipe: Qwen/Qwen3.8-27B (vllm@960f5c1bb145 recipes/models/Qwen/Qwen3.8-27B.yaml; arc_pro_b70 verified)
+  Qwen/Qwen3.8-27B                   [model optimizer]
+  --revision=37561816e66b5b9153b1b64c10968c18c1e6f4a0 [model optimizer]
+  --served-model-name=Qwen3.8-27B    [k3d-gpu default (agent_config; K3D_GPU_AGENT_MODEL_NAME unset)]
+  --port=8000                        [k3d-gpu default (agent_config)]
+  --dtype=float16                    [k3d-gpu default (vllm_device_args)]
+  --block-size=64                    [k3d-gpu default (vllm_device_args)]
+  --max-model-len=8192               [k3d-gpu default (vllm_device_args; K3D_GPU_AGENT_MAX_LEN unset)]
+  --max-num-batched-tokens=2048      [k3d-gpu default (vllm_device_args)]
+  --gpu-memory-utilization=0.9       [k3d-gpu default (vllm_device_args)]
+  --enforce-eager                    [k3d-gpu default (vllm_device_args); recipe xpu agrees (vllm@960f5c1bb145 hardware_overrides.xpu)]
+  --no-enable-prefix-caching         [k3d-gpu default (vllm_device_args)]
+  --tensor-parallel-size=1           [k3d-gpu default (vllm_manifest; K3D_GPU_AGENT_GPUS unset)]
+  --enable-auto-tool-choice          [recipe vllm@960f5c1bb145 features.tool_calling]
+  --tool-call-parser=qwen3_coder     [recipe vllm@960f5c1bb145 features.tool_calling; in vLLM 0.33.0's registry; model optimizer agrees]
+  --reasoning-parser=qwen3           [recipe vllm@960f5c1bb145 features.reasoning; model optimizer agrees]
+  --default-chat-template-kwargs {"enable_thinking": false, "reasoning_effort": "medium"} [model optimizer (engine args)]
+  --override-generation-config {"min_p": 0.0, "presence_penalty": 1.5, "repetition_penalty": 1.0, "temperature": 0.7, "top_k": 20, "top_p": 0.8} [model optimizer (engine args)]
+  --language-model-only              [model optimizer (engine args)]
+  --speculative-config {"method": "mtp", "num_speculative_tokens": 3} [model optimizer (engine args)]
+  not applied: frontend rust (model.default_frontend) -> recipe env is reported, never applied
+  recipe opt-in, left to the optimizer: spec_decoding (draft tokens: mtp 3, dflash 7, dspark 8), text_only
