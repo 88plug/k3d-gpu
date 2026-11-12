@@ -17901,10 +17901,12 @@ committed through H63's statistic (below, "What the committed records say"); tha
 descriptive and is not an H63 measurement. The scorer, `bench/h63/h63.py`, and its tests come with
 this pre-registration. The runner lands in a dated amendment with regression tests, merged before
 the first H63 smoke or hold. Row id: H63 was free on main, on every remote branch and in every pull
-request when this was written. H61 has no row on main, ~~but an unmerged branch's pre-registration
-uses it, so H63 is the next id free of both~~ (correction 2026-11-12: no branch, tag or pull request
-carries an H61 row either; the H61 pre-registration of 2026-10-29 was never committed and exists only
-as an uncommitted draft in a local checkout. H63's id is unchanged).
+request when this was written. H61 has no row on main, but an unmerged branch's pre-registration
+uses it, so H63 is the next id free of both (clarified 2026-11-12: when this was written, that H61
+pre-registration, drafted 2026-10-29, was an uncommitted edit in a local checkout of branch
+`claude/agentstack-eas-agent-toolkit`, and no branch, tag or pull request carried it; on 2026-11-12
+it was committed to that branch as an unregistered draft (ed3a081a), with no pull request. H63's id
+is unchanged).
 
 **Why.** Two wildct rows ran in the last two days, and between them they leave one-stream serving
 open:
