@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-12T11:05:36Z. 2 open.
+Updated 2026-11-12T11:07:13Z. 2 open.
 
 ## `red:freshness.yml`: scheduled run failure
 
@@ -89,7 +89,7 @@ Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch
 
 ## `stale:freshness.yml`: no successful scheduled run within 12 h
 
-Opened 2026-11-12T09:33:09Z, updated 2026-11-12T09:33:09Z.
+Opened 2026-11-12T09:33:09Z, updated 2026-11-12T09:33:09Z, acknowledged.
 
 `freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).
 
