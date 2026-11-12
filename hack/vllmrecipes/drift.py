@@ -3,8 +3,9 @@ hardware_overrides, per Intel generation, each difference labelled with the reas
 k3d-gpu differs (DRIFT_REASONS) or UNEXPLAINED. A report: nothing here changes an
 argument k3d-gpu emits.
 
-  xpu  k3d-gpu: the Intel GPU branch of scripts/k3d-gpu vllm_manifest and its
-       --tensor-parallel-size item, rendered with no K3D_GPU_* set, and VLLM_XPU_ENV.
+  xpu  k3d-gpu: the Intel GPU branch of scripts/k3d-gpu vllm_device_args and the
+       --tensor-parallel-size item of vllm_base_lines, rendered with no K3D_GPU_* set,
+       and VLLM_XPU_ENV.
        recipes: every hardware_overrides block keyed xpu or an xpu profile (arc_pro_b60,
        arc_pro_b70), at recipe, variant and single_node_tp level.
   cpu  k3d-gpu: the vllm-cpu engine of canary/engines.toml (vLLM on the CPU as the fit
@@ -23,6 +24,7 @@ Standard library only.
 import json
 import os
 import re
+import shlex
 import tomllib
 
 GENERATIONS = ("xpu", "cpu")
@@ -42,7 +44,7 @@ KINDS = ("ledger", "measured", "intel-runtime", "fit", "policy", "review")
 # tests/vllm_recipes_drift_test.py, so a stale reason is removed with the drift it explained.
 DRIFT_REASONS = {
     ("xpu", "--dtype"): {
-        "kind": "review", "source": "scripts/k3d-gpu vllm_manifest",
+        "kind": "review", "source": "scripts/k3d-gpu vllm_device_args",
         "why": "float16 is the Intel Arc runtime's value the launcher follows; the recipes leave dtype to the "
                "checkpoint (bf16 on most Arc recipes); k3d-gpu changes it only on a measured bf16 against "
                "float16 row on the B70"},
@@ -58,7 +60,7 @@ DRIFT_REASONS = {
         "kind": "fit", "source": "console/fit.py _flags",
         "why": "the fit sets --kv-cache-dtype to the KV element size it counted for the host and the model"},
     ("xpu", "--max-num-batched-tokens"): {
-        "kind": "intel-runtime", "source": "scripts/k3d-gpu vllm_manifest",
+        "kind": "intel-runtime", "source": "scripts/k3d-gpu vllm_device_args",
         "why": "2048 is the Intel Arc runtime's value the launcher follows; the vLLM agent served Qwen3-4B with "
                "it on an Arc Pro B70 (bench/vllm-agent/results/2026-11-08)"},
     ("xpu", "--quantization"): {
@@ -166,28 +168,37 @@ def _expand(word, text):
     return re.sub(r"\$\{(\w+)(?::-([^}]*))?\}", one, word)
 
 
-ITEM = re.compile(r'"\$\{item\}(--[^"]+)"')
+def _flag_words(chunk):
+    """The --flag words a shell chunk always renders: its words with line continuations
+    joined, without the ${VAR:+...} alternates that render only when VAR is set."""
+    try:
+        words = shlex.split(chunk.replace("\\\n", " "), comments=True)
+    except ValueError as e:
+        raise DriftError("scripts/k3d-gpu: %s" % e)
+    return [w for w in words if w.startswith("--")]
 
 
 def k3d_xpu(root):
     """k3d-gpu's flags and env for vLLM on an Intel GPU, with no K3D_GPU_* set: the GPU
-    (else) branch of vllm_manifest's `if [ "${device}" = HPU ]` and the unconditional
-    items after it, and VLLM_XPU_ENV."""
+    (else) branch of vllm_device_args's `if [ "$1" = HPU ]`, the items vllm_base_lines
+    always renders (its `for a in ...` lists: the tensor-parallel size), and VLLM_XPU_ENV."""
     text = _read(root, "scripts/k3d-gpu")
-    body = _fn_body(text, "vllm_manifest")
-    m = re.search(r'(?ms)^([ \t]*)if \[ "\$\{device\}" = HPU \]; then\n.*?^\1else\n(.*?)^\1fi\n(.*)', body)
+    m = re.search(r'(?ms)^([ \t]*)if \[ "\$1" = HPU \]; then\n.*?^\1else\n(.*?)^\1fi\n',
+                  _fn_body(text, "vllm_device_args"))
     if not m:
-        raise DriftError('scripts/k3d-gpu vllm_manifest: no if [ "${device}" = HPU ] ... else ... fi')
-    items = ITEM.findall(m.group(2))
-    items += [i for ln in m.group(3).splitlines() if ln.strip().startswith("args+=") for i in ITEM.findall(ln)]
+        raise DriftError('scripts/k3d-gpu vllm_device_args: no if [ "$1" = HPU ] ... else ... fi')
+    items = _flag_words(m.group(2))
     if not items:
-        raise DriftError("scripts/k3d-gpu vllm_manifest: no ${item}--flag in its Intel GPU branch")
+        raise DriftError("scripts/k3d-gpu vllm_device_args: no --flag in its Intel GPU branch")
+    for lst in re.findall(r"(?ms)^[ \t]*for a in (.*?); do$", _fn_body(text, "vllm_base_lines")):
+        items += _flag_words(lst)
     flags = {}
     for it in items:
-        k, sep, v = _expand(it, text).partition("=")
-        k, v = norm_flag(k, v if sep else None)
-        if k not in IDENTITY:
-            flags[k] = v
+        k, sep, v = it.partition("=")
+        if flag_name(k) in IDENTITY:
+            continue
+        k, v = norm_flag(k, _expand(v, text) if sep else None)
+        flags[k] = v
     am = re.search(r"(?ms)^VLLM_XPU_ENV=\(\n(.*?)^\)", text)
     if not am:
         raise DriftError("scripts/k3d-gpu has no VLLM_XPU_ENV=(...)")
@@ -197,7 +208,7 @@ def k3d_xpu(root):
         if ln and not ln.startswith("#"):
             k, _, v = ln.strip('"').partition("=")
             env[k] = v
-    return flags, env, "scripts/k3d-gpu vllm_manifest (Intel GPU, no K3D_GPU_* set) + VLLM_XPU_ENV"
+    return flags, env, "scripts/k3d-gpu vllm_device_args + vllm_base_lines (Intel GPU, no K3D_GPU_* set) + VLLM_XPU_ENV"
 
 
 def k3d_cpu(root):

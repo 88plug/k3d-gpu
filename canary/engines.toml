@@ -74,7 +74,7 @@ port = 8000
 golden = "canary/goldens/vllm-cpu.json"
 version_probe = { path = "/version", key = "version", regex = '^(?P<v>\d+\.\d+\.\d+)', tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
 surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/vllm-workspace/examples" }
-flags_source = ["scripts/k3d-gpu:vllm_manifest", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide", "console/model_opt.py:eat_patch"]
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide", "console/model_opt.py:eat_patch"]
 isa_signal = 'Illegal instruction|Failed to import from vllm\._C_AVX2'
 
 [[engine]]
@@ -159,12 +159,12 @@ family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vllm/vllm-openai-xpu(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm", tag = '^v(?P<v>\d+\.\d+\.\d+)$' }
 surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/workspace/vllm/examples" }
-flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"GPU": "(?P<v>[0-9.]+)"', of = "package" },
     { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION\.get\(device, "(?P<v>[0-9.]+)"\)', of = "package" },
     { file = "console/model_opt.py", regex = '\(o\.get\("vllm_version"\) or "(?P<v>[0-9.]+)"\)', of = "package" },
-    { file = "scripts/k3d-gpu", regex = 'device=\$\{AGENT_SEL%% \*\} vver=(?P<v>[0-9.]+) ', of = "package" },
+    { file = "scripts/k3d-gpu", regex = '^    local vver=(?P<v>[0-9.]+)$', of = "package" },
 ]
 
 [[engine]]
@@ -174,7 +174,7 @@ family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>intel/llm-scaler-vllm(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm" }
 surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/llm-scaler/vllm/vllm/examples" }
-flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_XPU_ENV", "console/fit.py:_flags", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = '"(?P<v>[0-9.]+)" if backend == "llm-scaler"', of = "package" },
     { file = "scripts/k3d-gpu", regex = 'llm-scaler\) vver=(?P<v>[0-9.]+) ;;', of = "package" },
@@ -187,7 +187,7 @@ family = "vllm"
 locator = { file = "scripts/k3d-gpu", regex = 'AGENT_DEFAULT_IMAGE="(?P<ref>vault\.habana\.ai/gaudi-docker/[^@":]+(?::[^@"]+)?@sha256:[0-9a-f]{64})"' }
 version_probe = { package = "vllm" }
 surface = { driver = "vllm", recipes = "console/vllm-recipes.json", examples_dir = "/workspace/vllm-project/examples" }
-flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:VLLM_HPU_ENV", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
+flags_source = ["scripts/k3d-gpu:vllm_manifest", "scripts/k3d-gpu:vllm_device_args", "scripts/k3d-gpu:vllm_base_lines", "console/recipes.py:ADOPT", "scripts/k3d-gpu:VLLM_HPU_ENV", "console/model_opt.py:optimize", "console/model_opt.py:spec_decide"]
 derived = [
     { file = "console/plan.py", regex = 'AGENT_VLLM_VERSION = \{[^}]*"HPU": "(?P<v>[0-9.]+)"', of = "package" },
     { file = "scripts/k3d-gpu", regex = '\[ -z "\$\{AGENT_HPU:-\}" \] \|\| vver=(?P<v>[0-9.]+)', of = "package" },
