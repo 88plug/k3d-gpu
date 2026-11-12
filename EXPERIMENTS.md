@@ -18452,7 +18452,7 @@ hold); and the arguments check mode accepts and refuses.
 Written 2026-11-11 and committed with its runner (`bench/h59r/`) before any H59r step. Nothing has
 been prepared, rendered or served on crescent for H59r, and nothing below is a measurement of
 either arm. Crescent was only read, over read-only ssh, at 2026-11-11T23:44Z (its containers, its
-`load1`, `/` and the bench lock). The hypothesis and predictions in the row are H59's, copied
+`load1`, `/`, the bench lock and the listing of H59's `~/k3dgpu-h59`). The hypothesis and predictions in the row are H59's, copied
 verbatim (L's build and a bracketed note on O aside) and not tuned; they are never edited. A
 protocol change is a dated amendment, merged before the data it governs.
 
@@ -18537,7 +18537,8 @@ stack, the dynamo and llm-d routers and the harvest processes are not touched.
    at render time, and H59r runs the launcher's. That fit has changed since H59's holds: commit
    `0c7af9e3` (2026-11-01, after H59d's OOM) counts llama.cpp's host buffers on a CPU placement. On
    H59's host reading the launcher now renders L at 45 slots of 262,144 tokens (`-c 11796480`,
-   353Gi), where H59's holds ran 48 (`-c 12582912`, 358Gi). Every other server flag, and their
+   353Gi); at H59's commit (`17aa59cf`) it renders 48 on the same reading (`-c 12582912`, 358Gi),
+   as H59's holds ran. #404 itself changes no fit value. Every other server flag, and their
    order, is H59's: L's staged render equals H59's recorded hold-1 L render with the image, `-c`,
    `-np` and the memory masked. N=4 uses 4 of the slots. This is not a protocol change. Each arm's
    `fit.json` records the fit it ran, and the run section reports it beside H59's.
