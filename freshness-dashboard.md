@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-12 08:24 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 08:48 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -14,17 +14,16 @@ red:freshness.yml
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.0` | `v1.109.0` | `v1.109.1` | patch | ? | ? |
 | packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 6h |
 | tools | `ci-chrome` | `157.0.8103.50` | `157.0.8103.78` | patch | ? | ? |
-| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `5018117921612e1002e6d9b636b0a412bd07ea46` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | revision | ? | ? |
 
 ### Not resolved (1)
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (4)
+## Open bot PRs (3)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #428 | tools | auto | - |
 | #427 | packaging-images | review | a human approval at the head |
 | #426 | examples | auto | - |
 | #423 | vllm-recipes | review | a human approval at the head |
