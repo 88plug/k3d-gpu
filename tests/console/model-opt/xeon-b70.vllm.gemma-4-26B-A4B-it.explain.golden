@@ -1,0 +1,61 @@
+facts: sha256:c0f1825fc929670909fccf97d296c7752b2b24b51398211dd0636d967c16de83
+targets:
+  cpu: Intel(R) Xeon(R) 6960P, family:model 6:173, AMX, 6 NUMA nodes; usable
+  gpu:0000:03:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+overrides: model=google/gemma-4-26B-A4B-it
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+model optimizer: google/gemma-4-26B-A4B-it on vllm (GPU), metadata from huggingface
+  MoE: 128 experts, 8 per token, 25805936206 params, ~4.0B active -> recorded for the bandwidth model (decode moves the active experts' bytes) [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  context 262144 tokens -> kept at the agent's own --max-model-len / OVMS default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/config.json]
+  2 safetensors candidate(s); top: google/gemma-4-26B-A4B-it [official] -> serve google/gemma-4-26B-A4B-it@4d7ae4984b7d [https://huggingface.co/google/gemma-4-26B-A4B-it/tree/4d7ae4984b7db7de8f8457170b3f1a419ee76d52]
+  recipe Google/gemma-4-26B-A4B-it (vllm@960f5c1bb145) -> tool parser gemma4, reasoning parser gemma4 [recipes/models/Google/gemma-4-26B-A4B-it.yaml features.tool_calling, features.reasoning]
+  chat template thinks off by default -> thinking off for agents, pinned server-side: --default-chat-template-kwargs '{"enable_thinking": false}' (a request's own kwargs still win; K3D_GPU_AGENT_THINKING=on|off|model) [vllm entrypoints cli_args.py default_chat_template_kwargs (v0.14.0+); https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/chat_template (line 186)]
+  generation_config.json: do_sample=True, temperature=1.0, top_k=64, top_p=0.95 -> the engine applies it as the request default [https://huggingface.co/google/gemma-4-26B-A4B-it/blob/4d7ae4984b7db7de8f8457170b3f1a419ee76d52/generation_config.json]
+  vision tower in config.json; agents send text -> --language-model-only (no encoder memory, larger KV pool) [https://github.com/vllm-project/vllm/blob/v0.33.0/vllm/engine/arg_utils.py (L1460, v0.17.0+)]
+  drafter google/gemma-4-26B-A4B-it-assistant [official] -> --speculative-config {"method": "mtp", "model": "google/gemma-4-26B-A4B-it-assistant", "num_speculative_tokens": 4} [recipe Google/gemma-4-26B-A4B-it (vllm@960f5c1bb145) features.spec_decoding.modes.mtp (num_speculative_tokens 4)]
+  variant ranking (official > RedHatAI > community/self-built; a lower rank wins only when measured better):
+    1. google/gemma-4-26B-A4B-it [official]
+    2. RedHatAI/gemma-4-26B-A4B-it [RedHatAI]
+    excluded: Intel/gemma-4-26B-A4B-it-int4-AutoRound (int4, the vLLM target on GPU is bf16)
+    excluded: Intel/gemma-4-26B-A4B-it-int4-mixed-AutoRound (int4, the vLLM target on GPU is bf16)
+    excluded: OpenVINO/gemma-4-26b-a4b-it-int4-ov (openvino-ir, vllm serves safetensors)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic (fp8, the vLLM target on GPU is bf16)
+    excluded: RedHatAI/gemma-4-26B-A4B-it-NVFP4 (NVFP4/MXFP4: NVIDIA only, no Intel engine documents it)
+    excluded: google/gemma-4-26B-A4B-it-qat-q4_0-gguf (gguf, vllm serves safetensors)
+    excluded: google/gemma-4-26B-A4B-it-qat-q4_0-unquantized (QAT weights serve an int4 target; this target is bf16)
+  note: drafter google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant skipped: QAT drafter, the target is not QAT
+  note: MoE target: Google says the 26B A4B drafter may not speed up at batch 1 without good parallelism (https://ai.google.dev/gemma/docs/mtp/overview); if vLLM's V1 runner fails on it, VLLM_USE_V2_MODEL_RUNNER=1 (https://github.com/vllm-project/vllm/pull/51493); K3D_GPU_AGENT_DRAFT=off turns the drafter off
+  engine args: --default-chat-template-kwargs {"enable_thinking": false} --language-model-only --speculative-config {"method": "mtp", "model": "google/gemma-4-26B-A4B-it-assistant", "num_speculative_tokens": 4}
+summary: Detected Intel(R) Xeon(R) 6960P (AMX) + 1x Battlemage 0xe223 (XMX); picked google/gemma-4-26B-A4B-it on vllm (GPU) with the google/gemma-4-26B-A4B-it-assistant drafter; thinking off for agents; why -> plan --model google/gemma-4-26B-A4B-it --explain
+vLLM server args: google/gemma-4-26B-A4B-it on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM 0.33.0)
+  recipe: Google/gemma-4-26B-A4B-it (vllm@960f5c1bb145 recipes/models/Google/gemma-4-26B-A4B-it.yaml; arc_pro_b70 verified)
+  google/gemma-4-26B-A4B-it          [model optimizer]
+  --revision=4d7ae4984b7db7de8f8457170b3f1a419ee76d52 [model optimizer]
+  --served-model-name=gemma-4-26B-A4B-it [k3d-gpu default (agent_config; K3D_GPU_AGENT_MODEL_NAME unset)]
+  --port=8000                        [k3d-gpu default (agent_config)]
+  --dtype=float16                    [k3d-gpu default (vllm_device_args)]
+  --block-size=64                    [k3d-gpu default (vllm_device_args)]
+  --max-model-len=8192               [k3d-gpu default (vllm_device_args; K3D_GPU_AGENT_MAX_LEN unset)]
+  --max-num-batched-tokens=2048      [k3d-gpu default (vllm_device_args)]
+  --gpu-memory-utilization=0.9       [k3d-gpu default (vllm_device_args)]
+  --enforce-eager                    [k3d-gpu default (vllm_device_args); recipe xpu agrees (vllm@960f5c1bb145 hardware_overrides.xpu)]
+  --no-enable-prefix-caching         [k3d-gpu default (vllm_device_args); recipe xpu agrees (vllm@960f5c1bb145 hardware_overrides.xpu)]
+  --tensor-parallel-size=1           [k3d-gpu default (vllm_manifest; K3D_GPU_AGENT_GPUS unset)]
+  --attention-backend=flash_attn     [recipe vllm@960f5c1bb145 hardware_overrides.xpu]
+  --enable-auto-tool-choice          [recipe vllm@960f5c1bb145 features.tool_calling]
+  --tool-call-parser=gemma4          [recipe vllm@960f5c1bb145 features.tool_calling; in vLLM 0.33.0's registry; model optimizer agrees]
+  --reasoning-parser=gemma4          [recipe vllm@960f5c1bb145 features.reasoning; model optimizer agrees]
+  --default-chat-template-kwargs {"enable_thinking": false} [model optimizer (engine args)]
+  --language-model-only              [model optimizer (engine args)]
+  --speculative-config {"method": "mtp", "model": "google/gemma-4-26B-A4B-it-assistant", "num_speculative_tokens": 4} [model optimizer (engine args)]
+  not applied: --trust-remote-code (hardware_overrides.xpu) -> no config.json available: not applied [recipe vllm@960f5c1bb145]
+  not applied: --gpu-memory-utilization=0.9 (hardware_overrides.xpu) -> fit-owned (k3d-gpu fit, K3D_GPU_AGENT_MAX_LEN/_GPUS/_MAX_NUM_SEQS) [recipe vllm@960f5c1bb145]
+  not applied: --max-num-batched-tokens=8192 (hardware_overrides.xpu) -> fit-owned (k3d-gpu fit, K3D_GPU_AGENT_MAX_LEN/_GPUS/_MAX_NUM_SEQS) [recipe vllm@960f5c1bb145]
+  not applied: --max-model-len=5120 (hardware_overrides.xpu) -> fit-owned (k3d-gpu fit, K3D_GPU_AGENT_MAX_LEN/_GPUS/_MAX_NUM_SEQS) [recipe vllm@960f5c1bb145]
+  not applied: --tensor-parallel-size=4 (hardware_overrides.xpu) -> fit-owned (k3d-gpu fit, K3D_GPU_AGENT_MAX_LEN/_GPUS/_MAX_NUM_SEQS) [recipe vllm@960f5c1bb145]
+  not applied: --chat-template=examples/tool_chat_template_gemma4.jinja (features.tool_calling) -> tool calls use the model's own chat template; recipe's examples/tool_chat_template_gemma4.jinja is not located in vllm-xpu [recipe vllm@960f5c1bb145]
+  recipe opt-in, left to the optimizer: text_only, spec_decoding (draft tokens: mtp 4, eagle3 3)

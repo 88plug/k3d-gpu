@@ -1,0 +1,148 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k3d-gpu-agent
+---
+# Hugging Face weights and the kernel caches (SYCL/Triton, or vLLM's on a Gaudi),
+# kept across restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vllm-models
+  namespace: k3d-gpu-agent
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: k3d-gpu-agent
+  labels:
+    app: vllm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+      annotations:
+        k3d-gpu.io/agent-device: GPU
+        k3d-gpu.io/agent-backend: vllm
+    spec:
+      enableServiceLinks: false
+      securityContext:
+        supplementalGroups: [GID]
+      containers:
+        # The Intel GPU images take 'vllm serve' arguments (their entrypoints run
+        # it); the Gaudi image's entrypoint is Intel's compose launcher, so the pod
+        # runs vllm serve itself.
+        - name: vllm
+          image: vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086
+          imagePullPolicy: IfNotPresent
+          args:
+            - Qwen/Qwen3-8B
+            - --served-model-name=Qwen3-8B
+            - --port=8000
+            - --dtype=float16
+            - --block-size=64
+            - --max-model-len=8192
+            - --max-num-batched-tokens=2048
+            - --gpu-memory-utilization=0.9
+            - --enforce-eager
+            - --no-enable-prefix-caching
+            - --tensor-parallel-size=1
+          env:
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
+            - name: DO_NOT_TRACK
+              value: "1"
+            - name: VLLM_WORKER_MULTIPROC_METHOD
+              value: "spawn"
+            - name: VLLM_ALLOW_LONG_MAX_MODEL_LEN
+              value: "1"
+            - name: VLLM_TARGET_DEVICE
+              value: "xpu"
+            - name: ZE_FLAT_DEVICE_HIERARCHY
+              value: "FLAT"
+            - name: ONEAPI_DEVICE_SELECTOR
+              value: "level_zero:*"
+            - name: ZE_ENABLE_PCI_ID_DEVICE_ORDER
+              value: "1"
+            - name: SYCL_CACHE_PERSISTENT
+              value: "1"
+            - name: ZES_ENABLE_SYSMAN
+              value: "1"
+            - name: HF_HUB_DISABLE_XET
+              value: "1"
+            - name: HF_HUB_ENABLE_HF_TRANSFER
+              value: "0"
+            - name: CCL_PROCESS_LAUNCHER
+              value: "none"
+            - name: CCL_WORKER_OFFLOAD
+              value: "0"
+            - name: CCL_WORKER_AFFINITY
+              value: ""
+            - name: CCL_ZE_IPC_EXCHANGE
+              value: "pidfd"
+            - name: CCL_ALLREDUCE
+              value: "ring"
+            - name: HF_HOME
+              value: "/models/huggingface"
+            - name: XDG_CACHE_HOME
+              value: "/models/.cache"
+            - name: TRITON_CACHE_DIR
+              value: "/models/.triton"
+            - name: TRITON_HOME
+              value: "/models/.triton"
+          ports:
+            - name: http
+              containerPort: 8000
+          # No liveness probe: the first start downloads the weights and
+          # compiles kernels (on a Gaudi: warms up HPU graphs) for the device.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              gpu.intel.com/xe: 1
+          volumeMounts:
+            - name: models
+              mountPath: /models
+            - name: shm
+              mountPath: /dev/shm
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: vllm-models
+        # vLLM worker processes exchange tensors through shared memory.
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm
+  namespace: k3d-gpu-agent
+spec:
+  selector:
+    app: vllm
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

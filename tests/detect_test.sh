@@ -3370,6 +3370,75 @@ agent_says "vllm auto runs on the Intel GPU even where OVMS would pick the CPU (
 agent_says "vllm with no allocatable GPU names the backend, not K3D_GPU_AGENT_DEVICE" "${r}" fail \
     'K3D_GPU_AGENT_DEVICE=GPU' negate STUB_ALLOC='cpu 16' K3D_GPU_AGENT_BACKEND=vllm
 
+# ---- agent: vLLM recipes (console/recipes.py over the frozen fixture artifact) --------
+# A model the user names gets its recipe's parsers and model flags; the default model,
+# OVMS and K3D_GPU_VLLM_RECIPES=off render as before (captures made on the base commit).
+RFIX="$(dirname "${K3D_GPU}")/../tests/fixtures/vllm-recipes"
+RCPU=(STUB_ALLOC="${XE1}" K3D_GPU_FIT=off XDG_CACHE_HOME="${WORK}/rcache" K3D_GPU_VLLM_RECIPES_FILE="${RFIX}/artifact.json")
+RVLLM=("${RCPU[@]}" K3D_GPU_AGENT_BACKEND=vllm)
+# agent_count <name> <root> <ERE> <count> [env...]: `agent manifest` has <count> lines matching <ERE>.
+agent_count() {
+    local name=$1 root=$2 re=$3 want=$4 out n
+    shift 4
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${ASTUB}:${PATH}" "$@" bash "${K3D_GPU}" agent manifest 2>/dev/null)
+    n=$(grep -cE -- "${re}" <<< "${out}")
+    if [ "${n}" = "${want}" ]; then PASS=$((PASS + 1)); echo "ok   ${name}"
+    else FAILS=$((FAILS + 1)); echo "FAIL ${name} (${n} lines match /${re}/, want ${want})"; awk '{print "  | " $0}' <<< "${out}"; fi
+}
+# agent_same <name> <root> <capture> [env...]: `agent manifest` equals a pre-change capture
+# (the render group id read as GID).
+agent_same() {
+    local name=$1 root=$2 cap=$3 out
+    shift 3
+    out=$(env K3D_GPU_SYSROOT="${root}" PATH="${ASTUB}:${PATH}" "$@" bash "${K3D_GPU}" agent manifest 2>/dev/null \
+        | sed -E 's/supplementalGroups: \[[0-9]+\]/supplementalGroups: [GID]/')
+    if [ "${out}" = "$(cat "${RFIX}/${cap}")" ]; then PASS=$((PASS + 1)); echo "ok   ${name}"
+    else FAILS=$((FAILS + 1)); echo "FAIL ${name}"; diff <(printf '%s\n' "${out}") "${RFIX}/${cap}" | head -20; fi
+}
+agent_says "recipes: a Qwen3 model the user names gets its hermes tool parser" "${r}" 0 \
+    '^ +- --tool-call-parser=hermes$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B
+agent_says "recipes: ...with automatic tool choice" "${r}" 0 \
+    '^ +- --enable-auto-tool-choice$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B
+agent_says "recipes: ...and the qwen3 reasoning parser" "${r}" 0 \
+    '^ +- --reasoning-parser=qwen3$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B
+agent_says "recipes: the pod names the recipe and its pin" "${r}" 0 \
+    '^        k3d-gpu\.io/vllm-recipe: "Qwen/Qwen3-8B@vllm-[0-9a-f]{12}"$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B
+agent_says "recipes: Qwen3.5-4B gets the qwen3_coder tool parser" "${r}" 0 \
+    '^ +- --tool-call-parser=qwen3_coder$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3.5-4B
+agent_says "recipes: Qwen3.5-4B runs no model-repo code (no auto_map in reach)" "${r}" 0 \
+    'trust-remote-code' negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3.5-4B
+agent_count "recipes: the recipe's --enforce-eager adds no second one" "${r}" '^ +- --enforce-eager$' 1 \
+    "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3.5-4B
+agent_says "recipes: Qwen3-30B-A3B adds its xpu --disable-sliding-window" "${r}" 0 \
+    "^ +- '--disable-sliding-window'$" "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-30B-A3B
+agent_says "recipes: the recipe's xpu sizing is not applied" "${r}" 0 \
+    'max-model-len=9472|max-num-batched-tokens=8192|gpu-memory-utilization=0\.8' negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-30B-A3B
+agent_says "recipes: llm-scaler (vLLM 0.26.0) has the qwen3_coder parser" "${r}" 0 \
+    '^ +- --tool-call-parser=qwen3_coder$' "" "${RCPU[@]}" K3D_GPU_AGENT_BACKEND=llm-scaler K3D_GPU_AGENT_MODEL=Qwen/Qwen3.5-4B
+agent_says "recipes: a parser set in the environment wins" "${r}" 0 \
+    '^ +- --tool-call-parser=llama3_json$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_AGENT_TOOL_PARSER=llama3_json
+agent_says "recipes: an empty K3D_GPU_AGENT_TOOL_PARSER still turns tool calling off" "${r}" 0 \
+    'enable-auto-tool-choice|tool-call-parser' negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_AGENT_TOOL_PARSER=
+agent_says "recipes: Llama-3.1-8B's recipe has no tool calling, so no tool parser" "${r}" 0 \
+    'tool-call-parser|enable-auto-tool-choice' negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=meta-llama/Llama-3.1-8B-Instruct
+agent_says "recipes: Nemotron's plugin reasoning parser is dropped, its tool parser kept" "${r}" 0 \
+    '^ +- --tool-call-parser=qwen3_coder$' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+agent_says "recipes: ...and the plugin file is never fetched" "${r}" 0 \
+    "^ +- '?(--reasoning-parser|.*nano_v3)" negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16
+agent_says "recipes: K3D_GPU_VLLM_RECIPES=off serves a named model with no parser, as before" "${r}" 0 \
+    'tool-call-parser|reasoning-parser|vllm-recipe' negate "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_VLLM_RECIPES=off
+agent_says "recipes: K3D_GPU_VLLM_RECIPES takes auto or off only" "${r}" fail \
+    'K3D_GPU_VLLM_RECIPES must be auto or off' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_VLLM_RECIPES=on
+agent_says "recipes: a missing artifact leaves k3d-gpu's defaults, with one warning" "${r}" 0 \
+    'vLLM recipes: .*is missing' "" "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_VLLM_RECIPES_FILE="${WORK}/none.json"
+agent_same "recipes: the default vLLM model renders as before the recipes" "${r}" manifest-default-xe1.yaml "${RVLLM[@]}"
+agent_same "recipes: K3D_GPU_VLLM_RECIPES=off renders a named model as before" "${r}" manifest-qwen3-8b-xe1.yaml \
+    "${RVLLM[@]}" K3D_GPU_AGENT_MODEL=Qwen/Qwen3-8B K3D_GPU_VLLM_RECIPES=off
+agent_same "recipes: OVMS's default model renders as before" "${r}" manifest-ovms-default.yaml \
+    "${RCPU[@]}" STUB_NODE_LABELS=gpu.intel.com/xmx=true
+agent_same "recipes: OVMS with a named model renders as before" "${r}" manifest-ovms-custom.yaml \
+    "${RCPU[@]}" STUB_NODE_LABELS=gpu.intel.com/xmx=true K3D_GPU_AGENT_MODEL=OpenVINO/Qwen3-8B-int4-ov
+
 r=$(newroot agent-lnl)
 pci "${r}" 0000:00:02.0 0x8086 0x64a0 xe; render "${r}" 0000:00:02.0 128
 agent_says "vllm on a non-Battlemage Intel GPU warns and names the GPU" "${r}" 0 \
@@ -3467,6 +3536,14 @@ agent_says "llm-scaler auto skips the Gaudi for the Intel GPU" "${r}" 0 \
     'gpu\.intel\.com/xe: "?1"?$' "" STUB_ALLOC=$'cpu 160\ngpu.intel.com/xe 1\nhabana.ai/gaudi 8' K3D_GPU_AGENT_BACKEND=llm-scaler
 agent_says "an explicit vllm backend runs on the Gaudi" "${r}" 0 \
     '^ +habana\.ai/gaudi: 1$' "" STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_AGENT_BACKEND=vllm
+RHPU=(STUB_ALLOC="${HPU_ALLOC}" K3D_GPU_FIT=off XDG_CACHE_HOME="${WORK}/rcache" K3D_GPU_VLLM_RECIPES_FILE="${RFIX}/artifact.json"
+      K3D_GPU_AGENT_MODEL=Qwen/Qwen3.5-4B)
+agent_says "recipes on a Gaudi: Qwen3.5-4B gets its recipe's parsers" "${r}" 0 \
+    '^ +- --reasoning-parser=qwen3$' "" "${RHPU[@]}"
+agent_says "recipes on a Gaudi: ...the qwen3_coder tool parser" "${r}" 0 \
+    '^ +- --tool-call-parser=qwen3_coder$' "" "${RHPU[@]}"
+agent_says "recipes on a Gaudi: no Arc device flag comes from the recipe" "${r}" 0 \
+    'enforce-eager|block-size|prefix-caching|attention-backend' negate "${RHPU[@]}"
 agent_says "the vLLM image is Intel's vllm-gaudi 0.30.0 build pinned by digest" "${r}" 0 \
     'image: vault\.habana\.ai/gaudi-docker/1\.24\.2/ubuntu24\.04/habanalabs/vllm-0\.30\.0-ptupstream-2\.13\.0:[^@ ]+@sha256:[0-9a-f]{64}$' "" \
     STUB_ALLOC="${HPU_ALLOC}"
