@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-12 08:20 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 08:24 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -10,7 +10,7 @@ red:freshness.yml
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 9h |
+| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 10h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.0` | `v1.109.0` | `v1.109.1` | patch | ? | ? |
 | packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 6h |
 | tools | `ci-chrome` | `157.0.8103.50` | `157.0.8103.78` | patch | ? | ? |
