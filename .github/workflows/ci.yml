@@ -312,6 +312,9 @@ jobs:
       # fixtures, arm.sh against a local stub server, its records scored by h59.py. The rows
       # are scored, so it runs on a copy whose launcher carries R1's llama.cpp pins.
       - run: tests/h59_runner_test.sh
+      # H59r's runner (the H59r pre-registration): H59's runner on crescent at llama.cpp b12110,
+      # against H59's stand-ins and its recorded crescent renders, scored by bench/h59/h59.py.
+      - run: python3 bench/h59r/test_h59r.py
       # H63's scorer (the H63 pre-registration): the N=1 rule over Ls and Od, the idle-window
       # gate, and the committed H57w, H59w, H57d and H59d records read through it.
       - run: python3 bench/h63/test_h63.py
