@@ -1,0 +1,3 @@
+vllm 0.33.0+xpu
+torch 2.14.0+xpu
+transformers 5.20.2

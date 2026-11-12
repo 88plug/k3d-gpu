@@ -1,0 +1,422 @@
+{
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+        "annotations": {
+            "k3d-gpu.io/agent-fit": "gpu 7x20480",
+            "k3d-gpu.io/model": "Qwen/Qwen3-4B",
+            "k3d-gpu.io/revision": "1cfa9a7208912126459214e8b04321603b3df60c"
+        },
+        "creationTimestamp": "2026-11-11T18:14:51Z",
+        "generateName": "qwen3-4b-6d8db88499-",
+        "generation": 1,
+        "labels": {
+            "app.kubernetes.io/managed-by": "k3d-gpu-eas-model",
+            "app.kubernetes.io/name": "qwen3-4b",
+            "pod-template-hash": "6d8db88499"
+        },
+        "name": "qwen3-4b-6d8db88499-mgqjh",
+        "namespace": "k3d-gpu-eas-models",
+        "ownerReferences": [
+            {
+                "apiVersion": "apps/v1",
+                "blockOwnerDeletion": true,
+                "controller": true,
+                "kind": "ReplicaSet",
+                "name": "qwen3-4b-6d8db88499",
+                "uid": "1f0f6dce-bd8f-45c3-b008-7e58d978b51e"
+            }
+        ],
+        "resourceVersion": "13009",
+        "uid": "d05eddfc-aab8-4c20-b0f3-cbb84d20b9cd"
+    },
+    "spec": {
+        "containers": [
+            {
+                "args": [
+                    "Qwen/Qwen3-4B",
+                    "--revision=1cfa9a7208912126459214e8b04321603b3df60c",
+                    "--served-model-name=qwen3-4b",
+                    "--port=8000",
+                    "--dtype=float16",
+                    "--block-size=64",
+                    "--max-model-len=20480",
+                    "--max-num-batched-tokens=2048",
+                    "--gpu-memory-utilization=0.88",
+                    "--enforce-eager",
+                    "--no-enable-prefix-caching",
+                    "--max-num-seqs=7",
+                    "--tensor-parallel-size=1",
+                    "--enable-auto-tool-choice",
+                    "--tool-call-parser=hermes",
+                    "--reasoning-parser=qwen3"
+                ],
+                "env": [
+                    {
+                        "name": "VLLM_NO_USAGE_STATS",
+                        "value": "1"
+                    },
+                    {
+                        "name": "DO_NOT_TRACK",
+                        "value": "1"
+                    },
+                    {
+                        "name": "VLLM_WORKER_MULTIPROC_METHOD",
+                        "value": "spawn"
+                    },
+                    {
+                        "name": "VLLM_ALLOW_LONG_MAX_MODEL_LEN",
+                        "value": "1"
+                    },
+                    {
+                        "name": "VLLM_TARGET_DEVICE",
+                        "value": "xpu"
+                    },
+                    {
+                        "name": "ZE_FLAT_DEVICE_HIERARCHY",
+                        "value": "FLAT"
+                    },
+                    {
+                        "name": "ONEAPI_DEVICE_SELECTOR",
+                        "value": "level_zero:*"
+                    },
+                    {
+                        "name": "ZE_ENABLE_PCI_ID_DEVICE_ORDER",
+                        "value": "1"
+                    },
+                    {
+                        "name": "SYCL_CACHE_PERSISTENT",
+                        "value": "1"
+                    },
+                    {
+                        "name": "ZES_ENABLE_SYSMAN",
+                        "value": "1"
+                    },
+                    {
+                        "name": "HF_HUB_DISABLE_XET",
+                        "value": "1"
+                    },
+                    {
+                        "name": "HF_HUB_ENABLE_HF_TRANSFER",
+                        "value": "0"
+                    },
+                    {
+                        "name": "CCL_PROCESS_LAUNCHER",
+                        "value": "none"
+                    },
+                    {
+                        "name": "CCL_WORKER_OFFLOAD",
+                        "value": "0"
+                    },
+                    {
+                        "name": "CCL_WORKER_AFFINITY"
+                    },
+                    {
+                        "name": "CCL_ZE_IPC_EXCHANGE",
+                        "value": "pidfd"
+                    },
+                    {
+                        "name": "CCL_ALLREDUCE",
+                        "value": "ring"
+                    },
+                    {
+                        "name": "HF_HOME",
+                        "value": "/models/huggingface"
+                    },
+                    {
+                        "name": "XDG_CACHE_HOME",
+                        "value": "/models/.cache"
+                    },
+                    {
+                        "name": "TRITON_CACHE_DIR",
+                        "value": "/models/.triton"
+                    },
+                    {
+                        "name": "TRITON_HOME",
+                        "value": "/models/.triton"
+                    },
+                    {
+                        "name": "HF_TOKEN",
+                        "valueFrom": {
+                            "secretKeyRef": {
+                                "key": "token",
+                                "name": "hf-token",
+                                "optional": true
+                            }
+                        }
+                    }
+                ],
+                "image": "vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086",
+                "imagePullPolicy": "IfNotPresent",
+                "name": "vllm",
+                "ports": [
+                    {
+                        "containerPort": 8000,
+                        "name": "http",
+                        "protocol": "TCP"
+                    }
+                ],
+                "readinessProbe": {
+                    "failureThreshold": 3,
+                    "httpGet": {
+                        "path": "/health",
+                        "port": "http",
+                        "scheme": "HTTP"
+                    },
+                    "periodSeconds": 5,
+                    "successThreshold": 1,
+                    "timeoutSeconds": 1
+                },
+                "resources": {
+                    "limits": {
+                        "gpu.intel.com/xe": "1",
+                        "memory": "9Gi"
+                    },
+                    "requests": {
+                        "cpu": "2",
+                        "gpu.intel.com/xe": "1",
+                        "memory": "9Gi"
+                    }
+                },
+                "terminationMessagePath": "/dev/termination-log",
+                "terminationMessagePolicy": "File",
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "shm"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-jcb7r",
+                        "readOnly": true
+                    }
+                ]
+            }
+        ],
+        "dnsPolicy": "ClusterFirst",
+        "enableServiceLinks": false,
+        "nodeName": "k3d-k3dgpu-b70eas-server-0",
+        "preemptionPolicy": "PreemptLowerPriority",
+        "priority": 0,
+        "restartPolicy": "Always",
+        "schedulerName": "default-scheduler",
+        "securityContext": {
+            "supplementalGroups": [
+                990
+            ]
+        },
+        "serviceAccount": "default",
+        "serviceAccountName": "default",
+        "terminationGracePeriodSeconds": 30,
+        "tolerations": [
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/not-ready",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            },
+            {
+                "effect": "NoExecute",
+                "key": "node.kubernetes.io/unreachable",
+                "operator": "Exists",
+                "tolerationSeconds": 300
+            }
+        ],
+        "volumes": [
+            {
+                "name": "models",
+                "persistentVolumeClaim": {
+                    "claimName": "qwen3-4b-models"
+                }
+            },
+            {
+                "emptyDir": {
+                    "medium": "Memory",
+                    "sizeLimit": "2Gi"
+                },
+                "name": "shm"
+            },
+            {
+                "name": "kube-api-access-jcb7r",
+                "projected": {
+                    "defaultMode": 420,
+                    "sources": [
+                        {
+                            "serviceAccountToken": {
+                                "expirationSeconds": 3607,
+                                "path": "token"
+                            }
+                        },
+                        {
+                            "configMap": {
+                                "items": [
+                                    {
+                                        "key": "ca.crt",
+                                        "path": "ca.crt"
+                                    }
+                                ],
+                                "name": "kube-root-ca.crt"
+                            }
+                        },
+                        {
+                            "downwardAPI": {
+                                "items": [
+                                    {
+                                        "fieldRef": {
+                                            "apiVersion": "v1",
+                                            "fieldPath": "metadata.namespace"
+                                        },
+                                        "path": "namespace"
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "status": {
+        "allocatedResources": {
+            "cpu": "2",
+            "gpu.intel.com/xe": "1",
+            "memory": "9Gi"
+        },
+        "conditions": [
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-11T18:14:55Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodReadyToStartContainers"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-11T18:14:55Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Initialized"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-11T18:19:08Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "Ready"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-11T18:19:08Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "ContainersReady"
+            },
+            {
+                "lastProbeTime": null,
+                "lastTransitionTime": "2026-11-11T18:14:55Z",
+                "observedGeneration": 1,
+                "status": "True",
+                "type": "PodScheduled"
+            }
+        ],
+        "containerStatuses": [
+            {
+                "allocatedResources": {
+                    "cpu": "2",
+                    "gpu.intel.com/xe": "1",
+                    "memory": "9Gi"
+                },
+                "allocatedResourcesStatus": [
+                    {
+                        "name": "gpu.intel.com/xe",
+                        "resources": [
+                            {
+                                "health": "Healthy",
+                                "resourceID": "card1-0"
+                            }
+                        ]
+                    }
+                ],
+                "containerID": "containerd://1c3c0272ff95cfe3585a19cdc1482a258b342032107d0c1a45c370ff73354615",
+                "image": "sha256:7b3eb7c792a5d3a049effcb0d792ce95d4a482dd47a965d8a05a244a47682813",
+                "imageID": "docker.io/vllm/vllm-openai-xpu@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086",
+                "lastState": {},
+                "name": "vllm",
+                "ready": true,
+                "resources": {
+                    "limits": {
+                        "gpu.intel.com/xe": "1",
+                        "memory": "9Gi"
+                    },
+                    "requests": {
+                        "cpu": "2",
+                        "gpu.intel.com/xe": "1",
+                        "memory": "9Gi"
+                    }
+                },
+                "restartCount": 0,
+                "started": true,
+                "state": {
+                    "running": {
+                        "startedAt": "2026-11-11T18:17:10Z"
+                    }
+                },
+                "user": {
+                    "linux": {
+                        "gid": 0,
+                        "supplementalGroups": [
+                            0,
+                            990
+                        ],
+                        "uid": 0
+                    }
+                },
+                "volumeMounts": [
+                    {
+                        "mountPath": "/models",
+                        "name": "models"
+                    },
+                    {
+                        "mountPath": "/dev/shm",
+                        "name": "shm"
+                    },
+                    {
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                        "name": "kube-api-access-jcb7r",
+                        "readOnly": true,
+                        "recursiveReadOnly": "Disabled"
+                    }
+                ]
+            }
+        ],
+        "hostIP": "172.19.0.2",
+        "hostIPs": [
+            {
+                "ip": "172.19.0.2"
+            }
+        ],
+        "observedGeneration": 1,
+        "phase": "Running",
+        "podIP": "10.42.0.101",
+        "podIPs": [
+            {
+                "ip": "10.42.0.101"
+            }
+        ],
+        "qosClass": "Burstable",
+        "resources": {
+            "limits": {
+                "memory": "9Gi"
+            },
+            "requests": {
+                "cpu": "1999m",
+                "memory": "9Gi"
+            }
+        },
+        "startTime": "2026-11-11T18:14:55Z"
+    }
+}

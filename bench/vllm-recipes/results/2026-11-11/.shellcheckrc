@@ -1,0 +1,3 @@
+# scripts/driver.sh is the record of what ran on crescent and stays byte-for-byte as it ran
+# (SHA256SUMS). Its unquoted $(...) at line 99 expands to a list of PIDs on purpose.
+disable=SC2046

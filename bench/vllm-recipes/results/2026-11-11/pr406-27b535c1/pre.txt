@@ -1,0 +1,16 @@
+2026-11-12T00:19:33Z
+ 00:19:33 up 57 days,  1:34, 10 users,  load average: 1.60, 1.68, 1.90
+NAME   SERVERS   AGENTS   LOADBALANCER
+dynamo-frontend Up 7 weeks
+llmd-envoy Up 7 weeks
+llmd-epp Up 7 weeks
+xe-exporter Up 8 weeks
+grafana Up 8 weeks
+otel-collector Up 8 weeks
+tempo Up 8 weeks
+node-exporter Up 8 weeks
+prometheus Up 8 weeks
+alloy Up 8 weeks
+drm-exporter Up 8 weeks
+loki Up 8 weeks
+xpumd Up 8 weeks

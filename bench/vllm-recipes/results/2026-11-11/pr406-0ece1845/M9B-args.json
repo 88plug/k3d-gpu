@@ -1,0 +1,1 @@
+["Qwen/Qwen3.5-9B","--served-model-name=Qwen3.5-9B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=65536","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.90","--enforce-eager","--no-enable-prefix-caching","--max-num-seqs=5","--tensor-parallel-size=1"]

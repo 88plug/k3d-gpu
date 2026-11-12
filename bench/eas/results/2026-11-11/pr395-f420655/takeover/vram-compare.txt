@@ -1,0 +1,5 @@
+card1 before 15.73 GiB restored 26.46 GiB
+card2 before 15.02 GiB restored 15.09 GiB
+card3 before 15.73 GiB restored 26.46 GiB
+card4 before 15.02 GiB restored 15.09 GiB
+VRAM back: yes
