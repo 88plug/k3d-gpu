@@ -388,5 +388,66 @@ if grep -q '^fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on' <<< "${out}"; then
     ok "plan --model sizes the variant the optimizer picked"
 else fail "plan --model sizes the variant the optimizer picked" "${out}"; fi
 
+# --- plan --explain's "vLLM server args" are the arguments agent up serves ----------------
+# On the 4x Arc Pro B70 host, `plan --model M --explain` lists every argument `agent manifest
+# --model M` renders, with the same value, and tags the sizing (context, sequences, GPU
+# share, KV cache type, tensor parallelism) as the fit's. With K3D_GPU_FIT=off agent up
+# serves k3d-gpu's defaults, and the block says so.
+# block_args <plan output>: the block's arguments, one per line, without their source.
+block_args() {
+    sed -n '/^vLLM server args: /,/^[^ ]/p' <<< "$1" | grep '^  ' \
+        | grep -Ev '^  (recipe:|recipe opt-in|not applied:|note:|warning:)' | sed -E 's/^  (.*[^ ]) +\[[^]]*\]$/\1/'
+}
+# manifest_args <manifest>: the vllm container's arguments, a flag's own value on its line.
+manifest_args() {
+    sed -n '/^          args:$/,/^          env:$/p' <<< "$1" | sed -n 's/^            - //p' | sed "s/^'\(.*\)'$/\1/" \
+        | awk '!/^-/ && n && last ~ /^-/ && last !~ / / { a[n] = a[n] " " $0; last = a[n]; next }
+               { a[++n] = $0; last = $0 } END { for (i = 1; i <= n; i++) print a[i] }'
+}
+SIZING='^--(max-model-len|max-num-seqs|gpu-memory-utilization|kv-cache-dtype|tensor-parallel-size)='
+# explain_parity <name> <tag> <model> [env...]: the block lists the manifest's arguments, and
+# each sizing argument the manifest renders carries <tag> as its source.
+explain_parity() {
+    local name=$1 tag=$2 model=$3; shift 3
+    local p a pa aa bad
+    p=$(env "$@" K3D_GPU_FIT_HOST="${XEON}" bash "${K3D_GPU}" plan --facts "${XB70}" --model "${model}" --explain 2>&1)
+    a=$(env "${GPU_ENV[@]}" "$@" bash "${K3D_GPU}" agent manifest --model "${model}" 2>/dev/null)
+    pa=$(block_args "${p}")
+    aa=$(manifest_args "${a}")
+    bad=$(grep -E "${SIZING}" <<< "${aa}" | while read -r s; do
+        grep -qF -- "  ${s} " <<< "${p}" && grep -F -- "  ${s} " <<< "${p}" | grep -qF "[${tag}" || echo "${s}"
+    done)
+    if [ -n "${pa}" ] && [ "${pa}" = "${aa}" ] && [ -z "${bad}" ] && grep -qE "${SIZING}" <<< "${aa}"; then
+        ok "plan --explain lists what agent up serves for ${name}: $(grep -E "${SIZING}" <<< "${aa}" | paste -sd' ' -) [${tag}]"
+    else
+        fail "plan --explain lists what agent up serves for ${name}" "sizing not tagged '${tag}': ${bad:-none}
+$(diff <(printf '%s\n' "${aa}") <(printf '%s\n' "${pa}") | sed 's/^< /agent manifest: /; s/^> /plan --explain: /')"
+    fi
+}
+explain_parity "RedHatAI INT4 on vLLM" "k3d-gpu fit" RedHatAI/Qwen3.8-27B-INT4 K3D_GPU_AGENT_BACKEND=vllm
+explain_parity "RedHatAI INT4 on vLLM, optimizer off" "k3d-gpu fit" RedHatAI/Qwen3.8-27B-INT4 \
+    K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_MODEL_OPT=off
+explain_parity "RedHatAI INT4 on vLLM, context and sequences from the environment" "k3d-gpu fit" \
+    RedHatAI/Qwen3.8-27B-INT4 K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_AGENT_MAX_LEN=16384 K3D_GPU_AGENT_MAX_NUM_SEQS=3
+explain_parity "RedHatAI INT4 on vLLM, K3D_GPU_FIT=off" "k3d-gpu default" RedHatAI/Qwen3.8-27B-INT4 \
+    K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT=off
+# When the block cannot show the fit's sizing it says why, never that the default is served:
+# sizing_says <name> <expected source prefix> <host> <plan args...>
+sizing_says() {
+    local name=$1 want=$2 host=$3 out sized; shift 3
+    out=$(env K3D_GPU_AGENT_BACKEND=vllm K3D_GPU_FIT_HOST="${host}" bash "${K3D_GPU}" plan --facts "${XB70}" "$@" --explain 2>&1)
+    sized=$(sed -n '/^vLLM server args: /,/^[^ ]/p' <<< "${out}" | grep -E "^  ${SIZING#^}")
+    if [ "$(wc -l <<< "${sized}")" -eq 3 ] && [ "$(grep -cF "[${want}" <<< "${sized}")" -eq 3 ]; then
+        ok "plan --explain, ${name}: the sizing reads [${want}...]"
+    else fail "plan --explain, ${name}: sizing source" "${sized:-$(grep -A30 'vLLM server args' <<< "${out}")}"; fi
+}
+# A model chosen through K3D_GPU_AGENT_MODEL: agent up fits it; plan fits only a --model.
+K3D_GPU_AGENT_MODEL=RedHatAI/Qwen3.8-27B-INT4 sizing_says "a model from K3D_GPU_AGENT_MODEL" \
+    "not known here: agent up's fit sizes it, and plan fits --model only" "${XEON}"
+K3D_GPU_MODEL_OPT=off sizing_says "a model that does not fit the laptop" \
+    "not served: agent up's fit refuses this model here (fit: below)" "${LAPTOP}" --model Qwen/Qwen3.8-27B
+K3D_GPU_MODEL_OPT=off sizing_says "a GGUF model only llama.cpp serves" \
+    "not served by vLLM: agent up's fit picks llama.cpp here (fit: below)" "${XEON}" --model "${FLASH}"
+
 echo "${PASS} passed, ${FAILS} failed"
 [ "${FAILS}" -eq 0 ]

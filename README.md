@@ -1007,7 +1007,11 @@ and reasoning parsers, and the model flags k3d-gpu adopts, from vLLM's own model
 vendored in `console/vllm-recipes.json` (pin `vllm-recipes`, read offline; the pod is
 annotated `k3d-gpu.io/vllm-recipe`). `plan --explain` lists every server argument with
 its source: user env, an `EXPERIMENTS.md` row, the recipe (`vllm@<commit>`), k3d-gpu's
-default, or the fit. Recipes never pick the image, the vLLM version, tensor parallelism,
+default, or the fit. For a model `agent up` sizes, `plan --model M --explain` runs the same
+fit and shows its context, sequences, GPU share, KV cache type and tensor parallelism; when
+plan cannot (the model came from `K3D_GPU_AGENT_MODEL`, or the fit refuses it or picks
+another engine), those lines say so instead of passing k3d-gpu's default off as what
+`agent up` serves. Recipes never pick the image, the vLLM version, tensor parallelism,
 context or memory, and never rewrite a device flag k3d-gpu already sets. A parser absent
 from the image's vLLM, a parser that needs a plugin file, `--trust-remote-code` for a
 model whose `config.json` has no `auto_map`, and a chat template not yet located in the

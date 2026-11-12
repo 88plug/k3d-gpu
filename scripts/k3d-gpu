@@ -9419,7 +9419,8 @@ vllm_device_args() {
 
 # vllm_arg_source <arg> <where k3d-gpu sets it>: where a vLLM server argument's value
 # comes from, for plan --explain and the recipe merge: the fit, the user's environment,
-# or k3d-gpu's default.
+# or k3d-gpu's default. A sizing argument plan cannot show the fit's value for says why
+# (AGENT_FIT_UNKNOWN, set by plan_fit_apply).
 vllm_arg_source() {
     local var="" fit=""
     case "$1" in
@@ -9434,6 +9435,8 @@ vllm_arg_source() {
         echo "k3d-gpu fit"
     elif [ -n "${var}" ] && [ -n "${!var+x}" ]; then
         echo "user env ${var}"
+    elif [ -n "${fit}" ] && [ -n "${AGENT_FIT_UNKNOWN}" ]; then
+        echo "${AGENT_FIT_UNKNOWN}; k3d-gpu default shown ($2${var:+; ${var} unset})"
     else
         echo "k3d-gpu default ($2${var:+; ${var} unset})"
     fi
@@ -12206,21 +12209,51 @@ plan_predict_model() {
     python3 "${dir}/moe_predict.py" "${src[@]}" --sysroot "${SYSROOT}" ${args[@]+"${args[@]}"}
 }
 
-# plan_vllm_args <console dir> <facts/v1 JSON> <matrix> [plan.py options]: plan --explain's
-# "vLLM server args" block when the agent's engine is vLLM (K3D_GPU_AGENT_BACKEND vllm or
-# llm-scaler, the model optimizer's engine, or a Gaudi): every argument agent up renders
-# for the model and where its value comes from (user env, ledger row, vLLM recipe,
-# k3d-gpu default, fit). Offline: no cluster, no fetch; the fit's own section follows.
-plan_vllm_args() {
-    local dir=$1 facts=$2 matrix=$3 pj pv base extra=() model="" i
+# plan_vllm_target <console dir> <facts/v1 JSON> <matrix> [plan.py options]: what plan's
+# "vLLM server args" block is for, as console/recipes.py plan's PV_*=value lines: the device
+# vLLM serves on (PV_DEVICE empty: the agent's engine is not vLLM), its PCI id, platform and
+# hardware class, and the model optimizer's vLLM choices. Offline: no cluster, no fetch.
+plan_vllm_target() {
+    local dir=$1 facts=$2 matrix=$3 pj
     shift 3
-    for ((i = 1; i < $#; i++)); do
-        [ "${!i}" != --model ] || { i=$((i + 1)); model=${!i}; }
-    done
     # No temp files: plan --explain runs only the tools tests/sim_matrix_test.sh lists.
     pj=$(printf '%s\n' "${facts}" | python3 "${dir}/plan.py" --mode json --matrix "${matrix}" "$@" 2>/dev/null) || pj=""
-    pv=$(python3 "${dir}/recipes.py" plan --facts <(printf '%s\n' "${facts}") --plan <(printf '%s\n' "${pj}") \
-        --backend "${K3D_GPU_AGENT_BACKEND:-}" 2>/dev/null) || pv=""
+    python3 "${dir}/recipes.py" plan --facts <(printf '%s\n' "${facts}") --plan <(printf '%s\n' "${pj}") \
+        --backend "${K3D_GPU_AGENT_BACKEND:-}" 2>/dev/null || true
+}
+
+# plan_fit_apply <fit document or ""> <model it sized> <plan's --model>: in plan_vllm_args,
+# the sizing agent up gives AGENT_MODEL. A fit of that model that vLLM serves sets the knobs
+# agent_fit_apply sets in agent up; otherwise AGENT_FIT_UNKNOWN says why the block shows no
+# fit values.
+plan_fit_apply() {
+    local doc=$1 sized=$2 engine
+    if [ -z "${doc}" ] && [ -z "$3" ]; then
+        AGENT_FIT_UNKNOWN="not known here: agent up's fit sizes it, and plan fits --model only"
+    elif [ -z "${doc}" ]; then
+        AGENT_FIT_UNKNOWN="not known here: agent up's fit sizes it, and plan did not fit ${AGENT_MODEL}"
+    elif [ "${sized}" != "${AGENT_MODEL}" ]; then
+        AGENT_FIT_UNKNOWN="not known here: agent up's fit sizes it, and plan fitted ${sized} (fit: below)"
+    elif [ ! -s "${doc}" ]; then
+        AGENT_FIT_UNKNOWN="not known here: agent up's fit sizes it, and it could not run here (fit: below)"
+    elif [ "$(fit_field "$(<"${doc}")" fits)" != true ]; then
+        AGENT_FIT_UNKNOWN="not served: agent up's fit refuses this model here (fit: below)"
+    elif engine=$(fit_field "$(<"${doc}")" engine) && [ "${engine}" != vllm ]; then
+        AGENT_FIT_UNKNOWN="not served by vLLM: agent up's fit picks ${engine} here (fit: below)"
+    else
+        agent_fit_apply "${doc}" 0
+    fi
+}
+
+# plan_vllm_args <plan_vllm_target output> <plan's --model> [<fit document> <model it sized>]:
+# plan --explain's "vLLM server args" block when the agent's engine is vLLM (K3D_GPU_AGENT_BACKEND
+# vllm or llm-scaler, the model optimizer's engine, or a Gaudi): every argument agent up
+# renders for the model and where its value comes from (user env, ledger row, vLLM recipe,
+# k3d-gpu default, fit). When agent up fits the model (agent_fit_wanted), the sizing is
+# plan's fit of it (cmd_plan, with agent up's fit arguments), applied as agent up applies
+# it. Offline: no cluster, no fetch; the fit's own section follows.
+plan_vllm_args() {
+    local pv=$1 model=$2 fitdoc=${3:-} fitmodel=${4:-} base extra=()
     local PV_DEVICE="" PV_PCI="" PV_PLATFORM="" PV_HW_CLASS="" PV_OPT="" PV_MODEL="" PV_REVISION="" PV_REQUESTED=""
     local PV_TARGET="" PV_TOOL="" PV_REASONING="" PV_ARGS_JSON="[]"
     eval "${pv}"
@@ -12246,6 +12279,9 @@ plan_vllm_args() {
             AGENT_REVISION=${K3D_GPU_AGENT_REVISION:-}
             AGENT_TOOL_PARSER=${K3D_GPU_AGENT_TOOL_PARSER-} AGENT_REASONING_PARSER=${K3D_GPU_AGENT_REASONING_PARSER-}
         fi
+        # agent up --model chooses the model, as K3D_GPU_AGENT_MODEL does.
+        [ -z "${model}" ] || AGENT_MODEL_CHOSEN=1
+        if agent_fit_wanted "${PV_DEVICE}"; then plan_fit_apply "${fitdoc}" "${fitmodel}" "${model}"; fi
         base=$(vllm_base_lines "${PV_DEVICE}")
         if [ "${AGENT_MODEL}" = "${AGENT_DEFAULT_MODEL}" ]; then
             extra=(--no-recipe "${AGENT_MODEL} is the vLLM agent's default model, served with k3d-gpu's validated arguments")
@@ -12256,6 +12292,30 @@ plan_vllm_args() {
             --title "${AGENT_MODEL} on ${AGENT_BACKEND}" ${PV_PLATFORM:+--platform "${PV_PLATFORM}"} ${extra[@]+"${extra[@]}"} \
             || warn "plan: could not list the vLLM server args"
     )
+}
+
+# plan_fit <model> <revision> <CPU|GPU or ""> <out>: the fit agent up runs for <model> on that
+# device (agent_fit_args: the same arguments), on what this host has free now, as a fit/v1
+# document in <out>; empty, with the reason on stderr, when it could not run. Exit 3: the
+# model does not fit.
+plan_fit() {
+    local dev="" host rc=0
+    case "$3" in CPU) dev=cpu ;; GPU) dev=gpu ;; esac
+    agent_fit_args "$1" "$2" "${dev}" || { warn "${FIT_WHY}"; return 1; }
+    host=$(mktemp)
+    fit_host "${host}" || { rm -f "${host}"; warn "fit: could not probe this host"; return 1; }
+    fit_py plan --host "${host}" "${FIT_ARGS[@]}" --mode json > "$4" || rc=$?
+    rm -f "${host}"
+    return "${rc}"
+}
+
+# fit_doc_text <text|explain> <fit document>: what `k3d-gpu fit` prints for it: the summary
+# line, after the arithmetic with explain. Nothing for an empty document.
+fit_doc_text() {
+    [ -s "$2" ] || return 0
+    python3 -c 'import json, sys
+d = json.load(open(sys.argv[2], encoding="utf-8"))
+print("\n".join((d["explain"] if sys.argv[1] == "explain" else []) + [d["summary"]]))' "$1" "$2"
 }
 
 # plan [--explain|--json|--hash] [--facts FILE] [--matrix FILE] [--engine E]
@@ -12315,59 +12375,71 @@ cmd_plan() {
         fi
     fi
     python3 "${dir}/plan.py" --mode "${mode}" --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" || rc=$?
-    # --explain: the vLLM agent's server arguments, each with its source (text, --json and
-    # --hash print what plan.py printed).
-    if [ "${rc}" -eq 0 ] && [ "${mode}" = explain ]; then
-        plan_vllm_args "${dir}" "${out}" "${matrix}" ${args[@]+"${args[@]}"}
-    fi
     # --model also sizes that model to this host (text and --explain; --json and --hash
     # stay the plan/v1 bytes the apply hash covers). K3D_GPU_FIT=off leaves it out.
     # With the model optimizer, the fit is of the variant it picked, at its revision and
-    # on its device: what `agent up --model` sizes and serves.
-    local fit_args=() opt fmodel frev fdev
+    # on its device; without it, of the model as given, on the vLLM block's device when
+    # vLLM serves it. That is what `agent up --model` sizes and serves, and the fit gets the
+    # arguments agent up gives it (plan_fit). It runs once, before --explain's vLLM server
+    # args, which take their sizing from it; what it printed follows them.
+    local fitrun="" pv="" opt fmodel="" frev="" fdev="" feng fitlog="" fitdoc="" fiterr=""
     if [ -n "${model}" ] && [ "${rc}" -eq 0 ] && { [ "${mode}" = text ] || [ "${mode}" = explain ]; } \
         && [ "${K3D_GPU_FIT:-auto}" != off ]; then
-        fit_args=(--model "${model}")
-        if [ -n "${meta}" ]; then
-            opt=$(python3 "${dir}/plan.py" --mode json --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" 2>/dev/null \
-                | python3 -c 'import json, sys
+        fitrun=1
+    fi
+    if [ "${rc}" -eq 0 ] && { [ "${mode}" = explain ] || [ -n "${fitrun}" ]; }; then
+        pv=$(plan_vllm_target "${dir}" "${out}" "${matrix}" ${args[@]+"${args[@]}"})
+    fi
+    if [ -n "${fitrun}" ]; then
+        fitlog=$(mktemp)
+        {
+            fmodel=${model} frev=- fdev=$(sed -n "s/^PV_DEVICE='\(.*\)'$/\1/p" <<< "${pv}")
+            if [ -n "${meta}" ]; then
+                opt=$(python3 "${dir}/plan.py" --mode json --matrix "${matrix}" ${args[@]+"${args[@]}"} <<< "${out}" 2>/dev/null \
+                    | python3 -c 'import json, sys
 o = json.load(sys.stdin).get("optimizer") or {}
 m = o.get("fallback_model") if o.get("conversion") else o.get("model")
 r = o.get("fallback_revision") if o.get("conversion") else o.get("revision")
 print(m or "-", r or "-", o.get("device") or "-", o.get("engine") or "-")' 2>/dev/null) || opt="- - - -"
-            local feng
-            read -r fmodel frev fdev feng <<< "${opt}"
-            if [ "${fmodel}" = - ] && [ "${feng}" != - ]; then
-                # The optimizer keeps the engine's default model, and agent up sizes that.
-                local AGENT_BACKEND=ovms AGENT_HPU=""
-                [ "${feng}" != vllm ] || AGENT_BACKEND=${K3D_GPU_AGENT_BACKEND:-vllm}
-                [ "${fdev}" != HPU ] || AGENT_HPU=1
-                agent_config
-                fmodel=${AGENT_MODEL} frev=${AGENT_DEFAULT_REVISION:-}
-                [ -n "${frev}" ] || frev=-
-                info "fit: the optimizer keeps the engine's default model for ${model}: sizing ${fmodel}"
+                read -r fmodel frev fdev feng <<< "${opt}"
+                if [ "${fmodel}" = - ] && [ "${feng}" != - ]; then
+                    # The optimizer keeps the engine's default model, and agent up sizes that.
+                    local AGENT_BACKEND=ovms AGENT_HPU=""
+                    [ "${feng}" != vllm ] || AGENT_BACKEND=${K3D_GPU_AGENT_BACKEND:-vllm}
+                    [ "${fdev}" != HPU ] || AGENT_HPU=1
+                    agent_config
+                    fmodel=${AGENT_MODEL} frev=${AGENT_DEFAULT_REVISION:--}
+                    info "fit: the optimizer keeps the engine's default model for ${model}: sizing ${fmodel}"
+                fi
+                [ "${fmodel}" != - ] || fmodel=""
             fi
-            if [ "${fmodel}" = - ]; then
-                fit_args=()
-            else
-                fit_args=(--model "${fmodel}")
-                [ "${frev}" = - ] || fit_args+=(--revision "${frev}")
-                case "${fdev}" in
-                    CPU) fit_args+=(--device cpu) ;;
-                    GPU) fit_args+=(--device gpu) ;;
-                    *) fit_args=(); info "fit: ${fdev} is not modelled by fit (agent up serves it unsized)" ;;
-                esac
-            fi
+            case "${fdev}" in
+                CPU|GPU|"") ;;
+                *) [ -z "${fmodel}" ] || info "fit: ${fdev} is not modelled by fit (agent up serves it unsized)"; fmodel="" ;;
+            esac
+        } > "${fitlog}" 2>&1
+        if [ -n "${fmodel}" ]; then
+            [ "${frev}" != - ] || frev=main
+            fitdoc=$(mktemp) fiterr=$(mktemp)
+            ( plan_fit "${fmodel}" "${K3D_GPU_AGENT_REVISION:-${frev}}" "${fdev}" "${fitdoc}" ) 2> "${fiterr}" || true
         fi
     fi
     [ -z "${meta}" ] || rm -f "${meta}"
-    if [ "${#fit_args[@]}" -gt 0 ]; then
-        if [ "${mode}" = explain ]; then
+    # --explain: the vLLM agent's server arguments, each with its source (text, --json and
+    # --hash print what plan.py printed).
+    if [ "${rc}" -eq 0 ] && [ "${mode}" = explain ]; then
+        plan_vllm_args "${pv}" "${model}" "${fitdoc}" "${fmodel}"
+    fi
+    if [ -n "${fitlog}" ]; then
+        cat "${fitlog}"
+        if [ -n "${fitdoc}" ] && [ "${mode}" = explain ]; then
             echo "fit:"
-            ( cmd_fit "${fit_args[@]}" --explain ) 2>&1 | sed 's/^/  /' || true
-        else
-            ( cmd_fit "${fit_args[@]}" ) || true
+            { cat "${fiterr}"; fit_doc_text explain "${fitdoc}"; } | sed 's/^/  /'
+        elif [ -n "${fitdoc}" ]; then
+            cat "${fiterr}" >&2
+            fit_doc_text text "${fitdoc}"
         fi
+        rm -f "${fitlog}" ${fitdoc:+"${fitdoc}"} ${fiterr:+"${fiterr}"}
     fi
     return "${rc}"
 }
@@ -12493,6 +12565,7 @@ cmd_fit() {
 
 # Set by agent_fit from the fit of the model agent_manifest renders.
 AGENT_FIT_ANN=""
+AGENT_FIT_UNKNOWN=""  # plan --explain only: why the vLLM block cannot show the fit's sizing
 AGENT_GPU_UTIL=""
 AGENT_KV_DTYPE=""
 AGENT_MAX_NUM_SEQS=""
@@ -12616,24 +12689,63 @@ agent_follow_engine() {
     esac
 }
 
-# agent_fit <device>: size the agent's model to this host before its manifest is
-# rendered. K3D_GPU_FIT: auto (default) sizes a model the user chose (see
-# AGENT_MODEL_CHOSEN), whose fit is unknown; on also sizes the defaults; off skips it.
-# A model that does not fit stops here with the reason. K3D_GPU_AGENT_MAX_LEN,
-# _MAX_NUM_SEQS and _GPUS are fit arguments, so the fit checks them instead of being
-# replaced by them. `agent up` (AGENT_FIT_RECORD=1) records the fit for the guard; a
-# guard step (K3D_GPU_FIT_RUNG=N) renders rung N of the recorded fit without fitting
-# again, since the running server already holds the memory a new probe would see.
-agent_fit() {
-    local device=$1 mode=${K3D_GPU_FIT:-auto} dir host doc rc=0 args=() dev engine rec app
-    rec="$(fit_state)/agent-fit.json"
-    case "${mode}" in
-        off|0) return 0 ;;
-        auto) [ -n "${AGENT_MODEL_CHOSEN}" ] || [ -n "${K3D_GPU_FIT_RUNG:-}" ] || return 0 ;;
-        on|1) mode=on ;;
-        *) err "K3D_GPU_FIT must be auto, on or off, got '${mode}'" ;;
+# agent_fit_wanted <device>: agent up sizes the agent's model on <device>. K3D_GPU_FIT: auto
+# (default) sizes a model the user chose (see AGENT_MODEL_CHOSEN), whose fit is unknown, and
+# renders a guard rung; on also sizes the defaults; off skips it. The fit models a CPU or a
+# GPU (not an NPU, a Gaudi or HETERO). agent_fit and plan --explain decide with it.
+agent_fit_wanted() {
+    case "${K3D_GPU_FIT:-auto}" in
+        off|0) return 1 ;;
+        auto) [ -n "${AGENT_MODEL_CHOSEN}" ] || [ -n "${K3D_GPU_FIT_RUNG:-}" ] || return 1 ;;
+        on|1) ;;
+        *) err "K3D_GPU_FIT must be auto, on or off, got '${K3D_GPU_FIT}'" ;;
     esac
-    case "${device}" in CPU) dev=cpu ;; GPU) dev=gpu ;; *) return 0 ;; esac  # NPU, HPU and HETERO: not modelled
+    [ "$1" = CPU ] || [ "$1" = GPU ]
+}
+
+# agent_fit_args <model> <revision> [cpu|gpu]: the fit.py plan arguments (after --host)
+# agent up sizes <model> with: its metadata (fetched once into the fit cache), its name and
+# device, the MTP drafter llama-server would load beside it, and K3D_GPU_AGENT_MAX_LEN,
+# _MAX_NUM_SEQS, _GPUS and K3D_GPU_FIT_FILE, which the fit checks instead of being
+# replaced by them. Sets FIT_ARGS, or FIT_WHY and returns 1. agent_fit and plan both
+# size with it, so plan shows the fit agent up serves.
+agent_fit_args() {
+    local model=$1 rev=$2 dir draft
+    FIT_ARGS=() FIT_WHY=""
+    dir=$(fit_model_dir "${model}" "${rev}") \
+        || { FIT_WHY="fit: no metadata for ${model} (offline, private or gated: set HF_TOKEN)"; return 1; }
+    FIT_ARGS=(--model "${dir}" --name "${model}" ${3:+--device "$3"})
+    # The MTP drafter llama-server would load beside the model: sized with it.
+    draft=$(fit_draft_args "${model}") \
+        || { FIT_WHY="fit: no metadata for ${model}'s MTP drafter (offline, private or gated: set HF_TOKEN)"; return 1; }
+    [ -z "${draft}" ] || readarray -t -O "${#FIT_ARGS[@]}" FIT_ARGS <<< "${draft}"
+    [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || FIT_ARGS+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
+    [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || FIT_ARGS+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
+    # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
+    # one GPU whatever it says. OVMS serves the model when the backend is set to it or, with
+    # the backend unset (the fit picks the engine), when it is an OpenVINO IR: only OVMS
+    # serves one, and the fit picks vLLM or llama.cpp for any other weights.
+    if [ -n "${K3D_GPU_AGENT_GPUS:-}" ]; then
+        if [ -n "${AGENT_BACKEND_SET}" ]; then
+            [ "${AGENT_APP}" = ovms ] || FIT_ARGS+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        else
+            [ "$(fit_dir_format "${dir}")" = openvino ] || FIT_ARGS+=(--gpus "${K3D_GPU_AGENT_GPUS}")
+        fi
+    fi
+    [ -z "${K3D_GPU_FIT_FILE:-}" ] || FIT_ARGS+=(--file "${K3D_GPU_FIT_FILE}")
+}
+
+# agent_fit <device>: size the agent's model to this host before its manifest is
+# rendered, when agent_fit_wanted says agent up does, with agent_fit_args.
+# A model that does not fit stops here with the reason. `agent up` (AGENT_FIT_RECORD=1)
+# records the fit for the guard; a guard step (K3D_GPU_FIT_RUNG=N) renders rung N of the
+# recorded fit without fitting again, since the running server already holds the memory a
+# new probe would see.
+agent_fit() {
+    local device=$1 mode=${K3D_GPU_FIT:-auto} host doc rc=0 dev engine rec app
+    rec="$(fit_state)/agent-fit.json"
+    agent_fit_wanted "${device}" || return 0
+    case "${device}" in CPU) dev=cpu ;; GPU) dev=gpu ;; esac
     if [ -n "${K3D_GPU_FIT_RUNG:-}" ]; then
         [[ "${K3D_GPU_FIT_RUNG}" =~ ^[0-9]+$ ]] && [ -f "${rec}" ] || err "fit: no recorded fit for rung ${K3D_GPU_FIT_RUNG}"
         agent_follow_engine "$(fit_field "$(<"${rec}")" engine)" "$(fit_field "$(<"${rec}")" summary)" "$(fit_field "$(<"${rec}")" flags)"
@@ -12641,26 +12753,7 @@ agent_fit() {
         return 0
     fi
     command -v python3 >/dev/null 2>&1 || { fit_soft "${mode}" "fit: python3 not found"; return 0; }
-    dir=$(fit_model_dir "${AGENT_MODEL}" "${AGENT_REVISION:-main}") \
-        || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL} (offline, private or gated: set HF_TOKEN)"; return 0; }
-    # The MTP drafter llama-server would load beside the model: sized with it.
-    local draft
-    draft=$(fit_draft_args "${AGENT_MODEL}") \
-        || { fit_soft "${mode}" "fit: no metadata for ${AGENT_MODEL}'s MTP drafter (offline, private or gated: set HF_TOKEN)"; return 0; }
-    [ -z "${draft}" ] || readarray -t -O "${#args[@]}" args <<< "${draft}"
-    [ -z "${K3D_GPU_AGENT_MAX_LEN:-}" ] || args+=(--ctx "${K3D_GPU_AGENT_MAX_LEN}")
-    [ -z "${K3D_GPU_AGENT_MAX_NUM_SEQS:-}" ] || args+=(--seqs "${K3D_GPU_AGENT_MAX_NUM_SEQS}")
-    # K3D_GPU_AGENT_GPUS shards a vLLM model or splits a llama.cpp one; an OVMS pod holds
-    # one GPU whatever it says. OVMS serves the model when the backend is set to it or, with
-    # the backend unset (the fit picks the engine), when it is an OpenVINO IR: only OVMS
-    # serves one, and the fit picks vLLM or llama.cpp for any other weights.
-    if [ -n "${K3D_GPU_AGENT_GPUS:-}" ]; then
-        if [ -n "${AGENT_BACKEND_SET}" ]; then
-            [ "${AGENT_APP}" = ovms ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
-        else
-            [ "$(fit_dir_format "${dir}")" = openvino ] || args+=(--gpus "${K3D_GPU_AGENT_GPUS}")
-        fi
-    fi
+    agent_fit_args "${AGENT_MODEL}" "${AGENT_REVISION:-main}" "${dev}" || { fit_soft "${mode}" "${FIT_WHY}"; return 0; }
     # agent up replaces the running server (the Deployment is Recreate, and a backend
     # switch deletes the other one): it is stopped before the probe, so the memory it holds
     # is measured as free, not as someone else's. A model that then does not fit gets the
@@ -12679,9 +12772,7 @@ agent_fit() {
     host=$(mktemp)
     fit_host "${host}" || { rm -f "${host}"; fit_soft "${mode}" "fit: could not probe this host"; return 0; }
     doc=$(mktemp)
-    [ -z "${K3D_GPU_FIT_FILE:-}" ] || args+=(--file "${K3D_GPU_FIT_FILE}")
-    fit_py plan --host "${host}" --model "${dir}" --name "${AGENT_MODEL}" --device "${dev}" --mode json \
-        ${args[@]+"${args[@]}"} > "${doc}" || rc=$?
+    fit_py plan --host "${host}" "${FIT_ARGS[@]}" --mode json > "${doc}" || rc=$?
     rm -f "${host}"
     if [ "${rc}" -eq 2 ] || [ ! -s "${doc}" ]; then
         rm -f "${doc}"
