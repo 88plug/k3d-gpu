@@ -1,0 +1,12 @@
+2026-11-11T21:13:01Z smoke start (commit 9899e920, 0 uncommitted)
+2026-11-11T21:18:25Z smoke rc=0
+2026-11-11T21:18:25Z done
+2026-11-11T21:18:57Z hold1 start (commit 9899e920, 0 uncommitted)
+2026-11-11T21:56:16Z hold1 rc=0
+2026-11-11T21:56:16Z hold2 start (commit 9899e920, 0 uncommitted)
+2026-11-11T22:34:47Z hold2 rc=0
+2026-11-11T22:34:47Z hold3 start (commit 9899e920, 0 uncommitted)
+2026-11-11T23:11:56Z hold3 rc=0
+2026-11-11T23:11:56Z hold4 start (commit 9899e920, 0 uncommitted)
+2026-11-11T23:54:56Z hold4 rc=0
+2026-11-11T23:54:56Z done

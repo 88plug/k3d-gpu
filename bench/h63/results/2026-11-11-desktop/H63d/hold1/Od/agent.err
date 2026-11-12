@@ -1,0 +1,2 @@
+[32m==>[0m fit: OpenVINO/gemma-4-26b-a4b-it-int4-ov on CPU (AVX2) via ovms, context 16384 x 6 seqs (below the 32768 x 4 target), host 37.3 GiB (pod limit 41Gi), host reserve 12.5 GiB
+[32m==>[0m agent: OpenVINO/gemma-4-26b-a4b-it-int4-ov as 'gemma' on CPU, P-cores, 16 CPU(s)

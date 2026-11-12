@@ -1,0 +1,183 @@
+{
+ "arms": {
+  "Ls": {
+   "role": "Ls",
+   "name": "Ls",
+   "n1_per_hold": {
+    "1": 11.455547914741706,
+    "2": 11.909373918241805,
+    "3": 11.965247227839763
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 50,
+    "n": 50
+   },
+   "n4_aggregate": {
+    "1": 10.765735844021979,
+    "2": 9.59490533684647,
+    "3": 10.86086216057859
+   },
+   "n1_median": 11.602853924189029,
+   "n4_median": 11.078781723023955,
+   "ttft_median_s": 14.909148826263845,
+   "n4_ttft_s": 72.14824046101421,
+   "n1_requests": 24
+  },
+  "Od": {
+   "role": "Od",
+   "name": "Od",
+   "n1_per_hold": {
+    "1": 10.352214890851233,
+    "2": 9.805200473621248,
+    "3": 10.02752269516252
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 50,
+    "n": 50
+   },
+   "n4_aggregate": {
+    "1": 20.052943703475673,
+    "2": 18.753656752593873,
+    "3": 19.187321114794447
+   },
+   "n1_median": 10.02752269516252,
+   "n4_median": 5.296670614043535,
+   "ttft_median_s": 25.41423314064741,
+   "n4_ttft_s": 5.193129514809698,
+   "n1_requests": 24
+  },
+  "Ld-mtp": {
+   "role": "Ld-mtp",
+   "name": "Ld-mtp",
+   "n1_per_hold": {
+    "1": 13.058295229325989,
+    "2": 12.774447692606586,
+    "3": 13.037039682149887
+   },
+   "holds_measured": 3,
+   "not_deliverable": 0,
+   "quality": {
+    "correct": 50,
+    "n": 50
+   },
+   "n4_aggregate": {
+    "1": 21.638246021754398,
+    "2": 20.113499220469702,
+    "3": 22.732013212360958
+   },
+   "n1_median": 12.817683861373279,
+   "n4_median": 5.803691027695578,
+   "ttft_median_s": 16.065409537870437,
+   "n4_ttft_s": 3.300378672312945,
+   "n1_requests": 24
+  }
+ },
+ "load_gate": {
+  "matched": false,
+  "spread": 2.057205128205128,
+  "tolerance": 2.0,
+  "reason": "foreign P-core load spread 2.06 > 2.00 CPU-s/s",
+  "means": {
+   "Ls": 5.462051282051282,
+   "Od": 3.4048461538461536
+  },
+  "rule": "H57d's load gate over each arm's 60 s idle window (H59 amendment R2)"
+ },
+ "load_recorded": {
+  "n1": {
+   "matched": false,
+   "spread": 2.8509891728707517,
+   "tolerance": 2.0,
+   "reason": "foreign P-core load spread 2.85 > 2.00 CPU-s/s",
+   "means": {
+    "Ls": 3.037425320056899,
+    "Od": 0.18643614718614718
+   },
+   "gates": false,
+   "rule": "H57d's load gate over the n1 phases (recorded, not gated)"
+  },
+  "idle_all_arms": {
+   "matched": false,
+   "spread": 2.057205128205128,
+   "tolerance": 2.0,
+   "reason": "foreign P-core load spread 2.06 > 2.00 CPU-s/s",
+   "means": {
+    "Ls": 5.462051282051282,
+    "Od": 3.4048461538461536,
+    "Ld-mtp": 3.7647692307692306
+   },
+   "rule": "H57d's load gate over each arm's 60 s idle window (H59 amendment R2)",
+   "gates": false
+  }
+ },
+ "reported": {
+  "Ls/Od": {
+   "n1": {
+    "ratio": 1.157100739326821,
+    "per_hold": {
+     "1": 1.1065794166295315,
+     "2": 1.214597697444471,
+     "3": 1.1932406030466567
+    }
+   },
+   "n4": {
+    "ratio": 2.091650119539205
+   },
+   "ttft": {
+    "ratio": 0.5866456305706198
+   }
+  },
+  "Ld-mtp/Od": {
+   "n1": {
+    "ratio": 1.2782502968112741,
+    "ci": [
+     1.2442707012729237,
+     1.3151735878634692
+    ],
+    "per_hold": {
+     "1": 1.2614010979298984,
+     "2": 1.3028237134950427,
+     "3": 1.3001256719607543
+    }
+   },
+   "n4": {
+    "ratio": 1.0957243616976549
+   },
+   "ttft": {
+    "ratio": 0.6321422113727088
+   }
+  },
+  "Ls/Ld-mtp": {
+   "n1": {
+    "ratio": 0.9052223513761952,
+    "ci": [
+     0.879958339869753,
+     0.9395319552711228
+    ],
+    "per_hold": {
+     "1": 0.8772621321208244,
+     "2": 0.9322809255490978,
+     "3": 0.9177886636505674
+    }
+   },
+   "n4": {
+    "ratio": 1.9089199735401683
+   },
+   "ttft": {
+    "ratio": 0.9280279342471178
+   }
+  }
+ },
+ "quality_gate": {
+  "Ls": 50,
+  "Od": 50,
+  "need": 48,
+  "passed": true
+ },
+ "verdict": "INCONCLUSIVE",
+ "reason": "load unmatched: foreign P-core load spread 2.06 > 2.00 CPU-s/s"
+}

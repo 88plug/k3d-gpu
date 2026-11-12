@@ -1,0 +1,8 @@
+K3D_GPU_AGENT_DEVICE=CPU
+K3D_GPU_AGENT_DRAFT=off
+K3D_GPU_AGENT_IMAGE=openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov
+K3D_GPU_AGENT_MODEL_NAME=gemma
+K3D_GPU_AUTOQUANT=off
+K3D_GPU_CLUSTER=k3dgpu-d-h63-1
+KUBECONFIG=/home/andrew/k3dgpu-h63/results/H63d/hold1/kubeconfig
