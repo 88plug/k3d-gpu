@@ -212,7 +212,7 @@ class Tables(unittest.TestCase):
     def test_the_row_names_the_class_the_rule_matches(self):
         mo = _load("model_opt", os.path.join(ROOT, "console", "model_opt.py"))
         rows = mo.ledger_rows(rd(os.path.join(ROOT, "EXPERIMENTS.md")))
-        self.assertIn("H59r", rows)
+        self.assertTrue("H59r" in rows, "no H59r row in the Hypotheses table")
         verdict, text = rows["H59r"]
         self.assertIn(verdict, ("PENDING", "SUPPORTED", "REFUTED", "INCONCLUSIVE"))
         self.assertTrue(mo.family_of("H59r", "H59"))
