@@ -1,0 +1,21 @@
+{
+  "schema": "k3d-gpu.eas-pins-resolved/v1",
+  "profile": "release",
+  "pins": [
+    {
+      "name": "eas",
+      "repo": "intel/enterprise-ai-solutions",
+      "sha": "a051f00fcb2dd473fe763610471cd509db82c433"
+    },
+    {
+      "name": "ei",
+      "repo": "intel/enterprise-inference",
+      "sha": "d035b1ef1981fbf5084ff05c9a337e620478bb87"
+    },
+    {
+      "name": "eat",
+      "repo": "intel/enterprise-agent-toolkit",
+      "sha": "7b827e2d95cec826a20c7e3f5a30eb4818ed2992"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+2026-11-11T19:24:32Z waiting for ~/k3dgpu-bench.lock (pid 4176623)
+2026-11-11T19:24:32Z lock taken
+2026-11-11T19:24:32Z disk / 34% used
+2026-11-11T19:30:53Z stopped: aiperf010 qwen38-b-hr qwen38-a-hr 
+2026-11-11T20:05:28Z run.sh rc=0
+2026-11-11T20:06:40Z restore rc=0
+2026-11-11T20:06:40Z card1 before 15.67 GiB restored 26.46 GiB;card2 before 14.97 GiB restored 15.09 GiB;card3 before 15.67 GiB restored 26.46 GiB;card4 before 14.97 GiB restored 15.09 GiB;VRAM back: yes;
+2026-11-11T20:06:40Z lock released

@@ -1,0 +1,17 @@
+2026-11-07T06:43:08Z waiting for the lock
+canary-326b: line 29: /proc/3608337/cmdline: No such file or directory
+canary-326b: line 29: /proc/0/cmdline: No such file or directory
+2026-11-07T06:43:08Z lock taken
+2026-11-07T06:43:08Z cards free: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-07T06:43:52Z up rc=0 in 44 s
+2026-11-07T06:43:52Z allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+2026-11-07T06:48:15Z A (vllm/vllm-openai-xpu:v0.32.0): vllm-port-uri after 263 s: ValueError: VLLM_PORT 'tcp://10.43.25.206:8000' appears to be a URI
+2026-11-07T06:48:38Z A deployment deleted; PVC kept: persistentvolumeclaim/vllm-models 
+2026-11-07T06:48:39Z B patched enableServiceLinks=false: yes at +1 s
+2026-11-07T06:51:57Z B agent up rc=1 in 199 s: 
+2026-11-07T06:51:57Z teardown (rc 0)
+2026-11-07T06:51:58Z agent down rc=0
+2026-11-07T06:52:04Z down rc=0
+2026-11-07T06:52:04Z vram after: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-07T06:52:04Z lock released
+2026-11-07T06:52:04Z driver done

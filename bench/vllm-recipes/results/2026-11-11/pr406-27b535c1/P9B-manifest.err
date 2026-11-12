@@ -1,0 +1,3 @@
+[32m==>[0m fit: Qwen/Qwen3.5-9B on 1 GPU via vllm, context 65536 x 5 seqs, GPU 29.0 GiB/card, host 8.0 GiB (pod limit 9Gi), host reserve 50.3 GiB
+[32m==>[0m agent: vllm serving Qwen/Qwen3.5-9B as 'Qwen3.5-9B' on 1x gpu.intel.com/xe, 2 CPU(s)
+[32m==>[0m vLLM recipe Qwen/Qwen3.5-9B (vllm@960f5c1bb145 recipes/models/Qwen/Qwen3.5-9B.yaml): tool parser qwen3_coder, reasoning parser qwen3

@@ -1,0 +1,21 @@
+2026-11-07T06:56:22Z waiting for the lock
+canary-326c: line 28: /proc/3629570/cmdline: No such file or directory
+canary-326c: line 28: /proc/0/cmdline: No such file or directory
+2026-11-07T06:56:22Z lock taken
+2026-11-07T06:56:23Z cards free: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-07T06:57:05Z up rc=0 in 42 s
+2026-11-07T06:57:05Z allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+2026-11-07T06:57:07Z B patched enableServiceLinks=false: yes at +2 s
+2026-11-07T07:01:23Z B agent up rc=1 in 258 s: 
+2026-11-07T07:01:23Z B control, no Content-Type: {"error":{"message":"1 validation error:\n  Unsupported Media Type: Only 'application/json' is allowed","type":"Bad Request","param":null,"code":400}} HTTP 400 
+2026-11-07T07:01:25Z B warm-up as the fix sends it (1482 ms): 'I am a large language model developed by Alibaba Cloud.'
+2026-11-07T07:01:25Z B chat (161 ms): '391' Qwen3-4B {'prompt_tokens': 28, 'total_tokens': 32, 'completion_tokens': 4, 'prompt_tokens_details': None, 'completion_tokens_details': {'reasoning_tokens': 0}}
+2026-11-07T07:01:25Z B vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 27.28;0000:96:00.0 card4 0.00;
+2026-11-07T07:01:25Z B pod VLLM_PORT: 0 line(s); render nodes: renderD130 
+2026-11-07T07:01:25Z B packages: intel-igc-core-2 2.38.2;intel-igc-opencl-2 2.38.2;intel-ocloc 26.27.39122.11-0;intel-opencl-icd 26.27.39122.11-0;libigdgmm12 22.10.2-1~24.04~ppa1;libze-dev 1.32.0;libze-intel-gpu1 26.27.39122.11-0;libze1 1.32.0;xpu-smi 2.1.0+26.33.6468cec-1~24.04;==;vllm 0.33.0+xpu;torch 2.14.0+xpu;intel-sycl-rt 2026.1.1;oneccl 2022.1.2;
+2026-11-07T07:01:25Z teardown (rc 0)
+2026-11-07T07:01:26Z agent down rc=0
+2026-11-07T07:01:29Z down rc=0
+2026-11-07T07:01:30Z vram after: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-07T07:01:30Z lock released
+2026-11-07T07:01:30Z driver done

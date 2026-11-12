@@ -1,0 +1,4 @@
+{"choices":[{"finish_reason":"stop","index":0,"logprobs":null,"message":{"content":"Paris","role":"assistant","tool_calls":[]}}],"created":1794030452,"model":"Qwen3-4B-int4-ov","object":"chat.completion","usage":{"prompt_tokens":24,"completion_tokens":2,"total_tokens":26}}
+http=200 t=0.096952s
+{"choices":[{"finish_reason":"stop","index":0,"logprobs":null,"message":{"content":"51","role":"assistant","tool_calls":[]}}],"created":1794030452,"model":"Qwen3-4B-int4-ov","object":"chat.completion","usage":{"prompt_tokens":27,"completion_tokens":3,"total_tokens":30}}
+http=200 t=0.118163s

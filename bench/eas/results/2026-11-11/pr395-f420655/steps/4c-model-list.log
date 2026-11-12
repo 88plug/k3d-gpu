@@ -1,0 +1,5 @@
+NAME                         BY       MODEL / API_BASE                                         STATE
+hybrid-router                eas      -
+qwen2-5-coder-14b            eas      http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen2-5-coder-14b/v1
+qwen3-4b                     k3d-gpu  Qwen/Qwen3-4B@1cfa9a720891                               ready gpu 7x20480
+qwen3guard                   eas      http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen3guard/v1

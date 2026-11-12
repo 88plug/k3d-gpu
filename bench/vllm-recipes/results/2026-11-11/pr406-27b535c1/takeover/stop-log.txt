@@ -1,0 +1,6 @@
+aiperf010 stop begin 2026-11-12T00:17:06Z
+aiperf010 stop rc=0 took 120s; status=exited exit=137
+qwen38-b-hr stop begin 2026-11-12T00:19:06Z
+qwen38-b-hr stop rc=0 took 7s; status=exited exit=0
+qwen38-a-hr stop begin 2026-11-12T00:19:13Z
+qwen38-a-hr stop rc=0 took 4s; status=exited exit=0

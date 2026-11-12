@@ -1,0 +1,1100 @@
+[32m==>[0m eas.sh down in k3d-gpu-eas-bastion:0d4b2552207a9928 (log: /home/devcloud/k3dgpu-bench/b70eas/b70eas-f420655-20261111T1741Z/state/eas-k3dgpu-b70eas/logs/eas-down-20261111-182040.log)
+Teardown: platform  (env=k3d-gpu, installer 1.2.0)
+Using existing venv: /eas-state/eas/.venv
+Inventory: /eas-state/eas/env/k3d-gpu/inventory/hosts.yaml
+BYO cluster mode — kubeconfig: /kube/config
+
+PLAY [AI-solutions] ************************************************************
+
+TASK [Gathering Facts] *********************************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight] ***************************************************************
+[0;36mincluded: /eas-state/eas/playbooks/includes/preflight.yaml for localhost[0m
+
+TASK [Preflight - Load ai-solutions component registry] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Ensure log and tmp directories exist] ************************
+[0;32mok: [localhost] => (item=/eas-state/eas/env/k3d-gpu/logs)[0m
+[0;32mok: [localhost] => (item=/eas-state/eas/env/k3d-gpu/logs/tmp)[0m
+
+TASK [Preflight - Note which layers ai-solutions declares itself] **************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Check for ext directory] *************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Discover ext component manifests] ****************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Merge ext components + layers] *******************************
+[0;32mok: [localhost] => (item=components.yaml (enterprise.agent-toolkit))[0m
+[0;32mok: [localhost] => (item=components.yaml (enterprise.ai-inference))[0m
+
+TASK [Preflight - Proxy: fail fast if proxy set without no_proxy] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Check internet connectivity] *********************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Show proxy status] *******************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Abort on no connectivity] ************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Object store: reject legacy MinIO configuration for object store] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Object store: validate backend value] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: validate value] **********************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: warn that accelerator overrides pinning] *********
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: downgrade to best-effort] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for nri-balloons] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for kubelet-static] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for best-effort] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: announce] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'CPU policy: nri-balloons → kubelet_cpu_manager_policy=none, kubelet_topology_manager_policy=none,[0m
+[0;32m        nri_cpu_balloons_enabled=True'[0m
+
+TASK [Preflight - Define workload affinity (soft, label-based)] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Empty affinity when topology disabled] ***********************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Storage: resolve backend] ************************************
+[0;36mincluded: storage for localhost[0m
+
+TASK [storage : storage | resolve | normalize selector] ************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | detect multi-node] *************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | collect missing ONTAP values] **************
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the ONTAP configuration is complete] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the custom StorageClass is named] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject an RWO-only custom class on multi-node] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject local-path on multi-node] ***********
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | look up backend in registry] ***************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | reject unknown backend] ********************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [storage : storage | resolve | derive role] *******************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | announce] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Storage backend: local-path -> role=(none - local-path)'[0m
+
+TASK [Preflight - Verify required CLI tools] ***********************************
+[0;32mok: [localhost] => (item=kubectl)[0m
+[0;32mok: [localhost] => (item=helm)[0m
+
+TASK [Preflight - Warn about missing CLI tools] ********************************
+[0;36mskipping: [localhost] => (item=kubectl) [0m
+[0;36mskipping: [localhost] => (item=helm) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Resolve active components (see filter_plugins/resolve_components.py)] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Refuse layers this env was not provisioned for] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Show skipped components] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Skipped (disabled): kuberay, openshell, keycloak_agent_config, vllm_sr, agentgateway,[0m
+[0;32m        keycloak_config, nfd, velero, keycloak, metallb'[0m
+
+TASK [Preflight - Display execution plan] **************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ━━━ Teardown Plan ━━━[0m
+[0;32m        Action: teardown[0m
+[0;32m        Target: platform[0m
+[0;32m        Components: agent_sandbox, pgvector, redis_stack, llm_services, langfuse, litellm, kserve, envoy_ai_gateway, nri_cpu_balloons, observability, seaweedfs, object_store, postgresql, envoy_gateway, istio, cert_manager[0m
+
+TASK [Preflight - Agent Toolkit node readiness] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [Execute components] ******************************************************
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=agent_sandbox)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=pgvector)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=redis_stack)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=llm_services)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=langfuse)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=litellm)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=kserve)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=envoy_ai_gateway)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=nri_cpu_balloons)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=observability)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=seaweedfs)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=object_store)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=postgresql)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=envoy_gateway)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=istio)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=cert_manager)[0m
+
+TASK [TEARDOWN: agent_sandbox] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: agent_sandbox                                                  ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute agent_sandbox] ***************************************************
+[0;36mincluded: agent_sandbox for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | Dispatch action: teardown] ***************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/agent_sandbox/tasks/teardown.yaml for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | teardown | Remove sandbox-router deployment] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | teardown | Remove extensions manifest (SandboxTemplate/Claim/WarmPool CRDs)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | teardown | Remove core manifest (CRDs + controller)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | teardown | Remove namespace] *************
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | teardown | Complete] *********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Agent Sandbox removed from namespace 'agent-sandbox-system'[0m
+
+TASK [agent_sandbox — teardown complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ agent_sandbox — teardown complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: pgvector] ******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: pgvector                                                       ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute pgvector] ********************************************************
+[0;36mincluded: pgvector for localhost[0m
+
+TASK [pgvector : pgvector | Dispatch action: teardown] *************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/pgvector/tasks/teardown.yaml for localhost[0m
+
+TASK [pgvector : pgvector | teardown | Remove Helm release] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | teardown | Remove credentials secret] **************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | teardown | Remove namespace] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | teardown | Complete] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: pgvector removed from namespace 'pgvector'[0m
+
+TASK [pgvector — teardown complete] ********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ pgvector — teardown complete                                           ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: redis_stack] ***************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: redis_stack                                                    ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute redis_stack] *****************************************************
+[0;36mincluded: redis_stack for localhost[0m
+
+TASK [redis_stack : redis_stack | Dispatch action: teardown] *******************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/redis_stack/tasks/teardown.yaml for localhost[0m
+
+TASK [redis_stack : redis_stack | teardown | Remove Helm release] **************
+[0;33mchanged: [localhost][0m
+
+TASK [redis_stack : redis_stack | teardown | Remove namespace] *****************
+[0;33mchanged: [localhost][0m
+
+TASK [redis_stack : redis_stack | teardown | Complete] *************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Redis Stack removed from namespace 'redis'[0m
+
+TASK [redis_stack — teardown complete] *****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ redis_stack — teardown complete                                        ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: llm_services] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: llm_services                                                   ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute llm_services] ****************************************************
+[0;36mincluded: llm_services for localhost[0m
+
+TASK [llm_services : llm_services | Dispatch action: teardown] *****************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/teardown.yaml for localhost[0m
+
+TASK [llm_services : llm_services | Delete all LLMInferenceServices] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [llm_services : llm_services | Delete all InferenceServices] **************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Delete all ServingRuntimes] ****************
+[0;33mchanged: [localhost][0m
+
+TASK [llm_services : llm_services | Find PVs bound to namespace] ***************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Delete stale PVs] **************************
+[0;33mchanged: [localhost] => (item=pvc-0484db66-2261-431b-800f-dde5f6df9259)[0m
+
+TASK [llm_services : llm_services | Delete namespace] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [llm_services — teardown complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ llm_services — teardown complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: langfuse] ******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: langfuse                                                       ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute langfuse] ********************************************************
+[0;36mincluded: langfuse for localhost[0m
+
+TASK [langfuse : langfuse | Dispatch action: teardown] *************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/langfuse/tasks/teardown.yaml for localhost[0m
+
+TASK [langfuse : langfuse | teardown | Remove Helm release] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Remove HTTPRoute] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Remove SecurityPolicy] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Remove Langfuse API keys from LiteLLM namespace] ***
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Remove ConfigMaps] **********************
+[0;33mchanged: [localhost] => (item=langfuse-credentials)[0m
+
+TASK [langfuse : langfuse | teardown | Remove Secrets] *************************
+[0;33mchanged: [localhost] => (item=langfuse-secrets)[0m
+[0;33mchanged: [localhost] => (item=langfuse-db-secret)[0m
+
+TASK [langfuse : langfuse | teardown | Remove namespace] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Remove Helm repo] ***********************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | teardown | Complete] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Langfuse removed from namespace 'langfuse'[0m
+
+TASK [langfuse — teardown complete] ********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ langfuse — teardown complete                                           ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: litellm] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: litellm                                                        ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute litellm] *********************************************************
+[0;36mincluded: litellm for localhost[0m
+
+TASK [litellm : litellm | Dispatch action: teardown] ***************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/litellm/tasks/teardown.yaml for localhost[0m
+
+TASK [litellm : litellm | teardown | Remove Helm release] **********************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | teardown | Remove HTTPRoute] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | teardown | Remove SecurityPolicy] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | teardown | Remove rate-limit BackendTrafficPolicy] ***
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | teardown | Remove ConfigMaps] ************************
+[0;33mchanged: [localhost] => (item=litellm-credentials)[0m
+[0;33mchanged: [localhost] => (item=litellm-router-code)[0m
+
+TASK [litellm : litellm | teardown | Remove Secrets] ***************************
+[0;33mchanged: [localhost] => (item=litellm-master-key)[0m
+[0;33mchanged: [localhost] => (item=litellm-db-secret)[0m
+
+TASK [litellm : litellm | teardown | Remove namespace] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | teardown | Complete] *********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: LiteLLM removed from namespace 'litellm'[0m
+
+TASK [litellm — teardown complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ litellm — teardown complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: kserve] ********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: kserve                                                         ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute kserve] **********************************************************
+[0;36mincluded: kserve for localhost[0m
+
+TASK [kserve : kserve | Dispatch action: teardown] *****************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/kserve/tasks/teardown.yaml for localhost[0m
+
+TASK [kserve : kserve | Uninstall LLMIsvc resources] ***************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Uninstall LLMIsvc CRDs Helm release] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Find LLMIsvc CRDs] *************************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Delete LLMIsvc CRDs] ***********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Uninstall LWS operator] ********************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Delete LWS CRDs] ***************************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Delete LWS namespace] **********************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Uninstall KServe runtime configs] **********************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Uninstall KServe resources] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Uninstall KServe CRDs Helm release] ********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Find KServe CRDs] **************************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Delete KServe CRDs] ************************************
+[0;33mchanged: [localhost] => (item=clusterservingruntimes.serving.kserve.io)[0m
+[0;33mchanged: [localhost] => (item=clusterstoragecontainers.serving.kserve.io)[0m
+[0;33mchanged: [localhost] => (item=inferencegraphs.serving.kserve.io)[0m
+[0;33mchanged: [localhost] => (item=inferenceservices.serving.kserve.io)[0m
+[0;33mchanged: [localhost] => (item=servingruntimes.serving.kserve.io)[0m
+[0;33mchanged: [localhost] => (item=trainedmodels.serving.kserve.io)[0m
+
+TASK [kserve : kserve | Delete KServe webhooks] ********************************
+[0;32mok: [localhost] => (item={'kind': 'MutatingWebhookConfiguration', 'name': 'inferenceservice.serving.kserve.io'})[0m
+[0;32mok: [localhost] => (item={'kind': 'ValidatingWebhookConfiguration', 'name': 'inferenceservice.serving.kserve.io'})[0m
+[0;32mok: [localhost] => (item={'kind': 'ValidatingWebhookConfiguration', 'name': 'trainedmodel.serving.kserve.io'})[0m
+
+TASK [kserve : kserve | Delete KServe namespace] *******************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Uninstall Knative net-istio] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Uninstall Knative Serving core] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Uninstall Knative Serving CRDs] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Delete Knative namespace] ******************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Uninstall Istio (istiod)] ******************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Uninstall Istio (base)] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Find Istio CRDs] ***************************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Delete Istio CRDs] *************************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Delete Istio namespace] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve — teardown complete] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ kserve — teardown complete                                             ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: envoy_ai_gateway] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: envoy_ai_gateway                                               ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_ai_gateway] ************************************************
+[0;36mincluded: envoy_ai_gateway for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Dispatch action: teardown] *********
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/envoy_ai_gateway/tasks/teardown.yaml for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Check if Helm release exists] ******
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Not installed — skipping teardown] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Uninstall controller] **************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Uninstall CRDs Helm release] *******
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Find AI Gateway CRDs] **************
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete AI Gateway CRDs] ************
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Find all AIGatewayRoutes in namespace] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Strip finalizers from AIGatewayRoutes] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete AIGatewayRoutes] ************
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete external inference HTTPRoute] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Find model-manager managed HTTPRoutes on ai-gateway] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete model-manager HTTPRoutes] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete legacy shared AIGatewayRoutes (migration cleanup)] ***
+[0;32mok: [localhost] => (item=inference-unified)[0m
+[0;32mok: [localhost] => (item=inference-unified-internal)[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete AI Gateway resource] ********
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete AI GatewayClass] ************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete AI Gateway namespace] *******
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Delete namespace] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway — teardown complete] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_ai_gateway — teardown complete                                   ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: nri_cpu_balloons] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: nri_cpu_balloons                                               ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute nri_cpu_balloons] ************************************************
+[0;36mincluded: nri_cpu_balloons for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Dispatch action: teardown] *********
+[0;36mincluded: /eas-state/eas/roles/nri_cpu_balloons/tasks/teardown.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Check Helm release] ****************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Not installed — nothing to tear down] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | List per-node BalloonsPolicy CRs] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Delete per-node BalloonsPolicy CRs (node.*)] ***
+[0;33mchanged: [localhost] => (item=node.k3d-k3dgpu-b70eas-server-0)[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Uninstall Helm release] ************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Delete policy ConfigMap] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Clean up tmp dir] ******************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | List all nodes] ********************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Remove NRI capability labels] ******
+[0;33mchanged: [localhost] => (item=k3d-k3dgpu-b70eas-server-0)[0m
+
+TASK [nri_cpu_balloons — teardown complete] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ nri_cpu_balloons — teardown complete                                   ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: observability] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: observability                                                  ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute observability] ***************************************************
+[0;36mincluded: observability for localhost[0m
+
+TASK [observability : observability | Dispatch action: teardown] ***************
+[0;36mincluded: /eas-state/eas/roles/observability/tasks/teardown.yaml for localhost[0m
+
+TASK [observability : observability | Check if any release exists] *************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Not installed — skipping teardown] *******
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Check Prometheus Adapter release] ********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Uninstall Prometheus Adapter] ************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Delete orphaned custom.metrics APIService] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Delete Grafana HTTPRoute] ****************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Check OTel Collector release] ************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Uninstall OTel Collector] ****************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Check Tempo release] *********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Uninstall Tempo] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Check Loki release] **********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Uninstall Loki] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Uninstall kube-prometheus-stack] *********
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Find Prometheus Operator CRDs] ***********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Delete Prometheus Operator CRDs] *********
+[0;33mchanged: [localhost] => (item=alertmanagerconfigs.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=alertmanagers.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=podmonitors.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=probes.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=prometheusagents.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=prometheuses.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=prometheusrules.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=scrapeconfigs.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=servicemonitors.monitoring.coreos.com)[0m
+[0;33mchanged: [localhost] => (item=thanosrulers.monitoring.coreos.com)[0m
+
+TASK [observability : observability | List PVCs in monitoring namespace] *******
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Delete PVCs] *****************************
+[0;33mchanged: [localhost] => (item=data-filer-telemetry-seaweedfs-filer-0)[0m
+[0;33mchanged: [localhost] => (item=data-monitoring-telemetry-seaweedfs-master-0)[0m
+[0;33mchanged: [localhost] => (item=data-telemetry-seaweedfs-volume-0)[0m
+[0;33mchanged: [localhost] => (item=prometheus-kube-prometheus-stack-prometheus-db-prometheus-kube-prometheus-stack-prometheus-0)[0m
+
+TASK [observability : observability | Delete namespace] ************************
+[0;33mchanged: [localhost][0m
+
+TASK [observability — teardown complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ observability — teardown complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: seaweedfs] *****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: seaweedfs                                                      ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute seaweedfs] *******************************************************
+[0;36mincluded: seaweedfs for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Dispatch action: teardown] ***********************
+[0;36mincluded: /eas-state/eas/roles/seaweedfs/tasks/teardown.yaml for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Check if Helm release exists] ********************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Not installed — skipping teardown] ***************
+[0;36mskipping: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Uninstall Helm release] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Load object_store interface vars] ****************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Find PVCs] ***************************************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Delete PVCs] *************************************
+[0;33mchanged: [localhost] => (item=data-filer-telemetry-seaweedfs-filer-0)[0m
+[0;33mchanged: [localhost] => (item=data-telemetry-seaweedfs-volume-0)[0m
+
+TASK [seaweedfs : seaweedfs | Delete Secrets] **********************************
+[0;33mchanged: [localhost] => (item=object-store-credentials)[0m
+[0;33mchanged: [localhost] => (item=telemetry-seaweedfs-s3-secret)[0m
+
+TASK [seaweedfs — teardown complete] *******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ seaweedfs — teardown complete                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: object_store] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: object_store                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute object_store] ****************************************************
+[0;36mincluded: object_store for localhost[0m
+
+TASK [object_store : object_store | Interface role — no tasks] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'object_store is an interface role. Active backend: seaweedfs'[0m
+
+TASK [object_store — teardown complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ object_store — teardown complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: postgresql] ****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: postgresql                                                     ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute postgresql] ******************************************************
+[0;36mincluded: postgresql for localhost[0m
+
+TASK [postgresql : postgresql | Include teardown] ******************************
+[0;36mincluded: /eas-state/eas/roles/postgresql/tasks/teardown.yaml for localhost[0m
+
+TASK [postgresql : postgresql | Delete CNPG Cluster] ***************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Delete per-database secrets] *******************
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Delete consumer namespace secrets] *************
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Delete namespace] ******************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Uninstall CNPG operator Helm release] **********
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Teardown complete] *****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: PostgreSQL (CNPG) resources removed.[0m
+
+TASK [postgresql — teardown complete] ******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ postgresql — teardown complete                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: envoy_gateway] *************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: envoy_gateway                                                  ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_gateway] ***************************************************
+[0;36mincluded: envoy_gateway for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Dispatch action: teardown] ***************
+[0;36mincluded: /eas-state/eas/roles/envoy_gateway/tasks/teardown.yaml for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Check if Helm release exists] ************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Not installed — skipping teardown] *******
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete SecurityPolicy] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete S3 listener ClientTrafficPolicy] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete Gateway resource] *****************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete CA ClusterIssuers] ****************
+[0;33mchanged: [localhost] => (item=gateway-issuer)[0m
+[0;33mchanged: [localhost] => (item=gateway-ca-bootstrap)[0m
+
+TASK [envoy_gateway : envoy_gateway | Delete root CA Certificate] **************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete root CA secret] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Remove exported root CA certificate] *****
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete gateway TLS Certificate] **********
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete TLS secret] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Uninstall Helm release] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Find Gateway API CRDs] *******************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete Gateway API CRDs] *****************
+[0;33mchanged: [localhost] => (item=backendtlspolicies.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=gatewayclasses.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=gateways.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=grpcroutes.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=httproutes.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=listenersets.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=referencegrants.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=tcproutes.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=tlsroutes.gateway.networking.k8s.io)[0m
+[0;33mchanged: [localhost] => (item=udproutes.gateway.networking.k8s.io)[0m
+
+TASK [envoy_gateway : envoy_gateway | Find Envoy Gateway CRDs] *****************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete Envoy Gateway CRDs] ***************
+[0;33mchanged: [localhost] => (item=backends.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=backendtrafficpolicies.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=clienttrafficpolicies.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=envoyextensionpolicies.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=envoypatchpolicies.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=envoyproxies.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=httproutefilters.gateway.envoyproxy.io)[0m
+[0;33mchanged: [localhost] => (item=securitypolicies.gateway.envoyproxy.io)[0m
+
+TASK [envoy_gateway : envoy_gateway | Delete certgen ClusterRole] **************
+[0;33mchanged: [localhost] => (item=ClusterRoleBinding)[0m
+[0;33mchanged: [localhost] => (item=ClusterRole)[0m
+
+TASK [envoy_gateway : envoy_gateway | Delete namespace] ************************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Delete gateway namespace (if different)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway — teardown complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_gateway — teardown complete                                      ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: istio] *********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: istio                                                          ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute istio] ***********************************************************
+[0;36mincluded: istio for localhost[0m
+
+TASK [istio : istio | Dispatch action: teardown] *******************************
+[0;36mincluded: /eas-state/eas/roles/istio/tasks/teardown.yaml for localhost[0m
+
+TASK [istio : istio | Teardown cert-manager-istio-csr (CA bridge)] *************
+[0;36mincluded: /eas-state/eas/roles/istio/tasks/teardown_csr.yaml for localhost[0m
+
+TASK [istio : istio | csr | Delete istio-system RoleBinding for istio-csr] *****
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Delete istio-system Role for istio-csr] ************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Uninstall cert-manager-istio-csr Helm chart] *******
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Delete istio-ca ClusterIssuer] *********************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Delete istio-ca Certificate] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Delete selfsigned-root ClusterIssuer] **************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Check if Helm release exists] ****************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Not installed — skipping teardown] ***********************
+[0;36mskipping: [localhost][0m
+
+TASK [istio : istio | Uninstall Helm chart] ************************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Delete namespace] ****************************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Get CRDs] ************************************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Remove Istio CRDs] ***************************************
+[0;33mchanged: [localhost] => (item=authorizationpolicies.security.istio.io)[0m
+[0;33mchanged: [localhost] => (item=destinationrules.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=envoyfilters.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=gateways.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=peerauthentications.security.istio.io)[0m
+[0;33mchanged: [localhost] => (item=proxyconfigs.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=requestauthentications.security.istio.io)[0m
+[0;33mchanged: [localhost] => (item=serviceentries.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=sidecars.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=telemetries.telemetry.istio.io)[0m
+[0;33mchanged: [localhost] => (item=virtualservices.networking.istio.io)[0m
+[0;33mchanged: [localhost] => (item=wasmplugins.extensions.istio.io)[0m
+[0;33mchanged: [localhost] => (item=workloadentries.networking.istio.io)[0m
+
+TASK [istio : istio | Teardown complete] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Istio uninstalled from istio-system.[0m
+
+TASK [istio — teardown complete] ***********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ istio — teardown complete                                              ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [TEARDOWN: cert_manager] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  TEARDOWN: cert_manager                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute cert_manager] ****************************************************
+[0;36mincluded: cert_manager for localhost[0m
+
+TASK [cert_manager : cert_manager | Dispatch action: teardown] *****************
+[0;36mincluded: /eas-state/eas/roles/cert_manager/tasks/teardown.yaml for localhost[0m
+
+TASK [cert_manager : cert_manager | Check if Helm release exists] **************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Not installed — skipping teardown] *********
+[0;36mskipping: [localhost][0m
+
+TASK [cert_manager : cert_manager | Uninstall Helm release] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager : cert_manager | Find cert-manager CRDs] ********************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Delete cert-manager CRDs] ******************
+[0;33mchanged: [localhost] => (item=certificaterequests.cert-manager.io)[0m
+[0;33mchanged: [localhost] => (item=certificates.cert-manager.io)[0m
+[0;33mchanged: [localhost] => (item=challenges.acme.cert-manager.io)[0m
+[0;33mchanged: [localhost] => (item=clusterissuers.cert-manager.io)[0m
+[0;33mchanged: [localhost] => (item=issuers.cert-manager.io)[0m
+[0;33mchanged: [localhost] => (item=orders.acme.cert-manager.io)[0m
+
+TASK [cert_manager : cert_manager | Delete namespace] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager — teardown complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ cert_manager — teardown complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+PLAY RECAP *********************************************************************
+[0;33mlocalhost[0m                  : [0;32mok=237 [0m [0;33mchanged=87  [0m unreachable=0    failed=0    [0;36mskipped=55  [0m rescued=0    ignored=0   
+
+
+[0;32m╭────────────────────────────────────────────────────────────────────────────────╮[0m
+[0;32m│[0m TEARDOWN COMPLETE                                                              [0;32m│[0m
+[0;32m│[0m                                                                                [0;32m│[0m
+[0;32m│[0m Target:  platform                                                              [0;32m│[0m
+[0;32m│[0m Env:     k3d-gpu                                                               [0;32m│[0m
+[0;32m│[0m Log:     /eas-state/eas/env/k3d-gpu/logs/teardown-platform-20261111-182040.log [0;32m│[0m
+[0;32m╰────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[32m==>[0m EAS removed from 'k3dgpu-b70eas'; the cluster stays ('k3d-gpu down' deletes it)

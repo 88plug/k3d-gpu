@@ -1,0 +1,9 @@
+habanalabs-device-plugin-daemonset 
+intel-dsa-plugin 
+intel-gpu-plugin 
+intel-gpu-plugin-wsl ["-wsl"]
+intel-iaa-plugin 
+intel-npu-plugin 
+intel-qat-plugin ["-kernel-vf-drivers=4xxxvf,420xxvf,6xxxvf,c6xxvf"]
+nvidia-device-plugin-daemonset 
+nfd-worker 

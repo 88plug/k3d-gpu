@@ -1,0 +1,2 @@
+{"error":{"message":"1 validation error:\n  Unsupported Media Type: Only 'application/json' is allowed","type":"Bad Request","param":null,"code":400}}
+HTTP 400

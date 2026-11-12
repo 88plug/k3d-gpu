@@ -1,0 +1,86 @@
+2026-11-12T00:17:05Z waiting for the lock (up to 28800 s); holders:  311813 311820
+2026-11-12T00:17:05Z lock taken
+2026-11-12T00:17:06Z vram before: 0000:12:00.0 card1 15.67;0000:48:00.0 card2 14.97;0000:7c:00.0 card3 15.67;0000:96:00.0 card4 14.97;
+2026-11-12T00:17:06Z baseline :30000 200 0.153021 'Paris'
+2026-11-12T00:17:06Z baseline :30001 200 0.155692 'Paris'
+2026-11-12T00:19:06Z stopped aiperf010 in 120 s
+2026-11-12T00:19:13Z stopped qwen38-b-hr in 7 s
+2026-11-12T00:19:18Z stopped qwen38-a-hr in 5 s
+2026-11-12T00:19:33Z cards free: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-12T00:20:20Z up rc=0 in 47 s
+2026-11-12T00:20:20Z allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+2026-11-12T00:20:21Z default-model render diff main -> pr: 0 line(s): 
+2026-11-12T00:20:21Z P4B: pr launcher (27b535c1ffeb), model Qwen/Qwen3.5-4B
+2026-11-12T00:20:56Z P4B plan --explain rc=0 in 35 s
+2026-11-12T00:20:59Z P4B agent manifest rc=0 in 3 s
+2026-11-12T00:25:52Z P4B agent up rc=0 in 293 s: ==> warm-up reply (2s): I am an artificial intelligence.
+2026-11-12T00:25:52Z P4B args: ["Qwen/Qwen3.5-4B","--served-model-name=Qwen3.5-4B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=131072","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.93","--enforce-eager","--no-enable-prefix-caching","--max-num-seqs=5","--tensor-parallel-size=1","--enable-auto-tool-choice","--tool-call-parser=qwen3_coder","--reasoning-parser=qwen3"]
+2026-11-12T00:25:53Z P4B tool rc=0 709 ms: tool_calls=[('get_weather', '{"city": "Paris"}')] content='' reasoning_len=0
+2026-11-12T00:25:58Z P4B reason rc=0 4712 ms: tool_calls=[] content='\n\n391' reasoning_len=708
+2026-11-12T00:25:58Z P4B chat rc=0 208 ms: tool_calls=[] content='Paris' reasoning_len=0
+2026-11-12T00:25:58Z P4B vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 27.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-12T00:25:59Z P4B agent down rc=0 in 1 s
+2026-11-12T00:26:01Z M4B: main launcher (86f4910e7b64), model Qwen/Qwen3.5-4B
+2026-11-12T00:26:37Z M4B plan --explain rc=0 in 36 s
+2026-11-12T00:26:38Z M4B agent manifest rc=0 in 1 s
+2026-11-12T00:27:31Z M4B agent up rc=0 in 53 s: ==> warm-up reply (0s): I am an artificial intelligence.
+2026-11-12T00:27:32Z M4B args: ["Qwen/Qwen3.5-4B","--served-model-name=Qwen3.5-4B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=131072","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.93","--enforce-eager","--no-enable-prefix-caching","--max-num-seqs=5","--tensor-parallel-size=1"]
+2026-11-12T00:27:32Z M4B tool rc=0 108 ms: Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+    m=json.load(open(sys.argv[1]))["choices"][0]["message"]
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'choices'
+2026-11-12T00:27:36Z M4B reason rc=0 4512 ms: tool_calls=[] content='Thinking Process:\n\n1.  **Analyze the Request:** The user is asking for the product of 17 and 23. The constraint is to answer with the number only.\n\n2.  **Calcul' reasoning_len=0
+2026-11-12T00:27:37Z M4B chat rc=0 209 ms: tool_calls=[] content='Paris' reasoning_len=0
+2026-11-12T00:27:37Z M4B vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 26.98;0000:96:00.0 card4 0.00;
+2026-11-12T00:27:37Z M4B agent down rc=0 in 0 s
+2026-11-12T00:27:41Z P9B: pr launcher (27b535c1ffeb), model Qwen/Qwen3.5-9B
+2026-11-12T00:28:17Z P9B plan --explain rc=0 in 36 s
+2026-11-12T00:28:19Z P9B agent manifest rc=0 in 2 s
+2026-11-12T00:32:18Z P9B agent up rc=0 in 239 s: ==> warm-up reply (1s): I am an artificial intelligence assistant designed to process information and answer questions.
+2026-11-12T00:32:18Z P9B args: ["Qwen/Qwen3.5-9B","--served-model-name=Qwen3.5-9B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=65536","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.90","--enforce-eager","--no-enable-prefix-caching","--max-num-seqs=5","--tensor-parallel-size=1","--enable-auto-tool-choice","--tool-call-parser=qwen3_coder","--reasoning-parser=qwen3"]
+2026-11-12T00:32:19Z P9B tool rc=0 1009 ms: tool_calls=[('get_weather', '{"city": "Paris"}')] content='' reasoning_len=0
+2026-11-12T00:32:27Z P9B reason rc=0 8215 ms: tool_calls=[] content='\n\n391' reasoning_len=730
+2026-11-12T00:32:28Z P9B chat rc=0 208 ms: tool_calls=[] content='Paris' reasoning_len=0
+2026-11-12T00:32:28Z P9B vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 25.87;0000:96:00.0 card4 0.00;
+2026-11-12T00:32:28Z P9B agent down rc=0 in 0 s
+2026-11-12T00:32:31Z M9B: main launcher (86f4910e7b64), model Qwen/Qwen3.5-9B
+2026-11-12T00:33:07Z M9B plan --explain rc=0 in 36 s
+2026-11-12T00:33:08Z M9B agent manifest rc=0 in 1 s
+2026-11-12T00:34:11Z M9B agent up rc=0 in 63 s: ==> warm-up reply (1s): I am an artificial intelligence assistant designed to process information and answer questions.
+2026-11-12T00:34:12Z M9B args: ["Qwen/Qwen3.5-9B","--served-model-name=Qwen3.5-9B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=65536","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.90","--enforce-eager","--no-enable-prefix-caching","--max-num-seqs=5","--tensor-parallel-size=1"]
+2026-11-12T00:34:12Z M9B tool rc=0 108 ms: Traceback (most recent call last):
+  File "<string>", line 3, in <module>
+    m=json.load(open(sys.argv[1]))["choices"][0]["message"]
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+KeyError: 'choices'
+2026-11-12T00:34:20Z M9B reason rc=0 8215 ms: tool_calls=[] content='Thinking Process:\n\n1.  **Analyze the Request:** The user is asking for the product of 17 and 23 ("17 times 23"). The constraint is to answer with the number onl' reasoning_len=0
+2026-11-12T00:34:20Z M9B chat rc=0 208 ms: tool_calls=[] content='Paris' reasoning_len=0
+2026-11-12T00:34:20Z M9B vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 25.85;0000:96:00.0 card4 0.00;
+2026-11-12T00:34:21Z M9B agent down rc=0 in 1 s
+2026-11-12T00:34:24Z PDEF: pr launcher (27b535c1ffeb), model <default>
+2026-11-12T00:35:00Z PDEF plan --explain rc=0 in 36 s
+2026-11-12T00:35:01Z PDEF agent manifest rc=0 in 1 s
+2026-11-12T00:36:52Z PDEF agent up rc=0 in 111 s: ==> warm-up reply (1s): I am a large language model developed by Alibaba Cloud.
+2026-11-12T00:36:52Z PDEF args: ["Qwen/Qwen3-4B","--revision=1cfa9a7208912126459214e8b04321603b3df60c","--served-model-name=Qwen3-4B","--port=8000","--dtype=float16","--block-size=64","--max-model-len=8192","--max-num-batched-tokens=2048","--gpu-memory-utilization=0.9","--enforce-eager","--no-enable-prefix-caching","--tensor-parallel-size=1","--enable-auto-tool-choice","--tool-call-parser=hermes","--reasoning-parser=qwen3"]
+2026-11-12T00:36:53Z PDEF tool rc=0 509 ms: tool_calls=[('get_weather', '{"city": "Paris"}')] content='' reasoning_len=0
+2026-11-12T00:36:58Z PDEF reason rc=0 5313 ms: tool_calls=[] content='\n\n391' reasoning_len=915
+2026-11-12T00:36:58Z PDEF chat rc=0 209 ms: tool_calls=[] content='Paris.' reasoning_len=0
+2026-11-12T00:36:58Z PDEF vram serving: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 27.30;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-12T00:36:59Z PDEF agent down rc=0 in 1 s
+2026-11-12T00:37:02Z cases done
+2026-11-12T00:37:02Z teardown (rc 0)
+2026-11-12T00:37:02Z agent down rc=0
+2026-11-12T00:37:08Z down rc=0
+2026-11-12T00:37:08Z k3d containers left: 0
+2026-11-12T00:37:38Z vram after teardown: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-12T00:37:38Z restore begin: docker start, reverse order, of: aiperf010 qwen38-b-hr qwen38-a-hr
+2026-11-12T00:37:38Z restore: qwen38-a-hr start rc=0
+2026-11-12T00:37:38Z restore: qwen38-b-hr start rc=0
+2026-11-12T00:37:38Z restore: aiperf010 start rc=0
+2026-11-12T00:38:41Z restore: :30000 200 0.390850 'Paris'
+2026-11-12T00:38:41Z restore: :30001 200 0.382850 'Paris'
+2026-11-12T00:39:26Z restore: vram 0000:12:00.0 card1 26.46;0000:48:00.0 card2 15.09;0000:7c:00.0 card3 26.46;0000:96:00.0 card4 15.09;
+2026-11-12T00:39:26Z restore verified: both servers answer Paris, per-card VRAM back
+2026-11-12T00:39:26Z lock released
+2026-11-12T00:39:26Z driver done

@@ -1,0 +1,2 @@
+[32m==>[0m fit: Qwen/Qwen3.5-4B on 1 GPU via vllm, context 131072 x 5 seqs, GPU 29.8 GiB/card, host 8.0 GiB (pod limit 9Gi), host reserve 50.3 GiB
+[32m==>[0m agent: vllm serving Qwen/Qwen3.5-4B as 'Qwen3.5-4B' on 1x gpu.intel.com/xe, 2 CPU(s)

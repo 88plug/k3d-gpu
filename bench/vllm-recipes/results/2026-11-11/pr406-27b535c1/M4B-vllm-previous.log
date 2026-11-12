@@ -1,0 +1,1 @@
+Error from server (BadRequest): previous terminated container "vllm" in pod "vllm-64955849d7-knp24" not found

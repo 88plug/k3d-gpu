@@ -1,0 +1,14 @@
+intel-igc-core-2 2.38.2
+intel-igc-opencl-2 2.38.2
+intel-ocloc 26.27.39122.11-0
+intel-opencl-icd 26.27.39122.11-0
+libigdgmm12 22.10.2-1~24.04~ppa1
+libze-dev 1.32.0
+libze-intel-gpu1 26.27.39122.11-0
+libze1 1.32.0
+xpu-smi 2.1.0+26.33.6468cec-1~24.04
+==
+vllm 0.33.0+xpu
+torch 2.14.0+xpu
+intel-sycl-rt 2026.1.1
+oneccl 2022.1.2
