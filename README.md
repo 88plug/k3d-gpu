@@ -22,7 +22,8 @@ A Docker-based [rancher/k3s](https://hub.docker.com/r/rancher/k3s) node image on
 > advertised nothing [ledger:H52b]. The ledger scores H52 REFUTED and H52b REFUTED.
 > On that Xeon's CPU, llama.cpp with Google's QAT Q4_0 GGUF and its MTP drafter
 > out-decoded OVMS with OpenVINO's base-model int4 IR on Gemma 4 26B-A4B at four concurrent
-> requests, so it is now the default CPU engine for that CPU class [ledger:H59] (one model
+> requests, at llama.cpp b11960 [ledger:H59] and again at b12110, the build pinned since
+> release 0.1.107 [ledger:H59r], so it is the default CPU engine for that CPU class (one model
 > measured; other models with an int4 GGUF follow the rule unmeasured), and llama.cpp
 > served a 125B MoE entirely from its DRAM, its share of the DRAM bandwidth ceiling inside
 > the pre-registered band around a smaller Gemma 4 control's [ledger:H60].
@@ -1279,7 +1280,7 @@ and submits through execlists, so a GuC fault there warns instead. A failed HuC
 only warns: it runs media decode and encode, not inference. Without root the GuC is reported as not checked. The refused GPU's
 facts/v1 target reads `usable: false` with the `reason` and `fix`; `plan` then
 falls back to the next green cell on a usable target (OVMS on the CPU, or
-llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-b11960` (release v0.8.0)
+llama.cpp on Vulkan, pinned as `ghcr.io/ggml-org/llama.cpp:server-vulkan-b12110` (release v0.9.0)
 by digest) and lists the fix. With nothing left to pick the decision is `fix`,
 not an engine; a Gaudi without its driver plans the same way. `agent up` follows
 the same verdict: `auto` uses OVMS on the CPU and says why, and
