@@ -26,9 +26,9 @@
      add itself to the line in HEAD's pins/classes in the same diff), or adds a
      PENDING row to the line in HEAD's pins/classes with an amendment naming it (the
      amendment moves that row's arm onto this runner, and is held to the rule above).
-  d. --autobump (an autobump/* branch): touching .github/, pins/classes or pins/rewrites
-     fails, and
-     touching EXPERIMENTS.md fails unless the branch is autobump/amend-*
+  d. --autobump (an autobump/* branch): touching .github/, pins/classes or
+     pins/rewrites fails, and touching EXPERIMENTS.md fails unless the branch is
+     autobump/amend-*
   e. a changed file under bench/ or oracle/ that holds a pin token and no line
      classifies fails: classify it in pins/classes
 
