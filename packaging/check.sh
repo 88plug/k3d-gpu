@@ -10,7 +10,7 @@
 # SOURCE_DATE_EPOCH (default: last commit time), and the *_IMAGE pins below.
 set -euo pipefail
 
-NFPM_IMAGE="${NFPM_IMAGE:-goreleaser/nfpm:v2.48.0@sha256:d57a1452e7a019896b355f7b1ec67262278f6c503631f652d4fce7aef9ac8df7}"
+NFPM_IMAGE="${NFPM_IMAGE:-goreleaser/nfpm:v2.49.0@sha256:9ea46a59c4d055ef7071b22f3520b53e8dad98e18043b2f881b53bd7ffec634e}"
 DEBIAN_IMAGE="${DEBIAN_IMAGE:-debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2}"
 FEDORA_IMAGE="${FEDORA_IMAGE:-fedora:45@sha256:a7d72ba2745b100a3351087472e5ee7b2450af7cf331e7673007e3817612839c}"
 BREW_IMAGE="${BREW_IMAGE:-ghcr.io/homebrew/brew:7.0.13@sha256:63be5353975c43bce2c885742370ab320b3c57541de72fd1458a26a8e35d7d8e}"
