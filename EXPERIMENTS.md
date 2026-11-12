@@ -18566,13 +18566,17 @@ arm's idle window, in CPU-s/s:
 | 3 | 3.30 | 3.22 | 3.04 |
 
 One window decided it. Ls's idle window in hold 2 (22:08:15Z to 22:09:15Z) read 10.30 CPU-s/s: the
-P-cores' busy time rose from about 4 to 15.5 CPU-s/s at 22:08:33Z while the node used 0.06-0.14, and
-`load1` climbed from 9.5 to 26. The package drew 109 W in that window against 83-94 W in every other
-idle window. Ls's other two windows read 3.05 and 3.04, beside Od's 2.85-4.07. The burst came from
-outside the campaign; the records do not name its source. Had that window read like Ls's other two,
-the spread would have been about 0.35. The rule reads the windows as recorded. No spare can
-stand in: the pre-registration gives a spare only to a hold that left Ls or Od not measured, and
-every arm was measured in every hold.
+P-cores' busy time rose from 4.6 CPU-s/s in its first sample to 13.9 by 22:08:33Z and peaked at
+15.6, while the node used 0.06-0.14, and `load1` climbed from 9.5 to 26. The package drew 109 W in
+that window against 83-94 W in every other idle window. Ls's other two windows read 3.05 and 3.04,
+beside Od's 2.85-4.07. The burst came from outside the campaign; the records do not name its source.
+One event outside the records falls in that window: this clone's reflog places the merge train's
+merge of #404 into its batch (`33dc31fa`, 22:08:36Z) in another worktree on this host. The burst may
+have been that work rather than the host's containers; nothing measured says which. Had that window
+read like Ls's other two, the spread would have been about 0.36; any reading up to 10.12 in it would
+have matched. The rule reads the windows as recorded. No spare can stand in: the pre-registration
+gives a spare only to a hold that left Ls or Od not measured, and every arm was measured in every
+hold.
 
 Recorded, not gated: over the N=1 phases Ls read 3.04 and Od 0.19 CPU-s/s (spread 2.85), the pattern
 amendment R1 of H59 reported, with OVMS's foreign load falling while it serves. Over all three arms'
@@ -18650,6 +18654,8 @@ container remains, and the bench lock is free. After the records were copied, th
 on the second disk (models, drafters and records, 30 GB) was removed, and so were the two images the
 campaign pulled to the host (the node image and `full-b11749`). The OVMS and `full-b11960` images
 were on the host before prep and stay.
+
+**Ledger after it.** 85 rows: 23 SUPPORTED, 24 REFUTED, 37 INCONCLUSIVE and 1 PENDING (H63w).
 
 ## Scope corrections
 
