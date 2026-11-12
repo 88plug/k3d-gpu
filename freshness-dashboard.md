@@ -1,30 +1,28 @@
 # Freshness dashboard
 
-Updated 2026-11-12 09:10 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 09:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 red:freshness.yml
+stale:freshness.yml
 
-## Pins behind (4)
+## Pins behind (2)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 10h |
-| examples | `image:examples:ghcr.io/berriai/litellm:v1.109.0` | `v1.109.0` | `v1.109.1` | patch | ? | ? |
-| packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 6h |
+| packaging-images | `image:packaging-images:goreleaser/nfpm:v2.48.0` | `v2.48.0` | `v2.49.0` | minor | 2026-11-12 | 7h |
 | vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | revision | ? | ? |
 
 ### Not resolved (1)
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (3)
+## Open bot PRs (2)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
 | #427 | packaging-images | review | a human approval at the head |
-| #426 | examples | auto | - |
 | #423 | vllm-recipes | review | a human approval at the head |
 
 ## EAT stock (always review)
@@ -45,7 +43,7 @@ red:freshness.yml
 - `image:eat-stock:langfuse/langfuse:3.173.0`: current (`3.173.0`)
 - `image:eat-stock:rayproject/ray:2.40.0-py312`: current (`2.40.0-py312`)
 - `image:eat-stock:registry.k8s.io/agent-sandbox/python-runtime-sandbox:v0.5.0`: current (`v0.5.0`)
-- `image:eat-stock:ubuntu:24.04`: current (`24.04`)
+- `image:eat-stock:ubuntu:noble-20261024.1`: current (`noble-20261024.1`)
 - `image:eat-stock:us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router:latest-main`: current (`latest-main`)
 
 ## PENDING arms
@@ -110,7 +108,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59r | cryptoandcoffee/k3d-gpu 0.1.110; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b12110; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | yes |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.111; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.112; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
