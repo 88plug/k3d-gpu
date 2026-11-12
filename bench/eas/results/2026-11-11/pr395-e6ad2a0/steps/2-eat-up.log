@@ -1,0 +1,2600 @@
+[32m==>[0m EAS agent-toolkit on cluster 'k3dgpu-b70eas' (state /home/devcloud/k3dgpu-bench/b70eas/b70eas-e6ad2a0-20261111T1924Z/state/eas-k3dgpu-b70eas)
+[32m==>[0m Facts (read-only)...
+[32m==>[0m Choices (fact -> choice [source]):
+# k3d-gpu eas-config: profile release, layer agent-toolkit, cluster k3dgpu-b70eas
+# eas intel/enterprise-ai-solutions a051f00fcb2dd473fe763610471cd509db82c433
+# ei intel/enterprise-inference d035b1ef1981fbf5084ff05c9a337e620478bb87
+# eat intel/enterprise-agent-toolkit 7b827e2d95cec826a20c7e3f5a30eb4818ed2992
+# each line: <fact> -> <choice> [<source>]; --explain prints each source as a permalink
+cluster k3dgpu-b70eas, kubeconfig mounted read-only at /kube/config -> existing_kubernetes: /kube/config [intel/enterprise-ai-solutions@a051f00 es_auto_installer.sh:1378-1394]
+containerd CNI bin_dirs ["/usr/bin"] -> istio_platform: k3d (needs overlay 0002) [88plug/k3d-gpu@d997ea8 docs/intel/upstream-eat.md:222]
+ServiceLB on (no --disable servicelb in k3s.io/node-args) -> metallb_enabled: false [intel/enterprise-ai-solutions@a051f00 roles/metallb/tasks/install.yaml:23-31]
+no NRI policy on the node, containerd NRI on -> kubernetes_cpu_policy: nri-balloons (EAS installs the balloons policy) [intel/enterprise-ai-solutions@a051f00 configs/defaults/global_config.yaml:91-96]
+kubernetes_cpu_policy nri-balloons -> overlay 0003: needed (pins the nri-plugins chart EAS installs unpinned) [intel/enterprise-ai-solutions@a051f00 roles/nri_cpu_balloons/tasks/install_advanced.yaml:197-205]
+DaemonSet node-feature-discovery/nfd-worker from k3s addon node-feature-discovery -> nfd_enabled: false (EI would install a second NFD) [intel/enterprise-inference@d035b1e roles/nfd/tasks/install.yaml:15-25]
+node k3d-k3dgpu-b70eas-server-0 labelled feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true -> defaults.require_amx: true [intel/enterprise-inference@d035b1e model_manager/models.yaml:20]
+no --cluster-cidr in k3s.io/node-args -> kubernetes_cluster_cidr: 10.42.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:137-141]
+no --service-cidr in k3s.io/node-args -> kubernetes_service_cidr: 10.43.0.0/16 (the k3s default) [k3s-io/k3s@356c025 pkg/cli/cmds/server.go:142-146]
+bring-your-own cluster -> kata_containers_enabled: false [intel/enterprise-ai-solutions@a051f00 roles/kata_containers/tasks/install.yaml:9-22]
+EI's model deploy passes the LiteLLM master key through ansible environment: (a /bin/sh -c argument while each model deploys) -> _deploy_litellm_secret: "" (model-manager reads Secret litellm/litellm-master-key itself) [intel/enterprise-inference@d035b1e roles/llm_services/tasks/deploy_models.yaml:231]
+gpu.intel.com/xe allocatable 4 -> kubernetes_accelerator: cpu (serve the device with k3d-gpu agent up) [intel/enterprise-agent-toolkit@7b827e2 README.md:36]
+no agent-sandbox CRD -> agent_sandbox_enabled: true (EAT installs agent-sandbox v0.5.0) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:56]
+node memory 503.3 GiB; qwen2-5-coder-14b needs 131 GiB and k3d-gpu fit says it fits -> llm_services_autodeploy_models: [qwen2-5-coder-14b] [intel/enterprise-agent-toolkit@7b827e2 docs/single-node-deployment.md:84]
+k3d-gpu fit Qwen/Qwen2.5-Coder-14B-Instruct --engine vllm --device cpu sizes the KV cache at 354 GiB -> qwen2-5-coder-14b env.VLLM_CPU_KVCACHE_SPACE: 40 as shipped (fit only lowers it: the pod's memory limit is the catalog's 96Gi, not the host) [intel/enterprise-inference@d035b1e model_manager/models.yaml:302-311]
+host CPUs: 96 logical, 2 thread(s) per core, 1 NUMA node(s) -> EAS's balloons policy reserves its 48 SMT siblings (profile siblings); EI's cpu: auto gives qwen2-5-coder-14b about 40 (one NUMA node, less the reserve and Qwen3Guard's 8) [intel/enterprise-ai-solutions@a051f00 roles/nri_cpu_balloons/files/compute_reserved_cpus_advanced.sh:252-270]
+node allocatable 96 CPUs: qwen2-5-coder-14b 40, Qwen3Guard 8, about 14 for the pods outside the balloons (EAT's sandbox router among them) fit -> qwen2-5-coder-14b cpu: auto as shipped [intel/enterprise-inference@d035b1e model_manager/core/nri_policy.py:569-591]
+EAT default -> guardrails_enabled: on (Qwen3Guard, 16 GiB of the budget) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:25-26]
+EAT default -> hybrid_router_enabled: on (2 GiB of the budget) [intel/enterprise-agent-toolkit@7b827e2 config.yaml:27-28]
+pin ei v1.1.0 (profile release) -> repos.agent-toolkit.yaml inference rev: d035b1ef1981fbf5084ff05c9a337e620478bb87 [intel/enterprise-ai-solutions@a051f00 configs/repos/repos.agent-toolkit.yaml:16]
+pin eat release-2.0.0 (profile release) -> repos.agent-toolkit.yaml agent-toolkit rev: 7b827e2d95cec826a20c7e3f5a30eb4818ed2992 [intel/enterprise-ai-solutions@a051f00 configs/repos/repos.agent-toolkit.yaml:25]
+[32m==>[0m eas.sh up agent-toolkit -- in k3d-gpu-eas-bastion:0d4b2552207a9928 (log: /home/devcloud/k3dgpu-bench/b70eas/b70eas-e6ad2a0-20261111T1924Z/state/eas-k3dgpu-b70eas/logs/eas-up-20261111-193138.log)
+==> Cloning https://github.com/intel/enterprise-ai-solutions into /eas-state/eas
+==> EAS at a051f00fcb2dd473fe763610471cd509db82c433
+# overlay at eas@a051f00 (HEAD), kubernetes_cpu_policy=nri-balloons, nodes=1
+0002 variant a applies -> apply 0002-eas-istio-global-platform.patch [eas@a051f00 configs/defaults/global_config.yaml:62]
+0003 variant a applies -> apply 0003-eas-pin-nri-balloons-chart.patch [eas@a051f00 roles/nri_cpu_balloons/defaults/main.yaml:27]
+0004 nodes=1, needed only on more than one node -> skip [overlay.json 0004 needed_when=multi_node]
+0005 documentation only -> skip [overlay.json 0005 needed_when=never]
+0006 variant a does not apply, variant b does -> apply 0006-release-1.2-envoy-control-plane-affinity.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:194]
+0007 variant a applies -> apply 0007-release-1.2-istio-keep-newer-gateway-api.patch [eas@a051f00 roles/istio/tasks/install.yaml:70]
+0008 variant a applies -> apply 0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch [eas@a051f00 roles/envoy_gateway/tasks/install.yaml:23]
+applied 0002-eas-istio-global-platform.patch 0003-eas-pin-nri-balloons-chart.patch 0006-release-1.2-envoy-control-plane-affinity.patch 0007-release-1.2-istio-keep-newer-gateway-api.patch 0008-release-1.2-envoy-gateway-keep-newer-gateway-api.patch to /eas-state/eas
+init: env=k3d-gpu  layer=agent-toolkit  →  /eas-state/eas/env/k3d-gpu
+  created: k3d-gpu/inventory/hosts.yaml
+Cloning enterprise.ai-inference (d035b1ef1981fbf5084ff05c9a337e620478bb87)
+Cloning into '/eas-state/eas/ext/enterprise.ai-inference'...
+HEAD is now at d035b1e Documentation Updates (#55)
+Cloning enterprise.agent-toolkit (7b827e2d95cec826a20c7e3f5a30eb4818ed2992)
+Cloning into '/eas-state/eas/ext/enterprise.agent-toolkit'...
+HEAD is now at 7b827e2 Merge branch 'main' into release-2.0.0
+  created: k3d-gpu/global_config.yaml  (auth_provider from repos.agent-toolkit.yaml)
+  created: k3d-gpu/nodes.yaml
+  created: k3d-gpu/config.inference.yaml  (enterprise.ai-inference/config.yaml)
+  created: k3d-gpu/models.yaml  (from enterprise.ai-inference/model_manager/models.yaml)
+  created: k3d-gpu/config.agent-toolkit.yaml  (enterprise.agent-toolkit/config.yaml)
+[0;32minit: done.[0m
+  Configure  /eas-state/eas/env/k3d-gpu/global_config.yaml  (see README.md § Configuration Reference)
+  Configure  /eas-state/eas/env/k3d-gpu/models.yaml          (see README.md § Deploy a Model)
+  Then       ./es_auto_installer.sh install --env k3d-gpu agent-toolkit
+==> EI roles/keycloak_config/tasks/install.yaml: kcadm reads the admin password from its environment and Keycloak generates the client secret (0001-release-1.1-keycloak-config-kcadm-argv.patch)
+==> EAT roles/redis_stack/tasks/validate.yaml: redis-cli reads the Redis password from REDISCLI_AUTH (0001-redis-stack-validate-redis-cli-auth.patch)
+==> env/k3d-gpu/global_config.yaml: the global_config of repos.agent-toolkit.yaml (auth_provider: "litellm"; init sets it only in a new file)
+Install: agent-toolkit  (env=k3d-gpu, installer 1.2.0)
+Using existing venv: /eas-state/eas/.venv
+Inventory: /eas-state/eas/env/k3d-gpu/inventory/hosts.yaml
+BYO cluster mode — kubeconfig: /kube/config
+
+PLAY [AI-solutions] ************************************************************
+
+TASK [Gathering Facts] *********************************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight] ***************************************************************
+[0;36mincluded: /eas-state/eas/playbooks/includes/preflight.yaml for localhost[0m
+
+TASK [Preflight - Load ai-solutions component registry] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Ensure log and tmp directories exist] ************************
+[0;32mok: [localhost] => (item=/eas-state/eas/env/k3d-gpu/logs)[0m
+[0;33mchanged: [localhost] => (item=/eas-state/eas/env/k3d-gpu/logs/tmp)[0m
+
+TASK [Preflight - Note which layers ai-solutions declares itself] **************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Check for ext directory] *************************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Discover ext component manifests] ****************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Merge ext components + layers] *******************************
+[0;32mok: [localhost] => (item=components.yaml (enterprise.agent-toolkit))[0m
+[0;32mok: [localhost] => (item=components.yaml (enterprise.ai-inference))[0m
+
+TASK [Preflight - Proxy: fail fast if proxy set without no_proxy] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Check internet connectivity] *********************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Show proxy status] *******************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Abort on no connectivity] ************************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Object store: reject legacy MinIO configuration for object store] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Object store: validate backend value] ************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: validate value] **********************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: warn that accelerator overrides pinning] *********
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: downgrade to best-effort] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for nri-balloons] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for kubelet-static] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: derive settings for best-effort] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - CPU policy: announce] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'CPU policy: nri-balloons → kubelet_cpu_manager_policy=none, kubelet_topology_manager_policy=none,[0m
+[0;32m        nri_cpu_balloons_enabled=True'[0m
+
+TASK [Preflight - Define workload affinity (soft, label-based)] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Empty affinity when topology disabled] ***********************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Storage: resolve backend] ************************************
+[0;36mincluded: storage for localhost[0m
+
+TASK [storage : storage | resolve | normalize selector] ************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | detect multi-node] *************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | collect missing ONTAP values] **************
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the ONTAP configuration is complete] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | assert the custom StorageClass is named] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject an RWO-only custom class on multi-node] ***
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | reject local-path on multi-node] ***********
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | resolve | look up backend in registry] ***************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | reject unknown backend] ********************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [storage : storage | resolve | derive role] *******************************
+[0;32mok: [localhost][0m
+
+TASK [storage : storage | resolve | announce] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Storage backend: local-path -> role=(none - local-path)'[0m
+
+TASK [Preflight - Verify required CLI tools] ***********************************
+[0;32mok: [localhost] => (item=kubectl)[0m
+[0;32mok: [localhost] => (item=helm)[0m
+
+TASK [Preflight - Warn about missing CLI tools] ********************************
+[0;36mskipping: [localhost] => (item=kubectl) [0m
+[0;36mskipping: [localhost] => (item=helm) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Resolve active components (see filter_plugins/resolve_components.py)] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Refuse layers this env was not provisioned for] **************
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Show skipped components] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Skipped (disabled): kata_containers, metallb, keycloak, velero, nfd, keycloak_config,[0m
+[0;32m        agentgateway, vllm_sr, keycloak_agent_config, openshell, kuberay'[0m
+
+TASK [Preflight - Display execution plan] **************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ━━━ Install Plan ━━━[0m
+[0;32m        Action: install[0m
+[0;32m        Target: agent-toolkit[0m
+[0;32m        Components: kubernetes, storage, cert_manager, istio, envoy_gateway, postgresql, object_store, seaweedfs, observability, nri_cpu_balloons, envoy_ai_gateway, kserve, litellm, langfuse, llm_services, redis_stack, pgvector, agent_sandbox[0m
+
+TASK [Preflight - Agent Toolkit node readiness] ********************************
+[0;36mincluded: /eas-state/eas/playbooks/includes/agent_toolkit_preflight.yaml for localhost[0m
+
+TASK [Preflight - Toolkit nodes: locate the checks] ****************************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Toolkit nodes: check for an existing cluster] ****************
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Toolkit nodes: render the inventory from nodes.yaml] *********
+[0;36mskipping: [localhost][0m
+
+TASK [Preflight - Toolkit nodes: run the checks on every host (report only)] ***
+[0;32mok: [localhost][0m
+
+TASK [Preflight - Toolkit nodes: save the run output] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [Preflight - Toolkit nodes: report] ***************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - ============================================================[0m
+[0;32m    - '  Intel® AI for Enterprise — Stack Health Report'[0m
+[0;32m    - ============================================================[0m
+[0;32m    - '  Network connectivity                  [ FAIL ] no gateway configured'[0m
+[0;32m    - '  Platform health                       [ FAIL ] NTP check failed'[0m
+[0;32m    - '------------------------------------------------------------'[0m
+[0;32m    - '  No node resource pressure: Re-run after the install to check the nodes'[0m
+[0;32m    - '  HuggingFace token valid: Gated models (Llama, Gemma) need it — export HF_TOKEN=<token>[0m
+[0;32m        before ./model-manager deploy'[0m
+[0;32m    - ''[0m
+[0;32m    - '  FAILED: [network] Gateway reachable from 905a08313800'[0m
+[0;32m    - '          Hint: Check default route: ip route show default'[0m
+[0;32m    - '  FAILED: [platform-health] Time sync on 905a08313800'[0m
+[0;32m    - '          Hint: NTP not synced — check: chronyc sources or timedatectl'[0m
+[0;32m    - ''[0m
+[0;32m    - ============================================================[0m
+[0;32m    - '  RESULT: 2 layers — 2 FAILED'[0m
+[0;32m    - ============================================================[0m
+[0;32m    - 'Report: /eas-state/eas/env/k3d-gpu/logs/health-report-latest.html'[0m
+
+TASK [Preflight - Toolkit nodes: run did not complete, the install continues] ***
+[0;36mskipping: [localhost][0m
+
+TASK [Execute components] ******************************************************
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=kubernetes)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=storage)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=cert_manager)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=istio)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=envoy_gateway)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=postgresql)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=object_store)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=seaweedfs)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=observability)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=nri_cpu_balloons)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=envoy_ai_gateway)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=kserve)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=litellm)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=langfuse)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=llm_services)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=redis_stack)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=pgvector)[0m
+[0;36mincluded: /eas-state/eas/playbooks/includes/run_component.yaml for localhost => (item=agent_sandbox)[0m
+
+TASK [INSTALL: kubernetes] *****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: kubernetes                                                      ┃[0m
+[0;32m        ┃  Layer: infrastructure                                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute kubernetes] ******************************************************
+[0;36mincluded: kubernetes for localhost[0m
+
+TASK [kubernetes : kubernetes | Dispatch action: install] **********************
+[0;36mincluded: /eas-state/eas/roles/kubernetes/tasks/install.yaml for localhost[0m
+
+TASK [kubernetes : kubernetes | BYO cluster — skip provisioning] ***************
+
+TASK [kubernetes — install complete] *******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ kubernetes — install complete                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: storage] ********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: storage                                                         ┃[0m
+[0;32m        ┃  Layer: infrastructure                                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute storage] *********************************************************
+[0;36mincluded: storage for localhost[0m
+
+TASK [storage : storage | ensure backend is resolved] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [storage : storage | no backend role to run (local-path)] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Backend 'local-path' has no role to run — handled by Kubespray. Skipping.[0m
+
+TASK [storage | dispatch to backend role ''] ***********************************
+[0;36mskipping: [localhost][0m
+
+TASK [storage — install complete] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ storage — install complete                                             ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: cert_manager] ***************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: cert_manager                                                    ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute cert_manager] ****************************************************
+[0;36mincluded: cert_manager for localhost[0m
+
+TASK [cert_manager : cert_manager | Dispatch action: install] ******************
+[0;36mincluded: /eas-state/eas/roles/cert_manager/tasks/install.yaml for localhost[0m
+
+TASK [cert_manager : cert_manager | Check for existing Helm release] ***********
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Already installed — skipping] **************
+[0;36mskipping: [localhost][0m
+
+TASK [cert_manager : cert_manager | Add jetstack Helm repo] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager : cert_manager | Update Helm repos] *************************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Check for Gateway API CRDs] ****************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Label namespace — Istio] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager : cert_manager | Label namespace — PSS] *********************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager : cert_manager | Install cert-manager] **********************
+[0;33mchanged: [localhost][0m
+
+TASK [cert_manager : cert_manager | Wait for webhook] **************************
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Pause for webhook readiness] ***************
+Pausing for 10 seconds
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Check if Prometheus Operator CRDs are available] ***
+[0;32mok: [localhost][0m
+
+TASK [cert_manager : cert_manager | Create ServiceMonitor for cert-manager controller] ***
+[0;36mskipping: [localhost][0m
+
+TASK [cert_manager : cert_manager | Create ServiceMonitor for cert-manager cainjector] ***
+[0;36mskipping: [localhost][0m
+
+TASK [cert_manager : cert_manager | ServiceMonitor skipped (Prometheus Operator not yet installed)] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Prometheus Operator CRDs not found — cert-manager ServiceMonitors will be created[0m
+[0;32m        by the observability role.[0m
+
+TASK [cert_manager — install complete] *****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ cert_manager — install complete                                        ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: istio] **********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: istio                                                           ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute istio] ***********************************************************
+[0;36mincluded: istio for localhost[0m
+
+TASK [istio : istio | Dispatch action: install] ********************************
+[0;36mincluded: /eas-state/eas/roles/istio/tasks/install.yaml for localhost[0m
+
+TASK [istio : istio | Check for existing Helm release] *************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Already installed — skipping] ****************************
+[0;36mskipping: [localhost][0m
+
+TASK [istio : istio | Add Helm repository] *************************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Ensure namespace exists] *********************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Label namespace — Istio] *********************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Label namespace — PSS] ***********************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Bootstrap cert-manager-istio-csr (CA bridge)] ************
+[0;36mincluded: /eas-state/eas/roles/istio/tasks/install_csr.yaml for localhost[0m
+
+TASK [istio : istio | csr | Check for existing istio-csr Helm release] *********
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | csr | Already installed — skipping] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [istio : istio | csr | Add jetstack Helm repo] ****************************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | csr | Create selfsigned-root ClusterIssuer] **************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Create istio-ca Certificate (intermediate CA)] *****
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Wait for istio-ca Certificate to be ready] *********
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | csr | Create istio-ca ClusterIssuer (backed by intermediate CA)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Install cert-manager-istio-csr Helm chart] *********
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Create Role for istio-system permissions] **********
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | csr | Bind Role to istio-csr ServiceAccount] *************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | csr | Wait for istio-csr deployment to be available] *****
+[1;30mFAILED - RETRYING: [localhost]: istio | csr | Wait for istio-csr deployment to be available (60 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: istio | csr | Wait for istio-csr deployment to be available (59 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Read the installed Gateway API version] ******************
+[0;32mok: [localhost][0m
+
+TASK [istio : istio | Install Gateway API CRDs] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [istio : istio | Install Helm chart] **************************************
+[0;33mchanged: [localhost][0m
+
+TASK [istio : istio | Allow plaintext at mesh-edge exceptions (STRICT overrides)] ***
+[0;33mchanged: [localhost] => (item=cert-manager/default)[0m
+
+TASK [istio : istio | Enforce mesh-wide mutual TLS (STRICT)] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [istio — install complete] ************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ istio — install complete                                               ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: envoy_gateway] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: envoy_gateway                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_gateway] ***************************************************
+[0;36mincluded: envoy_gateway for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Dispatch action: install] ****************
+[0;36mincluded: /eas-state/eas/roles/envoy_gateway/tasks/install.yaml for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Check for existing Helm release] *********
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Already installed — skipping] ************
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Read the installed Gateway API version] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Keep a Gateway API install at v1.5.0 or later] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Render Envoy Gateway's own CRDs] *********
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply Envoy Gateway's own CRDs (server-side)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Install Envoy Gateway via Helm (OCI) — standalone] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Wait for controller deployment] **********
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Label envoy-gateway-system namespace — Istio] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Allow external ingress at eg-gateway edge (mTLS PERMISSIVE)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Allow apiserver to reach controller webhook (port-level mTLS)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Label envoy-gateway-system namespace — PSS] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create gateway namespace (if different)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Label gateway namespace — Istio] *********
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Label gateway namespace — PSS] ***********
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Provision TLS serving certificate] *******
+[0;36mincluded: /eas-state/eas/roles/envoy_gateway/tasks/tls.yaml for localhost[0m
+
+TASK [envoy_gateway : envoy_gateway | Validate TLS configuration] **************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: TLS mode 'selfsigned' with domain 'solutions.ai'[0m
+
+TASK [envoy_gateway : envoy_gateway | Validate custom cert files exist] ********
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Read custom TLS certificate] *************
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Read custom TLS key] *********************
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create TLS secret from user-provided certs] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create self-signed bootstrap ClusterIssuer] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create root CA Certificate] **************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Wait for root CA secret] *****************
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create CA ClusterIssuer (gateway-issuer)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create Certificate for gateway TLS] ******
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Wait for TLS certificate to be ready] ****
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Export root CA certificate to /eas-state/eas/env/k3d-gpu/logs/ai-solutions-ca.crt] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Root CA trust instructions] **************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Root CA exported: /eas-state/eas/env/k3d-gpu/logs/ai-solutions-ca.crt'[0m
+[0;32m    - Import it to stop browser warnings on https://*.solutions.ai[0m
+[0;32m    - 'Firefox:  Settings → Privacy & Security → Certificates → View Certificates → Authorities[0m
+[0;32m        → Import'[0m
+[0;32m    - 'Chrome:   Settings → Privacy and security → Security → Manage certificates → Authorities[0m
+[0;32m        → Import'[0m
+[0;32m    - 'Linux:    sudo cp /eas-state/eas/env/k3d-gpu/logs/ai-solutions-ca.crt /usr/local/share/ca-certificates/ai-solutions-ca.crt[0m
+[0;32m        && sudo update-ca-certificates'[0m
+
+TASK [envoy_gateway : envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create GatewayClass] *********************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply Gateway resource] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Wait for Gateway to be accepted] *********
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Redirect all plaintext HTTP:80 traffic to HTTPS] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Exempt the HTTP→HTTPS redirect route from gateway auth] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Reserve platform hostnames to their owning namespace] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply S3 listener ClientTrafficPolicy (SigV4 path handling)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Remove the S3 listener ClientTrafficPolicy when the listener is gone] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Find routes still pinned to 'https' for the S3 hostname] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Report routes claiming the S3 hostname] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | S3 path normalization not relaxed (routing_mode: path)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply gateway-default BackendTrafficPolicy (timeout)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Read the current gateway SecurityPolicy] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply SecurityPolicy (litellm)] **********
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Drop auth sections the policy no longer has] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Apply no-auth SecurityPolicy overrides] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Check if Prometheus Operator CRDs are available] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | Create ServiceMonitor for Envoy Gateway metrics] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_gateway : envoy_gateway | ServiceMonitor skipped (Prometheus Operator not yet installed)] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Prometheus Operator CRDs not found — Envoy Gateway ServiceMonitor will be created[0m
+[0;32m        by the observability role.[0m
+
+TASK [envoy_gateway : envoy_gateway | Install complete] ************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Envoy Gateway v1.7.1 installed in envoy-gateway-system. Gateway 'eg-gateway'[0m
+[0;32m        created with TLS (selfsigned) + auth (litellm).[0m
+
+TASK [envoy_gateway — install complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_gateway — install complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: postgresql] *****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: postgresql                                                      ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute postgresql] ******************************************************
+[0;36mincluded: postgresql for localhost[0m
+
+TASK [postgresql : postgresql | Include install] *******************************
+[0;36mincluded: /eas-state/eas/roles/postgresql/tasks/install.yaml for localhost[0m
+
+TASK [postgresql : postgresql | Check for existing CNPG Helm release] **********
+[0;32mok: [localhost][0m
+
+TASK [postgresql : postgresql | Add CNPG Helm repo] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Label cnpg-system namespace — Istio] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Label cnpg-system namespace — PSS] *************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Install CNPG operator] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Wait for CNPG operator readiness] **************
+[0;32mok: [localhost][0m
+
+TASK [postgresql : postgresql | CNPG operator already installed] ***************
+[0;36mskipping: [localhost][0m
+
+TASK [postgresql : postgresql | Create namespace] ******************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Label namespace — Istio] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Allow apiserver to reach CNPG webhook (port-level mTLS)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Label namespace — PSS] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Check existing per-database secrets] ***********
+[0;32mok: [localhost] => (item=keycloak)[0m
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Create per-database credential secrets (only if missing)] ***
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Read credential secrets for SQL generation] ****
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Create SQL init Secrets for additional users] ***
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Check for existing CNPG Cluster] ***************
+[0;32mok: [localhost][0m
+
+TASK [postgresql : postgresql | Already running — skipping cluster deploy] *****
+[0;36mskipping: [localhost][0m
+
+TASK [postgresql : postgresql | Apply CNPG Cluster CR] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [postgresql : postgresql | Wait for CNPG Cluster readiness] ***************
+[1;30mFAILED - RETRYING: [localhost]: postgresql | Wait for CNPG Cluster readiness (60 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: postgresql | Wait for CNPG Cluster readiness (59 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: postgresql | Wait for CNPG Cluster readiness (58 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [postgresql : postgresql | Copy provisioning script to pod] ***************
+[0;36mskipping: [localhost][0m
+
+TASK [postgresql : postgresql | Provision users/databases on existing cluster] ***
+[0;36mskipping: [localhost] => (item=litellm) [0m
+[0;36mskipping: [localhost] => (item=langfuse) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [postgresql : postgresql | Create additional databases via CNPG Database CRD] ***
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Wait for databases to be ready] ****************
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Install complete] ******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'CloudNativePG 0.25.0 operator + PostgreSQL 17 cluster ''postgresql'' deployed[0m
+[0;32m        in postgresql (1 instance(s)). Databases: keycloak, litellm, langfuse.'[0m
+
+TASK [postgresql : postgresql | Ensure consumer namespaces exist] **************
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Label consumer namespaces — Istio] *************
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Read consumer namespaces] **********************
+[0;32mok: [localhost] => (item=keycloak)[0m
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Label consumer namespaces — PSS] ***************
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Read per-database passwords] *******************
+[0;32mok: [localhost] => (item=keycloak)[0m
+[0;32mok: [localhost] => (item=litellm)[0m
+[0;32mok: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql : postgresql | Copy DB secrets to consumer namespaces] ********
+[0;33mchanged: [localhost] => (item=keycloak)[0m
+[0;33mchanged: [localhost] => (item=litellm)[0m
+[0;33mchanged: [localhost] => (item=langfuse)[0m
+
+TASK [postgresql — install complete] *******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ postgresql — install complete                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: object_store] ***************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: object_store                                                    ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute object_store] ****************************************************
+[0;36mincluded: object_store for localhost[0m
+
+TASK [object_store : object_store | Interface role — no tasks] *****************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'object_store is an interface role. Active backend: seaweedfs'[0m
+
+TASK [object_store — install complete] *****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ object_store — install complete                                        ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: seaweedfs] ******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: seaweedfs                                                       ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute seaweedfs] *******************************************************
+[0;36mincluded: seaweedfs for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Dispatch action: install] ************************
+[0;36mincluded: /eas-state/eas/roles/seaweedfs/tasks/install.yaml for localhost[0m
+
+TASK [seaweedfs : seaweedfs | Load object_store interface vars] ****************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Create namespace] ********************************
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Label namespace — Istio] *************************
+[0;36mskipping: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Bootstrap credentials] ***************************
+[0;36mincluded: /eas-state/eas/roles/seaweedfs/tasks/credentials.yaml for localhost[0m
+
+TASK [seaweedfs : seaweedfs | credentials | Check for existing credentials Secret] ***
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | credentials | Load passwords from existing Secret] ***
+[0;36mskipping: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | credentials | Generate new passwords (first install)] ***
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | credentials | Store credentials Secret] **********
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Build S3 config] *********************************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Store S3 config Secret] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Add SeaweedFS Helm repo] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Deploy SeaweedFS] ********************************
+[0;33mchanged: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Set object_store_* facts] ************************
+[0;32mok: [localhost][0m
+
+TASK [seaweedfs : seaweedfs | Install complete] ********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'SeaweedFS deployed in namespace ''monitoring''. object_store_endpoint: http://telemetry-seaweedfs-s3.monitoring.svc.cluster.local:8333[0m
+[0;32m        Consumers: loki, tempo, langfuse Buckets: loki-chunks, loki-ruler, tempo-traces,[0m
+[0;32m        langfuse'[0m
+
+TASK [seaweedfs — install complete] ********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ seaweedfs — install complete                                           ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: observability] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: observability                                                   ┃[0m
+[0;32m        ┃  Layer: platform                                                          ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute observability] ***************************************************
+[0;36mincluded: observability for localhost[0m
+
+TASK [observability : observability | Dispatch action: install] ****************
+[0;36mincluded: /eas-state/eas/roles/observability/tasks/install.yaml for localhost[0m
+
+TASK [observability : observability | Check kube-prometheus-stack release] *****
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Check Loki release] **********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Check Tempo release] *********************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Check OTel Collector release] ************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Check Prometheus Adapter release] ********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Create namespace] ************************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Label namespace — Istio] *****************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Allow apiserver to reach operator webhook + metrics adapter (port-level mTLS)] ***
+[0;33mchanged: [localhost] => (item=allow-webhook-operator:10250)[0m
+[0;33mchanged: [localhost] => (item=allow-metrics-adapter:6443)[0m
+
+TASK [observability : observability | Read node internal IPs (apiserver webhook source)] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Collect node internal IPs] ***************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Restrict the mesh-edge ports to the apiserver and Prometheus] ***
+[0;33mchanged: [localhost] => (item=authz-webhook-operator)[0m
+[0;33mchanged: [localhost] => (item=authz-metrics-adapter)[0m
+
+TASK [observability : observability | Remove the previously named authorization policy] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Label namespace — PSS] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Bootstrap credentials] *******************
+[0;36mincluded: /eas-state/eas/roles/observability/tasks/credentials.yaml for localhost[0m
+
+TASK [observability : observability | credentials | Check for existing credentials Secret] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | credentials | Load passwords from existing Secret] ***
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | credentials | Generate new passwords (first install)] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | credentials | Store credentials Secret] ***
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Load object_store credentials Secret] ****
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Set object_store credentials from Secret] ***
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Add prometheus-community Helm repo] ******
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Add grafana-community Helm repo] *********
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Add open-telemetry Helm repo] ************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Deploy kube-prometheus-stack] ************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Wait for Prometheus Operator] ************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Wait for Grafana] ************************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Wait for Node Exporter DaemonSet] ********
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | kube-prometheus-stack already installed — skipping] ***
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Deploy Loki] *****************************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Wait for Loki StatefulSet] ***************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Loki already installed — skipping] *******
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Apply Loki PVC usage PrometheusRule] *****
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Deploy Tempo] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Wait for Tempo StatefulSet] **************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Tempo already installed — skipping] ******
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Deploy OpenTelemetry Collector] **********
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Wait for OTel Collector DaemonSet] *******
+[1;30mFAILED - RETRYING: [localhost]: observability | Wait for OTel Collector DaemonSet (60 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | OTel Collector already installed — skipping] ***
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Deploy Prometheus Adapter] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Wait for Prometheus Adapter] *************
+[0;32mok: [localhost][0m
+
+TASK [observability : observability | Prometheus Adapter already installed — skipping] ***
+[0;36mskipping: [localhost][0m
+
+TASK [observability : observability | Expose Grafana via gateway HTTPRoute] ****
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Bypass gateway auth for Grafana (Grafana has its own login)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Store Grafana admin credentials as a cluster Secret] ***
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Create Loki ServiceMonitor] **************
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Create OTel Collector ServiceMonitor] ****
+[0;33mchanged: [localhost][0m
+
+TASK [observability : observability | Install complete] ************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Observability stack deployed in namespace ''monitoring''. Components: kube-prometheus-stack[0m
+[0;32m        85.3.3, Loki 6.55.0, Tempo 1.24.4, OTel Collector 0.153.0. Grafana: https://grafana.solutions.ai[0m
+[0;32m        OTLP gRPC: opentelemetry-collector.monitoring.svc.cluster.local:4317 OTLP HTTP:[0m
+[0;32m        opentelemetry-collector.monitoring.svc.cluster.local:4318'[0m
+
+TASK [observability — install complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ observability — install complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: nri_cpu_balloons] ***********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: nri_cpu_balloons                                                ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute nri_cpu_balloons] ************************************************
+[0;36mincluded: nri_cpu_balloons for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Dispatch action: install] **********
+[0;36mincluded: /eas-state/eas/roles/nri_cpu_balloons/tasks/install.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Not CPU — skipping] ****************
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | End play] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Run topology-aware install] ********
+[0;36mincluded: /eas-state/eas/roles/nri_cpu_balloons/tasks/install_advanced.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Banner] ****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - =================================================================[0m
+[0;32m    - NRI Balloon Policy (multi-model, topology-aware)[0m
+[0;32m    - =================================================================[0m
+[0;32m    - 'Deployment profile:       siblings'[0m
+[0;32m    - 'Max TP size:              8 (auto-capped by NUMA)'[0m
+[0;32m    - 'Operator cpuset override: no'[0m
+[0;32m    - =================================================================[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Generate balloon types] ************
+[0;36mincluded: /eas-state/eas/roles/nri_cpu_balloons/tasks/generate_balloon_types.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Ensure topology-probe DaemonSet (minimal, non-root)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Wait for probe pods Running] ***
+[1;30mFAILED - RETRYING: [localhost]: nri_cpu_balloons | advanced | Wait for probe pods Running (30 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Filter Running probe pods (one per node)] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Assert at least one probe pod ready] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Pick a pod for cluster-wide tasks (first Running)] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Load probe script] ******
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Probe topology on every node (/sys, unprivileged)] ***
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0)[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Build per-node topology map] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Validate probe results] ***
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0) => [0m
+[0;32m    ansible_loop_var: item[0m
+[0;32m    changed: false[0m
+[0;32m    item:[0m
+[0;32m        key: k3d-k3dgpu-b70eas-server-0[0m
+[0;32m        value:[0m
+[0;32m            logical_cpus: 96[0m
+[0;32m            max_tp: 1[0m
+[0;32m            node_cpus:[0m
+[0;32m                0: 0-95[0m
+[0;32m            nodecpus_str: 0:0-95[0m
+[0;32m            numa: 1[0m
+[0;32m            physical_cpus: 48[0m
+[0;32m            pkgnode: '{0:[0]}'[0m
+[0;32m            siblings: 48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95[0m
+[0;32m            threads_per_core: 2[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Derive cluster-wide topology facts] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Per-node topology summary] ***
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0) => [0m
+[0;32m    msg: node=k3d-k3dgpu-b70eas-server-0 numa=1 physical_cpus=48 threads_per_core=2 max_tp=1[0m
+[0;32m        pkgnode={0:[0]}[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Cluster topology banner] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - =================================================================[0m
+[0;32m    - Cluster topology (1 node(s))[0m
+[0;32m    - =================================================================[0m
+[0;32m    - 'NUMA nodes:        min=1  max=1'[0m
+[0;32m    - 'Physical CPUs:     min=48  max=48'[0m
+[0;32m    - 'Max TP supported:  min=1    max=1'[0m
+[0;32m    - 'Heterogeneous:     False'[0m
+[0;32m    - =================================================================[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Warn on heterogeneous topology] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Pick PKG_NODE of the most-capable node] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Run gen-balloon-types.py on controller (cluster MAX_TP)] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Validate generated output] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Export balloon types fact] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Run gen-balloon-types.py per node (controller)] ***
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0 (max_tp=1))[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Merge per-node balloon types into topology fact] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | advanced | Label nodes with NRI capability] ***
+[0;33mchanged: [localhost] => (item=k3d-k3dgpu-b70eas-server-0 (max_tp=1))[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Compute dynamic reserved CPU list per node] ***
+[0;36mincluded: /eas-state/eas/roles/nri_cpu_balloons/tasks/compute_advanced_reserved_cpus.yaml for localhost[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Select representative node for cluster-default reserved calc] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Compute cluster-default reserved CPU list (profile=siblings)] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Reservation exceeds 25% of total CPUs] ***
+[0;33mchanged: [localhost] => [0m
+[0;33m    msg:[0m
+[0;33m    - '[WARNING] Profile ''siblings'' reserves more than 25% of total vCPUs.'[0m
+[0;33m    - '[WARNING] Reserved vCPUs (48) exceeds 25% of total (24). [WARNING] There may not[0m
+[0;33m        be sufficient CPUs available for inference workloads. [WARNING] Consider using[0m
+[0;33m        a larger machine or a smaller reservation profile. [WARNING] Proceeding with deployment...'[0m
+[0;33m    - Remaining CPUs for inference may be limited. Proceeding with deployment.[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Parse NRI_RESERVED_CPU_LIST] *******
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Validate reserved CPU list] ********
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Reserved CPU summary] **************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Display cluster-default reserved CPU plan] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Profile:                   siblings'[0m
+[0;32m    - 'Reserved cpuset:           48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95'[0m
+[0;32m    - 'Reserved CPUs (count):     48'[0m
+[0;32m    - 'Workload CPUs available:   0'[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Compute reserved CPUs per node (controller, injected topology)] ***
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0 (profile=siblings))[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Per-node reservation exceeds 25% of total CPUs] ***
+[0;33mchanged: [localhost] => (item=k3d-k3dgpu-b70eas-server-0) => [0m
+[0;33m    msg:[0m
+[0;33m    - '[WARNING] Node ''k3d-k3dgpu-b70eas-server-0'' — profile ''siblings'' reserves more[0m
+[0;33m        than 25% of total vCPUs.'[0m
+[0;33m    - '[WARNING] Reserved vCPUs (48) exceeds 25% of total (24). [WARNING] There may not[0m
+[0;33m        be sufficient CPUs available for inference workloads. [WARNING] Consider using[0m
+[0;33m        a larger machine or a smaller reservation profile. [WARNING] Proceeding with deployment...'[0m
+[0;33m    - Remaining CPUs for inference may be limited. Proceeding with deployment.[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Merge per-node reserved into topology fact] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Per-node reserved summary] *********
+[0;32mok: [localhost] => (item=k3d-k3dgpu-b70eas-server-0) => [0m
+[0;32m    msg: node=k3d-k3dgpu-b70eas-server-0 numa=1 threads_per_core=2 profile=siblings reserved_count=48[0m
+[0;32m        cpuset=48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Use operator-supplied reserved CPU list] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Validate reserved CPU list format] ***
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: All assertions passed[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Select reservedResources form] *****
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Reserved resources form banner] ****
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - 'Reserved form:     count'[0m
+[0;32m    - 'Reserved cpuset:   48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95'[0m
+[0;32m    - 'Reserved count:    48'[0m
+[0;32m    - 'Heterogeneous:     False'[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Inject operator reserved cpuset into per-node topology] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Delete topology optimizer DaemonSet] ***
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Ensure tmp dir exists] *************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Render values file] ****************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Add Helm repo] *********************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Ensure namespace exists] ***********
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Apply policy ConfigMap] ************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Install / upgrade Helm release] ****
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Wait for DaemonSet readiness] ******
+[1;30mFAILED - RETRYING: [localhost]: nri_cpu_balloons | Wait for DaemonSet readiness (30 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Wait for BalloonsPolicy CRD] *******
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Render per-node BalloonsPolicy CRs] ***
+[0;33mchanged: [localhost] => (item=k3d-k3dgpu-b70eas-server-0)[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Apply per-node BalloonsPolicy CRs] ***
+[0;33mchanged: [localhost] => (item=node.k3d-k3dgpu-b70eas-server-0 (max_tp=1, reserved=48))[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | List existing per-node BalloonsPolicy CRs] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Compute stale per-node BalloonsPolicy CRs] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Delete stale per-node BalloonsPolicy CRs] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | List nodes currently carrying nri.intel.com/balloons-enabled] ***
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Strip NRI labels from nodes no longer in topology] ***
+[0;36mskipping: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Per-node BalloonsPolicy summary] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ============================================================[0m
+[0;32m        Per-node BalloonsPolicy CRs reconciled[0m
+[0;32m        ============================================================[0m
+[0;32m        Applied / refreshed (1):[0m
+[0;32m          - node.k3d-k3dgpu-b70eas-server-0: max_tp=1, reserved=48, numa=1[0m
+[0;32m        Pruned stale (0):[0m
+[0;32m          - (none)[0m
+[0;32m        ------------------------------------------------------------[0m
+[0;32m        Plugin precedence: node.<NAME> > group.<NAME> > default[0m
+[0;32m        Default CR remains as safety-net for undiscovered nodes.[0m
+[0;32m        ============================================================[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Export policy stats] ***************
+[0;32mok: [localhost][0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Final summary] *********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - =================================================================[0m
+[0;32m    - NRI Balloon Policy deployed[0m
+[0;32m    - =================================================================[0m
+[0;32m    - 'NUMA nodes (max):  1'[0m
+[0;32m    - 'Physical CPUs:     48'[0m
+[0;32m    - 'Reserved cpuset:   48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95[0m
+[0;32m        (48 CPUs)'[0m
+[0;32m    - 'Deployment profile: siblings'[0m
+[0;32m    - 'Max TP size:       1'[0m
+[0;32m    - 'Balloon types:     vllm-balloon-tp1'[0m
+[0;32m    - ''[0m
+[0;32m    - 'Pods should be annotated with:'[0m
+[0;32m    - '  balloon.balloons.resource-policy.nri.io: vllm-balloon-tp<N>'[0m
+[0;32m    - =================================================================[0m
+
+TASK [nri_cpu_balloons : nri_cpu_balloons | Clean up tmp dir] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [nri_cpu_balloons — install complete] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ nri_cpu_balloons — install complete                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: envoy_ai_gateway] ***********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: envoy_ai_gateway                                                ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute envoy_ai_gateway] ************************************************
+[0;36mincluded: envoy_ai_gateway for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Dispatch action: install] **********
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/envoy_ai_gateway/tasks/install.yaml for localhost[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Check for existing Helm release] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Detect version] ********************
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Status] ****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        Fresh install[0m
+[0;32m        Envoy AI Gateway v0.6.0[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Label namespace — Istio] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Allow apiserver to reach controller webhook (port-level mTLS)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Label namespace — PSS] *************
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Install/upgrade CRDs via Helm (OCI)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Install/upgrade controller via Helm (OCI)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Wait for controller deployment] ****
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Install/upgrade complete] **********
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Envoy AI Gateway v0.6.0 ready in envoy-ai-gateway-system.[0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Ensure AI Gateway namespace exists] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Label AI Gateway namespace — Istio] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Label AI Gateway namespace — PSS] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create EnvoyProxy config (ClusterIP + data-plane affinity)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create GatewayClass for AI Gateway] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create AI Gateway namespace] *******
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create AI Gateway resource] ********
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Check if Prometheus Operator CRDs are available] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create ServiceMonitor for AI Gateway controller] ***
+[0;33mchanged: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | ServiceMonitor skipped (Prometheus Operator not yet installed)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Wait for AI Gateway to be accepted] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Create external inference HTTPRoute (eg-gateway → ai-gateway)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [envoy_ai_gateway : envoy_ai_gateway | Remove external inference HTTPRoute when not keycloak] ***
+[0;32mok: [localhost][0m
+
+TASK [envoy_ai_gateway — install complete] *************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ envoy_ai_gateway — install complete                                    ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: kserve] *********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: kserve                                                          ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute kserve] **********************************************************
+[0;36mincluded: kserve for localhost[0m
+
+TASK [kserve : kserve | Dispatch action: install] ******************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/kserve/tasks/install.yaml for localhost[0m
+
+TASK [kserve : kserve | Validate deploy mode] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    changed: false[0m
+[0;32m    msg: 'Deploy mode: Standard'[0m
+
+TASK [kserve : kserve | Verify cert-manager is running] ************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Wait for cert-manager webhook] *************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Check Istio installed] *********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Install Istio via Helm (istio-base)] *******************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Install Istio (istiod)] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Wait for istiod] ***************************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Check Knative Serving installed] ***********************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Install Knative Serving CRDs] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Install Knative Serving core] **************************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Install Knative Istio controller] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Wait for Knative Serving controller] *******************
+[0;36mskipping: [localhost][0m
+
+TASK [kserve : kserve | Check for existing KServe Helm release] ****************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Detect version] ****************************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Status] ************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        Fresh install[0m
+[0;32m        KServe v0.18.0[0m
+
+TASK [kserve : kserve | Label namespace — Istio] *******************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Allow apiserver to reach webhooks (port-level mTLS)] ***
+[0;33mchanged: [localhost] => (item=allow-webhook)[0m
+[0;33mchanged: [localhost] => (item=allow-webhook-llmisvc)[0m
+
+TASK [kserve : kserve | Label namespace — PSS] *********************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Install KServe CRDs via Helm template + server-side apply] ***
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | List the KServe CRDs] **********************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Wait for the KServe CRDs to be established] ************
+[0;32mok: [localhost] => (item=clusterservingruntimes.serving.kserve.io)[0m
+[0;32mok: [localhost] => (item=clusterstoragecontainers.serving.kserve.io)[0m
+[0;32mok: [localhost] => (item=inferencegraphs.serving.kserve.io)[0m
+[0;32mok: [localhost] => (item=inferenceservices.serving.kserve.io)[0m
+[0;32mok: [localhost] => (item=servingruntimes.serving.kserve.io)[0m
+[0;32mok: [localhost] => (item=trainedmodels.serving.kserve.io)[0m
+
+TASK [kserve : kserve | Install KServe resources via Helm] *********************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Detect pre-existing LLMIsvc runtime configs] ***********
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Compute initial llmisvcConfigs enablement] *************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Install KServe runtime configs via Helm] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Wait for controller] ***********************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Configure Gateway API ingress] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Restart controller to pick up ingress config] **********
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — check LWS operator] **************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — label LWS namespace — Istio] *****************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — label LWS namespace — PSS] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — install LWS operator via Helm] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — wait for LWS operator] ***********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — allow apiserver to reach LWS webhook (port-level mTLS)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — verify Envoy Gateway is running] *************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — verify Envoy AI Gateway is running] **********
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — check existing release] **********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — detect version change] ***********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — install CRDs via Helm] ***********************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — adopt GIE CRDs for Helm tracking] ************
+[0;32mok: [localhost] => (item=inferencemodelrewrites.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferenceobjectives.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepoolimports.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepools.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepools.inference.networking.k8s.io)[0m
+
+TASK [kserve : kserve | LLMIsvc — annotate GIE CRDs for Helm release] **********
+[0;32mok: [localhost] => (item=inferencemodelrewrites.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferenceobjectives.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepoolimports.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepools.inference.networking.x-k8s.io)[0m
+[0;32mok: [localhost] => (item=inferencepools.inference.networking.k8s.io)[0m
+
+TASK [kserve : kserve | LLMIsvc — install resources via Helm] ******************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — wait for controller] *************************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — upgrade runtime configs with llmisvcConfigs] ***
+[1;35m[WARNING]: The default idempotency check can fail to report changes in certain cases. Install helm diff >= 3.4.1 for better results.[0m
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — read scheduler preset] ***********************
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — repin llm-d router images] *******************
+[0;33mchanged: [localhost] => (item=main → ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0)[0m
+[0;33mchanged: [localhost] => (item=tokenizer → ghcr.io/llm-d/llm-d-uds-tokenizer:vllm-v0.19.1)[0m
+
+TASK [kserve : kserve | LLMIsvc — create image pre-pull DaemonSet] *************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — wait for image pre-pull to complete] *********
+[1;30mFAILED - RETRYING: [localhost]: kserve | LLMIsvc — wait for image pre-pull to complete (120 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: kserve | LLMIsvc — wait for image pre-pull to complete (119 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: kserve | LLMIsvc — wait for image pre-pull to complete (118 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: kserve | LLMIsvc — wait for image pre-pull to complete (117 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: kserve | LLMIsvc — wait for image pre-pull to complete (116 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | LLMIsvc — remove pre-pull DaemonSet] *******************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Ensure temp directory exists] **************************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Render AI Gateway values for Envoy Gateway] ************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Upgrade Envoy Gateway with AI integration] *************
+[0;33mchanged: [localhost][0m
+
+TASK [kserve : kserve | Wait for Envoy Gateway to stabilise after upgrade] *****
+[0;32mok: [localhost][0m
+
+TASK [kserve : kserve | Install complete] **************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'KServe v0.18.0 installed in kserve (mode: Standard) + LLMIsvc add-on.'[0m
+
+TASK [kserve — install complete] ***********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ kserve — install complete                                              ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: litellm] ********************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: litellm                                                         ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute litellm] *********************************************************
+[0;36mincluded: litellm for localhost[0m
+
+TASK [litellm : litellm | Dispatch action: install] ****************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/litellm/tasks/install.yaml for localhost[0m
+
+TASK [litellm : litellm | Check for existing Helm release] *********************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Read the running proxy configuration] ****************
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Look up the guard Service address] *******************
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Set the guard addresses that bypass the proxy] *******
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Set the loopback addresses that bypass the proxy] ****
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Warn when the guard Service address is unknown] ******
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Read the running LiteLLM Deployment] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Check the guard settings of the running release] *****
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Already installed — skipping] ************************
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Upgrading the release to apply the guard settings] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Label namespace — PSS] *******************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Detect cluster size] *********************************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Set sizing based on cluster topology] ****************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Topology summary] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'LiteLLM sizing: single-node (1 replica)'[0m
+
+TASK [litellm : litellm | Build proxy env (prisma CLI bootstrap needs egress)] ***
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Proxy env summary] ***********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'LiteLLM pod proxy: not set (direct egress)'[0m
+
+TASK [litellm : litellm | Build prisma engine seed initContainer] **************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Create namespace] ************************************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Create ReferenceGrant for Envoy Gateway extAuth] *****
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Wait for DB credentials secret] **********************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Wait for litellm database to be ready (CNPG Database CRD)] ***
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Extract DB connection details] ***********************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Check for existing master key secret] ****************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Create master key secret] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Configure hybrid router wiring (before Helm)] ********
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/litellm/tasks/hybrid_router_setup.yaml for localhost[0m
+
+TASK [litellm : litellm | hybrid | Default wiring to empty (disabled)] *********
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | hybrid | Read router code (flat dotted keys)] ********
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | hybrid | Create router-code ConfigMap] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | hybrid | Build helm wiring facts] ********************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | hybrid | Wiring summary] *****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: Hybrid router ENABLED — virtual model 'hybrid-router', default qwen2-5-coder-14b,[0m
+[0;32m        tiers ['SIMPLE', 'MEDIUM', 'COMPLEX', 'REASONING'][0m
+
+TASK [litellm : litellm | Install via Helm] ************************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Waiting for pods to be ready (image pull may take a few minutes)...] ***
+[1;30mFAILED - RETRYING: [localhost]: litellm | Waiting for pods to be ready (image pull may take a few minutes)... (120 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Waiting for pods to be ready (image pull may take a few minutes)... (119 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Waiting for pods to be ready (image pull may take a few minutes)... (118 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Waiting for pods to be ready (image pull may take a few minutes)... (117 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Waiting for pods to be ready (image pull may take a few minutes)... (116 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Progress: Running, Running] **************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Pod status: [{''running'': {''startedAt'': ''2026-11-11T19:44:13Z''}}, {''running'':[0m
+[0;32m        {''startedAt'': ''2026-11-11T19:44:13Z''}}]'[0m
+
+TASK [litellm : litellm | Wait for deployment ready] ***************************
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (60 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (59 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (58 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (57 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (56 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (55 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (54 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: litellm | Wait for deployment ready (53 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Remove the hybrid router code when the router is off] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Build HTTPRoute response filters (HSTS)] *************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Create HTTPRoute] ************************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Create no-auth SecurityPolicy (LiteLLM handles its own auth)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Create edge rate-limit BackendTrafficPolicy] *********
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Remove edge rate-limit BackendTrafficPolicy when disabled] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Restrict in-cluster access to the allowed namespaces (AuthorizationPolicy)] ***
+[0;33mchanged: [localhost] => (item=litellm-ingress)[0m
+[0;33mchanged: [localhost] => (item=litellm-redis)[0m
+
+TASK [litellm : litellm | Allow source ranges outside the mesh (AuthorizationPolicy)] ***
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | Store credentials summary] ***************************
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | Install complete] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - LiteLLM deployed in namespace 'litellm'[0m
+[0;32m    - 'UI: https://litellm.solutions.ai'[0m
+[0;32m    - 'Admin username: admin'[0m
+[0;32m    - 'Master key: kubectl get secret litellm-master-key -n litellm -o jsonpath=''{.data.master_key}''[0m
+[0;32m        | base64 -d'[0m
+[0;32m    - 'Auth mode: LiteLLM virtual keys (Bearer <key>); LiteLLM is the sole auth boundary'[0m
+
+TASK [litellm : litellm | Register the content-safety guardrail] ***************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/litellm/tasks/register_guardrail.yaml for localhost[0m
+
+TASK [litellm : litellm | guardrail | Read the proxy configuration] ************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Guard host is allowlisted] ***************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Wait for LiteLLM deployment to be ready] ***
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Render Qwen3Guard custom_code] ***********
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Build registration payload] **************
+[0;32mok: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Register with LiteLLM (/guardrails API, in-pod)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [litellm : litellm | guardrail | Registration result] *********************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - Guardrail 'content_safety' registered with LiteLLM (mode=pre_call, default_on=true)[0m
+[0;32m    - 'Guard model: qwen3guard @ http://ai-gateway.envoy-gateway-system.svc.cluster.local/llm-inference/qwen3guard/v1/chat/completions'[0m
+[0;32m    -   - Guardrail code compiles in the gateway sandbox[0m
+[0;32m        - Guardrail 'content_safety' registered (id e5105797-01f2-43d0-a6d8-8634e583d6a9)[0m
+
+TASK [litellm : litellm | Check LiteLLM is ready before looking for a guardrail to remove] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Remove the content-safety guardrail when turned off] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Restart LiteLLM so every replica drops the removed guardrail] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm : litellm | Warn when the guardrail could not be checked for removal] ***
+[0;36mskipping: [localhost][0m
+
+TASK [litellm — install complete] **********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ litellm — install complete                                             ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: langfuse] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: langfuse                                                        ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute langfuse] ********************************************************
+[0;36mincluded: langfuse for localhost[0m
+
+TASK [langfuse : langfuse | Dispatch action: install] **************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/langfuse/tasks/install.yaml for localhost[0m
+
+TASK [langfuse : langfuse | Check for existing Helm release] *******************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Already installed — skipping] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [langfuse : langfuse | Detect cluster size] *******************************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Set sizing based on cluster topology] **************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Topology summary] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Langfuse sizing: single-node (1 replica)'[0m
+
+TASK [langfuse : langfuse | Create namespace] **********************************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Wait for DB credentials secret] ********************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Wait for langfuse database to be ready (CNPG Database CRD)] ***
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Extract DB connection details] *********************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Load object store credentials] *********************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Extract object store S3 credentials] ***************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Fallback S3 to empty (object store not available)] ***
+[0;36mskipping: [localhost][0m
+
+TASK [langfuse : langfuse | Check for existing secrets] ************************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Generate and store secrets] ************************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Load secrets] **************************************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Add clickhouse_password to secrets if missing] *****
+[0;36mskipping: [localhost][0m
+
+TASK [langfuse : langfuse | Reload secrets (always — ensures fresh data after any patch)] ***
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Set secret facts] **********************************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Add Helm repo] *************************************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Install via Helm] **********************************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Wait for initial migration attempt (45s)] **********
+Pausing for 45 seconds
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Check for failed Prisma migrations] ****************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Delete failed migration records] *******************
+[0;36mskipping: [localhost][0m
+
+TASK [langfuse : langfuse | Restart pods to retry migrations] ******************
+[0;36mskipping: [localhost][0m
+
+TASK [langfuse : langfuse | Waiting for pods to be ready (image pull may take a few minutes)...] ***
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Progress: 4 pods, phases: Running, Running, Running, Running] ***
+[0;32mok: [localhost] => [0m
+[0;32m    msg: All Langfuse pods running.[0m
+
+TASK [langfuse : langfuse | Wait for web deployment ready] *********************
+[1;30mFAILED - RETRYING: [localhost]: langfuse | Wait for web deployment ready (60 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: langfuse | Wait for web deployment ready (59 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: langfuse | Wait for web deployment ready (58 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Wait for worker deployment ready] ******************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Load secrets (unconditional — needed for LiteLLM injection)] ***
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Set API key facts from existing secret] ************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Create HTTPRoute] **********************************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Create no-auth SecurityPolicy (Langfuse has its own login)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Get Langfuse public key from API] ******************
+[0;32mok: [localhost][0m
+
+TASK [langfuse : langfuse | Inject Langfuse API keys into LiteLLM (no manual step needed)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Patch LiteLLM deployment to use Langfuse API keys] ***
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Store access info] *********************************
+[0;33mchanged: [localhost][0m
+
+TASK [langfuse : langfuse | Install complete] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - Langfuse deployed in namespace 'langfuse'[0m
+[0;32m    - 'UI: https://langfuse.solutions.ai'[0m
+[0;32m    - 'Admin email: kubectl get secret langfuse-secrets -n langfuse -o jsonpath=''{.data.admin_email}''[0m
+[0;32m        | base64 -d'[0m
+[0;32m    - 'Admin password: kubectl get secret langfuse-secrets -n langfuse -o jsonpath=''{.data.admin_password}''[0m
+[0;32m        | base64 -d'[0m
+[0;32m    - 'LiteLLM integration: auto-configured (Langfuse API keys injected into LiteLLM)'[0m
+
+TASK [langfuse — install complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ langfuse — install complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: llm_services] ***************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: llm_services                                                    ┃[0m
+[0;32m        ┃  Layer: inference                                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute llm_services] ****************************************************
+[0;36mincluded: llm_services for localhost[0m
+
+TASK [llm_services : llm_services | Dispatch action: install] ******************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/install.yaml for localhost[0m
+
+TASK [llm_services : llm_services | Create namespace] **************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Label namespace — Istio] *******************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Label namespace — PSS] *********************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Create model-store PVC] ********************
+[0;33mchanged: [localhost][0m
+
+TASK [llm_services : llm_services | Verify InferenceService CRD] ***************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Check LLMInferenceService CRD] *************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | LLMInferenceService CRD status] ************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'LLMInferenceService CRD: available'[0m
+
+TASK [llm_services : llm_services | Find serving runtimes] *********************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Deploy serving runtimes] *******************
+[0;33mchanged: [localhost] => (item=vllm-runtime.yaml)[0m
+
+TASK [llm_services : llm_services | Wire up engine observability] **************
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/observability.yaml for localhost[0m
+
+TASK [llm_services : llm_services | observability | Check for ServiceMonitor file] ***
+[0;32mok: [localhost] => (item=vllm-cpu)[0m
+
+TASK [llm_services : llm_services | observability | Deploy ServiceMonitors] ****
+[0;33mchanged: [localhost] => (item=ServiceMonitor/vllm-cpu)[0m
+
+TASK [llm_services : llm_services | observability | Check for dashboard file] ***
+[0;32mok: [localhost] => (item=vllm-cpu)[0m
+
+TASK [llm_services : llm_services | observability | Deploy Grafana dashboard ConfigMaps] ***
+[0;33mchanged: [localhost] => (item=Dashboard/vllm-cpu)[0m
+
+TASK [llm_services : llm_services | observability | Engines without dashboard file (skipped)] ***
+[0;36mskipping: [localhost] => (item=vllm-cpu) [0m
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : llm_services | Install complete] **************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Namespace ''llm-inference'' ready. ServingRuntimes: 1. InferenceService: supported.[0m
+[0;32m        LLMInferenceService: supported. Observability engines: vllm-cpu.'[0m
+
+TASK [llm_services : llm_services | Set inference extension directory] *********
+[0;32mok: [localhost][0m
+
+TASK [llm_services : llm_services | Deploy guard model for the content-safety guardrail] ***
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml for localhost[0m
+
+TASK [llm_services : Check if model deployment should be skipped] **************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Show model deployment status] *****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Model deployment: ENABLED'[0m
+
+TASK [llm_services : Resolve model catalog path (env copy preferred)] **********
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Verify model-manager CLI and catalog are present] *********
+[0;32mok: [localhost] => (item=/eas-state/eas/playbooks/../ext/enterprise.ai-inference/model_manager/model-manager)[0m
+[0;32mok: [localhost] => (item=/eas-state/eas/env/k3d-gpu/models.yaml)[0m
+
+TASK [llm_services : Fail if model-manager CLI or catalog is missing] **********
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Wait for KServe to be ready] ******************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Check if Hugging Face token is available] *****************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Show Hugging Face token status] ***************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        No HF_TOKEN set - only public models will be accessible[0m
+[0;32m        Set HF_TOKEN environment variable to download gated models (e.g., Llama)[0m
+
+TASK [llm_services : Deploy models | Load LiteLLM master key (when auth_provider=litellm)] ***
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Enumerate autodeploy models from the catalog] *************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Find requested models the environment catalog lacks in the shipped catalog] ***
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Create the merged catalog file] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Write the merged catalog] *********************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Report requested models taken from the shipped catalog] ***
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Resolve the models to deploy and their catalog] ***********
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Fail on a missing required model] *************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Warn about missing requested models] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Show models to deploy] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: '1 requested model(s): qwen3guard'[0m
+
+TASK [llm_services : Deploy each catalog model] ********************************
+[0;33mchanged: [localhost] => (item=qwen3guard)[0m
+
+TASK [llm_services : Remove the merged catalog] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Summarise autodeploy outcomes] ****************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Report auto-deploy results] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        Auto-deploy summary:[0m
+[0;32m          Succeeded (1): qwen3guard[0m
+[0;32m          Failed    (0): none[0m
+[0;32m[0m
+[0;32m        Check status (via kubectl):[0m
+[0;32m          kubectl get llminferenceservices,inferenceservices -n llm-inference[0m
+
+TASK [llm_services : Warn about failed auto-deploys] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Report that no models were auto-deployed] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Show instructions for manual model deployment] ************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : llm_services | Deploy default models] *********************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : llm_services | Deploy solution-requested default models] ***
+[0;36mincluded: /eas-state/eas/ext/enterprise.ai-inference/roles/llm_services/tasks/deploy_models.yaml for localhost[0m
+
+TASK [llm_services : Check if model deployment should be skipped] **************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Show model deployment status] *****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: 'Model deployment: ENABLED'[0m
+
+TASK [llm_services : Resolve model catalog path (env copy preferred)] **********
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Verify model-manager CLI and catalog are present] *********
+[0;32mok: [localhost] => (item=/eas-state/eas/playbooks/../ext/enterprise.ai-inference/model_manager/model-manager)[0m
+[0;32mok: [localhost] => (item=/eas-state/eas/env/k3d-gpu/models.yaml)[0m
+
+TASK [llm_services : Fail if model-manager CLI or catalog is missing] **********
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Wait for KServe to be ready] ******************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Check if Hugging Face token is available] *****************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Show Hugging Face token status] ***************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        No HF_TOKEN set - only public models will be accessible[0m
+[0;32m        Set HF_TOKEN environment variable to download gated models (e.g., Llama)[0m
+
+TASK [llm_services : Deploy models | Load LiteLLM master key (when auth_provider=litellm)] ***
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Enumerate autodeploy models from the catalog] *************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Find requested models the environment catalog lacks in the shipped catalog] ***
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Create the merged catalog file] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Write the merged catalog] *********************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Report requested models taken from the shipped catalog] ***
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Resolve the models to deploy and their catalog] ***********
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Fail on a missing required model] *************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Warn about missing requested models] **********************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Show models to deploy] ************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: '1 requested model(s): qwen2-5-coder-14b'[0m
+
+TASK [llm_services : Deploy each catalog model] ********************************
+[0;33mchanged: [localhost] => (item=qwen2-5-coder-14b)[0m
+
+TASK [llm_services : Remove the merged catalog] ********************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Summarise autodeploy outcomes] ****************************
+[0;32mok: [localhost][0m
+
+TASK [llm_services : Report auto-deploy results] *******************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        Auto-deploy summary:[0m
+[0;32m          Succeeded (1): qwen2-5-coder-14b[0m
+[0;32m          Failed    (0): none[0m
+[0;32m[0m
+[0;32m        Check status (via kubectl):[0m
+[0;32m          kubectl get llminferenceservices,inferenceservices -n llm-inference[0m
+
+TASK [llm_services : Warn about failed auto-deploys] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Report that no models were auto-deployed] *****************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services : Show instructions for manual model deployment] ************
+[0;36mskipping: [localhost][0m
+
+TASK [llm_services — install complete] *****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ llm_services — install complete                                        ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: redis_stack] ****************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: redis_stack                                                     ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute redis_stack] *****************************************************
+[0;36mincluded: redis_stack for localhost[0m
+
+TASK [redis_stack : redis_stack | Dispatch action: install] ********************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/redis_stack/tasks/install.yaml for localhost[0m
+
+TASK [redis_stack : redis_stack | Create namespace] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [redis_stack : redis_stack | Enrol namespace in the ambient mesh] *********
+[0;33mchanged: [localhost][0m
+
+TASK [redis_stack : redis_stack | Read existing credentials] *******************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | Resolve password] ****************************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | Check for an existing release] ***************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | Remove a failed release] *********************
+[0;36mskipping: [localhost][0m
+
+TASK [redis_stack : redis_stack | Install via Helm] ****************************
+[0;33mchanged: [localhost][0m
+
+TASK [redis_stack : redis_stack | Check Helm install result] *******************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | Wait for pods to be ready] *******************
+[0;32mok: [localhost][0m
+
+TASK [redis_stack : redis_stack | Install complete] ****************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - Redis Stack deployed in namespace 'redis'[0m
+[0;32m    - 'In-cluster URL: redis://default:<password>@redis-stack-server.redis.svc.cluster.local:6379'[0m
+[0;32m    - 'Credentials Secret: redis-stack-server-credentials (keys: REDIS_PASSWORD, REDIS_URL)'[0m
+
+TASK [redis_stack — install complete] ******************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ redis_stack — install complete                                         ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: pgvector] *******************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: pgvector                                                        ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute pgvector] ********************************************************
+[0;36mincluded: pgvector for localhost[0m
+
+TASK [pgvector : pgvector | Dispatch action: install] **************************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/pgvector/tasks/install.yaml for localhost[0m
+
+TASK [pgvector : pgvector | Create namespace] **********************************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | Enrol namespace in the ambient mesh] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | Read existing credentials] *************************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | Resolve database password] *************************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | Check for an existing release] *********************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | Remove a failed release] ***************************
+[0;36mskipping: [localhost][0m
+
+TASK [pgvector : pgvector | Install via Helm] **********************************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | Check Helm install result] *************************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | Wait for pod to be ready] **************************
+[0;32mok: [localhost][0m
+
+TASK [pgvector : pgvector | Verify pgvector extension is loaded] ***************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | Create credentials secret] *************************
+[0;33mchanged: [localhost][0m
+
+TASK [pgvector : pgvector | Install complete] **********************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - pgvector deployed in namespace 'pgvector'[0m
+[0;32m    - 'In-cluster: pgvector.pgvector.svc.cluster.local:5432'[0m
+[0;32m    - 'Database: agentdb'[0m
+[0;32m    - 'User: agentuser'[0m
+[0;32m    - 'DSN secret: pgvector-credentials (key: DATABASE_URL)'[0m
+
+TASK [pgvector — install complete] *********************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ pgvector — install complete                                            ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+TASK [INSTALL: agent_sandbox] **************************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  INSTALL: agent_sandbox                                                   ┃[0m
+[0;32m        ┃  Layer: agent-toolkit                                                     ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Execute agent_sandbox] ***************************************************
+[0;36mincluded: agent_sandbox for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | Dispatch action: install] ****************
+[0;36mincluded: /eas-state/eas/ext/enterprise.agent-toolkit/roles/agent_sandbox/tasks/install.yaml for localhost[0m
+
+TASK [agent_sandbox : agent_sandbox | Create namespace] ************************
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Enrol namespace in the ambient mesh] *****
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Accept the API server on the controller webhook port] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Apply core manifest (CRDs + controller)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Apply extensions manifest (SandboxTemplate/Claim/WarmPool CRDs)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Wait for controller to be ready] *********
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Check for the sandbox-router auth token secret] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Create sandbox-router auth token secret] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Check sandbox-router auth token secret] ***
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Download sandbox-router manifest] ********
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Read sandbox-router manifest] ************
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Apply sandbox-router manifest] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Inject ROUTER_AUTH_TOKEN into sandbox-router deployment] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Wait for sandbox-router to be ready] *****
+[1;30mFAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (60 retries left).[0m
+[1;30mFAILED - RETRYING: [localhost]: agent_sandbox | Wait for sandbox-router to be ready (59 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Read default SandboxTemplate] ************
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Apply default SandboxTemplate] ***********
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Sandbox NetworkPolicy (every sandbox pod, claimed or not)] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Create default python SandboxWarmPool] ***
+[0;33mchanged: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Get RuntimeClasses created by kata-deploy] ***
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Select kata RuntimeClass for the SandboxTemplate] ***
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | No Kata RuntimeClass — skipping kata SandboxTemplate] ***
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Read kata-templates.yaml content] ********
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Template and apply kata SandboxTemplate] ***
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Verify kata SandboxTemplate created] *****
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Create kata SandboxWarmPool] *************
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Kata SandboxTemplate summary] ************
+[0;36mskipping: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Wait for Agent Sandbox pods to be ready] ***
+[1;30mFAILED - RETRYING: [localhost]: agent_sandbox | Wait for Agent Sandbox pods to be ready (60 retries left).[0m
+[0;32mok: [localhost][0m
+
+TASK [agent_sandbox : agent_sandbox | Install complete] ************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg:[0m
+[0;32m    - Agent Sandbox deployed in namespace 'agent-sandbox-system'[0m
+[0;32m    - 'Version: v0.5.0'[0m
+[0;32m    - 'Router: http://sandbox-router-svc.agent-sandbox-system.svc.cluster.local:8080'[0m
+[0;32m    - 'WarmPool: python-pool (size=5)'[0m
+
+TASK [agent_sandbox — install complete] ****************************************
+[0;32mok: [localhost] => [0m
+[0;32m    msg: |-[0m
+[0;32m        ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓[0m
+[0;32m        ┃  ✓ agent_sandbox — install complete                                       ┃[0m
+[0;32m        ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛[0m
+
+TASK [Reset prep-only flag] ****************************************************
+[0;36mskipping: [localhost][0m
+
+PLAY RECAP *********************************************************************
+[0;33mlocalhost[0m                  : [0;32mok=550 [0m [0;33mchanged=168 [0m unreachable=0    failed=0    [0;36mskipped=138 [0m rescued=0    ignored=0   
+
+
+[0;32m╭────────────────────────────────────────────────────────────────────────────────────╮[0m
+[0;32m│[0m INSTALLATION COMPLETE                                                              [0;32m│[0m
+[0;32m│[0m                                                                                    [0;32m│[0m
+[0;32m│[0m Target:  agent-toolkit                                                             [0;32m│[0m
+[0;32m│[0m Env:     k3d-gpu                                                                   [0;32m│[0m
+[0;32m│[0m Log:     /eas-state/eas/env/k3d-gpu/logs/install-agent-toolkit-20261111-193142.log [0;32m│[0m
+[0;32m╰────────────────────────────────────────────────────────────────────────────────────╯[0m
+
+[32m==>[0m EAS agent-toolkit is installed on 'k3dgpu-b70eas'
+  gateway: eg-gateway at 172.19.0.2 (k3s ServiceLB), hosts *.solutions.ai
+    KEY=$(KUBECONFIG=/home/devcloud/k3dgpu-bench/b70eas/b70eas-e6ad2a0-20261111T1924Z/state/kubeconfig-k3dgpu-b70eas kubectl -n litellm get secret litellm-master-key -o jsonpath='{.data.master_key}' | base64 -d)
+    curl -k --resolve litellm.solutions.ai:443:172.19.0.2 https://litellm.solutions.ai/v1/models -H "Authorization: Bearer ${KEY}"
+  check it end to end: k3d-gpu eas check

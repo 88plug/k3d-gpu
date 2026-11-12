@@ -1,0 +1,12 @@
+facts: sha256:3006c64384bdc2ed62c50b62d5914cc402bf3c451c3354686c7cba92a3f97489
+targets:
+  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable
+  gpu:0000:12:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:48:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:7c:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:96:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)

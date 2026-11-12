@@ -1,0 +1,5 @@
+deployment.apps "vllm" deleted from k3d-gpu-agent namespace
+service "vllm" deleted from k3d-gpu-agent namespace
+No resources found
+[32m==>[0m agent guard (pid 379026) stopped
+[32m==>[0m Model caches kept in the namespace's PVCs. Remove everything: KUBECONFIG=/home/devcloud/k3dgpu-bench/runs/b70-recipes/20261112T0017Z/kubeconfig kubectl --context k3d-k3dgpu-recipes-b70 delete namespace k3d-gpu-agent

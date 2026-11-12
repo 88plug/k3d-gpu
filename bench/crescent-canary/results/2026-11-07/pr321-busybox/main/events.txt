@@ -1,0 +1,140 @@
+NS                       OBJ                                       REASON                           MSG
+kube-system              helm-install-gateway-api-crd-hdrr8        Scheduled                        Successfully assigned kube-system/helm-install-gateway-api-crd-hdrr8 to k3d-k3dgpu-canary-images-server-0
+default                  k3d-k3dgpu-canary-images-server-0         Starting                         <none>
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Scheduled                        Successfully assigned node-feature-discovery/nfd-master-74b44b767d-7mwqh to k3d-k3dgpu-canary-images-server-0
+kube-system              coredns-577d995dff-7pr98                  Scheduled                        Successfully assigned kube-system/coredns-577d995dff-7pr98 to k3d-k3dgpu-canary-images-server-0
+default                  amx-test                                  Scheduled                        Successfully assigned default/amx-test to k3d-k3dgpu-canary-images-server-0
+default                  intel-gpu-test                            Scheduled                        Successfully assigned default/intel-gpu-test to k3d-k3dgpu-canary-images-server-0
+kube-system              metrics-server-778c4649b4-rsln7           Scheduled                        Successfully assigned kube-system/metrics-server-778c4649b4-rsln7 to k3d-k3dgpu-canary-images-server-0
+kube-system              local-path-provisioner-6858d854cf-rn7hc   Scheduled                        Successfully assigned kube-system/local-path-provisioner-6858d854cf-rn7hc to k3d-k3dgpu-canary-images-server-0
+node-feature-discovery   nfd-worker-4lq6p                          Scheduled                        Successfully assigned node-feature-discovery/nfd-worker-4lq6p to k3d-k3dgpu-canary-images-server-0
+kube-system              intel-gpu-plugin-g55xl                    Scheduled                        Successfully assigned kube-system/intel-gpu-plugin-g55xl to k3d-k3dgpu-canary-images-server-0
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    Scheduled                        Successfully assigned node-feature-discovery/nfd-gc-8d4595cbc-n6f82 to k3d-k3dgpu-canary-images-server-0
+default                  k3d-k3dgpu-canary-images-server-0         CertificateExpirationOK          Node and Certificate Authority certificates managed by k3s are OK
+default                  k3d-k3dgpu-canary-images-server-0         InvalidDiskCapacity              invalid capacity 0 on image filesystem
+default                  k3d-k3dgpu-canary-images-server-0         NodeHasSufficientMemory          Node k3d-k3dgpu-canary-images-server-0 status is now: NodeHasSufficientMemory
+default                  k3d-k3dgpu-canary-images-server-0         NodeHasNoDiskPressure            Node k3d-k3dgpu-canary-images-server-0 status is now: NodeHasNoDiskPressure
+default                  k3d-k3dgpu-canary-images-server-0         NodeHasSufficientPID             Node k3d-k3dgpu-canary-images-server-0 status is now: NodeHasSufficientPID
+default                  k3d-k3dgpu-canary-images-server-0         NodeAllocatableEnforced          Updated Node Allocatable limit across pods
+default                  k3d-k3dgpu-canary-images-server-0         NodeReady                        Node k3d-k3dgpu-canary-images-server-0 status is now: NodeReady
+default                  k3d-k3dgpu-canary-images-server-0         Starting                         Starting kubelet.
+kube-system              intel-iaa-plugin                          AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-iaa-plugin.yaml"
+kube-system              intel-gpu-wsl-plugin                      AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-gpu-wsl-plugin.yaml"
+kube-system              intel-gpu-wsl-plugin                      ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-gpu-wsl-plugin.yaml"
+kube-system              intel-gpu-plugin                          AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml"
+kube-system              intel-gpu-plugin                          ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-gpu-plugin.yaml"
+kube-system              intel-iaa-plugin                          ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-iaa-plugin.yaml"
+kube-system              intel-gpu-dra                             DeletingManifest                 Deleting manifest at "/var/lib/rancher/k3s/server/manifests/intel-gpu-dra.yaml"
+kube-system              intel-dsa-plugin                          AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-dsa-plugin.yaml"
+kube-system              intel-dsa-plugin                          ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-dsa-plugin.yaml"
+kube-system              ccm                                       ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/ccm.yaml"
+kube-system              ccm                                       AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/ccm.yaml"
+kube-system              coredns                                   ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/coredns.yaml"
+kube-system              intel-npu-plugin                          ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml"
+kube-system              gaudi-device-plugin                       AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml"
+kube-system              gaudi-device-plugin                       ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/gaudi-device-plugin.yaml"
+kube-system              gateway-api-crd                           AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/gateway-api-crd.yaml"
+kube-system              gateway-api-crd                           ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/gateway-api-crd.yaml"
+kube-system              coredns                                   AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/coredns.yaml"
+kube-system              node-feature-discovery                    ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml"
+kube-system              auth-delegator                            ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/auth-delegator.yaml"
+kube-system              resource-reader                           AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/resource-reader.yaml"
+kube-system              resource-reader                           ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/resource-reader.yaml"
+kube-system              metrics-server-service                    AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-server-service.yaml"
+kube-system              metrics-server-service                    ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-server-service.yaml"
+kube-system              gateway-api-crd                           ApplyJob                         Applying HelmChart from https://%{KUBERNETES_API}%/static/charts/gateway-api-crd-1.6.103.tgz using Job kube-system/helm-install-gateway-api-crd 
+kube-system              metrics-server-deployment                 AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-server-deployment.yaml"
+kube-system              metrics-server-deployment                 ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-server-deployment.yaml"
+kube-system              metrics-apiservice                        AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-apiservice.yaml"
+kube-system              metrics-apiservice                        ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/metrics-apiservice.yaml"
+kube-system              local-storage                             AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/local-storage.yaml"
+kube-system              local-storage                             ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/local-storage.yaml"
+kube-system              intel-qat-plugin                          AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-qat-plugin.yaml"
+kube-system              intel-qat-plugin                          ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/intel-qat-plugin.yaml"
+kube-system              intel-npu-plugin                          AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/intel-npu-plugin.yaml"
+default                  k3d-k3dgpu-canary-images-server-0         Synced                           Node synced successfully
+default                  k3d-k3dgpu-canary-images-server-0         NodePasswordValidationComplete   Deferred node password secret validation complete
+kube-system              aggregated-metrics-reader                 ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/aggregated-metrics-reader.yaml"
+kube-system              aggregated-metrics-reader                 AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/aggregated-metrics-reader.yaml"
+kube-system              auth-reader                               AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/auth-reader.yaml"
+kube-system              auth-reader                               ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/auth-reader.yaml"
+kube-system              auth-delegator                            AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/metrics-server/auth-delegator.yaml"
+kube-system              runtimes                                  AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/runtimes.yaml"
+kube-system              local-path-provisioner                    ScalingReplicaSet                Scaled up replica set local-path-provisioner-6858d854cf from 0 to 1
+kube-system              metrics-server                            ScalingReplicaSet                Scaled up replica set metrics-server-778c4649b4 from 0 to 1
+kube-system              nri-balloons                              DeletingManifest                 Deleting manifest at "/var/lib/rancher/k3s/server/manifests/nri-balloons.yaml"
+kube-system              nvidia-device-plugin                      ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/nvidia-device-plugin.yaml"
+node-feature-discovery   nfd-worker                                SuccessfulCreate                 Created pod: nfd-worker-4lq6p
+kube-system              gateway-api-crd                           ResumeJob                        Resumed synced Job kube-system/helm-install-gateway-api-crd
+kube-system              helm-install-gateway-api-crd              Resumed                          Job resumed
+kube-system              intel-gpu-plugin                          SuccessfulCreate                 Created pod: intel-gpu-plugin-g55xl
+default                  k3d-k3dgpu-canary-images-server-0         RegisteredNode                   Node k3d-k3dgpu-canary-images-server-0 event: Registered Node k3d-k3dgpu-canary-images-server-0 in Controller
+kube-system              helm-install-gateway-api-crd              SuccessfulCreate                 Created pod: helm-install-gateway-api-crd-hdrr8
+kube-system              helm-install-gateway-api-crd              Suspended                        Job suspended
+kube-system              nvidia-device-plugin                      AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/nvidia-device-plugin.yaml"
+node-feature-discovery   nfd-master                                ScalingReplicaSet                Scaled up replica set nfd-master-74b44b767d from 0 to 1
+kube-system              coredns                                   ScalingReplicaSet                Scaled up replica set coredns-577d995dff from 0 to 1
+kube-system              rolebindings                              ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/rolebindings.yaml"
+kube-system              rolebindings                              AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/rolebindings.yaml"
+node-feature-discovery   nfd-gc                                    ScalingReplicaSet                Scaled up replica set nfd-gc-8d4595cbc from 0 to 1
+kube-system              runtimes                                  ApplyingManifest                 Applying manifest at "/var/lib/rancher/k3s/server/manifests/runtimes.yaml"
+kube-system              node-feature-discovery                    AppliedManifest                  Applied manifest at "/var/lib/rancher/k3s/server/manifests/node-feature-discovery.yaml"
+kube-system              traefik                                   DeletingManifest                 Deleting manifest at "/var/lib/rancher/k3s/server/manifests/traefik.yaml"
+kube-system              coredns-577d995dff                        SuccessfulCreate                 Created pod: coredns-577d995dff-7pr98
+kube-system              local-path-provisioner-6858d854cf-rn7hc   FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "c8bccdc11acc81fe9808a9a462d07c3c02fc544d3f2740d22b8bd5e9f9f868fb": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+kube-system              local-path-provisioner-6858d854cf         SuccessfulCreate                 Created pod: local-path-provisioner-6858d854cf-rn7hc
+kube-system              intel-gpu-plugin-g55xl                    FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "a2616c1abec06fa9623adab8faff79989b33b4da9f6dd43fff510df4d8123c6f": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+kube-system              metrics-server-778c4649b4                 SuccessfulCreate                 Created pod: metrics-server-778c4649b4-rsln7
+kube-system              helm-install-gateway-api-crd-hdrr8        FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "8d0edca5f2d31448aee6f35c09289453c88cd5e626edd399c178bdd23b6c147f": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+kube-system              coredns-577d995dff-7pr98                  FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "521e0b69f77c9b1690fd26a47d59b0f36cdc63d2c6ea62f082e19ccbd6fb9f31": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+node-feature-discovery   nfd-worker-4lq6p                          FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "fbe2130b868d609ae347cb3e36727e31608097dc0cd1d8dea66549cb0ba7dab9": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+node-feature-discovery   nfd-gc-8d4595cbc                          SuccessfulCreate                 Created pod: nfd-gc-8d4595cbc-n6f82
+kube-system              metrics-server-778c4649b4-rsln7           FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "2c05a9168bd866e7de0fecee13c0f27c03261bcdf86378e288dbcc979ffa77f0": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+node-feature-discovery   nfd-master-74b44b767d                     SuccessfulCreate                 Created pod: nfd-master-74b44b767d-7mwqh
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "dbb2c21866bd703d10dd0cd72df052b53cce2b79b0424985b38f4628be838e9f": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               FailedCreatePodSandBox           Failed to create pod sandbox: rpc error: code = Unknown desc = failed to setup network for sandbox "b0a00eb2ce0685f4ce28f304e72b2042f0e1f17d1599d7c5f95f0cc3ca9926ec": plugin type="flannel" failed (add): failed to load flannel 'subnet.env' file: open /run/flannel/subnet.env: no such file or directory. Check the flannel pod log for this node.
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Pulling                          Pulling image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379"
+kube-system              local-path-provisioner-6858d854cf-rn7hc   Pulling                          Pulling image "rancher/local-path-provisioner:v0.0.37"
+kube-system              coredns-577d995dff-7pr98                  Pulling                          Pulling image "rancher/mirrored-coredns-coredns:1.14.7"
+kube-system              helm-install-gateway-api-crd-hdrr8        Pulling                          Pulling image "rancher/klipper-helm:v0.13.3-build20260727"
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    Pulling                          Pulling image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379"
+node-feature-discovery   nfd-worker-4lq6p                          Pulling                          Pulling image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379"
+kube-system              intel-gpu-plugin-g55xl                    Pulling                          Pulling image "intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33"
+kube-system              intel-gpu-plugin-g55xl                    Created                          Container created
+kube-system              intel-gpu-plugin-g55xl                    Pulled                           Successfully pulled image "intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33" in 2.348s (2.348s including waiting). Image size: 5970136 bytes.
+kube-system              coredns-577d995dff-7pr98                  Pulled                           Successfully pulled image "rancher/mirrored-coredns-coredns:1.14.7" in 3.086s (3.086s including waiting). Image size: 24261571 bytes.
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Started                          Container started
+kube-system              coredns-577d995dff-7pr98                  Started                          Container started
+kube-system              coredns-577d995dff-7pr98                  Created                          Container created
+kube-system              intel-gpu-plugin-g55xl                    Started                          Container started
+node-feature-discovery   nfd-worker-4lq6p                          Started                          Container started
+kube-system              coredns-577d995dff-7pr98                  Unhealthy                        Readiness probe failed: Get "http://10.42.0.6:8181/ready": dial tcp 10.42.0.6:8181: connect: connection refused
+node-feature-discovery   nfd-worker-4lq6p                          Created                          Container created
+node-feature-discovery   nfd-worker-4lq6p                          Pulled                           Successfully pulled image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379" in 3.322s (3.322s including waiting). Image size: 87537491 bytes.
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Unhealthy                        Readiness probe failed: Get "http://10.42.0.5:8080/healthz": dial tcp 10.42.0.5:8080: connect: connection refused
+kube-system              metrics-server-778c4649b4-rsln7           Pulling                          Pulling image "rancher/mirrored-metrics-server:v0.9.0"
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Created                          Container created
+node-feature-discovery   nfd-master-74b44b767d-7mwqh               Pulled                           Successfully pulled image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379" in 2.739s (2.739s including waiting). Image size: 87537491 bytes.
+kube-system              local-path-provisioner-6858d854cf-rn7hc   Started                          Container started
+kube-system              local-path-provisioner-6858d854cf-rn7hc   Created                          Container created
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    Pulled                           Successfully pulled image "registry.k8s.io/nfd/node-feature-discovery:v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379" in 3.324s (3.324s including waiting). Image size: 87537491 bytes.
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    Created                          Container created
+node-feature-discovery   nfd-gc-8d4595cbc-n6f82                    Started                          Container started
+kube-system              local-path-provisioner-6858d854cf-rn7hc   Pulled                           Successfully pulled image "rancher/local-path-provisioner:v0.0.37" in 2.598s (2.598s including waiting). Image size: 15066012 bytes.
+kube-system              helm-install-gateway-api-crd-hdrr8        Pulled                           Successfully pulled image "rancher/klipper-helm:v0.13.3-build20260727" in 4.799s (4.799s including waiting). Image size: 74172006 bytes.
+kube-system              helm-install-gateway-api-crd-hdrr8        Created                          Container created
+kube-system              helm-install-gateway-api-crd-hdrr8        Started                          Container started
+kube-system              metrics-server-778c4649b4-rsln7           Pulled                           Successfully pulled image "rancher/mirrored-metrics-server:v0.9.0" in 2.388s (2.388s including waiting). Image size: 23258428 bytes.
+kube-system              metrics-server-778c4649b4-rsln7           Unhealthy                        Readiness probe failed: Get "https://10.42.0.9:10250/readyz": dial tcp 10.42.0.9:10250: connect: connection refused
+kube-system              metrics-server-778c4649b4-rsln7           Started                          Container started
+kube-system              metrics-server-778c4649b4-rsln7           Created                          Container created
+kube-system              helm-install-gateway-api-crd              Completed                        Job completed
+default                  intel-gpu-test                            Pulling                          Pulling image "busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec"
+default                  intel-gpu-test                            Created                          Container created
+default                  intel-gpu-test                            Started                          Container started
+default                  intel-gpu-test                            Pulled                           Successfully pulled image "busybox:1.37@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec" in 1.547s (1.547s including waiting). Image size: 2222118 bytes.
+kube-system              metrics-server-778c4649b4-rsln7           Unhealthy                        Readiness probe failed: HTTP probe failed with statuscode: 500
+default                  amx-test                                  Pulling                          Pulling image "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05"
+default                  amx-test                                  Started                          Container started
+default                  amx-test                                  Created                          Container created
+default                  amx-test                                  Pulled                           Successfully pulled image "vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05" in 44.754s (44.754s including waiting). Image size: 1719072416 bytes.

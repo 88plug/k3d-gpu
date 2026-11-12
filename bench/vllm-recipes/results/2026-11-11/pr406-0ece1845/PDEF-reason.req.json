@@ -1,0 +1,1 @@
+{"model":"Qwen3-4B","max_tokens":4096,"temperature":0,"chat_template_kwargs":{"enable_thinking":true},"messages":[{"role":"user","content":"What is 17 times 23? Answer with the number only."}]}

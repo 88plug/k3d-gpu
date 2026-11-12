@@ -1,0 +1,11 @@
+Allocated resources:
+  (Total limits may be over 100 percent, i.e., overcommitted.)
+  Resource           Requests        Limits
+  --------           --------        ------
+  cpu                62149m (64%)    71300m (74%)
+  memory             143161Mi (27%)  155233Mi (30%)
+  ephemeral-storage  100Mi (0%)      4Gi (0%)
+  hugepages-1Gi      0 (0%)          0 (0%)
+  hugepages-2Mi      0 (0%)          0 (0%)
+  gpu.intel.com/xe   1               1
+Events:

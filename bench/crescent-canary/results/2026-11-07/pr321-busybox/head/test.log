@@ -1,0 +1,10 @@
+[32m==>[0m Deploying intel-gpu-test test pod (busybox:1.38@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4, gpu.intel.com/xe)...
+total 0
+crw-rw----    1 root     root      226,   2 Nov  7 06:31 card2
+crw-rw----    1 root     root      226, 129 Nov  7 06:31 renderD129
+[32m==>[0m Deploying AMX probe pod (vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05, nodeSelector feature.node.kubernetes.io/cpu-cpuid.AMXBF16=true): ARCH_REQ_XCOMP_PERM + one oneDNN BF16 matmul, ONEDNN_VERBOSE=1...
+amx-probe: ARCH_REQ_XCOMP_PERM: ok
+onednn_verbose,v1,info,cpu,isa:Intel AVX10.1 and Intel AMX with bfloat16, float16 and 8-bit integer support
+onednn_verbose,v1,primitive,exec,cpu,matmul,brg_matmul:avx10_1_512_amx,undef,src:bf16::blocked:ab::f0 wei:bf16::blocked:ab::f0 dst:bf16::blocked:ab::f0,attr-scratchpad:user,,512x512:512x512,0.609863
+amx-probe: torch 2.13.0+cpu bf16 matmul done
+[32m==>[0m AMX in use: oneDNN matmul ran brg_matmul:avx10_1_512_amx

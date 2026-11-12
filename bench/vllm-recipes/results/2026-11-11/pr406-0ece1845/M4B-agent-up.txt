@@ -1,0 +1,17 @@
+[32m==>[0m fit: Qwen/Qwen3.5-4B on 1 GPU via vllm, context 131072 x 5 seqs, GPU 29.8 GiB/card, host 8.0 GiB (pod limit 9Gi), host reserve 50.3 GiB
+[32m==>[0m agent: vllm serving Qwen/Qwen3.5-4B as 'Qwen3.5-4B' on 1x gpu.intel.com/xe, 2 CPU(s)
+namespace/k3d-gpu-agent unchanged
+persistentvolumeclaim/vllm-models unchanged
+deployment.apps/vllm created
+service/vllm created
+[32m==>[0m Waiting for the model to download and load (first run fetches it into the PVC; up to 1500s)...
+Waiting for deployment "vllm" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "vllm" rollout to finish: 0 of 1 updated replicas are available...
+deployment "vllm" successfully rolled out
+[32m==>[0m warm-up reply (1s): I am an artificial intelligence.
+[32m==>[0m model Qwen/Qwen3.5-4B at revision main (unpinned; set K3D_GPU_AGENT_REVISION)
+[32m==>[0m OpenAI API ready, model 'Qwen3.5-4B':
+       KUBECONFIG=/home/devcloud/k3dgpu-bench/runs/b70-recipes/20261111T2310Z/kubeconfig kubectl --context k3d-k3dgpu-recipes-b70 -n k3d-gpu-agent port-forward svc/vllm 8000:8000
+       curl http://localhost:8000/v1/chat/completions -H 'Content-Type: application/json' \
+         -d '{"model":"Qwen3.5-4B","messages":[{"role":"user","content":"hi"}]}'
+[32m==>[0m agent guard started (pid 218343, log /home/devcloud/k3dgpu-bench/runs/b70-recipes/20261111T2310Z/state/k3d-gpu/agent-guard.log): it steps the fit down under memory pressure

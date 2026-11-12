@@ -1,0 +1,17 @@
+[32m==>[0m Card (fact -> choice):
+  gpu.intel.com/xe: 4 advertised, 0 held by pods (none) -> 4 free
+  cards the plugin advertises -> all of /dev/dri
+  card1 (0000:12:00.0): VRAM 31.9 GiB, in use 0.0 GiB -> idle
+  card2 (0000:48:00.0): VRAM 31.9 GiB, in use 0.0 GiB -> idle
+  card3 (0000:7c:00.0): VRAM 31.9 GiB, in use 0.0 GiB -> idle
+  card4 (0000:96:00.0): VRAM 31.9 GiB, in use 0.0 GiB -> idle
+  cards no pod holds -> card1 card2 card3 card4 (from the pods' status)
+  fit -> sized for card1, the card no pod holds with the least free VRAM (31.8 GiB): the plugin may hand this model any of them
+[32m==>[0m fit: Qwen/Qwen3-4B on 1 GPU via vllm, context 20480 x 7 seqs (below the 32768 x 4 target), GPU 28.3 GiB/card, host 8.0 GiB (pod limit 9Gi), host reserve 50.3 GiB
+[32m==>[0m tool parser hermes, reasoning parser qwen3
+[32m==>[0m Waiting for qwen3-4b in k3d-gpu-eas-models (the first start downloads the weights and compiles kernels)...
+Waiting for deployment "qwen3-4b" rollout to finish: 0 of 1 updated replicas are available...
+deployment "qwen3-4b" successfully rolled out
+[32m==>[0m warm-up reply: I am a large language model developed by Alibaba Cloud.
+[32m==>[0m qwen3-4b is registered with EAS's LiteLLM (api_base http://qwen3-4b.k3d-gpu-eas-models.svc.cluster.local:8000/v1) on 'k3dgpu-b70eas'
+  check it end to end: k3d-gpu eas check --model qwen3-4b

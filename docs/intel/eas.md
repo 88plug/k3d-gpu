@@ -411,7 +411,8 @@ not change. k3d-gpu keeps Intel's pins as shipped, so a stock install warns on b
   EAS's own models. `k3d-gpu eas model add` serves a model on one Arc B60 or B70 with vLLM
   for Intel GPUs and registers it with EAS's LiteLLM, as EI's model-manager registers its
   own ([integrations/eas/README.md](../../integrations/eas/README.md#models-on-an-arc-b60-or-b70-eas-model-add));
-  it ran once on a Xeon 6741P with a B70 ([record](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985)).
+  it ran on a Xeon 6741P with a B70 at two commits of [#395](https://github.com/88plug/k3d-gpu/pull/395), both passing
+  ([records](../../bench/eas/results/2026-11-11/README.md)).
   A Gaudi stays with `k3d-gpu agent up`.
 - **ERAG is not wired in yet.** EAS wires Intel Enterprise RAG in as a further layer
   ([repos.erag.yaml](https://github.com/intel/enterprise-ai-solutions/blob/a051f00fcb2dd473fe763610471cd509db82c433/configs/repos/repos.erag.yaml#L22-L28)),

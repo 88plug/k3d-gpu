@@ -1,0 +1,12 @@
+time="2026-11-07T07:01:23Z" level=warning msg="Config \"/etc/crictl.yaml\" does not exist, trying next: \"/usr/bin/crictl.yaml\""
+time="2026-11-07T07:01:23Z" level=warning msg="Image connect using default endpoints: [unix:///run/k3s/containerd/containerd.sock unix:///var/run/dockershim.sock unix:///run/containerd/containerd.sock unix:///run/crio/crio.sock unix:///var/run/cri-dockerd.sock]. As the default settings are now deprecated, you should set the endpoint instead."
+IMAGE                                        TAG                     DIGEST              IMAGE ID            SIZE
+docker.io/intel/intel-gpu-plugin             <none>                  004641b2547d5       7dcecf49463b2       5.97MB
+docker.io/rancher/klipper-helm               v0.13.3-build20260727   5425a2b4613d2       8e0d8d2218ec8       74.2MB
+docker.io/rancher/local-path-provisioner     v0.0.37                 e757967a5ec33       683316f41426e       15.1MB
+docker.io/rancher/mirrored-coredns-coredns   1.14.7                  7efd3c635b03e       97efff2babf85       24.3MB
+docker.io/rancher/mirrored-library-busybox   1.37.0                  101b4afd76732       ff7a7936e9306       2.15MB
+docker.io/rancher/mirrored-metrics-server    v0.9.0                  d9862115e7c78       d7b01abacd67f       23.3MB
+docker.io/rancher/mirrored-pause             3.10.2                  f548e0e8e3dc1       4a83b15d3ecfe       321kB
+docker.io/vllm/vllm-openai-xpu               <none>                  be3a9aea234be       7b3eb7c792a5d       5.21GB
+registry.k8s.io/nfd/node-feature-discovery   <none>                  6fc5c9af9176e       001dab4b60aa3       87.5MB

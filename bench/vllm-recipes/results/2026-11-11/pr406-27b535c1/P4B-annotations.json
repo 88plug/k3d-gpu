@@ -1,0 +1,1 @@
+{"k3d-gpu.io/agent-backend":"vllm","k3d-gpu.io/agent-device":"GPU","k3d-gpu.io/agent-fit":"gpu 5x131072","k3d-gpu.io/vllm-recipe":"Qwen/Qwen3.5-4B@vllm-960f5c1bb145"}

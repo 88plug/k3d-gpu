@@ -1,0 +1,16 @@
+2026-11-07T05:49:13Z waiting for the lock
+canary-326: line 33: /proc/3553150/cmdline: No such file or directory
+canary-326: line 33: /proc/0/cmdline: No such file or directory
+2026-11-07T06:19:14Z lock taken
+2026-11-07T06:19:14Z aiperf procs 0; num_requests_total :30000 0 (base 56), :30001 0 (base 50)
+2026-11-07T06:19:14Z qwen38-a-hr not running: left as is
+2026-11-07T06:19:14Z qwen38-b-hr not running: left as is
+2026-11-07T06:19:14Z cards freed: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+2026-11-07T06:19:57Z up rc=0 in 43 s
+2026-11-07T06:19:57Z allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+2026-11-07T06:29:59Z agent up rc=1 in 602 s
+2026-11-07T06:29:59Z teardown (rc 0)
+2026-11-07T06:29:59Z agent down rc=0
+2026-11-07T06:30:05Z down rc=0
+2026-11-07T06:30:06Z lock released
+2026-11-07T06:30:06Z driver done

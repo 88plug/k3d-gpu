@@ -1,0 +1,1 @@
+k3d-gpu-eas-models qwen3-4b-6d8db88499-c74gj

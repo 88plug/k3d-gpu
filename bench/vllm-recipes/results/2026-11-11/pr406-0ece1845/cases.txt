@@ -1,0 +1,5 @@
+P4B pr Qwen/Qwen3.5-4B served=yes
+M4B main Qwen/Qwen3.5-4B served=yes
+P9B pr Qwen/Qwen3.5-9B served=yes
+M9B main Qwen/Qwen3.5-9B served=yes
+PDEF pr default served=yes
