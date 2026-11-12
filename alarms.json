@@ -1,1 +1,10 @@
-{}
+{
+  "blind-spot:gguf-huggingface-hub": {
+    "title": "gguf-huggingface-hub is 13d behind upstream with no open PR",
+    "body": "Pin `gguf-huggingface-hub` (group gguf-convert-pip) is at 2.3.0; upstream 2.4.0 was published 2026-10-29T15:30:10.421769Z (13d ago, limit 72 h). No autobump/gguf-convert-pip PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.",
+    "opened_at": "2026-11-12T00:10:50Z",
+    "updated_at": "2026-11-12T00:10:50Z",
+    "notified_at": "2026-11-12T00:10:50Z",
+    "acked": false
+  }
+}
