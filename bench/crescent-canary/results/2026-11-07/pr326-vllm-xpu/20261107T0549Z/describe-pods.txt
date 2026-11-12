@@ -1,0 +1,119 @@
+Name:             vllm-b597794c7-cnfff
+Namespace:        k3d-gpu-agent
+Priority:         0
+Service Account:  default
+Node:             k3d-k3dgpu-canary-vllm-xpu-server-0/172.19.0.2
+Start Time:       Sat, 07 Nov 2026 06:20:03 +0000
+Labels:           app=vllm
+                  pod-template-hash=b597794c7
+Annotations:      k3d-gpu.io/agent-backend: vllm
+                  k3d-gpu.io/agent-device: GPU
+Status:           Running
+IP:               10.42.0.11
+IPs:
+  IP:           10.42.0.11
+Controlled By:  ReplicaSet/vllm-b597794c7
+Containers:
+  vllm:
+    Container ID:  containerd://eb3e0c65bc6c17efb599d11963ec361b9a7065b30eb5d0731f0e713c81e3766f
+    Image:         vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086
+    Image ID:      docker.io/vllm/vllm-openai-xpu@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086
+    Port:          8000/TCP (http)
+    Host Port:     0/TCP (http)
+    Args:
+      Qwen/Qwen3-4B
+      --revision=1cfa9a7208912126459214e8b04321603b3df60c
+      --served-model-name=Qwen3-4B
+      --port=8000
+      --dtype=float16
+      --block-size=64
+      --max-model-len=8192
+      --max-num-batched-tokens=2048
+      --gpu-memory-utilization=0.9
+      --enforce-eager
+      --no-enable-prefix-caching
+      --tensor-parallel-size=1
+      --enable-auto-tool-choice
+      --tool-call-parser=hermes
+      --reasoning-parser=qwen3
+    State:          Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Sat, 07 Nov 2026 06:29:02 +0000
+      Finished:     Sat, 07 Nov 2026 06:29:29 +0000
+    Last State:     Terminated
+      Reason:       Error
+      Exit Code:    1
+      Started:      Sat, 07 Nov 2026 06:27:05 +0000
+      Finished:     Sat, 07 Nov 2026 06:27:32 +0000
+    Ready:          False
+    Restart Count:  5
+    Limits:
+      gpu.intel.com/xe:  1
+    Requests:
+      cpu:               2
+      gpu.intel.com/xe:  1
+      memory:            8Gi
+    Readiness:           http-get http://:http/health delay=0s timeout=1s period=5s successThreshold=1 failureThreshold=3
+    Environment:
+      VLLM_NO_USAGE_STATS:            1
+      DO_NOT_TRACK:                   1
+      VLLM_WORKER_MULTIPROC_METHOD:   spawn
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN:  1
+      VLLM_TARGET_DEVICE:             xpu
+      ZE_FLAT_DEVICE_HIERARCHY:       FLAT
+      ONEAPI_DEVICE_SELECTOR:         level_zero:*
+      ZE_ENABLE_PCI_ID_DEVICE_ORDER:  1
+      SYCL_CACHE_PERSISTENT:          1
+      ZES_ENABLE_SYSMAN:              1
+      HF_HUB_DISABLE_XET:             1
+      HF_HUB_ENABLE_HF_TRANSFER:      0
+      CCL_PROCESS_LAUNCHER:           none
+      CCL_WORKER_OFFLOAD:             0
+      CCL_WORKER_AFFINITY:            
+      CCL_ZE_IPC_EXCHANGE:            pidfd
+      CCL_ALLREDUCE:                  ring
+      HF_HOME:                        /models/huggingface
+      XDG_CACHE_HOME:                 /models/.cache
+      TRITON_CACHE_DIR:               /models/.triton
+      TRITON_HOME:                    /models/.triton
+    Mounts:
+      /dev/shm from shm (rw)
+      /models from models (rw)
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-sg5td (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       False 
+  ContainersReady             False 
+  PodScheduled                True 
+Volumes:
+  models:
+    Type:       PersistentVolumeClaim (a reference to a PersistentVolumeClaim in the same namespace)
+    ClaimName:  vllm-models
+    ReadOnly:   false
+  shm:
+    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:     Memory
+    SizeLimit:  2Gi
+  kube-api-access-sg5td:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   Burstable
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type     Reason     Age                     From               Message
+  ----     ------     ----                    ----               -------
+  Normal   Scheduled  9m56s                   default-scheduler  Successfully assigned k3d-gpu-agent/vllm-b597794c7-cnfff to k3d-k3dgpu-canary-vllm-xpu-server-0
+  Normal   Pulling    9m56s                   kubelet            spec.containers{vllm}: Pulling image "vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086"
+  Normal   Pulled     7m38s                   kubelet            spec.containers{vllm}: Successfully pulled image "vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086" in 2m17.899s (2m17.899s including waiting). Image size: 5212361514 bytes.
+  Warning  Unhealthy  2m38s (x51 over 7m38s)  kubelet            spec.containers{vllm}: Readiness probe failed: Get "http://10.42.0.11:8000/health": dial tcp 10.42.0.11:8000: connect: connection refused
+  Normal   Created    57s (x6 over 7m38s)     kubelet            spec.containers{vllm}: Container created
+  Normal   Started    57s (x6 over 7m38s)     kubelet            spec.containers{vllm}: Container started
+  Normal   Pulled     57s (x5 over 5m44s)     kubelet            spec.containers{vllm}: Container image "vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086" already present on machine and can be accessed by the pod

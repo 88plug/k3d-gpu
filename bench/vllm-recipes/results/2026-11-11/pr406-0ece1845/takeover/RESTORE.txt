@@ -1,0 +1,4 @@
+k3d-gpu b70-recipes takeover 20261111T2310Z (run records: /home/devcloud/k3dgpu-bench/runs/b70-recipes/20261111T2310Z).
+Stopped with docker stop -t 120, in order: see stop-log.txt. Nothing removed; config, image, volumes, restart policy unchanged.
+Restore, reverse order: docker start qwen38-a-hr qwen38-b-hr aiperf010 (only the ones stop-log.txt lists).
+Verify: :30000 and :30001 answer the baseline question (baseline-*.json) with Paris; per-card VRAM as vram-before.txt.

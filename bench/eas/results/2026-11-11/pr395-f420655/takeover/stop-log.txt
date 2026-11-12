@@ -1,0 +1,12 @@
+2026-11-11T17:41:36Z vram before: card1 15.73;card2 15.02;card3 15.73;card4 15.02;
+2026-11-11T17:43:35Z qwen38-a-hr POST lines in the last 10 min: 0
+2026-11-11T17:45:34Z qwen38-b-hr POST lines in the last 10 min: 0
+2026-11-11T17:45:34Z baseline port=30000 http=200 total_s=0.152653 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop"}
+2026-11-11T17:45:34Z baseline port=30001 http=200 total_s=0.360561 {"model":"Qwen3.8-27B","content":"Paris","finish":"stop"}
+2026-11-11T17:45:34Z aiperf010 stop begin
+2026-11-11T17:47:34Z aiperf010 stop took 120s: status=exited exit=137 restart=no
+2026-11-11T17:47:34Z qwen38-b-hr stop begin
+2026-11-11T17:47:43Z qwen38-b-hr stop took 9s: status=exited exit=0 restart=no
+2026-11-11T17:47:43Z qwen38-a-hr stop begin
+2026-11-11T17:47:50Z qwen38-a-hr stop took 7s: status=exited exit=0 restart=no
+2026-11-11T17:48:00Z vram after: card1 0.00;card2 0.00;card3 0.00;card4 0.00;

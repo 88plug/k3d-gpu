@@ -2,7 +2,10 @@
 """images.lock: every container image k3d-gpu ships, pinned by registry digest.
 
   scripts/images-lock check    offline: images.lock lists exactly the images the
-                               repo references, with the digests the repo pins
+                               repo references, with the digests the repo pins,
+                               and no name:tag is pinned in files of two pin
+                               classes (pins/classes: ours and eat-stock pins move
+                               apart, and the lock holds one digest per name:tag)
   scripts/images-lock update [--only FILE...]
                                network: resolve each digest from its registry,
                                read k3s's own image list, rewrite images.lock; a
@@ -334,6 +337,16 @@ def check(root, lock_path):
         entries[key] = e
     if not any(k3s in e["sources"] for e in lock["images"]):
         problems.append("images.lock holds no k3s system images: run scripts/images-lock update")
+    for key in sorted(found, key=lambda k: (k[0], k[1] or "")):
+        by_class = {}
+        for s in found[key]["sources"]:
+            path = s.split(" ", 1)[0]
+            by_class.setdefault(pin_class(root, path), set()).add(path)
+        if len(by_class) > 1:
+            problems.append("%s: pinned in %s files, which move apart (pins/classes); images.lock holds one digest "
+                            "per name:tag, so its next respin fails the digests bump: pin one class under its own tag"
+                            % (label(*key), " and ".join("%s (%s)" % (c, ", ".join(sorted(by_class[c])))
+                                                         for c in sorted(by_class, key=lambda c: (c != "ours", c)))))
     for key in sorted(found, key=lambda k: (k[0], k[1] or "")):
         want, e = found[key], entries.get(key)
         if e is None:

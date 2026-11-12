@@ -1,0 +1,9 @@
+[32m==>[0m agent: vllm serving Qwen/Qwen3-4B as 'Qwen3-4B' on 1x gpu.intel.com/xe, 2 CPU(s)
+namespace/k3d-gpu-agent created
+persistentvolumeclaim/vllm-models created
+deployment.apps/vllm created
+service/vllm created
+[32m==>[0m Waiting for the model to download and load (first run fetches it into the PVC; up to 857s)...
+Waiting for deployment "vllm" rollout to finish: 0 of 1 updated replicas are available...
+error: deployment "vllm" exceeded its progress deadline
+[31mERROR:[0m server not ready — kubectl -n k3d-gpu-agent logs deploy/vllm

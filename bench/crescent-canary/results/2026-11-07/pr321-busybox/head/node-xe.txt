@@ -1,0 +1,1 @@
+k3d-k3dgpu-canary-images-server-0 allocatable xe=4 capacity xe=4

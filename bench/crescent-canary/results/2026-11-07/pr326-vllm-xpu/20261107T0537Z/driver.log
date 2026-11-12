@@ -1,0 +1,4 @@
+2026-11-07T05:37:45Z waiting for the lock
+2026-11-07T05:47:58Z priority user queued (3358221: flock -o -w 21600 /home/devcloud/k3dgpu-bench.lock bash -c t=$(date +%s); echo "lock taken $(date -Is -d "@${t}")" >> "$3/lock.txt"
+        used=$(df --output=pcent / | tail -1 | tr -dc 0-9)
+        i): released, waiting again

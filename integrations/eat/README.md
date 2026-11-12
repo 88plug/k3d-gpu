@@ -329,7 +329,7 @@ Pinned here (checked 2026-10-29):
 | What | Pin | Source |
 |------|-----|--------|
 | EAT | `release-1.1.0`, commit `0c726f576595971c53cc45b94e08ba969beb4a4a`; `eat-up.sh` refuses any other HEAD | `eat-up.sh`; EAT's newest 1.x release ([release-1.1.0](https://github.com/intel/enterprise-agent-toolkit/releases/tag/release-1.1.0), published 2026-10-22); `release-2.0.0` removed the standalone installer (pin `eat` holds below it) |
-| bastion base | `ubuntu:24.04` by digest | `bastion.Dockerfile` |
+| bastion base | `ubuntu:noble-20261024.1` (Ubuntu 24.04) by digest: a dated tag, apart from the node image's rolling `ubuntu:24.04` | `bastion.Dockerfile` |
 | Helm in the bastion | v3.14.0 by sha256, the version `setup-bastion.yml` asks for | `bastion.Dockerfile` |
 | vLLM CPU | `vllm/vllm-openai-cpu:v0.28.0@sha256:197354e6...df9647`, the tag `release-1.1.0`'s `xeon-values.yaml` names (line 34); with `deploy_guardrails=on` the guard's image too (`guardrail-values.yaml`, line 30) | `vllm-values.yaml` |
 | GenAI Gateway | postgresql 18.12.4 and redis 28.3.1 charts; 11 images by digest (below) | `gateway-values.yaml`, `gateway-trace-values.yaml` |

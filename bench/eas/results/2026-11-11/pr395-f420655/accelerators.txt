@@ -1,0 +1,1 @@
+==> Accelerators schedulable: intel=4 amx=1. Try: k3d-gpu test

@@ -14,6 +14,8 @@
 #     on such a pair with no digest, with no tag, or tagged latest
 #   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat,
 #     and the Dockerfile's *_IMAGE ARG defaults (the 24.04 variant's base)
+#   - `check` fails on a name:tag pinned in files of two pin classes (an ours Dockerfile
+#     and an eat-stock bastion), and passes once each class pins its own tag
 #   - `repin` (registry stubbed) appends the digest to a name:tag, moves a stale
 #     digest, leaves allowed and digest-only refs alone, does the same for a values
 #     tag, and is idempotent; `repin --exclude GLOB` leaves matching files alone
@@ -373,6 +375,28 @@ printf -- '- image: quay.io/a/a:1@%s\n' "${D1}" > "${WORK}/r/share/a.yml"
 printf -- '- image: quay.io/d/d:1@%s\n' "${D1}" > "${WORK}/r/share/d.yml"
 sed -i 's/v1.37.1-k3s1/v1.37.2-k3s1/' "${WORK}/r/Dockerfile"
 update_case "update --only refuses a moved K3S_TAG unless the Dockerfile is named" 2 "K3S_TAG" --only share/d.yml
+
+# ---- check: one name:tag pinned in files of two pin classes ----
+# The classes move apart (the digests group respins ours files only) and images.lock
+# holds one digest per name:tag, so the tag's next respin fails `update --only`.
+scratch
+printf 'integrations/eat/** eat-stock tracks EAT releases\n' >> "${WORK}/r/pins/classes"
+mkdir -p "${WORK}/r/integrations/eat"
+printf 'ARG K3S_TAG=v1.37.1-k3s1\nARG UBUNTU_2404_IMAGE="ubuntu:24.04@%s"\nFROM debian:trixie-slim@%s\n' "${D1}" "${D1}" \
+    > "${WORK}/r/Dockerfile"
+: > "${WORK}/r/scripts/k3d-gpu"
+rm "${WORK}/r/share/local.yml"; : > "${WORK}/r/images.unpinned"
+printf 'FROM ubuntu:24.04@%s\n' "${D1}" > "${WORK}/r/integrations/eat/bastion.Dockerfile"
+update_case "update writes images.lock for an ours and an eat-stock file on one name:tag" 0 ""
+out=$("${WORK}/r/scripts/images-lock" check --root "${WORK}/r" 2>&1); rc=$?
+if [ "${rc}" -eq 1 ] && grep -qF "FAIL docker.io/library/ubuntu:24.04: pinned in ours (Dockerfile) and eat-stock (integrations/eat/bastion.Dockerfile) files" <<< "${out}"; then
+    ok "check fails on a name:tag that files of two pin classes pin"
+else fail "check missed a name:tag pinned in ours and eat-stock files (exit ${rc})"; sed 's/^/  | /' <<< "${out}"; fi
+printf 'FROM ubuntu:noble-20261024.1@%s\n' "${D1}" > "${WORK}/r/integrations/eat/bastion.Dockerfile"
+update_case "update writes images.lock once each class pins its own tag" 0 ""
+if out=$("${WORK}/r/scripts/images-lock" check --root "${WORK}/r" 2>&1); then
+    ok "check passes when each class pins its own tag of the image"
+else fail "check rejects one image under two tags, one per class"; sed 's/^/  | /' <<< "${out}"; fi
 
 # ---- http(): 429 and 5xx retried, Retry-After honoured (capped), other statuses not ----
 if out=$(python3 - "${REPO}" 2>&1 <<'EOF'

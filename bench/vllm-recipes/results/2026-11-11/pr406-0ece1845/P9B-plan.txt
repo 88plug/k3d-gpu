@@ -1,0 +1,31 @@
+facts: sha256:3006c64384bdc2ed62c50b62d5914cc402bf3c451c3354686c7cba92a3f97489
+targets:
+  cpu: Intel(R) Xeon(R) 6741P, family:model 6:173, 96 CPUs, AMX; usable
+  gpu:0000:12:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:48:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:7c:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+  gpu:0000:96:00.0: intel Battlemage, 0xe223, on xe, XMX; usable
+matrix: 2 cells, 0 on a target of this host
+  no measured cell for these targets
+decision:
+  unmeasured: no green cell for this box; quickstart and agent up still pick by device
+  bind 127.0.0.1, auth loopback-key (no login, gateway key in a 0600 file)
+vLLM server args: Qwen/Qwen3.5-9B on vllm (GPU, Battlemage 0xe223 = arc_pro_b70, vLLM 0.33.0)
+  recipe: Qwen/Qwen3.5-9B (vllm@960f5c1bb145 recipes/models/Qwen/Qwen3.5-9B.yaml; arc_pro_b70 verified)
+  Qwen/Qwen3.5-9B                [user env K3D_GPU_AGENT_MODEL]
+  --served-model-name=Qwen3.5-9B [k3d-gpu default (agent_config; K3D_GPU_AGENT_MODEL_NAME unset)]
+  --port=8000                    [k3d-gpu default (agent_config)]
+  --dtype=float16                [k3d-gpu default (vllm_device_args)]
+  --block-size=64                [k3d-gpu default (vllm_device_args)]
+  --max-model-len=8192           [k3d-gpu default (vllm_device_args; K3D_GPU_AGENT_MAX_LEN unset)]
+  --max-num-batched-tokens=2048  [k3d-gpu default (vllm_device_args)]
+  --gpu-memory-utilization=0.9   [k3d-gpu default (vllm_device_args)]
+  --enforce-eager                [k3d-gpu default (vllm_device_args); recipe xpu agrees (vllm@960f5c1bb145 hardware_overrides.xpu)]
+  --no-enable-prefix-caching     [k3d-gpu default (vllm_device_args)]
+  --tensor-parallel-size=1       [k3d-gpu default (vllm_manifest; K3D_GPU_AGENT_GPUS unset)]
+  --enable-auto-tool-choice      [recipe vllm@960f5c1bb145 features.tool_calling]
+  --tool-call-parser=qwen3_coder [recipe vllm@960f5c1bb145 features.tool_calling; in vLLM 0.33.0's registry]
+  --reasoning-parser=qwen3       [recipe vllm@960f5c1bb145 features.reasoning]
+  not applied: --trust-remote-code (model.base_args) -> no config.json available: not applied [recipe vllm@960f5c1bb145]
+  not applied: frontend rust (model.default_frontend) -> recipe env is reported, never applied
+  recipe opt-in, left to the optimizer: spec_decoding (draft tokens: mtp 1), text_only

@@ -1,0 +1,45 @@
+[2026-11-11T19:30:53Z] vram before up: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T19:30:53Z] step 0b-inotify: start (timeout 60s): sudo -n sysctl -w fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576
+[2026-11-11T19:30:53Z] step 0b-inotify: rc=0 wall=0s
+[2026-11-11T19:30:53Z] step 1-up: start (timeout 1800s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu up
+[2026-11-11T19:31:36Z] step 1-up: rc=0 wall=43s
+[2026-11-11T19:31:36Z] allocatable {"cpu":"96","ephemeral-storage":"3538173550480","gpu.intel.com/xe":"4","hugepages-1Gi":"0","hugepages-2Mi":"0","memory":"527767144Ki","pods":"110"}
+[2026-11-11T19:31:36Z] step 2-eat-up: start (timeout 6000s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eat up
+[2026-11-11T19:56:48Z] step 2-eat-up: rc=0 wall=1512s
+[2026-11-11T19:56:48Z] step 3-wait: start (timeout 1800s): env KUBECONFIG=/home/devcloud/k3dgpu-bench/b70eas/b70eas-e6ad2a0-20261111T1924Z/state/kubeconfig-k3dgpu-b70eas kubectl wait --for=condition=Ready pod -A --field-selector=status.phase!=Succeeded --timeout=30m
+[2026-11-11T19:56:54Z] step 3-wait: rc=0 wall=6s
+[2026-11-11T19:56:54Z] gateway 172.19.0.2 host litellm.solutions.ai
+[2026-11-11T19:56:54Z] models before add: ["hybrid-router","qwen3guard","qwen2-5-coder-14b"] (http 200)
+[2026-11-11T19:56:55Z] vram before model add: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T19:56:55Z] step 4a-model-add-dry-run: start (timeout 900s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eas model add Qwen/Qwen3-4B --dry-run
+[2026-11-11T19:56:56Z] step 4a-model-add-dry-run: rc=0 wall=1s
+[2026-11-11T19:56:56Z] step 4b-model-add: start (timeout 3600s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eas model add Qwen/Qwen3-4B
+[2026-11-11T20:01:17Z] step 4b-model-add: rc=0 wall=261s
+[2026-11-11T20:01:17Z] step 4c-model-list: start (timeout 300s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eas model list
+[2026-11-11T20:01:17Z] step 4c-model-list: rc=0 wall=0s
+[2026-11-11T20:01:18Z] model pod k3d-gpu-eas-models/qwen3-4b-6d8db88499-c74gj ready-wait 1s
+[2026-11-11T20:01:18Z] model pod Ready=True xe=1 limits=[{"name":"vllm","limits":{"gpu.intel.com/xe":"1","memory":"9Gi"},"requests":{"cpu":"2","gpu.intel.com/xe":"1","memory":"9Gi"}}]
+[2026-11-11T20:01:18Z] model pod images: vllm=sha256:7b3eb7c792a5d3a049effcb0d792ce95d4a482dd47a965d8a05a244a47682813 docker.io/vllm/vllm-openai-xpu@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086 restarts=0
+[2026-11-11T20:01:18Z] engine XPU lines: 6
+[2026-11-11T20:01:18Z] node allocated xe:  gpu.intel.com/xe 1 1;
+[2026-11-11T20:01:18Z] vram serving: 0000:12:00.0 card1 26.89;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T20:01:19Z] served max-model-len 20480; chat max_tokens 4096
+[2026-11-11T20:01:19Z] models after add: ["hybrid-router","qwen3guard","qwen2-5-coder-14b","qwen3-4b"] (http 200); new: qwen3-4b; using qwen3-4b
+[2026-11-11T20:01:47Z] chat http=200 total_s=27.847395 ttfb_s=27.847303 model=qwen3-4b finish=stop usage={"completion_tokens":1426,"prompt_tokens":18,"total_tokens":1444,"completion_tokens_details":{"reasoning_tokens":1283}}
+[2026-11-11T20:01:47Z] chat content:   To calculate $ 17 \times 23 $, we can use the distributive property of multiplication:  $$ 17 \times 23 = 17 \times (20 + 3) = (17 \times 20) + (17 \times 3) $$  Now compute each part:  - $ 17 \times 20 = 340 $ - $ 17 \times 3 = 51 $  Add the results:  $$ 340 + 51 = 391 $$  Thus, the final answer is:  $$ \boxed{391} $$ 
+[2026-11-11T20:01:47Z] step 5-eas-check: start (timeout 1800s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eas check --model qwen3-4b
+[2026-11-11T20:02:28Z] step 5-eas-check: rc=0 wall=41s
+[2026-11-11T20:02:29Z] vram after check: 0000:12:00.0 card1 26.70;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T20:02:29Z] step 5b-model-remove: start (timeout 600s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eas model remove qwen3-4b
+[2026-11-11T20:02:38Z] step 5b-model-remove: rc=0 wall=9s
+[2026-11-11T20:02:48Z] vram after model remove: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T20:02:48Z] step 6-eat-down: start (timeout 1200s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu eat down
+[2026-11-11T20:04:58Z] step 6-eat-down: rc=0 wall=130s
+[2026-11-11T20:04:58Z] step 7-down: start (timeout 600s): /home/devcloud/k3dgpu-bench/k3d-gpu-b70eas-e6ad2a0/scripts/k3d-gpu down
+[2026-11-11T20:05:22Z] step 7-down: rc=0 wall=24s
+[2026-11-11T20:05:27Z] k3d containers after: 0
+[2026-11-11T20:05:27Z] results: model_add_dry_rc=0 model_add_rc=0 model_list_rc=0 pod_ready=True pod_xe=1 models_http=200 model_id=qwen3-4b model_listed=true chat_http=200 chat_391=yes eas_check_rc=0 model_remove_rc=0 eat_down_rc=0 down_rc=0 
+[2026-11-11T20:05:27Z] RESULT PASS
+[2026-11-11T20:05:27Z] inotify put back to 128 1048576
+[2026-11-11T20:05:28Z] vram at exit: 0000:12:00.0 card1 0.00;0000:48:00.0 card2 0.00;0000:7c:00.0 card3 0.00;0000:96:00.0 card4 0.00;
+[2026-11-11T20:05:28Z] run.sh done (rc 0)

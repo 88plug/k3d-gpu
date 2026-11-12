@@ -1,0 +1,6 @@
+k3d-gpu commit: f420655584771a3814df441d38f9386412eb9209 (0 local changes)
+k3d-gpu version: k3d-gpu 0.1.102
+tools: k3d version v5.9.0; Client Version: v1.37.2; docker 29.8.0
+host: 905a08313800 7.0.0-31-generic; Intel(R) Xeon(R) 6741P
+model add: Qwen/Qwen3-4B
+start: 2026-11-11T17:48:00Z cap 180 min

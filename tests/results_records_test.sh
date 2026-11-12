@@ -42,6 +42,9 @@ records=(
     bench/h54/results/2026-10-20/host
     bench/h54/results/2026-10-21/builds
     bench/xhost/results/2026-10-20
+    bench/eas/results/2026-11-11
+    bench/vllm-recipes/results/2026-11-11
+    bench/crescent-canary/results/2026-11-07
 )
 for d in "${records[@]}"; do
     if [ -f "${d}/SHA256SUMS" ] && (cd "${d}" && sha256sum --strict --quiet -c SHA256SUMS); then

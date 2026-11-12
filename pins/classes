@@ -35,6 +35,9 @@ oracle/raw/**                           historical  the raw H6 and H8 records th
 bench/f3/**                             historical  F3's runner and records (a functional row; ledger lines take H ids only)
 bench/f5/**                             historical  F5's runner and records: its pins are the pre-registration's (a functional row; ledger lines take H ids only)
 bench/vllm-agent/**                     historical  the vLLM agent's unpatched end-state runs on an Arc Pro B70 (2026-11-08): release 0.1.94 and #357's head
+bench/eas/results/2026-11-11/**         historical  eas model add's end-state runs on an Arc Pro B70 (2026-11-11): #395's heads f420655 and e6ad2a0
+bench/vllm-recipes/results/2026-11-11/** historical  the vLLM recipes' end-state runs on an Arc Pro B70 (2026-11-11/12): #406's heads 0ece1845 and 27b535c1
+bench/crescent-canary/results/2026-11-07/** historical  the hardware canaries of #321, #322 and #326 on crescent (2026-11-07)
 
 # --- Runners of finished rows. Ledger lines, so the class follows the ledger: every row
 # listed has a verdict, so each resolves to historical (hack/pin-classes effective).

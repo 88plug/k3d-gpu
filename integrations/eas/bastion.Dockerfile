@@ -23,7 +23,7 @@
 # Runs as root: es_auto_installer.sh ensure_sudo runs `sudo -k` under `set -e` unless
 # EUID is 0, and this image has no sudo. eas.sh hands the state dir back to the
 # invoking user's uid:gid when it exits.
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+FROM ubuntu:noble-20261024.1@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
 
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
 

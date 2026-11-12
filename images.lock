@@ -165,9 +165,7 @@
       "digest": "sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
       "name": "docker.io/library/ubuntu",
       "sources": [
-        "Dockerfile",
-        "integrations/eas/bastion.Dockerfile",
-        "integrations/eat/bastion.Dockerfile"
+        "Dockerfile"
       ],
       "tag": "24.04"
     },
@@ -178,6 +176,15 @@
         "Dockerfile"
       ],
       "tag": "26.04"
+    },
+    {
+      "digest": "sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852",
+      "name": "docker.io/library/ubuntu",
+      "sources": [
+        "integrations/eas/bastion.Dockerfile",
+        "integrations/eat/bastion.Dockerfile"
+      ],
+      "tag": "noble-20261024.1"
     },
     {
       "digest": "sha256:2b8fc7b402eb045b809c3bb6296853e7d6e99a5acaded62b28f9494b357fbb4f",

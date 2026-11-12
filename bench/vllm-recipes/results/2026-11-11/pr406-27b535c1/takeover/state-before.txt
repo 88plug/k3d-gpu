@@ -1,0 +1,3 @@
+/aiperf010 status=running started=2026-11-11T23:30:50.623225937Z restart=no
+/qwen38-b-hr status=running started=2026-11-11T23:30:50.480929882Z restart=no
+/qwen38-a-hr status=running started=2026-11-11T23:30:50.344478504Z restart=no
