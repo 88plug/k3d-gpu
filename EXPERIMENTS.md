@@ -18452,9 +18452,10 @@ hold); and the arguments check mode accepts and refuses.
 Written 2026-11-11 and committed with its runner (`bench/h59r/`) before any H59r step. Nothing has
 been prepared, rendered or served on crescent for H59r, and nothing below is a measurement of
 either arm. Crescent was only read, over read-only ssh, at 2026-11-11T23:44Z (its containers, its
-`load1`, `/`, the bench lock and the listing of H59's `~/k3dgpu-h59`). The hypothesis and predictions in the row are H59's, copied
-verbatim (L's build and a bracketed note on O aside) and not tuned; they are never edited. A
-protocol change is a dated amendment, merged before the data it governs.
+`load1`, `/`, the bench lock and the listing of H59's `~/k3dgpu-h59`). The hypothesis and
+predictions in the row are H59's, copied verbatim (L's build and a bracketed note on O aside) and
+not tuned; they are never edited. A protocol change is a dated amendment, merged before the data it
+governs.
 
 **Why.**
 
@@ -18629,11 +18630,11 @@ header's title and prep's comment on the conversion image. `bench/h59` is unchan
 PENDING, for class `6741p`.
 
 **Tests** (in CI). `bench/h59r/test_h59r.py`, on H59's test stand-ins with a launcher copy that
-carries H59r's pins (so a later pin bump on main does not break them; a hold on such a main stops
-at the check): the tables differ from bench/h59's only as listed; each shell file equals bench/h59's
+carries H59r's pins (so a later pin bump on main does not break them; a checkout at such a main is
+refused at prep and at the smoke's check): the tables differ from bench/h59's only as listed; each shell file equals bench/h59's
 but for the listed lines; on a 6741P sysroot both arms render and pass the check, their staged
 renders equal H59's recorded hold-1 renders with the fit's values and L's image masked, and O with
-no backend renders the ledger's llama.cpp; the prep render's Job is the `full-b12110` conversion
+no backend takes the ledger's llama.cpp and is refused; the prep render's Job is the `full-b12110` conversion
 with the registered pip set, and `docker-argv` refuses another pip set or image; arm.sh's records
 for holds 1-4 (N=16 included) feed `run.py gate` and `bench/h59/h59.py` to a SUPPORTED verdict on a
 stub where L is faster; `hold.sh`'s guards (the 6741P only, the shim, the node image, a hold runs
