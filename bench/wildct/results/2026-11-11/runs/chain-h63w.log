@@ -1,0 +1,82 @@
+2026-11-11T23:01:30Z chain start: holds 1 2 3 4
+PROD-SAME before-H63w-1: 18 running, as at setup
+launched H63w-1 2026-11-11T23:01:30Z
+H63w-1 rc=0
+2026-11-11T23:47:31Z H63w-1 wait rc=0
+== after H63w-1 2026-11-11T23:47:31Z
+rc: 0
+== H63w-1 lock taken 2026-11-11T23:01:30Z
+== H63w-1 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h63w 1 2026-11-11T23:01:31Z
+== H63w-1 rc=0; clusters deleted: none; now: ; / 621 GB available 2026-11-11T23:47:11Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 2859G      621G      83% /
+lock-free
+PROD-SAME after-H63w-1: 18 running, as at setup
+2026-11-11T23:47:31Z H63w-1 Ld-mtp {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-11T23:31:05Z"}
+2026-11-11T23:47:31Z H63w-1 Ls {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-11T23:46:49Z"}
+2026-11-11T23:47:31Z H63w-1 Od {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-11T23:18:56Z"}
+PROD-SAME before-H63w-2: 18 running, as at setup
+launched H63w-2 2026-11-11T23:47:31Z
+H63w-2 rc=0
+2026-11-12T00:33:32Z H63w-2 wait rc=0
+== after H63w-2 2026-11-12T00:33:32Z
+rc: 0
+== H63w-2 lock taken 2026-11-11T23:47:31Z
+== H63w-2 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h63w 2 2026-11-11T23:47:32Z
+== H63w-2 rc=0; clusters deleted: none; now: ; / 621 GB available 2026-11-12T00:33:12Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 2859G      621G      83% /
+lock-free
+PROD-SAME after-H63w-2: 18 running, as at setup
+2026-11-12T00:33:32Z H63w-2 Ld-mtp {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-11T23:59:55Z"}
+2026-11-12T00:33:32Z H63w-2 Ls {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-12T00:16:00Z"}
+2026-11-12T00:33:32Z H63w-2 Od {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-12T00:32:51Z"}
+PROD-SAME before-H63w-3: 18 running, as at setup
+launched H63w-3 2026-11-12T00:33:32Z
+H63w-3 rc=0
+2026-11-12T01:19:33Z H63w-3 wait rc=0
+== after H63w-3 2026-11-12T01:19:33Z
+rc: 0
+== H63w-3 lock taken 2026-11-12T00:33:32Z
+== H63w-3 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h63w 3 2026-11-12T00:33:33Z
+== H63w-3 rc=0; clusters deleted: none; now: ; / 621 GB available 2026-11-12T01:19:28Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 2859G      621G      83% /
+lock-free
+PROD-SAME after-H63w-3: 18 running, as at setup
+2026-11-12T01:19:33Z H63w-3 Ld-mtp {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-12T01:19:09Z"}
+2026-11-12T01:19:33Z H63w-3 Ls {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-12T00:49:52Z"}
+2026-11-12T01:19:33Z H63w-3 Od {"status": "measured", "reason": "perf phases recorded", "at": "2026-11-12T01:07:05Z"}
+PROD-SAME before-H63w-4: 18 running, as at setup
+launched H63w-4 2026-11-12T01:19:33Z
+H63w-4 rc=0
+2026-11-12T02:18:04Z H63w-4 wait rc=0
+== after H63w-4 2026-11-12T02:18:04Z
+rc: 0
+== H63w-4 lock taken 2026-11-12T01:19:33Z
+== H63w-4 start: bash /home/andrew/k3dgpu-bench-wildct/repo/bench/wildct/row.sh h63w 4 2026-11-12T01:19:34Z
+== H63w-4 rc=0; clusters deleted: none; now: ; / 621 GB available 2026-11-12T02:17:36Z
+
+list rc=0
+ps rc=0
+
+strays rc=0
+/dev/nvme0n1p2             3667G 2859G      621G      83% /
+lock-free
+PROD-SAME after-H63w-4: 18 running, as at setup
+2026-11-12T02:18:05Z H63w-4 Ld-mtp {"status": "measured", "reason": "quality recorded", "at": "2026-11-12T02:17:14Z"}
+2026-11-12T02:18:05Z H63w-4 Ls {"status": "measured", "reason": "quality recorded", "at": "2026-11-12T01:41:35Z"}
+2026-11-12T02:18:05Z H63w-4 Od {"status": "measured", "reason": "quality recorded", "at": "2026-11-12T02:01:07Z"}
+2026-11-12T02:18:05Z chain done

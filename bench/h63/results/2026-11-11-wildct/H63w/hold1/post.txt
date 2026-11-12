@@ -1,0 +1,18 @@
+2026-11-11T23:47:07Z
+ 18:47:07 up 13 days, 14:35,  2 users,  load average: 11.97, 13.05, 10.45
+               total        used        free      shared  buff/cache   available
+Mem:          128441       11762       44242        1434       74706      116678
+Swap:         393215           2      393213
+%CPU   PID USER     COMMAND
+ 3.5 22290 root     kworker/u48:6-writeback
+ 2.6  1157 root     tailscaled
+ 1.7 22282 root     kworker/10:2-mm_percpu_wq
+ 1.5     1 root     systemd
+ 1.1  9906 911      python3
+ 0.9  1184 root     gdm
+ 0.7 34152 andrew   rustdesk
+ 0.6  9806 andrew   WebExtensions
+ 0.4  3313 root     dockerd
+ 0.4  6528 nobody   prometheus
+/dev/nvme0n1p2  3844245864 2997755216 651138928      83% /
+/dev/nvme0n1p2  3844245864 2997755216 651138928      83% /

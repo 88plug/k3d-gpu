@@ -1,0 +1,9 @@
+K3D_GPU_AGENT_DEVICE=CPU
+K3D_GPU_AGENT_DRAFT=off
+K3D_GPU_AGENT_IMAGE=openvino/model_server:2026.4.1-gpu@sha256:a928903fe429f1e3e27107cc45932d30d95febfd2d1159dc50869c3eac76fc58
+K3D_GPU_AGENT_MODEL=OpenVINO/gemma-4-26b-a4b-it-int4-ov
+K3D_GPU_AGENT_MODEL_NAME=gemma
+K3D_GPU_AUTOQUANT=off
+K3D_GPU_CLUSTER=k3dgpu-w-h63-smoke
+K3D_GPU_RAPL_EXEC=docker exec k3dgpu-w-rapl
+KUBECONFIG=/home/andrew/k3dgpu-bench-wildct/h63/smoke/H63w-20261111T225701Z/kubeconfig

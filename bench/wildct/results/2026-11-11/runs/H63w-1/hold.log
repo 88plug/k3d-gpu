@@ -1,0 +1,4 @@
+== H63w-hold1 waiting for the lock (mode perf, arms: Od Ld-mtp Ls) 2026-11-11T23:01:32Z
+== H63w-hold1 lock taken 2026-11-11T23:01:32Z
+== H63w-hold1 start: Od Ld-mtp Ls 2026-11-11T23:01:32Z
+== H63w-hold1 rc=0; clusters deleted: k3dgpu-w-h63-1; now:  2026-11-11T23:47:07Z

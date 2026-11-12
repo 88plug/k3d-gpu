@@ -1,0 +1,20 @@
+== H63w-holdsmoke waiting for the lock (mode perf, arms: Od Ld-mtp Ls) 2026-11-11T22:57:01Z
+== H63w-holdsmoke lock taken 2026-11-11T22:57:01Z
+== H63w-holdsmoke start: Od Ld-mtp Ls 2026-11-11T22:57:01Z
+== H63w-holdsmoke rc=0; clusters deleted: k3dgpu-w-h63-smoke; now:  2026-11-11T23:01:02Z
+== H63w-hold1 waiting for the lock (mode perf, arms: Od Ld-mtp Ls) 2026-11-11T23:01:32Z
+== H63w-hold1 lock taken 2026-11-11T23:01:32Z
+== H63w-hold1 start: Od Ld-mtp Ls 2026-11-11T23:01:32Z
+== H63w-hold1 rc=0; clusters deleted: k3dgpu-w-h63-1; now:  2026-11-11T23:47:07Z
+== H63w-hold2 waiting for the lock (mode perf, arms: Ld-mtp Ls Od) 2026-11-11T23:47:33Z
+== H63w-hold2 lock taken 2026-11-11T23:47:33Z
+== H63w-hold2 start: Ld-mtp Ls Od 2026-11-11T23:47:33Z
+== H63w-hold2 rc=0; clusters deleted: k3dgpu-w-h63-2; now:  2026-11-12T00:33:09Z
+== H63w-hold3 waiting for the lock (mode perf, arms: Ls Od Ld-mtp) 2026-11-12T00:33:34Z
+== H63w-hold3 lock taken 2026-11-12T00:33:34Z
+== H63w-hold3 start: Ls Od Ld-mtp 2026-11-12T00:33:34Z
+== H63w-hold3 rc=0; clusters deleted: k3dgpu-w-h63-3; now:  2026-11-12T01:19:27Z
+== H63w-hold4 waiting for the lock (mode quality, arms: Ls Od Ld-mtp) 2026-11-12T01:19:35Z
+== H63w-hold4 lock taken 2026-11-12T01:19:35Z
+== H63w-hold4 start: Ls Od Ld-mtp 2026-11-12T01:19:36Z
+== H63w-hold4 rc=0; clusters deleted: k3dgpu-w-h63-4; now:  2026-11-12T02:17:32Z

@@ -1,0 +1,95 @@
+== H63w health 2026-11-11T22:39:55Z repo 25b04b788be5533b00b006054c81525e80b2422b image cryptoandcoffee/k3d-gpu:0.1.106@sha256:417e53f3b6c13e26fd084bb75f788ac0e5dedbae28b86413fcd628f329cdc331
+-- H1
+active
+
+active
+H1 rc=0
+-- H2
+running
+H2 rc=0
+-- H3
+29.7.2 live-restore=false cgroup=systemd/2
+H3 rc=0
+-- H4
+Unable to find image 'python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb' locally
+docker.io/library/python@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb: Pulling from library/python
+6fc242d221a6: Pulling fs layer
+789960dca7c6: Pulling fs layer
+7d824d9f8321: Pulling fs layer
+6f058ad03f0c: Pulling fs layer
+6f058ad03f0c: Waiting
+6fc242d221a6: Verifying Checksum
+6fc242d221a6: Download complete
+6f058ad03f0c: Download complete
+789960dca7c6: Verifying Checksum
+789960dca7c6: Download complete
+7d824d9f8321: Download complete
+6fc242d221a6: Pull complete
+789960dca7c6: Pull complete
+7d824d9f8321: Pull complete
+6f058ad03f0c: Pull complete
+Digest: sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+Status: Downloaded newer image for python@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+probe rc=0
+-- H5
+H5 done
+-- H6
+/dev/nvme0n1p2             3667G 2824G      657G      82% /
+MemAvailable:   119570612 kB
+1.05 0.61 0.51 1/3458 48437
+-- H7
+
+H7 rc=0
+-- H8
+lock-free
+H8 done
+-- H9
+br_netfilter vxlan
+modprobe=[]
+-- H10
+ok ipset hash:ip
+ok ipset hash:net
+ok ipset hash:ip,port
+ok ipset hash:ip,port,ip
+ok ipset hash:ip,port,net
+ok iptables-nft filter comment
+ok iptables-nft filter statistic
+ok iptables-nft filter recent
+ok iptables-nft filter conntrack
+ok iptables-nft filter addrtype
+ok iptables-nft filter mark
+ok iptables-nft filter MARK
+ok iptables-nft filter REJECT
+ok iptables-nft filter tcp
+ok iptables-nft filter udp
+ok iptables-nft filter multiport
+ok iptables-nft filter limit
+ok iptables-nft filter NFLOG
+ok iptables-nft filter physdev
+ok iptables-nft filter pkttype
+ok iptables-nft nat MASQUERADE
+ok iptables-nft nat comment
+ok ip6tables-nft filter comment
+ok ip6tables-nft filter statistic
+ok ip6tables-nft filter recent
+ok ip6tables-nft filter conntrack
+ok ip6tables-nft filter addrtype
+ok ip6tables-nft filter mark
+ok ip6tables-nft filter MARK
+ok ip6tables-nft filter REJECT
+ok ip6tables-nft filter tcp
+ok ip6tables-nft filter udp
+ok ip6tables-nft filter multiport
+ok ip6tables-nft filter limit
+ok ip6tables-nft filter NFLOG
+ok ip6tables-nft filter physdev
+ok ip6tables-nft filter pkttype
+ok ip6tables-nft nat MASQUERADE
+ok ip6tables-nft nat comment
+ok iptables-nft nat DNAT
+ok iptables-nft nat SNAT
+ok ip6tables-nft nat DNAT
+iptables: iptables v1.8.11 (nf_tables)
+NFPROBE clean
+nfprobe rc=0
+== end 2026-11-11T22:39:58Z

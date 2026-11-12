@@ -1,0 +1,18 @@
+2026-11-12T01:19:35Z
+ 20:19:35 up 13 days, 16:08,  2 users,  load average: 6.00, 7.59, 8.24
+               total        used        free      shared  buff/cache   available
+Mem:          128441       11810       44163        1434       74752      116631
+Swap:         393215           2      393213
+%CPU   PID USER     COMMAND
+16.9 55807 andrew   pamac-checkupda
+ 2.7  1157 root     tailscaled
+ 1.5     1 root     systemd
+ 1.3 56176 andrew   python3
+ 1.2 56122 root     sleep
+ 1.1  9906 911      python3
+ 1.0 55866 root     pamac-daemon
+ 0.9  1184 root     gdm
+ 0.7 36294 andrew   rustdesk
+ 0.6  9806 andrew   WebExtensions
+/dev/nvme0n1p2  3844245864 2997768740 651125404      83% /
+/dev/nvme0n1p2  3844245864 2997768740 651125404      83% /
