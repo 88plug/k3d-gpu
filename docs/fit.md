@@ -212,27 +212,29 @@ refused, with the llama-server flags to run instead. `K3D_GPU_AGENT_BACKEND=llam
 Q4_0 GGUF, sized by the fit.
 
 Which engine serves a model on the CPU when several can is the ledger's call, read the way
-the CPU Fast Draft default is (H34): the engine-choice rows of EXPERIMENTS.md, H59 and its
-replications per CPU class (H59d, H59w). With `K3D_GPU_AGENT_BACKEND` unset, a row of that
-family SUPPORTED for this host's CPU class makes llama.cpp the CPU engine: the model
-optimizer then picks the model's int4 GGUF (Google's QAT Q4_0 GGUF for Gemma 4) with the QAT
-MTP drafter, the arm the row measured. A REFUTED, INCONCLUSIVE or PENDING row, a row for
-another CPU class, or no row keeps OVMS, as does a model with no int4 GGUF, a variant named
-(`K3D_GPU_AGENT_VARIANT`, or a variant's id as `--model`) or an OVMS Fast Draft device
-(`K3D_GPU_AGENT_DRAFT` `auto`, `CPU`, `GPU` or `NPU`). The rows ship in
-`console/ledger-rules.json` for installs without EXPERIMENTS.md, and
+the CPU Fast Draft default is (H34): the engine-choice rows of EXPERIMENTS.md, H59, its
+re-run at the current llama.cpp build (H59r) and its replications per CPU class (H59d, H59w).
+With `K3D_GPU_AGENT_BACKEND` unset, a row of that family SUPPORTED for this host's CPU class
+makes llama.cpp the CPU engine: the model optimizer then picks the model's int4 GGUF
+(Google's QAT Q4_0 GGUF for Gemma 4) with the QAT MTP drafter, the arm the row measured. A
+REFUTED, INCONCLUSIVE or PENDING row, a row for another CPU class, or no row keeps OVMS, as
+does a model with no int4 GGUF, a variant named (`K3D_GPU_AGENT_VARIANT`, or a variant's id
+as `--model`) or an OVMS Fast Draft device (`K3D_GPU_AGENT_DRAFT` `auto`, `CPU`, `GPU` or
+`NPU`). The rows ship in `console/ledger-rules.json` for installs without EXPERIMENTS.md, and
 `k3d-gpu plan --model M --explain` names the row that decided. A GPU placement is not
 affected: these are CPU rows.
 
-As of 2026-11-01 one row of the family is SUPPORTED: H59, for the Xeon 6741P's class
-(`6741p`) [ledger:H59]. On that class, with no backend set and no variant named,
+Two rows of the family are SUPPORTED, both for the Xeon 6741P's class (`6741p`): H59, measured
+at llama.cpp b11960 [ledger:H59], and H59r, H59 run again at b12110, the build pinned since
+release 0.1.107 [ledger:H59r]. On that class, with no backend set and no variant named,
 `agent up --model google/gemma-4-26B-A4B-it` serves llama.cpp with Google's QAT Q4_0 GGUF
 and the QAT MTP drafter. H59d (the i9-13900T) is INCONCLUSIVE and H59w (the i7-13700) is
 REFUTED, so those classes, and every class with no row, keep OVMS.
 
 ## The llama.cpp backend
 
-llama-server (ggml-org/llama.cpp v0.8.0, image tags `*-b11960`, pinned by digest) runs in
+llama-server (ggml-org/llama.cpp v0.9.0, image tags `*-b12110` since release 0.1.107, pinned by
+digest; the source lines cited in this section were read at v0.8.0, `b11960`) runs in
 deployment `llamacpp` of the agent namespace and serves the OpenAI API at `/v1`, port 8000.
 It uses the `server-intel` (SYCL) image on an Intel GPU and the `server` (CPU) image
 otherwise. Each option and its value are two arguments: llama-server reads a value from the
@@ -249,8 +251,8 @@ Beyond the fit's flags it sets:
 
 Safetensors weights whose architecture only llama.cpp runs here, such as
 Qwen3.8-Flash-Next, are converted once. A Job (`gguf-convert-<hash of its inputs>`) runs
-the `full-b11960` image's `convert_hf_to_gguf.py`, with transformers 5.21.0 and
-huggingface-hub 2.3.0 on `PYTHONPATH`. The image's own transformers cannot read
+the `full-b12110` image's `convert_hf_to_gguf.py`, with transformers 5.22.2 and
+huggingface-hub 2.4.0 on `PYTHONPATH`. The image's own transformers cannot read
 transformers-5 tokenizer configs. It downloads the pinned revision and writes
 `model.gguf` and `manifest.json` (sha256, size, pip freeze) under `/models/gguf`. Then it
 removes the download. Unquantized weights keep their 16-bit type. FP8 checkpoints are
