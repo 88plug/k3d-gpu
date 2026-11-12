@@ -265,9 +265,12 @@ guardrail's block and a sandbox run printing 385), a secret scan of 0, and `eat 
 records and the three wiring smokes before it are in
 [bench/f5/results/2026-11-07/](../../bench/f5/results/2026-11-07/).
 
-`eas model add|list|remove` ran once on the Xeon 6741P with its four B70s on 2026-11-11, at
-commit `f420655` with node image 0.1.102, EAS v1.2.0 and EAT release-2.0.0
-([record](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985)): `eat up`
+`eas model add|list|remove` ran on the Xeon 6741P with its four B70s on 2026-11-11, once at
+commit `f420655` with node image 0.1.102 and once at `e6ad2a0` (the commit [#395](https://github.com/88plug/k3d-gpu/pull/395) merged at)
+with 0.1.104, both on EAS v1.2.0 and EAT release-2.0.0
+([records](../../bench/eas/results/2026-11-11/README.md); PR comments for
+[f420655](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6804114985) and
+[e6ad2a0](https://github.com/88plug/k3d-gpu/pull/395#issuecomment-6806116502)). Each run: `eat up`
 with `failed=0`, `eas model add Qwen/Qwen3-4B` serving `qwen3-4b` on one B70 (the pod held
 `card1` only; the other three cards stayed at 0 GiB), the gateway's `/v1/models` listing
 it, `eas check --model qwen3-4b` (Intel's validate, chat, a tool call, the guardrail's

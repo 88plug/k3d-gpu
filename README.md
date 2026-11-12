@@ -1012,6 +1012,12 @@ context or memory, and never rewrite a device flag k3d-gpu already sets. A parse
 from the image's vLLM, a parser that needs a plugin file, `--trust-remote-code` for a
 model whose `config.json` has no `auto_map`, and a chat template not yet located in the
 image are left out with a warning. The default model keeps the arguments above.
+On an Arc Pro B70, at two heads of [#406](https://github.com/88plug/k3d-gpu/pull/406),
+`Qwen/Qwen3.5-4B` and `Qwen/Qwen3.5-9B` took the `qwen3_coder` tool parser and the `qwen3`
+reasoning parser from their recipes and returned a parsed `get_weather` call and the
+reasoning in its own field. Main's launcher, with no parser, answered the same tool request
+with HTTP 400. The default model's `agent manifest` was byte-identical to main's
+([record](bench/vllm-recipes/results/2026-11-11/README.md)).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -1034,8 +1040,9 @@ every version and file:
 Releases 0.1.21 (2026-10-16) through 0.1.93 do not serve with vLLM, on Arc or on a
 Gaudi, and neither does `agent up --model` when the fit picks vLLM. The hardware canary
 for the `v0.33.0` bump ([#326](https://github.com/88plug/k3d-gpu/pull/326)) found two
-causes on an Arc Pro B70 on 2026-11-07; the `v0.32.0` image exits there on the first one
-too:
+causes on an Arc Pro B70 on 2026-11-07
+([record](bench/crescent-canary/results/2026-11-07/README.md)); the `v0.32.0` image exits
+there on the first one too:
 
 - The Service is named `vllm`, so Kubernetes gives the pod
   `VLLM_PORT=tcp://<cluster IP>:8000`. vLLM reads `VLLM_PORT` as its own port and exits
