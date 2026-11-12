@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-11 23:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-12 00:10 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -10,7 +10,7 @@ None.
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 9h |
+| docs-build | `docs-pymdown-extensions` | `13.0` | `13.1` | minor | 2026-11-11 | 10h |
 | examples | `examples-crewai` | `1.15.39` | `1.15.40` | patch | 2026-11-11 | 1h |
 | gguf-convert-pip | `gguf-huggingface-hub` | `2.3.0` | `2.4.0` | minor | 2026-10-29 | 13d |
 | gguf-convert-pip | `gguf-transformers` | `5.21.0` | `5.22.2` | minor | 2026-11-06 | 5d |
@@ -21,12 +21,11 @@ None.
 
 - `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
 
-## Open bot PRs (3)
+## Open bot PRs (2)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #416 | gguf-convert-pip | auto | - |
-| #413 | docs-build | auto | - |
+| #418 | docs-build | auto | - |
 | #411 | vllm-recipes | review | a human approval at the head |
 
 ## EAT stock (always review)
@@ -193,3 +192,8 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
            path: pr
            branch: autobump/amend-${{ inputs.propose_amendment }}
 ```
+
+## Lag tripwire
+
+- blind-spot:gguf-huggingface-hub: gguf-huggingface-hub is 13d behind upstream with no open PR
+- blind-spot:gguf-transformers: gguf-transformers is 5d behind upstream with no open PR
