@@ -1,0 +1,6 @@
+{
+ "matched": true,
+ "reason": "no N=4 phase void after its re-run (6 checked)",
+ "rule": "H54's void rule over the N=4 phases",
+ "checked": 6
+}

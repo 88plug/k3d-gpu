@@ -1,0 +1,18 @@
+2026-11-12T01:52:30Z
+ 01:52:30 up 57 days,  3:06,  9 users,  load average: 4.45, 19.42, 19.72
+               total        used        free      shared  buff/cache   available
+Mem:          515397       98992      269257        5512      156497      416405
+Swap:              0           0           0
+%CPU     PID USER     COMMAND
+49.2  467682 root     sglang::schedul
+49.1  467684 root     sglang::schedul
+45.5  468000 root     sglang::schedul
+45.3  468001 root     sglang::schedul
+18.9  466634 root     python
+18.7  466966 root     python
+15.2  872705 65532    epp
+ 2.6    3911 nobody   node_exporter
+ 1.3    2651 root     dockerd
+ 1.2    3934 root     python3
+/dev/nvme0n1p1  3637102748 1213867928 2423218436      34% /
+/dev/nvme0n1p1  3637102748 1213867928 2423218436      34% /

@@ -1,0 +1,65 @@
+{
+ "seed": 5901,
+ "model": "gemma",
+ "agents": [
+  {
+   "ttft": 5.104021800681949,
+   "total": 6.461052421480417,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a1"
+  },
+  {
+   "ttft": 0.6320489123463631,
+   "total": 1.9927666392177343,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a2"
+  },
+  {
+   "ttft": 0.6241390332579613,
+   "total": 1.977171323262155,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a3"
+  },
+  {
+   "ttft": 0.6207418208941817,
+   "total": 1.971549279987812,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a4"
+  },
+  {
+   "ttft": 0.620687760412693,
+   "total": 1.971789911389351,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a5"
+  },
+  {
+   "ttft": 0.6223334521055222,
+   "total": 1.9948747223243117,
+   "text_len": 0,
+   "prompt_tokens": 1377,
+   "completion_tokens": 8,
+   "error": null,
+   "agent": "a6"
+  }
+ ],
+ "first_ttft_s": 5.104021800681949,
+ "added_ttft_median_s": 0.6223334521055222,
+ "prompt_tokens": [
+  "1377"
+ ]
+}
