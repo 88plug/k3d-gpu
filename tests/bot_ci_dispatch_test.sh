@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # hack/bot-ci-dispatch against a fake gh (no network).
-# The fake keeps open PRs in prs.json and workflow runs in runs.json. `gh run
-# list` filters runs like the API (-w workflow file, -c head SHA, -b branch,
-# -e event, -L count, newest first). `gh workflow run` appends a queued
+# The fake keeps open PRs in prs.json and workflow runs in runs.json. `gh pr
+# list` prints the first -L PRs (default 30). `gh run list` filters runs like the
+# API (-w workflow file, -c head SHA, -b branch, -e event, -L count, newest first)
+# and prints only the --json fields. `gh workflow run` appends a queued
 # workflow_dispatch run at the branch's head, unless the branch is listed in
 # no_dispatch (its workflow file lacks the trigger: HTTP 422) or dispatch_fail
 # exists (HTTP 500). dispatch_fail_n (a count) fails that many dispatches with an
@@ -31,17 +32,21 @@ echo "gh $*" >> "$F/calls"
 # countdown NAME: true (and one less) while the count in $F/NAME is above 0.
 countdown() { local n; n=$(cat "$F/$1" 2>/dev/null || echo 0); [ "$n" -gt 0 ] || return 1; echo $((n - 1)) > "$F/$1"; }
 case "$1 $2" in
-  "pr list") cat "$F/prs.json"; exit 0;;
+  "pr list")
+    shift 2; L=30
+    while [ $# -gt 0 ]; do case $1 in -L|--limit) L=$2; shift 2;; *) shift;; esac; done
+    jq --argjson L "$L" '.[:$L]' "$F/prs.json"; exit 0;;
   "run list")
     countdown runlist_fail_n && { echo "HTTP 502: Server Error (https://api.github.com/repos/o/r/actions/runs)" >&2; exit 1; }
-    shift 2; wf= c= b= e= q= L=1000
+    shift 2; wf= c= b= e= q= j= L=1000
     while [ $# -gt 0 ]; do case $1 in
       -w|--workflow) wf=$2; shift 2;; -c|--commit) c=$2; shift 2;; -b|--branch) b=$2; shift 2;;
-      -e|--event) e=$2; shift 2;; -q|--jq) q=$2; shift 2;; -L|--limit) L=$2; shift 2;; --json) shift 2;; *) shift;; esac; done
-    out=$(jq --arg w "$wf" --arg c "$c" --arg b "$b" --arg e "$e" --argjson L "$L" \
+      -e|--event) e=$2; shift 2;; -q|--jq) q=$2; shift 2;; -L|--limit) L=$2; shift 2;; --json) j=$2; shift 2;; *) shift;; esac; done
+    out=$(jq --arg w "$wf" --arg c "$c" --arg b "$b" --arg e "$e" --argjson L "$L" --arg j "${j:-}" \
       '[.[] | select(($w == "" or .workflow == $w) and ($c == "" or .headSha == $c)
                      and ($b == "" or .headBranch == $b) and ($e == "" or .event == $e))]
-       | sort_by(.createdAt) | reverse | .[:$L]' "$F/runs.json")
+       | sort_by(.createdAt) | reverse | .[:$L]
+       | if $j == "" then . else map(with_entries(select(.key as $k | $j | split(",") | index($k)))) end' "$F/runs.json")
     if [ -n "$q" ]; then jq -r "$q" <<<"$out"; else echo "$out"; fi
     exit 0;;
   "workflow run")
@@ -122,22 +127,61 @@ bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q 'deferred' <<<"$OUT"; then ok "cap_full: deferred"
 else fail "cap_full: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions")"; fi
 
-# 3. a queued ci.yml run of a human PR defers every bot dispatch; a running one does not.
-fixture human_queued "[$(pr 1 autobump/a a111)]" "[$(run 5 ci.yml pull_request claude/x c333 queued '')]"
+# 3. a queued ci.yml pull_request run at the current head of an open PR (not on an
+#    autobump/ branch) defers every bot dispatch; a running one does not. A queued run
+#    at a SHA that is no open PR's head (an older push of an open PR, or a closed or
+#    merged PR's; GitHub can leave such a run queued for hours and refuse to cancel or
+#    delete it) serves no one and defers nothing.
+DEFER='#1 autobump/a a111: no ci.yml run at the head: deferred, 1 ci.yml run(s) of human PRs queued'
+fixture human_queued "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" "[$(run 5 ci.yml pull_request claude/x c333 queued '')]"
 BOT_CI_MAX_INFLIGHT=10 bcd
-if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q 'human' <<<"$OUT"; then ok "human_queued: deferred"
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then ok "human_queued: deferred"
 else fail "human_queued: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
-# a queued run whose head branch is gone (headBranch null) counts as a human run.
-fixture human_null_branch "[$(pr 1 autobump/a a111)]" \
+# a queued run whose head branch reads null (not autobump/) counts at an open PR's head.
+fixture human_null_branch "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" \
   "[{\"databaseId\":5,\"workflow\":\"ci.yml\",\"event\":\"pull_request\",\"headBranch\":null,\"headSha\":\"c333\",\"status\":\"queued\",\"conclusion\":\"\",\"attempt\":1,\"createdAt\":\"2026-10-29T20:00:00Z\"}]"
 BOT_CI_MAX_INFLIGHT=10 bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q 'deferred, 1 ci.yml run(s) of human PRs queued' <<<"$OUT"; then
   ok "human_null_branch: deferred"
 else fail "human_null_branch: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
-fixture human_running "[$(pr 1 autobump/a a111)]" "[$(run 5 ci.yml pull_request claude/x c333 in_progress '')]"
+fixture human_running "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" "[$(run 5 ci.yml pull_request claude/x c333 in_progress '')]"
 bcd
 if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ]; then ok "human_running: dispatched"
 else fail "human_running: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions")"; fi
+# a queued run at a SHA no open PR has at its head (a merged PR's older push): dispatched.
+fixture human_ghost "[$(pr 1 autobump/a a111),$(pr 3 claude/y d444 "$HUMAN")]" \
+  "[$(run 5 ci.yml pull_request claude/vllm-recipes-resolver 6e2e822e queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a && ! grep -q 'human' <<<"$OUT"; then
+  ok "human_ghost: a queued run at no open PR's head defers nothing"
+else fail "human_ghost: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# that run beside a queued run at an open PR's head: deferred, and only the live run counts.
+fixture human_mixed "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" \
+  "[$(run 5 ci.yml pull_request claude/vllm-recipes-resolver 6e2e822e queued ''),$(run 6 ci.yml pull_request claude/x c333 queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then
+  ok "human_mixed: deferred, the live run counted alone"
+else fail "human_mixed: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# an open PR's queued run at its older head (the PR moved on to c999): dispatched.
+fixture human_superseded "[$(pr 1 autobump/a a111),$(pr 3 claude/x c999 "$HUMAN")]" "[$(run 5 ci.yml pull_request claude/x c333 queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a && ! grep -q 'human' <<<"$OUT"; then
+  ok "human_superseded: a queued run at an open PR's older head defers nothing"
+else fail "human_superseded: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a run whose head SHA reads null or empty counts: nothing shows it is at no open PR's head.
+fixture human_no_sha "[$(pr 1 autobump/a a111),$(pr 3 claude/x c333 "$HUMAN")]" "[$(run 5 ci.yml pull_request claude/x '' queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then ok "human_no_sha: deferred"
+else fail "human_no_sha: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# a PR list cut at its limit (200) can miss the open PR a queued run is at (#202, past
+# the first 200 here): then every queued human run counts, as before heads were read.
+fixture human_list_cut "$(jq -c --argjson a "$(pr 1 autobump/a a111)" --argjson h "$HUMAN" \
+  '[$a] + [range(2; 203) | {number: ., headRefName: "claude/p\(.)", headRefOid: "p\(.)", baseRefName: "main",
+                          isCrossRepository: false, author: $h}]' <<<null)" \
+  "[$(run 5 ci.yml pull_request claude/p202 p202 queued '')]"
+BOT_CI_MAX_INFLIGHT=10 bcd
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -qxF "$DEFER" <<<"$OUT"; then ok "human_list_cut: deferred"
+else fail "human_list_cut: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 
 # 4. idempotent: a second call dispatches nothing more.
 fixture idempotent "[$(pr 1 autobump/a a111),$(pr 2 autobump/b b222)]" '[]'
@@ -279,6 +323,22 @@ echo "[$(pr 1 autobump/c "$SHA_C")]" > "$FIX/prs.json"; bcd_repo --workflow cana
 if [ "$RC" -eq 1 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/c [0-9a-f]*: error: hack/pins policy failed' <<<"$OUT"; then
   ok "canary_ledger_policy_fail: main moved only in the ledger, a policy failure is an error"
 else fail "canary_ledger_policy_fail: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+# canary.yml reads the same pool from ci.yml's runs: a queued ci.yml run at an open
+# PR's head defers the canary, one at no open PR's head does not.
+canary_repo canary_human_live
+echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 3 claude/x c333 "$HUMAN")]" > "$FIX/prs.json"
+echo "[$(run 5 ci.yml pull_request claude/x c333 queued '')]" > "$FIX/runs.json"
+BOT_CI_MAX_INFLIGHT=10 bcd_repo --workflow canary.yml
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 0 ] && grep -q '#1 autobump/a .*: deferred, 1 ci.yml run(s) of human PRs queued' <<<"$OUT"; then
+  ok "canary_human_live: deferred"
+else fail "canary_human_live: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
+canary_repo canary_human_ghost
+echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 3 claude/x c333 "$HUMAN")]" > "$FIX/prs.json"
+echo "[$(run 5 ci.yml pull_request claude/x c222 queued '')]" > "$FIX/runs.json"
+BOT_CI_MAX_INFLIGHT=10 bcd_repo --workflow canary.yml
+if [ "$RC" -eq 0 ] && [ "$(acts dispatch)" -eq 1 ] && dispatched autobump/a canary.yml && ! grep -q 'human' <<<"$OUT"; then
+  ok "canary_human_ghost: dispatched"
+else fail "canary_human_ghost: rc=$RC actions=$(tr '\n' ';' < "$FIX/actions") out=$(tr '\n' ';' <<<"$OUT")"; fi
 # ci.yml never consults the policy, and its dispatch carries no inputs.
 canary_repo ci_no_policy; rm "$CR/hack/pins"
 echo "[$(pr 1 autobump/a "$SHA_A"),$(pr 2 autobump/b "$SHA_B")]" > "$FIX/prs.json"
