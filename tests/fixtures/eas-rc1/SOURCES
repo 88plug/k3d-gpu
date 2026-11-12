@@ -1,0 +1,35 @@
+Fixtures for tests/eas_test.sh: an EAS v1.2.0-rc.1 checkout after
+`es_auto_installer.sh init agent-toolkit`, cut to the files and keys
+integrations/eas/eas-up.sh reads. Every line is upstream's, unedited: a file is
+either verbatim or a set of its line ranges (1-based, inclusive), cut 2026-10-29
+from read-only clones at these commits:
+
+  intel/enterprise-ai-solutions    5c27fb39a95eecec41aa4e29a1188984e9c726f3 (tag v1.2.0-rc.1)
+  intel/enterprise-inference       170eb3abb1956de0787727f21e356aef2b13ff24 (ext/enterprise.ai-inference)
+  intel/enterprise-agent-toolkit   036b66234801e9bd950afd90830821859780d668 (ext/enterprise.agent-toolkit)
+
+eas/configs/defaults/global_config.yaml                       blob d8d2537d36da, lines 1-3,11-21,40-46,60-66,91-98,114-121
+eas/configs/repos/repos.agent-toolkit.yaml                    blob efd417ee7079, verbatim
+eas/roles/kubernetes/defaults/main.yaml                       blob fd917f8ce9fd, lines 1-11,38-41
+eas/roles/istio/defaults/main.yaml                            blob b2e0882fce12, lines 1-9,26-33
+eas/charts/istio/values.yaml                                  blob 6cf161e86dd8, verbatim
+eas/roles/envoy_gateway/tasks/install.yaml                    blob 9f3d4234a159, verbatim
+eas/ext/enterprise.ai-inference/roles/nfd/defaults/main.yaml  blob 609eedf8fcee, verbatim
+eas/ext/enterprise.ai-inference/model_manager/models.yaml     blob 400f97fb7a00, lines 1-21,93,218-236,406-428,545-551,578-587
+eas/ext/enterprise.agent-toolkit/config.yaml                  blob 110d05376454, lines 1-13,30-35,54-57
+eas/ext/enterprise.agent-toolkit/roles/agent_sandbox/defaults/main.yaml  blob 78b7a08c859c, lines 1-27
+
+The env/local/ files init would seed (global_config.yaml with the layer manifest's
+auth_provider: "litellm", config.agent-toolkit.yaml, models.yaml) are made by the
+test from these, the way init makes them.
+
+These files are Intel's, Apache-2.0 (LICENSE, EAS's copy).
+
+golden/ holds what `eas-up.sh render` must produce from them, as sorted JSON:
+  global_config.json      env/local/global_config.yaml; @CHECKOUT@ is the checkout path,
+                          @ROUTER@ the router image in integrations/eas/images.yaml
+  istio-values-k3d.json   env/local/istio-values.k3d-gpu.yaml for containerd bin_dirs ["/usr/bin"]
+  istio-values-k3s.json   the same for ["/var/lib/rancher/k3s/data/cni"]
+  models-amx.json         env/local/models.yaml on xeon-gnr's node labels (AMX)
+  models-noamx.json       env/local/models.yaml on raptorlake-nvidia's node labels (no AMX)
+  config.agent-toolkit.json

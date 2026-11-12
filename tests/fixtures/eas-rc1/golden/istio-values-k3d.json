@@ -1,0 +1,42 @@
+{
+  "base": {
+    "defaultRevision": "default"
+  },
+  "cni": {
+    "profile": "ambient"
+  },
+  "global": {
+    "platform": "k3d"
+  },
+  "istiod": {
+    "caAddress": "cert-manager-istio-csr.cert-manager.svc:443",
+    "meshConfig": {
+      "meshMTLS": {
+        "cipherSuites": [
+          "ECDHE-ECDSA-AES256-GCM-SHA384",
+          "ECDHE-RSA-AES256-GCM-SHA384",
+          "ECDHE-ECDSA-AES128-GCM-SHA256",
+          "ECDHE-RSA-AES128-GCM-SHA256"
+        ],
+        "minProtocolVersion": "TLSV1_3"
+      },
+      "tlsDefaults": {
+        "cipherSuites": [
+          "ECDHE-ECDSA-AES256-GCM-SHA384",
+          "ECDHE-RSA-AES256-GCM-SHA384",
+          "ECDHE-ECDSA-AES128-GCM-SHA256",
+          "ECDHE-RSA-AES128-GCM-SHA256"
+        ]
+      }
+    },
+    "pilot": {
+      "env": {
+        "ENABLE_CA_SERVER": "false"
+      }
+    },
+    "profile": "ambient"
+  },
+  "ztunnel": {
+    "caAddress": "cert-manager-istio-csr.cert-manager.svc:443"
+  }
+}

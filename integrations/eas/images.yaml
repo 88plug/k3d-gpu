@@ -1,0 +1,12 @@
+# Images eas-up.sh sets over Intel's defaults, as Helm-values-shaped repository/tag
+# pairs so scripts/images-lock collects them into images.lock and the nightly
+# repin moves their digests.
+#
+# agent_sandbox_router: EAT 036b662 roles/agent_sandbox/defaults/main.yaml:27 leaves
+# agent_sandbox_router_image at the floating staging tag latest-main, and
+# roles/agent_sandbox/tasks/install.yaml:138 substitutes it into the sandbox-router
+# manifest. eas-up.sh renders it into global_config.yaml as this digest.
+agent_sandbox_router:
+  image:
+    repository: us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router
+    tag: "latest-main@sha256:9cebf7d97f98c0ce008aec8524f23637e60b61485db18ad426897eefac156968"

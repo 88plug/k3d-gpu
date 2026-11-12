@@ -1,0 +1,35 @@
+# https://github.com/istio/istio/tree/master/manifests/charts
+
+base:
+  defaultRevision: default
+
+istiod:
+  profile: ambient
+  meshConfig:
+    meshMTLS:
+      minProtocolVersion: TLSV1_3
+      cipherSuites:
+      - ECDHE-ECDSA-AES256-GCM-SHA384
+      - ECDHE-RSA-AES256-GCM-SHA384
+      - ECDHE-ECDSA-AES128-GCM-SHA256
+      - ECDHE-RSA-AES128-GCM-SHA256
+    tlsDefaults:
+      cipherSuites:
+      - ECDHE-ECDSA-AES256-GCM-SHA384
+      - ECDHE-RSA-AES256-GCM-SHA384
+      - ECDHE-ECDSA-AES128-GCM-SHA256
+      - ECDHE-RSA-AES128-GCM-SHA256
+  # Delegate workload cert signing to cert-manager-istio-csr.
+  # caAddress must be at this level (istiod chart top-level), not nested under pilot.
+  # ztunnel also reads this to reach the external CA directly.
+  caAddress: "cert-manager-istio-csr.cert-manager.svc:443"
+  pilot:
+    env:
+      ENABLE_CA_SERVER: "false"
+
+cni:
+  profile: ambient
+
+ztunnel:
+  # ztunnel requests workload certs directly — must also point at istio-csr.
+  caAddress: "cert-manager-istio-csr.cert-manager.svc:443"

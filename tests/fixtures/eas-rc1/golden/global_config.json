@@ -1,0 +1,23 @@
+{
+  "agent_sandbox_router_image": "@ROUTER@",
+  "auth_provider": "litellm",
+  "cert_manager_enabled": true,
+  "envoy_gateway_enabled": true,
+  "existing_kubernetes": "/kube/config",
+  "istio_enabled": true,
+  "istio_helm_default_values_file": "@CHECKOUT@/env/local/istio-values.k3d-gpu.yaml",
+  "kata_containers_enabled": false,
+  "kata_runtime": "kata-fc",
+  "kubernetes_accelerator": "cpu",
+  "kubernetes_cluster_cidr": "10.42.0.0/16",
+  "kubernetes_cluster_name": "cluster.local",
+  "kubernetes_cpu_policy": "best-effort",
+  "kubernetes_kube_proxy_mode": "nftables",
+  "kubernetes_skip_if_exists": true,
+  "metallb_enabled": false,
+  "nfd_enabled": false,
+  "observability_enabled": true,
+  "postgresql_enabled": true,
+  "storage_backend": "local-path",
+  "velero_enabled": false
+}

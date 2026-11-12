@@ -12,7 +12,7 @@
 #     lines, in *.Dockerfile too
 #   - Helm values name an image as sibling `repository:` / `tag:` keys: pins fails
 #     on such a pair with no digest, with no tag, or tagged latest
-#   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat,
+#   - images.lock collects the values pairs and Dockerfile FROMs under integrations/eat and integrations/eas,
 #     and the Dockerfile's *_IMAGE ARG defaults (the 24.04 variant's base)
 #   - `repin` (registry stubbed) appends the digest to a name:tag, moves a stale
 #     digest, leaves allowed and digest-only refs alone, does the same for a values
@@ -154,6 +154,34 @@ for key, (digest, sources) in want.items():
 EOF
 ); then ok "images.lock collects integrations/eat values pairs, Dockerfile FROMs and the Dockerfile's *_IMAGE ARGs"
 else fail "images-lock collect integrations/eat"; sed 's/^/  | /' <<< "${out}"; fi
+
+# integrations/eas is a source the same way: its values-shaped image overrides
+# (a registry with no docker.io default, a tag that carries a name) and its bastion's FROM.
+mkdir -p "${WORK}/r/integrations/eas"
+printf 'FROM ubuntu:24.04@%s\n' "${D1}" > "${WORK}/r/integrations/eas/bastion.Dockerfile"
+printf 'router:\n  image:\n    repository: us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router\n    tag: "latest-main@%s"\n' \
+    "${D2}" > "${WORK}/r/integrations/eas/images.yaml"
+printf 'ansible==12.3.0\n' > "${WORK}/r/integrations/eas/constraints.txt"
+if out=$(python3 - "${WORK}/r" "${D1}" "${D2}" 2>&1 <<'EOF'
+import importlib.machinery, importlib.util, sys
+root, d1, d2 = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("images_lock", root + "/scripts/images-lock")
+spec = importlib.util.spec_from_loader("images_lock", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+found, _ = m.collect(root)
+want = {
+    ("us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router", "latest-main"):
+        (d2, {"integrations/eas/images.yaml"}),
+    ("docker.io/library/ubuntu", "24.04"):
+        (d1, {"Dockerfile", "integrations/eat/bastion.Dockerfile", "integrations/eas/bastion.Dockerfile"}),
+}
+for key, (digest, sources) in want.items():
+    got = found.get(key)
+    assert got == {"digest": digest, "sources": sources}, (key, got)
+EOF
+); then ok "images.lock collects integrations/eas values pairs and its bastion's FROM"
+else fail "images-lock collect integrations/eas"; sed 's/^/  | /' <<< "${out}"; fi
 
 # ---- repin, with the registry stubbed ----
 scratch

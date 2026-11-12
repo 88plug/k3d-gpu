@@ -1,0 +1,81 @@
+# =============================================================================
+# Model Manager — model catalog & runtime configuration
+# =============================================================================
+#   models:    what to deploy (one entry per model)
+#   runtimes:  per-engine deploy config (images, versions, env, categories)
+#
+#   ./model-manager deploy <name> --wait           # deploy a catalog model
+#   ./model-manager deploy --id <hf/repo> --cpu 8  # deploy any HuggingFace model by id (no edit needed)
+#   ./model-manager undeploy <name>
+# =============================================================================
+
+
+# =============================================================================
+# Defaults — cluster-wide fallbacks applied to every model that omits a value
+# =============================================================================
+defaults:
+  namespace: llm-inference        # target namespace for deployments
+  runtime: vllm                   # default engine when a model omits one
+  replicas: 1                     # default replica count
+  require_amx: true               # only schedule model pods on nodes with Intel AMX
+
+models:
+  - name: qwen3-1-7b
+    model_id: Qwen/Qwen3-1.7B
+    category: llm
+    runtime: vllm
+    server_version: "0.28.0"
+    cpu: auto                        # one NUMA node per TP rank, per node
+    memory: 64Gi
+    args: [ "--block-size", "128", "--dtype", "bfloat16", "--distributed_executor_backend", "mp", "--enable_chunked_prefill", "--enforce-eager", "--max-num-batched-tokens", "2048", "--max-num-seqs", "256", "--enable-prefix-caching", "--enable-auto-tool-choice", "--tool-call-parser", "hermes", "--tensor-parallel-size", "1" ]
+    env:
+      VLLM_RPC_TIMEOUT: "100000"
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      VLLM_ENGINE_ITERATION_TIMEOUT_S: "120"
+      TRITON_CACHE_DIR: "/tmp/.triton"
+      USER: "vllm"
+      VLLM_CPU_KVCACHE_SPACE: "40"
+      VLLM_CPU_NUM_OF_RESERVED_CPU: "0"
+      HF_HUB_DISABLE_XET: "1"
+      VLLM_CPU_SGL_KERNEL: "1"
+
+  # Guard model — content-safety classifier backing the LiteLLM guardrail
+  # (guardrail_model; deployed whenever the guardrail is on, the default with
+  # auth_provider: litellm).
+  # Sizing: cpu 8, memory 16Gi, KV cache 4 GiB, max-num-seqs 8, TP 1.
+  # memory: 8Gi OOM-killed the pod (exit 137, peak ~8.6GiB); the guard is
+  # default-on and fail-closed, so a guard OOM blocks every LiteLLM request.
+  - name: qwen3guard
+    model_id: Qwen/Qwen3Guard-Gen-0.6B
+    category: llm
+    runtime: vllm
+    server_version: "0.28.0"
+    cpu: 8
+    memory: 16Gi
+    args: [ "--block-size", "128", "--dtype", "bfloat16", "--max-num-seqs", "8", "--tensor-parallel-size", "1" ]
+    env:
+      VLLM_CPU_KVCACHE_SPACE: "4"
+      VLLM_CPU_SGL_KERNEL: "1"
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      HF_HUB_DISABLE_XET: "1"
+      USER: "vllm"
+      HOME: "/tmp"
+      XDG_CACHE_HOME: "/tmp/.cache"
+      VLLM_CACHE_ROOT: "/tmp/vllm"
+runtimes:
+
+  # ── vLLM (CPU) ──────────────────────────────────────────────────────────────
+  # env is shared across all versions/categories; args live per-category below.
+  vllm:
+    default_version: "0.24.0"       # used when a model/CLI doesn't pick a version
+
+
+    # Per-category engine args + env + resource defaults (a model's own values
+    # override). VLLM_CPU_KVCACHE_SPACE is set here (not in the shared env above)
+    # so each workload class sizes its CPU KV cache appropriately —
+    # ${KV_CACHE_GB} is filled from this category's kv_cache_gb default.
+    categories:
+      llm:
+        args: [ --dtype, bfloat16, --max-num-seqs, "128", --max-num-batched-tokens, "2048", --enable-prefix-caching, --enable-chunked-prefill ]
+        env: { VLLM_CPU_KVCACHE_SPACE: "${KV_CACHE_GB}" }
+        defaults: { cpu: 8, memory: "16Gi", kv_cache_gb: 8 }

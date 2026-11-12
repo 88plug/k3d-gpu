@@ -166,6 +166,7 @@
       "name": "docker.io/library/ubuntu",
       "sources": [
         "Dockerfile",
+        "integrations/eas/bastion.Dockerfile",
         "integrations/eat/bastion.Dockerfile"
       ],
       "tag": "24.04"
@@ -435,6 +436,14 @@
         "share/node-feature-discovery.yml"
       ],
       "tag": "v0.20.1"
+    },
+    {
+      "digest": "sha256:9cebf7d97f98c0ce008aec8524f23637e60b61485db18ad426897eefac156968",
+      "name": "us-central1-docker.pkg.dev/k8s-staging-images/agent-sandbox/sandbox-router",
+      "sources": [
+        "integrations/eas/images.yaml"
+      ],
+      "tag": "latest-main"
     },
     {
       "digest": "sha256:5d064465d751a73a729e7ecdc32c0ba5de0df1d305debb60a3d9a85b4fd3a967",

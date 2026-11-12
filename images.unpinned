@@ -29,3 +29,4 @@ tests/image_test.sh                   *                                     node
 tests/model_share_test.sh             localhost:5000/agent                  checks a registry port is not read as a tag
 tests/image_pins_test.sh              *                                     the pin gate's own unpinned inputs
 tests/eat_test.sh                     *                                     stubs of EAT's gateway chart files, the input gateway-charts.py pins
+tests/eas_test.sh                     *                                     stub cluster listings eas-check.sh reads (a second NRI, NFD or sandbox controller)

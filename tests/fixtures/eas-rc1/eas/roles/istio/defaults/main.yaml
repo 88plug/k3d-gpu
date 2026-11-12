@@ -1,0 +1,17 @@
+# Copyright (C) 2024-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# =============================================================================
+# Istio Role Defaults
+# =============================================================================
+
+istio_namespace: "istio-system"
+# Helm
+istio_helm_repo_name: "istio"
+istio_helm_repo_url: "https://istio-release.storage.googleapis.com/charts"
+istio_helm_chart_name: "istio"
+istio_helm_chart_directory: "{{ playbook_dir }}/../charts/istio"
+istio_helm_release_name: "istio"
+istio_helm_default_values_file: "{{ istio_helm_chart_directory }}/values.yaml"
+istio_wait_timeout: "300s"

@@ -103,6 +103,7 @@ setup too weak to decide). Only `SUPPORTED` backs a claim.
 | H59 | Engine choice by evidence on the Xeon 6741P (crescent; AMX, CPU only, no card): with Gemma 4 26B-A4B QAT at agent concurrency N=4, llama.cpp with Google's QAT Q4_0 GGUF and the QAT MTP drafter (L, `agent up` with the llama.cpp backend of PR #182) decodes at least 1.2x faster than OVMS int4 (O, `OpenVINO/gemma-4-26b-a4b-it-int4-ov`, the model optimizer's current pick), with GSM8K quality within 2 of 50. SUPPORTED makes llama.cpp the optimizer's CPU engine default for this CPU class (`console/ledger-rules.json`, H59 family); otherwise OVMS stays. | Written 2026-10-21, before any H59 measurement. Informed by H54a's descriptive N=1 numbers on this host (Lg-mtp 54.52, A1g 23.25 tok/s, not a verdict): N=1 L/O 2.2 (1.6-2.8) (0.6); N=4 per-request decode L/O 1.6 (1.1-2.3) (0.55), with MTP's gain smaller at N=4 than at N=1 (0.65); N=16 L/O < N=4 L/O (0.6); prefix-reuse added-agent TTFT O < L (0.55); GSM8K both >= 46/50 (0.7). SUPPORTED (0.55), REFUTED (0.3), INCONCLUSIVE (0.15). | [H59 pre-registration](#h59-pre-registration-engine-choice-per-cpu-class-2026-10-21): arms O and L at their best documented settings, one serving at a time on the CPU, 3 performance holds in rotated order (N=1: 8, N=4: 16, N=16: 32 requests, 256 tokens, greedy), a TTFT and a prefix-reuse phase per arm, 1 quality hold (GSM8K 0-49), RAPL J/token. Statistic: ratio of L's to O's median per-request decode tok/s at N=4 over the pooled holds, 95% bootstrap CI (H54's `boot_ratio`). SUPPORTED: CI lower bound >= 1.2 and L's GSM8K >= O's - 2. REFUTED: CI upper bound < 1.2, or the quality gate fails. Otherwise INCONCLUSIVE (also: an arm not deliverable, load unmatched). Scorer: `bench/h59/h59.py`, [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28) (2026-10-28, before any H59 measurement). O serves base-model int4 (OVB), not QAT weights, so a verdict compares the two stacks as shipped (S1's description fixes); SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59 measurement). | PENDING |
 | H59d | H59 on the desktop i9-13900T (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i9-13900T class only. | Written 2026-10-21, before any H59d measurement; H57d's desktop arms (Od, Ld, Ld-mtp) have no scored result yet. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59, with the desktop knobs of the H57d pre-registration (P-core balloon, its load gate, H57d's lock and disk rules); N=16 is not run (8 physical P-cores; H57d dropped it for the same reason). Prior restated 2026-10-28 after the H57d run, before any H59d measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59d measurement). | PENDING |
 | H59w | H59 on wildct, the client i7-13700 (8 P-cores, AVX2 and AVX-VNNI, no AVX-512, no AMX): same arms, statistic and rule; SUPPORTED makes llama.cpp the CPU engine default for the i7-13700 class only. | Written 2026-10-21, before any H59w measurement. N=1 L/O 1.4 (0.9-2.0) (0.5); N=4 L/O 1.2 (0.8-1.7) (0.45). SUPPORTED (0.35), REFUTED (0.45), INCONCLUSIVE (0.2). | As H59d, with the wildct knobs of the wildct pre-registration (the GPU opt-out, rules W2-W6, hold-start `load1` <= 12). Prior restated 2026-10-28 after the H57d run, before any H59w measurement, prediction unchanged; scorer `bench/h59/h59.py --load h57d`: [H59 amendment S1](#h59-amendment-s1-the-scorer-and-the-desktop-and-wildct-priors-after-the-h57d-run-2026-10-28). SUPPORTED also needs L faster than O in each performance hold: [H59 amendment S2](#h59-amendment-s2-supported-needs-l-faster-in-each-performance-hold-2026-10-29) (2026-10-29, before any H59w measurement). | PENDING |
+| H61 | On the i9-13900T (no AMX), `integrations/eas/eas-up.sh` takes a fresh, default k3d-gpu cluster to Intel's agent toolkit (EAT 2.0, `036b662`) through Intel's EAS `v1.2.0-rc.1` installer (`5c27fb3`; enterprise-inference `170eb3a`) with no flag and no hand edit, and every `eas-check.sh` item passes. With `EAS_REQUIRE_AMX=true`, the stock catalog's AMX requirement, the same path installs, but `eas-check.sh` fails on the AMX nodeAffinity and the fail-closed guardrail refuses chat. | Written 2026-10-29, before any H61 step. Arm A (auto-detect): `eas-up.sh` rc 0 with every PLAY RECAP `failed=0` (0.6); every `eas-check.sh` item ok (0.4). Arm N (negative control, `EAS_REQUIRE_AMX=true`): `eas-up.sh` rc 0 (0.65); `eas-check.sh` exits 1, names `require_amx` for `qwen3guard` and `qwen3-1-7b`, and reports the chat refused by the fail-closed guardrail (0.7). SUPPORTED 0.35, REFUTED 0.5, INCONCLUSIVE 0.15. | [H61 pre-registration](#h61-pre-registration-i9-13900t-2026-10-29). Each arm, A then N, gets its own fresh cluster `k3dgpu-h61-eas` inside the shared live lock (at most 180 min in all). Every step runs once, timed and logged, and `k3d-gpu down` follows each arm. SUPPORTED: arm A passes every graded item and arm N fails as predicted. REFUTED: arm A fails a graded item on a valid run, or arm N's `eas-check.sh` passes. INCONCLUSIVE otherwise: a void arm, or arm N failing some other way. | PENDING |
 
 ## Falsification log
 
@@ -12051,6 +12052,91 @@ S1 rule; the added condition can only turn a SUPPORTED into INCONCLUSIVE.
 condition. `bench/h59/test_h59.py` adds a pooled CI above 1.2 with one hold at 0.9
 (INCONCLUSIVE), one hold at exactly 1.0 (INCONCLUSIVE) and at 1.05 (SUPPORTED), and a CI below
 the bar with one slower hold (still REFUTED).
+
+### H61 pre-registration (i9-13900T, 2026-10-29)
+
+Written 2026-10-29 (UTC), before any H61 step, on branch `claude/agentstack-eas-agent-toolkit`,
+which adds `integrations/eas/`. Nothing in it has run against a cluster. H61 runs from the
+first `main` commit that holds `integrations/eas/eas-up.sh`, and the run section records that
+commit.
+
+**Why.** Intel moved its agent toolkit into its unified installer. EAT #19 (merged
+2026-10-27 into `release-2.0.0` as `036b662`) deletes `deploy-agentic-stack.sh` and
+`core/`. EAT is now the `agent-toolkit` layer of EAS, installed with
+`es_auto_installer.sh init agent-toolkit` and `install agent-toolkit`. EAS tag
+`v1.2.0-rc.1` (`5c27fb3`, a prerelease) is the first tag that carries it. H1b
+[ledger:H1b] tested EAT 1.0.3's own brownfield path, which this release removes. H61 asks
+whether the new path works on k3d-gpu with no hand step, and whether the end-state check
+can tell a working install from a broken one.
+
+**Pins.** These come from `integrations/eas/eas-up.sh` and are checked by it at run time:
+- EAS `5c27fb39a95eecec41aa4e29a1188984e9c726f3`;
+- enterprise-inference `170eb3abb1956de0787727f21e356aef2b13ff24`;
+- EAT `036b66234801e9bd950afd90830821859780d668`.
+
+The bastion is `integrations/eas/bastion.Dockerfile` at that commit, and the venv takes its
+versions from `integrations/eas/constraints.txt`.
+
+**Host and lock.** This is the shared i9-13900T (8 P-cores, 16 E-cores, AVX2 and AVX-VNNI,
+no AVX-512, no AMX). H61 is a functional test, not a performance test, so no background
+load is applied. Other tenants keep running. `load1`, swap used and the running container
+count are recorded at the start of every step. Every step from (1) on runs inside `flock`
+on the shared live lock, at most 180 min from taking it to releasing it. Both clusters are
+deleted before the lock is released.
+
+**Before the lock** (no cluster touched):
+- (0a) `docker build` of the node image at the run commit;
+- (0b) the bastion image, built with the command `eas-up.sh` runs (`docker build -t
+  k3d-gpu-eas-bastion:<sha256 of bastion.Dockerfile, 12 hex> -f
+  integrations/eas/bastion.Dockerfile integrations/eas`), so no timed step includes it.
+
+**Arm A (auto-detect).** Scratch `KUBECONFIG` (never `~/.kube/config`), an empty `EAS_WORK`,
+no `EAS_*` variable set. Each step is timed (wall s) and logged in order:
+
+1. `K3D_GPU_CLUSTER=k3dgpu-h61-eas k3d-gpu up` with that node image.
+2. `integrations/eas/eas-up.sh`. Its exit code is recorded, and so is every PLAY RECAP line
+   of its log. Also recorded verbatim: `facts.json`, and the render printout (every key
+   against its old value, the model entry against the catalog).
+3. `kubectl get pods -A -o wide`, and every Job with its completion.
+4. `integrations/eas/eas-check.sh`. Its exit code is recorded, with every `ok` and `FAIL`
+   line.
+5. `K3D_GPU_CLUSTER=k3dgpu-h61-eas k3d-gpu down`.
+
+**Arm N (negative control).** Arm A's steps on a new fresh cluster of the same name, with a
+new empty `EAS_WORK` and one change: `EAS_REQUIRE_AMX=true`. That restores the stock
+catalog's AMX requirement on a host without AMX. The preflight's warning is recorded. In
+step 2 `model-manager --wait` times out on both models, so this arm is the longer one.
+
+**Graded.**
+
+| Arm | Item | Predicted |
+|---|---|---|
+| A | (1) `k3d-gpu up` | rc 0 |
+| A | (2) `eas-up.sh` | rc 0, every PLAY RECAP `failed=0` |
+| A | (4) `eas-check.sh` | exit 0, every item `ok`: Istio ambient, the Envoy data plane, one agent-sandbox controller v0.5.0, no second NRI policy, one NFD, `qwen3guard` and `qwen3-1-7b` Ready, chat HTTP 200, a `get_weather` tool call, the unsafe prompt blocked, the virtual key deleted, the sandbox printing 385 |
+| N | (2) `eas-up.sh` | rc 0 |
+| N | (4) `eas-check.sh` | exit 1; `FAIL` for `qwen3guard` and for `qwen3-1-7b`, each naming `require_amx` from the scheduler's affinity message; the chat `FAIL` naming the fail-closed guardrail |
+
+**Outcome -> conclusion, fixed now.**
+- **SUPPORTED:** every arm A item holds, and arm N's `eas-check.sh` fails as predicted.
+- **REFUTED:**
+  - an arm A item fails on a valid run; or
+  - arm N's `eas-check.sh` exits 0 (the check cannot see the broken install).
+- **INCONCLUSIVE:**
+  - a void arm. An arm is void when a failure was caused outside k3d-gpu and Intel's
+    pinned code (a registry, GitHub or Hugging Face refusing or timing out, recorded
+    verbatim), or the lock was not taken within its budget. A void arm may be re-run
+    once, as a new run section.
+  - arm N failing in some other way, for example `eas-up.sh` not rc 0, or `eas-check.sh`
+    failing without naming `require_amx`. The control then shows nothing about the check.
+
+A failure that k3d-gpu or the pinned upstream code causes is a valid REFUTED run. It is
+fixed test-first, and the re-run is a new row.
+
+**Not claimed by any outcome.**
+- Production support. The rc is a prerelease, and this is one host, n=1 per arm.
+- Any performance number.
+- Any result on another CPU, on XPU, or with Kata.
 
 ## Scope corrections
 

@@ -61,6 +61,37 @@ cluster, read from source only:
 Every cell in the last column is an expectation. They are being checked on one host with
 4x Arc Pro B70; no result is in yet, and nothing here is sent upstream until they are.
 
+## EAS v1.2.0-rc.1 (EAT 2.0) and integrations/eas
+
+[EAS `v1.2.0-rc.1`](https://github.com/intel/enterprise-ai-solutions/releases/tag/v1.2.0-rc.1)
+(`5c27fb3`, a prerelease) is the first EAS tag that carries #19. It installs EAT
+`release-2.0.0` (`036b662`) as the `agent-toolkit` layer over enterprise-inference `release-1.1`
+(`170eb3a`). On 2026-10-29, `apply-check.sh` ran on a read-only clone at the tag:
+
+| Patch | EAS `5c27fb3` |
+|---|---|
+| 0002, 0003, 0004 | apply |
+| 0005 | does not apply: `patch failed: docs/README.md:33` |
+| 0006 | does not apply: `roles/envoy_gateway/tasks/controller.yaml` does not exist at the tag. The EnvoyProxy task is still in `install.yaml`; EAS #42 moved it on `main` only |
+| series | stops at 0005 |
+
+[integrations/eas](../../integrations/eas/README.md) runs this tag through
+`es_auto_installer.sh` on a k3d-gpu cluster. It does not send these patches, and it takes
+two of them differently:
+
+- **Istio (0002).** It edits no Istio role. It sets `istio_helm_default_values_file` to a
+  values file generated on each run: the checkout's `charts/istio/values.yaml` plus
+  `global.platform` (`k3d` or `k3s`, from containerd's CNI `bin_dirs`). 0002 stays an
+  upstream proposal.
+- **Envoy (0006).** It keeps 0006 rebased onto the tag's
+  `roles/envoy_gateway/tasks/install.yaml` as
+  `integrations/eas/patches/0006-envoy-control-plane-affinity-rc1.patch`. That is the
+  same change, applied only to its throwaway checkout. `eas-envoy-reinstall.py` gives
+  `ok` on that clone, before and after the patch, for a fresh install and for a
+  re-install.
+
+No live run backs this path yet; its pre-registered test is H61, PENDING [ledger:H61].
+
 ## File tree
 
 ```text

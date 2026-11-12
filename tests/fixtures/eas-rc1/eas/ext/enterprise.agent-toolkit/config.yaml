@@ -1,0 +1,23 @@
+# Copyright (C) 2025-2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+---
+# =============================================================================
+# Agent Toolkit Configuration — enterprise.agent-toolkit
+# =============================================================================
+# Role defaults live in roles/<name>/defaults/main.yaml.
+# Override any of them here.  `es_auto_installer.sh init agent-toolkit` seeds
+# this file into env/<env>/config.agent-toolkit.yaml and the installer loads
+# that seeded copy: edit the copy to change an existing environment.
+# It loads after config.inference.yaml, so guardrails_enabled, hybrid_router_enabled and
+# litellm_* set here override the inference layer's values.
+# =============================================================================
+litellm_public_paths: []
+
+# --- Default model (inference layer, applied only where this layer is provisioned) ---
+# Deployed on install.
+# Set [] to install without a chat model; deploy others with ./model-manager deploy <name>.
+llm_services_autodeploy_models: ["qwen2-5-coder-14b"]
+# --- Agent Sandbox ---
+agent_sandbox_namespace: "agent-sandbox-system"   # fixed: the upstream manifests and sandbox templates use this namespace
+agent_sandbox_version: "v0.5.0"
+

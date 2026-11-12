@@ -1,0 +1,37 @@
+# pip constraints for the venv es_auto_installer.sh builds (EAS v1.2.0-rc.1,
+# requirements.txt: ansible>=10.0,<13.0, kubernetes>=29.0,<36.0, jsonpatch>=1.33,<2.0,
+# jmespath>=1.0,<2.0). eas-up.sh passes this file as PIP_CONSTRAINT, so the
+# venv's `pip install --upgrade pip` and `pip install -r requirements.txt` resolve
+# to exactly these versions instead of the newest release in each range.
+#
+# Resolved 2026-10-29 from that requirements.txt with pip 26.2.2 on Python 3.12.3 in
+# the bastion's base image (ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852):
+#   python3 -m venv v && v/bin/pip install --upgrade pip && v/bin/pip install -r requirements.txt && v/bin/pip freeze --all
+# collections/requirements.yml pins kubernetes.core 6.3.0 exactly, so it needs no constraint.
+ansible==12.3.0
+ansible-core==2.19.14
+certifi==2026.10.23
+cffi==2.1.1
+charset-normalizer==3.5.2
+cryptography==50.0.2
+durationpy==0.11
+idna==3.20
+Jinja2==3.1.6
+jmespath==1.1.0
+jsonpatch==1.38
+jsonpointer==3.6
+kubernetes==35.0.0
+MarkupSafe==3.0.4
+oauthlib==4.0.0
+packaging==26.3
+pip==26.2.2
+pycparser==3.12
+python-dateutil==3.0.0
+PyYAML==6.0.3
+requests==2.34.2
+requests-oauthlib==2.0.0
+resolvelib==1.2.1
+six==1.17.0
+tzdata==2026.6
+urllib3==2.8.0
+websocket-client==1.9.2

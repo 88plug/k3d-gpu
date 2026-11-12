@@ -1,0 +1,62 @@
+From: k3d-gpu <noreply@k3d-gpu.invalid>
+Subject: [PATCH] envoy_gateway: select control-plane nodes by label presence (v1.2.0-rc.1)
+
+Patch 0006 (integrations/eat/upstream/patches) rebased onto EAS tag
+v1.2.0-rc.1 (5c27fb39a95eecec41aa4e29a1188984e9c726f3). There the
+EnvoyProxy task is still in roles/envoy_gateway/tasks/install.yaml
+(lines 199-219, blob 9f3d423), not in controller.yaml, where EAS #42
+moved it on main; the upstream 0006 does not apply to the tag.
+
+Same change: a required node affinity with operator Exists on
+node-role.kubernetes.io/control-plane instead of the exact-value
+nodeSelector "" (k3s labels its servers "true", so the selector
+matches no k3s or k3d node), and nodeSelector: null so a re-install
+over an EnvoyProxy left by an older install drops the old selector
+(kubernetes.core.k8s updates a custom resource with a JSON merge
+patch). k3d-gpu applies it to its throwaway EAS checkout only; it is
+not sent upstream from here.
+---
+ roles/envoy_gateway/tasks/install.yaml | 23 ++++++++++++++++-------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/roles/envoy_gateway/tasks/install.yaml b/roles/envoy_gateway/tasks/install.yaml
+index 9f3d423..72c3444 100644
+--- a/roles/envoy_gateway/tasks/install.yaml
++++ b/roles/envoy_gateway/tasks/install.yaml
+@@ -191,11 +191,12 @@
+ # MetalLB elects at any given moment: every CP node always has a local
+ # envoy. Survives CP failover, no hostname pinning, no cp[0] dance.
+ #
+-# nodeSelector keys on the standard control-plane label (empty string is
+-# how kubespray / kubeadm stamp it) rather than the taint, because
+-# operators can remove the taint; the label is the stable Kubernetes
+-# control-plane marker. Toleration is kept for the case where the taint
+-# is still in place.
++# Node affinity keys on the standard control-plane label rather than the
++# taint, because operators can remove the taint; the label is the stable
++# Kubernetes control-plane marker. It matches on the label's presence, not
++# its value: kubespray / kubeadm stamp it with "" while k3s stamps
++# it with "true", and an exact-value nodeSelector schedules no envoy there.
++# Toleration is kept for the case where the taint is still in place.
+ - name: "envoy_gateway | Create EnvoyProxy config (DaemonSet on control-plane nodes)"
+   kubernetes.core.k8s:
+     state: present
+@@ -211,8 +212,16 @@
+           kubernetes:
+             envoyDaemonSet:
+               pod:
+-                nodeSelector:
+-                  node-role.kubernetes.io/control-plane: ""
++                # null drops the nodeSelector an older install left behind:
++                # this update is a JSON merge patch, which keeps omitted keys.
++                nodeSelector: null
++                affinity:
++                  nodeAffinity:
++                    requiredDuringSchedulingIgnoredDuringExecution:
++                      nodeSelectorTerms:
++                        - matchExpressions:
++                            - key: node-role.kubernetes.io/control-plane
++                              operator: Exists
+                 tolerations:
+                   - key: node-role.kubernetes.io/control-plane
+                     operator: Exists
