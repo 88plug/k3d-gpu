@@ -10,7 +10,9 @@ bench/h59/run.py (H59 amendments R1-R4), and changes only what the pre-registrat
     `agent manifest --model google/gemma-4-26B-A4B-it` with no backend serves llama.cpp on this
     CPU class; with the backend named it renders H59's O;
   - one host profile, crescent, as H59's but for its row (H59r), campaign directory
-    (~/k3dgpu-h59r) and cluster prefix (k3dgpu-g-h59r-).
+    (~/k3dgpu-h59r) and cluster prefix (k3dgpu-g-h59r-);
+  - `run.py models` (hold.sh's and prep.sh's model check) also requires the drafter prep built to
+    be H59's file (DRAFTER), so L differs from H59's in its server build alone.
 
 Every command is bench/h59/run.py's (see its docstring); its functions read these tables when
 called. The verdict is bench/h59/h59.py's (`h59.py score RESULTS --load GATE.json`), the
@@ -48,8 +50,33 @@ h59run.LLAMA_CPU_IMAGE, h59run.LLAMA_FULL_IMAGE, h59run.PROFILES = LLAMA_CPU_IMA
 GGUF_REPO, GGUF_REV, GGUF_FILE, GGUF_PATH = h59run.GGUF_REPO, h59run.GGUF_REV, h59run.GGUF_FILE, h59run.GGUF_PATH
 DRAFT_REPO, DRAFT_REV, DRAFT_DIR, DRAFT_PATH = h59run.DRAFT_REPO, h59run.DRAFT_REV, h59run.DRAFT_DIR, h59run.DRAFT_PATH
 OVB, OVB_REV, OVB_LM = h59run.OVB, h59run.OVB_REV, h59run.OVB_LM
-models_ready, load_docs, deployment, args_of, check, untagged = (
-    h59run.models_ready, h59run.load_docs, h59run.deployment, h59run.args_of, h59run.check, h59run.untagged)
+load_docs, deployment, args_of, check, untagged = (
+    h59run.load_docs, h59run.deployment, h59run.args_of, h59run.check, h59run.untagged)
+
+# The drafter H59 served: prep's build on crescent (H59 run, Reproduce header). Built at full-b12110
+# with the current pip set and with R1's, it is the same file (H59r pre-registration).
+DRAFTER = {"sha256": "f6f80c368d692c9e78ed673c6785827ca21c332e8cdab0263ce4dcdf0b184018", "bytes": 321145312}
+
+
+def drafter_problem(g):
+    """None when the drafter prep built is H59's, read from its manifest.json (convert.sh writes the
+    file's sha256 and size there); otherwise why not."""
+    man = os.path.join(g, "models", DRAFT_DIR, "manifest.json")
+    try:
+        m = h59run.jload(man)
+    except (OSError, ValueError):
+        m = {}
+    if (m.get("sha256"), m.get("bytes")) == (DRAFTER["sha256"], DRAFTER["bytes"]):
+        return None
+    return (f"{man}: the drafter is {m.get('sha256')} ({m.get('bytes')} bytes), not H59's "
+            f"{DRAFTER['sha256']} ({DRAFTER['bytes']} bytes)")
+
+
+def models_ready(g):
+    """bench/h59/run.py's model check (the files missing), then the drafter against H59's; [] when
+    both pass."""
+    missing = h59run.models_ready(g)
+    return missing if missing else [w for w in (drafter_problem(g),) if w]
 
 
 def docker_argv(spec, models, scripts):
@@ -65,6 +92,15 @@ def main(argv):
     if argv[:1] == ["docker-argv"]:
         print("\n".join(docker_argv(h59run.jload(argv[1]), argv[2], argv[3])))
         return 0
+    if argv[:1] == ["models"]:
+        g = os.path.expanduser(argv[1])
+        missing = h59run.models_ready(g)
+        for m in missing:
+            print(f"missing {m}")
+        why = None if missing else drafter_problem(g)
+        if why:
+            print(why)
+        return 1 if missing or why else 0
     return h59run.main(argv)
 
 
