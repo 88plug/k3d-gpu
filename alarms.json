@@ -6,5 +6,13 @@
     "updated_at": "2026-11-12T00:10:50Z",
     "notified_at": "2026-11-12T00:10:50Z",
     "acked": false
+  },
+  "blind-spot:gguf-transformers": {
+    "title": "gguf-transformers is 5d behind upstream with no open PR",
+    "body": "Pin `gguf-transformers` (group gguf-convert-pip) is at 5.21.0; upstream 5.22.2 was published 2026-11-06T15:42:54.257524Z (5d ago, limit 72 h). No autobump/gguf-convert-pip PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.",
+    "opened_at": "2026-11-12T00:10:56Z",
+    "updated_at": "2026-11-12T00:10:56Z",
+    "notified_at": "2026-11-12T00:10:56Z",
+    "acked": false
   }
 }
