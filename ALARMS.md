@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-19T20:59:30Z. 5 open.
+Updated 2026-11-19T20:59:37Z. 6 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -20,6 +20,20 @@ Failed log unavailable: gh run view 44529477567 -R 88plug/k3d-gpu --log-failed: 
 
 Re-dispatched `bot-sweep.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=44529477567 -->
+
+## `red:canary.yml`: scheduled run failure
+
+Opened 2026-11-19T20:59:37Z, updated 2026-11-19T20:59:37Z.
+
+The latest scheduled run of `canary.yml` failed.
+
+Run: https://github.com/88plug/k3d-gpu/actions/runs/44519729166
+Conclusion: **failure**, created 2026-11-19T11:59:37Z, commit 35326ee0ac3ef313e867b79847aa086ccb4e8355
+Failed jobs: Plan
+Failed log unavailable: gh run view 44519729166 -R 88plug/k3d-gpu --log-failed: exit 1: log not found: 135544977538
+
+Re-dispatched `canary.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
+<!-- watchdog:dispatched=44519729166 -->
 
 ## `red:freshness.yml`: scheduled run failure
 
