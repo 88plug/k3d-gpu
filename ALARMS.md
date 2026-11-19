@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-19T21:21:23Z. 6 open.
+Updated 2026-11-19T21:37:57Z. 5 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -108,16 +108,6 @@ Bump llama-cpp Bump 2026-11-19T20:57:31.0578157Z ##[error]Process completed with
 
 Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=44612403133 -->
-
-## `stale:bot-sweep.yml`: no successful scheduled run within 7 h
-
-Opened 2026-11-19T20:59:17Z, updated 2026-11-19T20:59:17Z.
-
-`bot-sweep.yml` (cron `13 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
-
-Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43205906938 at 2026-11-12T11:04:16Z
-
-A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
 ## `stale:canary.yml`: no successful scheduled run within 30 h
 
