@@ -22,5 +22,13 @@
     "updated_at": "2026-11-19T20:59:17Z",
     "notified_at": "2026-11-19T20:59:17Z",
     "acked": false
+  },
+  "red:bot-sweep.yml": {
+    "title": "scheduled run failure",
+    "body": "The latest scheduled run of `bot-sweep.yml` failed.\n\nRun: https://github.com/88plug/k3d-gpu/actions/runs/44529477567\nConclusion: **failure**, created 2026-11-19T13:02:11Z, commit 35326ee0ac3ef313e867b79847aa086ccb4e8355\nFailed jobs: Dispatch Freshness for newly fixed known issues, CI on bot PRs, Merge one auto-eligible bot PR, batch the release\nFailed log unavailable: gh run view 44529477567 -R 88plug/k3d-gpu --log-failed: exit 1: log not found: 135578680612\n\nRe-dispatched `bot-sweep.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.\n<!-- watchdog:dispatched=44529477567 -->",
+    "opened_at": "2026-11-19T20:59:24Z",
+    "updated_at": "2026-11-19T20:59:24Z",
+    "notified_at": "2026-11-19T20:59:24Z",
+    "acked": false
   }
 }
