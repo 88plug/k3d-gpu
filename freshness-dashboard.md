@@ -1,29 +1,69 @@
 # Freshness dashboard
 
-Updated 2026-11-12 10:23 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-19 21:20 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
+red:bot-sweep.yml
+red:canary.yml
 red:freshness.yml
 stale:bot-sweep.yml
+stale:canary.yml
 stale:freshness.yml
 
-## Pins behind (1)
+## Pins behind (29)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| vllm-recipes | `vllm-recipes` | `d9862f5cba9ee4e04c959aee595c0c4a410aeac0` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | revision | ? | ? |
+| devcontainer | `dev-helm` | `4.3.1` | `4.3.2` | patch | 2026-11-13 | 6d |
+| devcontainer | `image:devcontainer:mcr.microsoft.com/devcontainers/base:2.2.5-trixie` | `2.2.5-trixie` | `2.2.6-trixie` | patch | ? | ? |
+| docs-build | `docs-mkdocs-material` | `9.8.1` | `9.8.2` | patch | 2026-11-19 | 1h |
+| docs-build | `docs-pip-tools` | `7.6.2` | `7.7.0` | minor | 2026-11-16 | 3d |
+| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 3h |
+| examples | `examples-langchain-core` | `1.8.0` | `1.8.3` | patch | 2026-11-18 | 1d |
+| examples | `examples-langchain-openai` | `1.7.4` | `1.8.3` | minor | 2026-11-19 | 20h |
+| examples | `examples-langgraph` | `1.2.20` | `1.2.23` | patch | 2026-11-19 | 15h |
+| examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 5d |
+| examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 5d |
+| examples | `examples-openai` | `3.49.0` | `3.55.1` | minor | 2026-11-18 | 1d |
+| examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 1d |
+| examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.1` | minor | ? | ? |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `f68407657ad294471eb4b2e65d193df26edf729f` | revision | 2026-11-16 | 2d |
+| gguf-convert-pip | `gguf-transformers` | `5.22.2` | `5.23.0` | minor | 2026-11-13 | 6d |
+| host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 5d |
+| host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
+| llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 6d |
+| nvidia-plugin | `nvidia-device-plugin` | `v0.20.1` | `v0.20.2` | patch | 2026-11-17 | 2d |
+| opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.11` | patch | 2026-11-12 | 6d |
+| opt-in-manifests | `open-webui` | `v0.13.3` | `v0.13.4` | patch | 2026-11-17 | 2d |
+| packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
+| telemetry | `node-exporter` | `v1.12.1` | `v1.13.1` | minor | 2026-11-19 | 0h |
+| telemetry | `xpumd` | `v2.3.0` | `v2.4.0` | minor | 2026-11-16 | 3d |
+| tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
+| tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 6d |
+| vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 2d |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `c6459fa56c0a256fb01d2c03076fd5018a3105a3` | revision | ? | ? |
+| vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 2d |
 
-### Not resolved (1)
-
-- `vllm-cpu` (vllm-cpu): unconfirmed: github-release says v=v0.32.0, oci says v0.33.0
-
-## Open bot PRs (2)
+## Open bot PRs (15)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #434 | digests | auto | - |
-| #423 | vllm-recipes | review | a human approval at the head |
+| #451 | vllm-xpu | review | a human approval at the head |
+| #450 | vllm-recipes | review | a human approval at the head |
+| #449 | vllm-cpu | auto | - |
+| #448 | tools | review | a human approval at the head |
+| #447 | telemetry | auto | - |
+| #446 | packaging-images | review | a human approval at the head |
+| #445 | opt-in-manifests | auto | - |
+| #444 | nvidia-plugin | auto | - |
+| #443 | host-intel | review | a human approval at the head |
+| #442 | gguf-convert-pip | auto | - |
+| #441 | flake | review | a human approval at the head |
+| #440 | examples | review | a human approval at the head |
+| #439 | docs-build | auto | - |
+| #438 | digests | review | a human approval at the head |
+| #437 | devcontainer | auto | - |
 
 ## EAT stock (always review)
 
@@ -108,7 +148,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59r | cryptoandcoffee/k3d-gpu 0.1.110; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b12110; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | yes |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.112; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.113; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
