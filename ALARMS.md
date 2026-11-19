@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-19T20:59:24Z. 4 open.
+Updated 2026-11-19T20:59:30Z. 5 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -108,6 +108,16 @@ Opened 2026-11-19T20:59:17Z, updated 2026-11-19T20:59:17Z.
 `bot-sweep.yml` (cron `13 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
 
 Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43205906938 at 2026-11-12T11:04:16Z
+
+A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
+
+## `stale:canary.yml`: no successful scheduled run within 30 h
+
+Opened 2026-11-19T20:59:30Z, updated 2026-11-19T20:59:30Z.
+
+`canary.yml` (cron `29 3 * * *`, every 24 h) has no successful scheduled run within 30 h (period + 6 h).
+
+Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43211086595 at 2026-11-12T11:39:55Z
 
 A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
