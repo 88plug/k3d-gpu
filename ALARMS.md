@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-19T21:00:57Z. 7 open.
+Updated 2026-11-19T21:01:01Z. 6 open.
 
 ## `red:bot-sweep.yml`: scheduled run failure
 
@@ -48,20 +48,6 @@ Failed log unavailable: gh run view 44481223810 -R 88plug/k3d-gpu --log-failed: 
 
 Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=44481223810 -->
-
-## `red:watchdog.yml`: scheduled run failure
-
-Opened 2026-11-19T21:00:03Z, updated 2026-11-19T21:00:03Z.
-
-The latest scheduled run of `watchdog.yml` failed.
-
-Run: https://github.com/88plug/k3d-gpu/actions/runs/44521427893
-Conclusion: **failure**, created 2026-11-19T12:10:29Z, commit 35326ee0ac3ef313e867b79847aa086ccb4e8355
-Failed jobs: Watchdog
-Failed log unavailable: gh run view 44521427893 -R 88plug/k3d-gpu --log-failed: exit 1: log not found: 135550732503
-
-Re-dispatched `watchdog.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
-<!-- watchdog:dispatched=44521427893 -->
 
 ## `stale:bot-sweep.yml`: no successful scheduled run within 7 h
 
