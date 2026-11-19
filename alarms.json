@@ -54,5 +54,13 @@
     "updated_at": "2026-11-19T20:59:57Z",
     "notified_at": "2026-11-19T20:59:57Z",
     "acked": false
+  },
+  "red:watchdog.yml": {
+    "title": "scheduled run failure",
+    "body": "The latest scheduled run of `watchdog.yml` failed.\n\nRun: https://github.com/88plug/k3d-gpu/actions/runs/44521427893\nConclusion: **failure**, created 2026-11-19T12:10:29Z, commit 35326ee0ac3ef313e867b79847aa086ccb4e8355\nFailed jobs: Watchdog\nFailed log unavailable: gh run view 44521427893 -R 88plug/k3d-gpu --log-failed: exit 1: log not found: 135550732503\n\nRe-dispatched `watchdog.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.\n<!-- watchdog:dispatched=44521427893 -->",
+    "opened_at": "2026-11-19T21:00:03Z",
+    "updated_at": "2026-11-19T21:00:03Z",
+    "notified_at": "2026-11-19T21:00:03Z",
+    "acked": false
   }
 }
