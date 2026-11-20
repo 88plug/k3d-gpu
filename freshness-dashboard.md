@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-20 07:55 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-20 08:24 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -17,10 +17,10 @@ stale:freshness.yml
 | devcontainer | `image:devcontainer:mcr.microsoft.com/devcontainers/base:2.2.5-trixie` | `2.2.5-trixie` | `2.2.6-trixie` | patch | ? | ? |
 | docs-build | `docs-mkdocs-material` | `9.8.1` | `9.8.2` | patch | 2026-11-19 | 12h |
 | docs-build | `docs-pip-tools` | `7.6.2` | `7.7.0` | minor | 2026-11-16 | 4d |
-| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 13h |
+| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 14h |
 | examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 9h |
-| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 8h |
-| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 6h |
+| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 9h |
+| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 7h |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 6d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 6d |
 | examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 6h |
@@ -35,13 +35,13 @@ stale:freshness.yml
 | opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.11` | patch | 2026-11-12 | 7d |
 | opt-in-manifests | `open-webui` | `v0.13.3` | `v0.13.4` | patch | 2026-11-17 | 2d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 10h |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 11h |
 | telemetry | `node-exporter` | `v1.12.1` | `v1.13.1` | minor | 2026-11-19 | 11h |
 | telemetry | `xpumd` | `v2.3.0` | `v2.4.0` | minor | 2026-11-16 | 3d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 7d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `4cfcfcd36d439dbc1e61bea4e3e86f43efd9a00f` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `35c496443ac089b308cf5fe9acff49caa9d190c6` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
 
 ## Open bot PRs (15)
