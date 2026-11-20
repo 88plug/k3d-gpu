@@ -1,6 +1,6 @@
 # Toolchain for working on k3d-gpu: every static validator `make check` runs.
 # Each tool is pinned to an exact release and verified against its sha256.
-FROM mcr.microsoft.com/devcontainers/base:2.2.6-trixie@sha256:38f9e6c291f054e3c868d95a5477cbfcf76c0fa7c218dda65dc6aa3fbfe06871
+FROM mcr.microsoft.com/devcontainers/base:2.2.7-trixie@sha256:41ff7ce12ec45f2704f27a6e091831186ad922ec8112e6339425bfefdf5a70f9
 
 ARG SHELLCHECK_VERSION=0.11.0
 ARG HADOLINT_VERSION=2.15.1
