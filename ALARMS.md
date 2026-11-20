@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-20T11:55:42Z. 4 open.
+Updated 2026-11-20T12:07:25Z. 3 open.
 
 ## `red:canary.yml`: scheduled run failure
 
@@ -100,16 +100,6 @@ Bump llama-cpp UNKNOWN STEP 2026-11-20T07:38:42.8867311Z ##[error]Process comple
 
 Re-dispatched `freshness.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.
 <!-- watchdog:dispatched=44695352102 -->
-
-## `stale:canary.yml`: no successful scheduled run within 30 h
-
-Opened 2026-11-19T20:59:30Z, updated 2026-11-19T20:59:30Z.
-
-`canary.yml` (cron `29 3 * * *`, every 24 h) has no successful scheduled run within 30 h (period + 6 h).
-
-Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43211086595 at 2026-11-12T11:39:55Z
-
-A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
 ## `stale:freshness.yml`: no successful scheduled run within 12 h
 
