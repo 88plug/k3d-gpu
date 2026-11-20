@@ -14,13 +14,5 @@
     "updated_at": "2026-11-12T09:33:09Z",
     "notified_at": "2026-11-19T20:59:44Z",
     "acked": true
-  },
-  "red:canary.yml": {
-    "title": "scheduled run failure",
-    "body": "The latest scheduled run of `canary.yml` failed.\n\nRun: https://github.com/88plug/k3d-gpu/actions/runs/44519729166\nConclusion: **failure**, created 2026-11-19T11:59:37Z, commit 35326ee0ac3ef313e867b79847aa086ccb4e8355\nFailed jobs: Plan\nFailed log unavailable: gh run view 44519729166 -R 88plug/k3d-gpu --log-failed: exit 1: log not found: 135544977538\n\nRe-dispatched `canary.yml` on main once after this run; a further re-dispatch happens only after a new failed scheduled run.\n<!-- watchdog:dispatched=44519729166 -->",
-    "opened_at": "2026-11-19T20:59:37Z",
-    "updated_at": "2026-11-19T20:59:37Z",
-    "notified_at": "2026-11-19T20:59:37Z",
-    "acked": false
   }
 }
