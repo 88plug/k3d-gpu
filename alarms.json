@@ -14,5 +14,13 @@
     "updated_at": "2026-11-12T09:33:09Z",
     "notified_at": "2026-11-19T20:59:44Z",
     "acked": true
+  },
+  "blind-spot:llama-cpp": {
+    "title": "llama-cpp is 7d behind upstream with no open PR",
+    "body": "Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 2026-11-13T10:20:19Z (7d ago, limit 7 days). No autobump/llama-cpp PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.",
+    "opened_at": "2026-11-20T21:01:29Z",
+    "updated_at": "2026-11-20T21:01:29Z",
+    "notified_at": "2026-11-20T21:01:29Z",
+    "acked": false
   }
 }
