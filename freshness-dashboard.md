@@ -1,53 +1,53 @@
 # Freshness dashboard
 
-Updated 2026-11-20 08:24 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-20 21:01 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
-red:canary.yml
 red:freshness.yml
-stale:canary.yml
 stale:freshness.yml
 
-## Pins behind (30)
+## Pins behind (31)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| devcontainer | `dev-helm` | `4.3.1` | `4.3.2` | patch | 2026-11-13 | 7d |
-| devcontainer | `image:devcontainer:mcr.microsoft.com/devcontainers/base:2.2.5-trixie` | `2.2.5-trixie` | `2.2.6-trixie` | patch | ? | ? |
-| docs-build | `docs-mkdocs-material` | `9.8.1` | `9.8.2` | patch | 2026-11-19 | 12h |
+| devcontainer | `image:devcontainer:mcr.microsoft.com/devcontainers/base:2.2.6-trixie` | `2.2.6-trixie` | `2.2.7-trixie` | patch | ? | ? |
+| docs-build | `docs-mkdocs-material` | `9.8.1` | `9.8.2` | patch | 2026-11-19 | 1d |
 | docs-build | `docs-pip-tools` | `7.6.2` | `7.7.0` | minor | 2026-11-16 | 4d |
-| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 14h |
-| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 9h |
-| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 9h |
-| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 7h |
+| docs-build | `docs-pymdown-extensions` | `13.1` | `13.1.2` | patch | 2026-11-20 | 2h |
+| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 1d |
+| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 22h |
+| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 21h |
+| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 19h |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 6d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 6d |
-| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 6h |
+| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 19h |
 | examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 2d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
-| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `3457b69ac4aba6d9ea9a743370af160fb502db29` | revision | 2026-11-18 | 1d |
-| gguf-convert-pip | `gguf-transformers` | `5.22.2` | `5.23.0` | minor | 2026-11-13 | 6d |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `ab5c18fdedfc8f9bbc9d773f10a540790e2787a7` | revision | 2026-11-20 | 19h |
+| gguf-convert-pip | `gguf-transformers` | `5.22.2` | `5.23.0` | minor | 2026-11-13 | 7d |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 6d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
-| llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 6d |
-| nvidia-plugin | `nvidia-device-plugin` | `v0.20.1` | `v0.20.2` | patch | 2026-11-17 | 2d |
-| opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.11` | patch | 2026-11-12 | 7d |
-| opt-in-manifests | `open-webui` | `v0.13.3` | `v0.13.4` | patch | 2026-11-17 | 2d |
+| host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 1d |
+| llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 7d |
+| nvidia-plugin | `nvidia-device-plugin` | `v0.20.1` | `v0.20.2` | patch | 2026-11-17 | 3d |
+| opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.12` | patch | 2026-11-20 | 1h |
+| opt-in-manifests | `open-webui` | `v0.13.3` | `v0.13.4` | patch | 2026-11-17 | 3d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 11h |
-| telemetry | `node-exporter` | `v1.12.1` | `v1.13.1` | minor | 2026-11-19 | 11h |
-| telemetry | `xpumd` | `v2.3.0` | `v2.4.0` | minor | 2026-11-16 | 3d |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 1d |
+| telemetry | `node-exporter` | `v1.12.1` | `v1.13.1` | minor | 2026-11-19 | 1d |
+| telemetry | `xpumd` | `v2.3.0` | `v2.4.0` | minor | 2026-11-16 | 4d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 7d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `35c496443ac089b308cf5fe9acff49caa9d190c6` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `17442450ff7948f0c52370982709d72a2e57e51c` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
 
 ## Open bot PRs (15)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #452 | devcontainer | auto | - |
 | #451 | vllm-xpu | review | a human approval at the head |
 | #450 | vllm-recipes | review | a human approval at the head |
 | #449 | vllm-cpu | auto | - |
@@ -62,7 +62,6 @@ stale:freshness.yml
 | #440 | examples | review | a human approval at the head |
 | #439 | docs-build | auto | - |
 | #438 | digests | review | a human approval at the head |
-| #437 | devcontainer | auto | - |
 
 ## EAT stock (always review)
 
@@ -228,3 +227,7 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
            path: pr
            branch: autobump/amend-${{ inputs.propose_amendment }}
 ```
+
+## Lag tripwire
+
+- blind-spot:llama-cpp: llama-cpp is 7d behind upstream with no open PR
