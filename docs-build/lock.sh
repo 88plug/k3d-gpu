@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="${DOCS_PYTHON_IMAGE:-$(sed -n 's/^FROM \(python:[^ ]*\).*$/\1/p' "${ROOT}/docs-build/Dockerfile")}"
-PIP_TOOLS="pip-tools==7.6.2"
+PIP_TOOLS="pip-tools==7.7.0"
 
 docker run --rm -v "${ROOT}/docs-build:/w" -w /w "${IMAGE}" sh -c \
     "pip install -q --root-user-action=ignore '${PIP_TOOLS}' && \
