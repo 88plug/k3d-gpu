@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-20 21:35 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-20 22:42 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,31 +8,27 @@ blind-spot:llama-cpp
 red:freshness.yml
 stale:freshness.yml
 
-## Pins behind (31)
+## Pins behind (27)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| devcontainer | `image:devcontainer:mcr.microsoft.com/devcontainers/base:2.2.6-trixie` | `2.2.6-trixie` | `2.2.7-trixie` | patch | ? | ? |
-| docs-build | `docs-mkdocs-material` | `9.8.1` | `9.8.2` | patch | 2026-11-19 | 1d |
-| docs-build | `docs-pip-tools` | `7.6.2` | `7.7.0` | minor | 2026-11-16 | 4d |
-| docs-build | `docs-pymdown-extensions` | `13.1` | `13.1.2` | patch | 2026-11-20 | 2h |
 | examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 1d |
-| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 22h |
-| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 22h |
-| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 20h |
-| examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 6d |
+| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 1d |
+| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 23h |
+| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 21h |
+| examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 7d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 6d |
-| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 20h |
+| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 21h |
 | examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 2d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
-| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `ab5c18fdedfc8f9bbc9d773f10a540790e2787a7` | revision | 2026-11-20 | 20h |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `ab5c18fdedfc8f9bbc9d773f10a540790e2787a7` | revision | 2026-11-20 | 21h |
 | gguf-convert-pip | `gguf-transformers` | `5.22.2` | `5.23.0` | minor | 2026-11-13 | 7d |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 6d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
 | host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 1d |
 | llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 7d |
 | nvidia-plugin | `nvidia-device-plugin` | `v0.20.1` | `v0.20.2` | patch | 2026-11-17 | 3d |
-| opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.12` | patch | 2026-11-20 | 1h |
+| opt-in-manifests | `agent-sandbox` | `v1.0.10` | `v1.0.12` | patch | 2026-11-20 | 2h |
 | opt-in-manifests | `open-webui` | `v0.13.3` | `v0.13.4` | patch | 2026-11-17 | 3d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
 | packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 1d |
@@ -41,10 +37,10 @@ stale:freshness.yml
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 7d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `17442450ff7948f0c52370982709d72a2e57e51c` | revision | ? | ? |
-| vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `8e4d35414833c9a698ce7eac3fe0a0bb73132d88` | revision | ? | ? |
+| vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 4d |
 
-## Open bot PRs (14)
+## Open bot PRs (13)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
@@ -60,7 +56,6 @@ stale:freshness.yml
 | #442 | gguf-convert-pip | auto | - |
 | #441 | flake | review | a human approval at the head |
 | #440 | examples | review | a human approval at the head |
-| #439 | docs-build | auto | - |
 | #438 | digests | review | a human approval at the head |
 
 ## EAT stock (always review)
