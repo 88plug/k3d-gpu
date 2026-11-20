@@ -1,9 +1,10 @@
 # Freshness dashboard
 
-Updated 2026-11-20 21:01 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-20 21:35 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
+blind-spot:llama-cpp
 red:freshness.yml
 stale:freshness.yml
 
@@ -17,14 +18,14 @@ stale:freshness.yml
 | docs-build | `docs-pymdown-extensions` | `13.1` | `13.1.2` | patch | 2026-11-20 | 2h |
 | examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 1d |
 | examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 22h |
-| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 21h |
-| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 19h |
+| examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 22h |
+| examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 20h |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 6d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 6d |
-| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 19h |
+| examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 20h |
 | examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 2d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
-| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `ab5c18fdedfc8f9bbc9d773f10a540790e2787a7` | revision | 2026-11-20 | 19h |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `ab5c18fdedfc8f9bbc9d773f10a540790e2787a7` | revision | 2026-11-20 | 20h |
 | gguf-convert-pip | `gguf-transformers` | `5.22.2` | `5.23.0` | minor | 2026-11-13 | 7d |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 6d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
@@ -43,11 +44,10 @@ stale:freshness.yml
 | vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `17442450ff7948f0c52370982709d72a2e57e51c` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 3d |
 
-## Open bot PRs (15)
+## Open bot PRs (14)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
-| #452 | devcontainer | auto | - |
 | #451 | vllm-xpu | review | a human approval at the head |
 | #450 | vllm-recipes | review | a human approval at the head |
 | #449 | vllm-cpu | auto | - |
