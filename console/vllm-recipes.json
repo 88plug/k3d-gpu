@@ -2082,8 +2082,8 @@
  },
  "license": {
   "sources": [
-   "https://github.com/vllm-project/vllm/tree/9e6815acab1a6acb188931510271b1bce4688c75/recipes",
-   "https://github.com/vllm-project/recipes/tree/294a6d27809e3b6543554214a8d99116bd7d13dd"
+   "https://github.com/vllm-project/vllm/tree/7bce843a08fd3119766cd73d346bce481ede2544/recipes",
+   "https://github.com/vllm-project/recipes/tree/d33e7b7e8d459199cb30bc3b0f29a9edb0fa7c38"
   ],
   "spdx": "Apache-2.0",
   "text": "                                 Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"[]\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.\n"
@@ -2193,8 +2193,6 @@
     "--max-model-len",
     "32768",
     "--enable-prefix-caching",
-    "--mamba-cache-mode",
-    "align",
     "--limit-mm-per-prompt",
     "{\"image\": 8}",
     "--max-num-seqs",
@@ -3542,7 +3540,7 @@
    "id": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
    "min_vllm": "0.30.0",
    "model_id": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "strategies": [
@@ -5948,9 +5946,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "inclusionAI/Ling-3.0-flash-VL",
-   "min_vllm": "nightly",
+   "min_vllm": "0.30.0",
    "model_id": "inclusionAI/Ling-3.0-flash-VL",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -6155,9 +6153,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "inclusionAI/Ling-3.1-flash",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "inclusionAI/Ling-3.1-flash",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -6203,9 +6201,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "inclusionAI/Ming-3.0-asr-tiny",
-   "min_vllm": "nightly",
+   "min_vllm": "0.34.0",
    "model_id": "inclusionAI/Ming-3.0-asr-tiny",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -8332,7 +8330,9 @@
         "--speculative-config",
         "{\"method\":\"dspark\",\"model\":\"Inferact/Muse-Spark-Open-DSpark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\",\"rejection_sample_method\":\"block\",\"enable_adaptive_verification\":false}",
         "--additional-config",
-        "{\"decode_backend\":\"latency_specialized\"}"
+        "{\"decode_backend\":\"latency_specialized\"}",
+        "--moe-backend",
+        "auto"
        ],
        "hardware": {
         "default": "unsupported"
@@ -8358,7 +8358,7 @@
    "id": "meta-models/Muse-Spark-Open-816B-A42B",
    "min_vllm": "0.33.0",
    "model_id": "meta-models/Muse-Spark-Open-816B-A42B",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -9128,7 +9128,7 @@
    "id": "MiniMaxAI/MiniMax-M3",
    "min_vllm": "0.24.0",
    "model_id": "MiniMaxAI/MiniMax-M3",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding",
     "text_only",
@@ -9254,10 +9254,10 @@
         "--attention-config",
         "{\"indexer_kv_dtype\": \"fp8\"}",
         "--compilation-config",
-        "{\"cudagraph_mode\": \"FULL_DECODE_ONLY\"}"
+        "{\"cudagraph_mode\": \"FULL_DECODE_ONLY\"}",
+        "--monokernel"
        ],
        "env": {
-        "VLLM_ROCM_MINIMAX_M3_MONO": "1",
         "VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT": "1"
        },
        "variants": [
@@ -10850,7 +10850,7 @@
     "spec_decoding": {
      "args": [
       "--speculative-config",
-      "{\"model\":\"Inferact/Kimi-K3.1-Pro-DSpark-preview\",\"num_speculative_tokens\":5,\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\"}"
+      "{\"model\":\"Inferact/Kimi-K3.1-Pro-DSpark\",\"num_speculative_tokens\":5,\"method\":\"dspark\",\"draft_sample_method\":\"probabilistic\"}"
      ]
     },
     "text_only": {
@@ -10870,7 +10870,7 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "moonshotai/Kimi-K3.1-Pro",
-   "min_vllm": "0.34.0",
+   "min_vllm": "0.35.0",
    "model_id": "moonshotai/Kimi-K3.1-Pro",
    "nightly": true,
    "opt_in": [
@@ -10880,6 +10880,12 @@
     "nvfp4_kv_cache"
    ],
    "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
    "strategies": [
     "single_node_tp",
     "single_node_tep",
@@ -11464,8 +11470,6 @@
    "base_args": [
     "--mamba-backend",
     "flashinfer",
-    "--mamba-cache-mode",
-    "align",
     "--enable-prefix-caching",
     "--max-num-batched-tokens",
     "16384"
@@ -11726,9 +11730,7 @@
       "--mamba-ssm-cache-dtype",
       "float32",
       "--chat-template-content-format",
-      "string",
-      "--mamba-cache-mode",
-      "align"
+      "string"
      ],
      "default_modes": {},
      "env": {},
@@ -11783,8 +11785,6 @@
       "5",
       "--chat-template-content-format",
       "string",
-      "--mamba-cache-mode",
-      "align",
       "--enable-mamba-shared-prefix-checkpoint"
      ],
      "default_modes": {},
@@ -11816,9 +11816,7 @@
       "--mamba-cache-philox-rounds",
       "5",
       "--chat-template-content-format",
-      "string",
-      "--mamba-cache-mode",
-      "align"
+      "string"
      ],
      "default_modes": {},
      "env": {},
@@ -12263,6 +12261,93 @@
       "xeon6"
      ],
      "vram_min": 4
+    }
+   }
+  },
+  "openbmb/minicpm-ocr-1.0": {
+   "base_args": [
+    "--trust-request-mm-kwargs",
+    "--limit-mm-per-prompt",
+    "{\"image\":36,\"video\":0}",
+    "--max-model-len",
+    "40960",
+    "--max-num-batched-tokens",
+    "40960"
+   ],
+   "base_env": {},
+   "context_length": 262144,
+   "default_frontend": null,
+   "feature_order": [
+    "spec_decoding"
+   ],
+   "features": {
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"method\":\"dspark\",\"model\":\"openbmb/MiniCPM-OCR-1.0-DSpark\",\"num_speculative_tokens\":15,\"enable_adaptive_verification\":false}"
+     ]
+    }
+   },
+   "file": "recipes/models/openbmb/MiniCPM-OCR-1.0.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "openbmb/MiniCPM-OCR-1.0",
+   "min_vllm": "0.34.0",
+   "model_id": "openbmb/MiniCPM-OCR-1.0",
+   "nightly": false,
+   "opt_in": [],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "awq": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "openbmb/MiniCPM-OCR-1.0-AWQ",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 3
+    },
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 4
+    },
+    "gptq": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "openbmb/MiniCPM-OCR-1.0-GPTQ",
+     "nightly": false,
+     "overrides": {},
+     "precision": "int4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 3
     }
    }
   },
@@ -15915,7 +16000,7 @@
      "listed": false,
      "min_vllm": "0.28.0",
      "model_id": "nvidia/Qwen3.6-27B-NVFP4",
-     "nightly": true,
+     "nightly": false,
      "overrides": {},
      "precision": "nvfp4",
      "precision_hardware": null,
@@ -16177,9 +16262,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "Qwen/Qwen3.8-2.4T-A95B",
-   "min_vllm": "nightly",
+   "min_vllm": "0.28.0",
    "model_id": "Qwen/Qwen3.8-2.4T-A95B",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -16543,7 +16628,7 @@
    "id": "Qwen/Qwen3.8-Flash-Next",
    "min_vllm": "0.30.0",
    "model_id": "Qwen/Qwen3.8-Flash-Next",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "text_only",
     "long_context"
@@ -16815,7 +16900,7 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "RecursiveSI/flint",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "RecursiveSI/flint",
    "nightly": false,
    "opt_in": [],
@@ -17006,9 +17091,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "ricursiveAI/Ripple-65B-Preview",
-   "min_vllm": "0.33.0",
+   "min_vllm": "0.34.0",
    "model_id": "ricursiveAI/Ripple-65B-Preview",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -17657,6 +17742,189 @@
     }
    }
   },
+  "tencent/hy4": {
+   "base_args": [
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "131072",
+    "--max-num-seqs",
+    "32",
+    "--max-num-batched-tokens",
+    "8192",
+    "--attention-backend",
+    "FLASHMLA_SPARSE",
+    "--limit-mm-per-prompt",
+    "{\"image\":1,\"video\":0}"
+   ],
+   "base_env": {},
+   "context_length": 1048576,
+   "default_frontend": "rust",
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "hy_v4"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"num_speculative_tokens\":5,\"method\":\"dfly\"}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "hy_v4",
+      "--reasoning-parser",
+      "hy_v4"
+     ]
+    }
+   },
+   "file": "recipes/models/tencent/Hy4.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "tencent/Hy4",
+   "min_vllm": "0.35.0",
+   "model_id": "tencent/Hy4",
+   "nightly": true,
+   "opt_in": [],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp"
+   ],
+   "variants": {
+    "bf16": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 1859
+    },
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "tencent/Hy4-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 944
+    }
+   }
+  },
+  "tencent/hy4-flash": {
+   "base_args": [
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "8192",
+    "--max-num-seqs",
+    "4",
+    "--max-num-batched-tokens",
+    "8192",
+    "--limit-mm-per-prompt",
+    "{\"image\":1,\"video\":0}"
+   ],
+   "base_env": {},
+   "context_length": 1048576,
+   "default_frontend": "rust",
+   "feature_order": [
+    "tool_calling",
+    "reasoning",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "hy_v4",
+      "--tool-call-parser",
+      "hy_v4"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"num_speculative_tokens\":5,\"method\":\"dfly\"}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "hy_v4",
+      "--reasoning-parser",
+      "hy_v4"
+     ]
+    }
+   },
+   "file": "recipes/models/tencent/Hy4-flash.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "tencent/Hy4-flash",
+   "min_vllm": null,
+   "model_id": "tencent/Hy4-flash",
+   "nightly": false,
+   "opt_in": [],
+   "overrides": {},
+   "strategies": [
+    "single_node_tp",
+    "single_node_tep"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "bf16",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 529
+    },
+    "fp8": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "model_id": "tencent/Hy4-flash-FP8",
+     "nightly": false,
+     "overrides": {},
+     "precision": "fp8",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 345
+    }
+   }
+  },
   "tencent/hy4-preview": {
    "base_args": [],
    "base_env": {},
@@ -17694,7 +17962,7 @@
    "id": "tencent/Hy4-preview",
    "min_vllm": "0.29.0",
    "model_id": "tencent/Hy4-preview",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -17786,7 +18054,7 @@
    "id": "thinkingmachines/Inkling",
    "min_vllm": "0.26.0",
    "model_id": "thinkingmachines/Inkling-NVFP4",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -17906,6 +18174,213 @@
     }
    }
   },
+  "thinkingmachines/inkling-2-mini": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 1048576,
+   "default_frontend": null,
+   "feature_order": [
+    "reasoning",
+    "tool_calling",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "inkling"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\"}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "inkling"
+     ]
+    }
+   },
+   "file": "recipes/models/thinkingmachines/Inkling-2-Mini.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "thinkingmachines/Inkling-2-Mini",
+   "min_vllm": "0.35.0",
+   "model_id": "thinkingmachines/Inkling-2-Mini",
+   "nightly": true,
+   "opt_in": [
+    "tool_calling"
+   ],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": false,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": null,
+     "supported": [],
+     "vram_min": 24
+    }
+   }
+  },
+  "thinkingmachines/inkling-2-small": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 1048576,
+   "default_frontend": null,
+   "feature_order": [
+    "reasoning",
+    "tool_calling",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "inkling"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\"}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "inkling"
+     ]
+    }
+   },
+   "file": "recipes/models/thinkingmachines/Inkling-2-Small.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "thinkingmachines/Inkling-2-Small",
+   "min_vllm": "0.35.0",
+   "model_id": "thinkingmachines/Inkling-2-Small",
+   "nightly": true,
+   "opt_in": [
+    "tool_calling"
+   ],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "nvfp4",
+     "precision_hardware": {
+      "brand": "NVIDIA"
+     },
+     "supported": [],
+     "vram_min": 473
+    }
+   }
+  },
+  "thinkingmachines/inkling-2-small-mxfp8": {
+   "base_args": [],
+   "base_env": {},
+   "context_length": 1048576,
+   "default_frontend": null,
+   "feature_order": [
+    "reasoning",
+    "tool_calling",
+    "spec_decoding"
+   ],
+   "features": {
+    "reasoning": {
+     "args": [
+      "--reasoning-parser",
+      "inkling"
+     ]
+    },
+    "spec_decoding": {
+     "args": [
+      "--speculative-config",
+      "{\"method\":\"dspark\",\"num_speculative_tokens\":7,\"draft_sample_method\":\"probabilistic\"}"
+     ]
+    },
+    "tool_calling": {
+     "args": [
+      "--enable-auto-tool-choice",
+      "--tool-call-parser",
+      "inkling"
+     ]
+    }
+   },
+   "file": "recipes/models/thinkingmachines/Inkling-2-Small-MXFP8.yaml",
+   "hardware": {},
+   "hardware_opt_in": {},
+   "id": "thinkingmachines/Inkling-2-Small-MXFP8",
+   "min_vllm": "0.35.0",
+   "model_id": "thinkingmachines/Inkling-2-Small-MXFP8",
+   "nightly": true,
+   "opt_in": [
+    "tool_calling"
+   ],
+   "overrides": {},
+   "single_node_tp": {
+    "args": [],
+    "env": {},
+    "overrides": {},
+    "vllm_args": []
+   },
+   "strategies": [
+    "single_node_tp",
+    "multi_node_tp"
+   ],
+   "variants": {
+    "default": {
+     "args": [],
+     "default_modes": {},
+     "env": {},
+     "listed": true,
+     "min_vllm": null,
+     "nightly": false,
+     "overrides": {},
+     "precision": "mxfp8",
+     "precision_hardware": {
+      "brand": "NVIDIA"
+     },
+     "supported": [],
+     "vram_min": 747
+    }
+   }
+  },
   "thinkingmachines/inkling-small": {
    "base_args": [
     "--trust-remote-code",
@@ -17949,7 +18424,7 @@
    "id": "thinkingmachines/Inkling-Small",
    "min_vllm": "0.26.0",
    "model_id": "thinkingmachines/Inkling-Small-NVFP4",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [
     "spec_decoding"
    ],
@@ -18043,9 +18518,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18084,9 +18559,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3-edge",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3-edge",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18125,9 +18600,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3-flash",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3-flash",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18166,9 +18641,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3-lite",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3-lite",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18207,9 +18682,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3-mini",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3-mini",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18248,9 +18723,9 @@
    "hardware": {},
    "hardware_opt_in": {},
    "id": "vllm-sr/d3-nano",
-   "min_vllm": "nightly",
+   "min_vllm": "0.33.0",
    "model_id": "vllm-sr/d3-nano",
-   "nightly": true,
+   "nightly": false,
    "opt_in": [],
    "overrides": {},
    "single_node_tp": {
@@ -18505,9 +18980,16 @@
    "feature_order": [
     "tool_calling",
     "reasoning",
-    "spec_decoding"
+    "spec_decoding",
+    "encoder_parallel"
    ],
    "features": {
+    "encoder_parallel": {
+     "args": [
+      "--mm-encoder-tp-mode",
+      "data"
+     ]
+    },
     "reasoning": {
      "args": [
       "--reasoning-parser",
@@ -18536,7 +19018,8 @@
    "model_id": "XiaomiMiMo/MiMo-V2.6-Flash-RL",
    "nightly": false,
    "opt_in": [
-    "spec_decoding"
+    "spec_decoding",
+    "encoder_parallel"
    ],
    "overrides": {},
    "strategies": [
@@ -18597,9 +19080,16 @@
    "feature_order": [
     "tool_calling",
     "reasoning",
-    "spec_decoding"
+    "spec_decoding",
+    "encoder_parallel"
    ],
    "features": {
+    "encoder_parallel": {
+     "args": [
+      "--mm-encoder-tp-mode",
+      "data"
+     ]
+    },
     "reasoning": {
      "args": [
       "--reasoning-parser",
@@ -18628,7 +19118,8 @@
    "model_id": "XiaomiMiMo/MiMo-V2.6-Pro-RL",
    "nightly": false,
    "opt_in": [
-    "spec_decoding"
+    "spec_decoding",
+    "encoder_parallel"
    ],
    "overrides": {},
    "strategies": [
@@ -20161,7 +20652,7 @@
    "vram_gb": 1024
   }
  },
- "recipes_commit": "294a6d27809e3b6543554214a8d99116bd7d13dd",
+ "recipes_commit": "d33e7b7e8d459199cb30bc3b0f29a9edb0fa7c38",
  "schema": "k3d-gpu.vllm-recipes/v1",
  "schema_version": 1,
  "single_node_tp": {
@@ -20649,6 +21140,14 @@
   "nvidia/qwen3.8-27b-nvfp4": [
    "qwen/qwen3.8-27b",
    "nvfp4_nvidia"
+  ],
+  "openbmb/minicpm-ocr-1.0-awq": [
+   "openbmb/minicpm-ocr-1.0",
+   "awq"
+  ],
+  "openbmb/minicpm-ocr-1.0-gptq": [
+   "openbmb/minicpm-ocr-1.0",
+   "gptq"
   ],
   "poolside/laguna-m.1-fp8": [
    "poolside/laguna-m.1",
@@ -21214,6 +21713,14 @@
    "tencent/hy3",
    "fp8"
   ],
+  "tencent/hy4-flash-fp8": [
+   "tencent/hy4-flash",
+   "fp8"
+  ],
+  "tencent/hy4-fp8": [
+   "tencent/hy4",
+   "default"
+  ],
   "tencent/hy4-preview-fp8": [
    "tencent/hy4-preview",
    "fp8"
@@ -21267,6 +21774,6 @@
    "bf16"
   ]
  },
- "vllm_commit": "9e6815acab1a6acb188931510271b1bce4688c75",
- "vllm_tree": "0cc11295caef376b1ce1e1231b8595b8ee1aa7ed"
+ "vllm_commit": "7bce843a08fd3119766cd73d346bce481ede2544",
+ "vllm_tree": "c036ee2bfb5d54e33f279257f32c5cf3c4a6665c"
 }
