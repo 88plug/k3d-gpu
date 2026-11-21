@@ -1627,7 +1627,7 @@
     "xlam"
    ]
   },
-  "0.33.0": {
+  "0.34.0": {
    "flags": [
     "--additional-config",
     "--aggregate-engine-logging",
@@ -1647,8 +1647,11 @@
     "--attention-config",
     "--aux-output-config",
     "--block-size",
+    "--cache-aware-admission-threshold",
+    "--cache-aware-admission-window",
     "--chat-template",
     "--chat-template-content-format",
+    "--checkpoint-prepare-on-startup",
     "--code-revision",
     "--cohere-format",
     "--cohere-is-reasoning-model",
@@ -1716,6 +1719,7 @@
     "--enable-ep-weight-filter",
     "--enable-eplb",
     "--enable-expert-parallel",
+    "--enable-extensible-kv-cache",
     "--enable-fault-tolerance",
     "--enable-flash-late-interaction",
     "--enable-flashinfer-autotune",
@@ -1767,6 +1771,7 @@
     "--h11-max-header-count",
     "--h11-max-incomplete-event-size",
     "--headless",
+    "--headless-client-handshake-address",
     "--hf-config-path",
     "--hf-overrides",
     "--hf-token",
@@ -1824,6 +1829,7 @@
     "--max-model-len",
     "--max-num-active-seqs",
     "--max-num-batched-tokens",
+    "--max-num-inflight-kv-loads",
     "--max-num-queued-reqs",
     "--max-num-queued-tokens",
     "--max-num-scheduled-tokens",
@@ -1903,6 +1909,7 @@
     "--seed",
     "--served-model-name",
     "--show-hidden-metrics-for-version",
+    "--shuffle-safetensors-files",
     "--shutdown-timeout",
     "--skip-mm-profiling",
     "--skip-tokenizer-init",
@@ -2006,17 +2013,19 @@
     "mistral",
     "muse",
     "muse_glimmer",
-    "musespark1x",
+    "musespark",
     "nemotron_v3",
     "olmo3",
     "openai_gptoss",
     "plamo3",
     "poolside_v1",
     "qwen3",
+    "ripple",
     "seed_oss",
     "step3",
     "step3p5",
-    "step5"
+    "step5",
+    "zaya"
    ],
    "tool_parsers": [
     "apertus",
@@ -2038,6 +2047,7 @@
     "granite",
     "granite-20b-fc",
     "granite4",
+    "granite_toolcall_parser",
     "hermes",
     "hf",
     "hunyuan_a13b",
@@ -2062,7 +2072,7 @@
     "mistral",
     "muse",
     "muse_glimmer",
-    "musespark1x",
+    "musespark",
     "olmo3",
     "openai",
     "phi4_mini_json",
@@ -2072,11 +2082,14 @@
     "qwen3_coder",
     "qwen3_json",
     "qwen3_xml",
+    "ripple",
     "seed_oss",
     "step3",
     "step3p5",
     "step5",
-    "xlam"
+    "xlam",
+    "zaya",
+    "zaya_xml"
    ]
   }
  },

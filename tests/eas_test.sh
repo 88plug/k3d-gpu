@@ -2629,7 +2629,7 @@ section_model() {
     local STATE="${S}/k3d-gpu-state/eas-easm" NS=k3d-gpu-eas-models
     local NAME=qwen3-8-27b-int4 REV=91bd022d5b49442a868bc35008f6c21e1860edfa
     local URL="http://qwen3-8-27b-int4.k3d-gpu-eas-models.svc.cluster.local:8000/v1"
-    local IMAGE="vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086"
+    local IMAGE="vllm/vllm-openai-xpu:v0.34.0@sha256:cb55d8cffeb1851c552c4b002a5e8be21daa99a51a678d53c57f271e7c16b3f0"
     local out rc log j F="${WORK}/model/s/fx"
     mkdir -p "${B}" "${F}" "${S}/deps" "${S}/home" "${STATE}/eas/env/k3d-gpu"
     echo agent-toolkit > "${STATE}/layer"
