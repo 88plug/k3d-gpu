@@ -162,7 +162,7 @@
       "tag": "1.38"
     },
     {
-      "digest": "sha256:2198e4c65076e9cb0b3d695219df667c0e3b0072da64ca3c2648aca17dcecaf5",
+      "digest": "sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289",
       "name": "docker.io/library/ubuntu",
       "sources": [
         "Dockerfile"
@@ -170,7 +170,7 @@
       "tag": "24.04"
     },
     {
-      "digest": "sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96",
+      "digest": "sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db",
       "name": "docker.io/library/ubuntu",
       "sources": [
         "Dockerfile"
