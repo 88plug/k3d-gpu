@@ -18,8 +18,8 @@ FROM rancher/k3s:$K3S_TAG@$K3S_DIGEST AS k3s
 # through the node on a host that lacks it. Version and sha256 from
 # https://www.kernel.org/releases.json and cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc.
 FROM ${UBUNTU_IMAGE} AS isst
-ARG LINUX_TOOLS_VERSION="7.3.4"
-ARG LINUX_TOOLS_SHA256="b11b6df8295e8e991ff040b71aaa4994a8b55caa23b6b092907f195b5840fd1f"
+ARG LINUX_TOOLS_VERSION="7.3.5"
+ARG LINUX_TOOLS_SHA256="8f293f83d54f0b7b9be56863ebc5e4ea79d73e530b4ae55c572be97ef39f0990"
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils make gcc libc6-dev \
       pkg-config libnl-3-dev libnl-genl-3-dev \
     && curl -fsSLo /tmp/linux.tar.xz "https://cdn.kernel.org/pub/linux/kernel/v$(echo "${LINUX_TOOLS_VERSION}" | cut -d. -f1).x/linux-${LINUX_TOOLS_VERSION}.tar.xz" \
