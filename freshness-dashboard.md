@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-21 02:21 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-21 07:44 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,7 +8,7 @@ blind-spot:llama-cpp
 red:freshness.yml
 stale:freshness.yml
 
-## Pins behind (24)
+## Pins behind (23)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
@@ -25,27 +25,26 @@ stale:freshness.yml
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 7d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
 | host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 1d |
+| images | `image:images:ollama/ollama:0.40.16` | `0.40.16` | `0.40.17` | patch | 2026-11-21 | 4h |
 | llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 7d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
 | packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 1d |
-| telemetry | `node-exporter` | `v1.12.1` | `v1.13.1` | minor | 2026-11-19 | 1d |
-| telemetry | `xpumd` | `v2.3.0` | `v2.4.0` | minor | 2026-11-16 | 4d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
-| tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 7d |
-| tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 2h |
+| tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 8d |
+| tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 8h |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 4d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `8b7b7403d4414f382e919465507374c8a90d1085` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `1a578a9b10da5ef2c087f92a1b1dc7cfe09e543a` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 4d |
 
 ## Open bot PRs (10)
 
 | PR | Group | Verdict | Blocking |
 |---|---|---|---|
+| #453 | images | auto | - |
 | #451 | vllm-xpu | review | a human approval at the head |
 | #450 | vllm-recipes | review | a human approval at the head |
 | #449 | vllm-cpu | auto | - |
 | #448 | tools | review | a human approval at the head |
-| #447 | telemetry | auto | - |
 | #446 | packaging-images | review | a human approval at the head |
 | #443 | host-intel | review | a human approval at the head |
 | #441 | flake | review | a human approval at the head |
@@ -135,7 +134,7 @@ Read-only. SUPPORTED rows of EXPERIMENTS.md whose recorded versions are a minor 
 | H59r | cryptoandcoffee/k3d-gpu 0.1.110; hf:OpenVINO/gemma-4-26b-a4b-it-int4-ov 4e5885c3; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; hf:google/gemma-4-26B-A4B-it-qat-q4_0-unquantized-assistant 95371415; llama.cpp b12110; openvino/model_server 2026.4.1 | no |
 | H60 | cryptoandcoffee/k3d-gpu 0.1.84; hf:ggml-org/Qwen3.8-Flash-Next-GGUF 91fb0035; hf:google/gemma-4-26B-A4B-it-qat-q4_0-gguf d1c082be; llama.cpp b11960 | yes |
 
-Current pins: cryptoandcoffee/k3d-gpu 0.1.115; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
+Current pins: cryptoandcoffee/k3d-gpu 0.1.117; llama.cpp b12110; openvino/model_server 2026.4.1; rancher/k3s v1.37.2-k3s1; vllm-openai-cpu 0.32.0; vllm-openai-xpu 0.33.0
 
 ### Not machine-readable
 
