@@ -285,12 +285,12 @@
       "tag": "v0.28.0"
     },
     {
-      "digest": "sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",
+      "digest": "sha256:1640fdc27ae499572f611ffd4dc55e0b07ce97608f33566d5834c98671b115d4",
       "name": "docker.io/vllm/vllm-openai-cpu",
       "sources": [
         "scripts/k3d-gpu K3D_GPU_AMX_TEST_IMAGE"
       ],
-      "tag": "v0.32.0"
+      "tag": "v0.34.0"
     },
     {
       "digest": "sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086",

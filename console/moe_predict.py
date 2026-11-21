@@ -64,7 +64,7 @@ ENGINES = [
     {"name": "llm-scaler-vllm", "container": "safetensors", "devices": ("gpu",), "tp": True,
      "formats": ("bf16", "fp16", "fp8", "w4a16"), "images": ("intel/llm-scaler-vllm:1.5@sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b",)},
     {"name": "vllm-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
-     "formats": ("bf16", "fp16", "w4a16"), "images": ("vllm/vllm-openai-cpu:v0.32.0@sha256:ffaba3989b9b96d95a576143c872a4110ce9800f5199b6a36eb27bdff1cbbe05",)},
+     "formats": ("bf16", "fp16", "w4a16"), "images": ("vllm/vllm-openai-cpu:v0.34.0@sha256:1640fdc27ae499572f611ffd4dc55e0b07ce97608f33566d5834c98671b115d4",)},
     {"name": "sglang-cpu", "container": "safetensors", "devices": ("cpu",), "tp": False,
      "formats": ("bf16", "fp8", "w4a16"), "images": ("lmsysorg/sglang:v0.5.23-xeon@sha256:f22c18d175270ad1aa63ff6298a4d5a79954520863d5eab6862f94728c2d18df",)},
     {"name": "llama.cpp", "container": "gguf", "devices": ("cpu", "gpu", "hybrid"), "tp": False,
