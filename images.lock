@@ -366,12 +366,12 @@
       "tag": "v0.12.1"
     },
     {
-      "digest": "sha256:539009b75c64159ca2202f52b94ae736ab3883c3497d30d65bd3d179357e1859",
+      "digest": "sha256:de6c8051b2fe0bc47535c067cdeb2803f03f2e67d0c4557813e58bc69414812a",
       "name": "ghcr.io/intel/xpumanager/xpumd",
       "sources": [
         "share/telemetry/optional/intel-xpumd.yml"
       ],
-      "tag": "v2.3.0"
+      "tag": "v2.4.0"
     },
     {
       "digest": "sha256:d5168bfbc28609eff5bea1b438dd864cf64d185cf6582c02244865e18385b901",
@@ -398,12 +398,12 @@
       "tag": "4.7.0-4.9.0-distroless"
     },
     {
-      "digest": "sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0",
+      "digest": "sha256:011e2d12c5bff759b90804bda642664775d7b4b127bf5148539bb82d3f590bb7",
       "name": "quay.io/prometheus/node-exporter",
       "sources": [
         "share/telemetry/node-exporter.yml"
       ],
-      "tag": "v1.12.1"
+      "tag": "v1.13.1"
     },
     {
       "digest": "sha256:9332054523223e2ddc18d8101799d54a4a8d823b030c53216f063a6c117773cd",
