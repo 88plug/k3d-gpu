@@ -374,12 +374,12 @@
       "tag": "v2.3.0"
     },
     {
-      "digest": "sha256:46b59158e6558eeb980bc828e0f1b30238ad24d82ed84d5e5eda1dab2a082f14",
+      "digest": "sha256:d5168bfbc28609eff5bea1b438dd864cf64d185cf6582c02244865e18385b901",
       "name": "ghcr.io/open-webui/open-webui",
       "sources": [
         "share/agent-chat-ui.yml"
       ],
-      "tag": "v0.13.3"
+      "tag": "v0.13.4"
     },
     {
       "digest": "sha256:7673383d44a84bece724d9ca8feeadf4eee69cd46475fdff614cbbca6732d463",
@@ -414,12 +414,12 @@
       "tag": "v3.16.0"
     },
     {
-      "digest": "sha256:594f4853913bca2b336d0267fe0978445f1aaa5837ed23797e48e745c8d6b610",
+      "digest": "sha256:b0ee91a42129919179baf5f429979fee3ab1a3dac6855110b4648a6ff4b44103",
       "name": "registry.k8s.io/agent-sandbox/agent-sandbox-controller",
       "sources": [
         "share/agent-sandbox.yml"
       ],
-      "tag": "v1.0.10"
+      "tag": "v1.0.12"
     },
     {
       "digest": "sha256:bbacb1409a2ec436ee8cecdfb50f626fe66eae35adbf2886df255cbf5a2b10df",
@@ -430,12 +430,12 @@
       "tag": "v0.5.0"
     },
     {
-      "digest": "sha256:ad4ec84b60a57d38c2271be014c68a2fc8f3028c03008fca8a0657a63cd21bec",
+      "digest": "sha256:a28cf5b846f35f3391977fe6886009d1089875c1cca1ff802be3c3ff87264c47",
       "name": "registry.k8s.io/agent-sandbox/python-runtime-sandbox",
       "sources": [
         "share/agent-sandbox-k3d.yml"
       ],
-      "tag": "v1.0.10"
+      "tag": "v1.0.12"
     },
     {
       "digest": "sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379",

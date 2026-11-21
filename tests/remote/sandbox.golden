@@ -99,7 +99,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: python
-        image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.10@sha256:ad4ec84b60a57d38c2271be014c68a2fc8f3028c03008fca8a0657a63cd21bec
+        image: registry.k8s.io/agent-sandbox/python-runtime-sandbox:v1.0.12@sha256:a28cf5b846f35f3391977fe6886009d1089875c1cca1ff802be3c3ff87264c47
         env:
         - name: HOME
           value: /tmp
