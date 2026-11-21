@@ -46,7 +46,7 @@ spec:
         # it); the Gaudi image's entrypoint is Intel's compose launcher, so the pod
         # runs vllm serve itself.
         - name: vllm
-          image: vllm/vllm-openai-xpu:v0.33.0@sha256:be3a9aea234be64ffc2816ac561c597e0f0b1f44a61a7f4912780e4d77450086
+          image: vllm/vllm-openai-xpu:v0.34.0@sha256:cb55d8cffeb1851c552c4b002a5e8be21daa99a51a678d53c57f271e7c16b3f0
           imagePullPolicy: IfNotPresent
           args:
             - Qwen/Qwen3-8B
