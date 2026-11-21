@@ -1,10 +1,11 @@
 # Freshness dashboard
 
-Updated 2026-11-21 07:44 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-21 08:01 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
 blind-spot:llama-cpp
+ci-missing
 red:freshness.yml
 stale:freshness.yml
 
