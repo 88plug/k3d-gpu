@@ -5,13 +5,21 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-21T07:45:14Z. 3 open.
+Updated 2026-11-21T07:45:23Z. 4 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 7d behind upstream with no open PR
 
 Opened 2026-11-20T21:01:29Z, updated 2026-11-20T21:01:29Z.
 
 Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 2026-11-13T10:20:19Z (7d ago, limit 7 days). No autobump/llama-cpp PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.
+
+## `ci-missing`: main's HEAD has no ci.yml run
+
+Opened 2026-11-21T07:45:23Z, updated 2026-11-21T07:45:23Z.
+
+main's HEAD `4d2f2e7209f39de6fcb39e2883860d252f41ae06` (committed 2026-11-21T03:24:33Z) has no ci.yml run from a push or workflow_dispatch, 2 h after the commit.
+
+A push made with GITHUB_TOKEN starts no workflow; the watchdog dispatched ci.yml on main once when HEAD was 30 min old. Dispatch it: `gh workflow run ci.yml --ref main`.
 
 ## `red:freshness.yml`: scheduled run failure
 
