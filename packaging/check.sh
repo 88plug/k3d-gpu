@@ -13,8 +13,8 @@ set -euo pipefail
 NFPM_IMAGE="${NFPM_IMAGE:-goreleaser/nfpm:v2.49.0@sha256:9ea46a59c4d055ef7071b22f3520b53e8dad98e18043b2f881b53bd7ffec634e}"
 DEBIAN_IMAGE="${DEBIAN_IMAGE:-debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2}"
 FEDORA_IMAGE="${FEDORA_IMAGE:-fedora:45@sha256:a7d72ba2745b100a3351087472e5ee7b2450af7cf331e7673007e3817612839c}"
-BREW_IMAGE="${BREW_IMAGE:-ghcr.io/homebrew/brew:7.0.13@sha256:63be5353975c43bce2c885742370ab320b3c57541de72fd1458a26a8e35d7d8e}"
-NIX_IMAGE="${NIX_IMAGE:-nixos/nix:2.35.6@sha256:b49cb33f3a7e5cf3933ad8774529de0e3807ec5cf54987aa7ccdfb49f2fc55ed}"
+BREW_IMAGE="${BREW_IMAGE:-ghcr.io/homebrew/brew:7.0.15@sha256:f382b121325d4a54e8b8bbb23665f4b0127bc011cd9dfa217da130fff07e9d2c}"
+NIX_IMAGE="${NIX_IMAGE:-nixos/nix:2.36.0@sha256:746280551ddc1c72177d1a597c05eacac86dfaa18d5d649bf86411278bcd5470}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="${K3D_GPU_DIST:-${ROOT}/dist}"
