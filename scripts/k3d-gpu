@@ -8010,9 +8010,9 @@ cmd_model_share() {
 #
 # Pins, taken from each upstream release page:
 #   intel/compute-runtime 26.40.40196.8 with intel-graphics-compiler v2.42.6
-#   oneapi-src/level-zero v1.35.0 (libze1, the Ubuntu 24.04 build; it publishes no
+#   oneapi-src/level-zero v1.36.0 (libze1, the Ubuntu 24.04 build; it publishes no
 #     26.04 build, so 26.04 has no pinned loader and host-setup says so)
-#   intel/linux-npu-driver v1.38.0 (UMD, NPU compiler, intel-fw-npu firmware)
+#   intel/linux-npu-driver v1.39.1 (UMD, NPU compiler, intel-fw-npu firmware)
 #   ppa:kobuk-team/intel-graphics media driver, libva and gmmlib (HS_PPA_*; Intel
 #     publishes no media-driver .debs, and this is Intel's Ubuntu package source).
 #     The compute .debs need gmmlib 22.10 or later, newer than either release
@@ -8026,8 +8026,8 @@ cmd_model_share() {
 # Manjaro always install with -Syu, because a partial upgrade is what leaves the
 # media driver ahead of libva or the compute runtime ahead of libstdc++.
 HS_CR=26.40.40196.8
-HS_NPU_REL=v1.38.0
-HS_NPU_BUILD=1.38.0.20260910-34487311128
+HS_NPU_REL=v1.39.1
+HS_NPU_BUILD=1.39.1.20261119-44517102376
 HS_NVCTK=1.20.2-1
 # PPA builds with the Ubuntu release taken out (hs_ppa puts it back).
 HS_PPA_MEDIA=26.4.1-1~ppa1
@@ -8048,13 +8048,13 @@ intel-opencl-icd_${HS_CR}-0_amd64.deb 96046069e94680b761df6e83ddc64244721178b826
 libze-intel-gpu1_${HS_CR}-0_amd64.deb d9c86b2bb195baea6936c2708846cd1fceeadc39bc5e167f728858a5ca6fb86e ${cr}
 EOF
 }
-HS_ZE_DEB="libze1_1.35.0+u24.04_amd64.deb 8420f4fd710a44bed054afad2f7e0fbc408d8b3e266a2b5464bd4ab71a0dfcf3 https://github.com/oneapi-src/level-zero/releases/download/v1.35.0"
+HS_ZE_DEB="libze1_1.36.0+u24.04_amd64.deb 28ad4a3ac9dd429265729eb935e33300ba6ca4212f8b24b36b14339d83b9c33f https://github.com/oneapi-src/level-zero/releases/download/v1.36.0"
 
 # NPU driver archive per Ubuntu release: "<file> <sha256>" (GitHub asset digests).
 hs_npu_tarball() {
     case "$1" in
-        24.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2404.tar.gz 1efcd4b60c22abee751d8f2705962cbcc2a569de45c7e0e670cf08afbfcdc1d2" ;;
-        26.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2604.tar.gz 83685e6d92f4db1ca65e442846d487c7feb1335634b33994292ceb38f933bcc7" ;;
+        24.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2404.tar.gz 884a461b152281f259cd6759a8ae17a77968712b939543607360ec562d4741fc" ;;
+        26.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2604.tar.gz 8003e3edc70ba5e4015df3c526a263fc950ee451d05d10c32813debad8957e96" ;;
     esac
 }
 
