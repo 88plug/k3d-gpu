@@ -5,13 +5,24 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-22T21:49:40Z. 4 open.
+Updated 2026-11-22T21:49:57Z. 5 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 9d behind upstream with no open PR
 
 Opened 2026-11-20T21:01:29Z, updated 2026-11-22T20:08:20Z.
 
 Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 2026-11-13T10:20:19Z (9d ago, limit 7 days). No autobump/llama-cpp PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.
+
+## `bot-pr-stuck`: bot PRs open over 72 h without green CI
+
+Opened 2026-11-22T21:49:57Z, updated 2026-11-22T21:49:57Z.
+
+These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
+
+- https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure
+- https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure
+
+A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
 
 ## `ci-missing`: main's HEAD has no ci.yml run
 

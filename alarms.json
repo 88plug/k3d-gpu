@@ -30,5 +30,13 @@
     "updated_at": "2026-11-21T07:45:23Z",
     "notified_at": "2026-11-22T10:20:23Z",
     "acked": false
+  },
+  "bot-pr-stuck": {
+    "title": "bot PRs open over 72 h without green CI",
+    "body": "These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:\n\n- https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure\n- https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure\n\nA PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.",
+    "opened_at": "2026-11-22T21:49:57Z",
+    "updated_at": "2026-11-22T21:49:57Z",
+    "notified_at": "2026-11-22T21:49:57Z",
+    "acked": false
   }
 }
