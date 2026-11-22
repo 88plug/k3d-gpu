@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-22T20:08:58Z. 4 open.
+Updated 2026-11-22T21:49:40Z. 4 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 9d behind upstream with no open PR
 
@@ -23,7 +23,7 @@ A push made with GITHUB_TOKEN starts no workflow; the watchdog dispatched ci.yml
 
 ## `red:freshness.yml`: scheduled run failure
 
-Opened 2026-11-12T07:37:06Z, updated 2026-11-22T20:08:51Z, acknowledged.
+Opened 2026-11-12T07:37:06Z, updated 2026-11-22T21:49:40Z, acknowledged.
 
 The latest scheduled run of `freshness.yml` failed.
 
@@ -32,63 +32,69 @@ Conclusion: **failure**, created 2026-11-22T19:50:37Z, commit 4d2f2e7209f39de6fc
 Failed jobs: Bump llama-cpp
 Hint: no known signature matched
 
-<details><summary>Last 54 lines of the failed log</summary>
+<details><summary>Last 60 lines of the failed log</summary>
 
 ```text
-Bump llama-cpp Bump ﻿2026-11-22T19:59:22.2073676Z ##[group]Run out="$RUNNER_TEMP/out"
-Bump llama-cpp Bump 2026-11-22T19:59:22.2074033Z ^[[36;1mout="$RUNNER_TEMP/out"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2074293Z ^[[36;1mmkdir -p "$out"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2074785Z ^[[36;1mcase "$REASON" in ''|known-issue:*) ;; *) echo "::error::reason must be empty or known-issue:<id>"; exit 2;; esac^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2075800Z ^[[36;1m"$RUNNER_TEMP/venv/bin/python" hack/bump "$GROUP" ${REASON:+--reason "$REASON"} \^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2076501Z ^[[36;1m  --summary "$out/summary.json" --body "$out/body.md"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2076830Z ^[[36;1mgit add -A^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2077098Z ^[[36;1mgit diff --cached --binary > "$out/bump.patch"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2077469Z ^[[36;1mki=$(jq -r '.followup // empty' "$out/summary.json")^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2077792Z ^[[36;1mif [ -n "$ki" ]; then^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2078179Z ^[[36;1m  git -c user.name=freshness -c user.email=freshness@localhost commit -qm bump^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2078789Z ^[[36;1m  "$RUNNER_TEMP/venv/bin/python" hack/bump --remove-workaround "$ki" --body "$out/followup.md"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2079297Z ^[[36;1m  git add -A^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2079576Z ^[[36;1m  git diff --cached --binary > "$out/followup.patch"^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2079891Z ^[[36;1mfi^[[0m
-Bump llama-cpp Bump 2026-11-22T19:59:22.2116456Z shell: /usr/bin/bash -e {0}
-Bump llama-cpp Bump 2026-11-22T19:59:22.2116719Z env:
-Bump llama-cpp Bump 2026-11-22T19:59:22.2116915Z   GROUP: llama-cpp
-Bump llama-cpp Bump 2026-11-22T19:59:22.2117133Z   REASON: 
-Bump llama-cpp Bump 2026-11-22T19:59:22.2117340Z   PROMETHEUS_VERSION: 3.16.0
-Bump llama-cpp Bump 2026-11-22T19:59:22.2117751Z   PROMETHEUS_SHA256: 68727009472a2c02e1ff7f062fd5b3e637285bffc8fc2d340c76fb449d6e0f34
-Bump llama-cpp Bump 2026-11-22T19:59:22.2118198Z   KUBECONFORM_VERSION: v0.8.0
-Bump llama-cpp Bump 2026-11-22T19:59:22.2118607Z   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
-Bump llama-cpp Bump 2026-11-22T19:59:22.2119330Z   KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
-Bump llama-cpp Bump 2026-11-22T19:59:22.2119909Z   CHROME_VERSION: 157.0.8103.78
-Bump llama-cpp Bump 2026-11-22T19:59:22.2120158Z   JSONSCHEMA_VERSION: 4.26.0
-Bump llama-cpp Bump 2026-11-22T19:59:22.2120414Z   HELM4_VERSION: v4.3.1
-Bump llama-cpp Bump 2026-11-22T19:59:22.2120638Z   SHELLCHECK_VERSION: v0.11.0
-Bump llama-cpp Bump 2026-11-22T19:59:22.2120878Z   PACKAGING_VERSION: 26.3
-Bump llama-cpp Bump 2026-11-22T19:59:22.2121111Z   PYYAML_VERSION: 6.0.3
-Bump llama-cpp Bump 2026-11-22T19:59:22.2123946Z   GH_TOKEN: ***
-Bump llama-cpp Bump 2026-11-22T19:59:22.2124245Z   VLLM_RECIPES_PYTHON: /home/runner/work/_temp/venv/bin/python
-Bump llama-cpp Bump 2026-11-22T19:59:22.2124583Z ##[endgroup]
-Bump llama-cpp Bump 2026-11-22T19:59:47.9788284Z Traceback (most recent call last):
-Bump llama-cpp Bump 2026-11-22T19:59:47.9794576Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 785, in <module>
-Bump llama-cpp Bump 2026-11-22T19:59:47.9795386Z     sys.exit(main(sys.argv))
-Bump llama-cpp Bump 2026-11-22T19:59:47.9795857Z              ~~~~^^^^^^^^^^
-Bump llama-cpp Bump 2026-11-22T19:59:47.9796550Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 757, in main
-Bump llama-cpp Bump 2026-11-22T19:59:47.9797561Z     out = bump(root, a.group, a.reason, a.dry_run, resolved, not a.no_tests, a.fixed_in)
-Bump llama-cpp Bump 2026-11-22T19:59:47.9798466Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 659, in bump
-Bump llama-cpp Bump 2026-11-22T19:59:47.9799071Z     edits += edits_for(p, spans, cur, r)
-Bump llama-cpp Bump 2026-11-22T19:59:47.9799536Z              ~~~~~~~~~^^^^^^^^^^^^^^^^^^
-Bump llama-cpp Bump 2026-11-22T19:59:47.9800138Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 140, in edits_for
-Bump llama-cpp Bump 2026-11-22T19:59:47.9800600Z     new = _digest_for(s, vals)
-Bump llama-cpp Bump 2026-11-22T19:59:47.9801020Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 128, in _digest_for
-Bump llama-cpp Bump 2026-11-22T19:59:47.9801495Z     return oci.digest(name, tag)
-Bump llama-cpp Bump 2026-11-22T19:59:47.9801779Z            ~~~~~~~~~~^^^^^^^^^^^
-Bump llama-cpp Bump 2026-11-22T19:59:47.9802209Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/pinlib/oci.py", line 103, in digest
-Bump llama-cpp Bump 2026-11-22T19:59:47.9802747Z     return images_lock().registry_digest(name, tag)
-Bump llama-cpp Bump 2026-11-22T19:59:47.9803137Z            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
-Bump llama-cpp Bump 2026-11-22T19:59:47.9803653Z   File "/home/runner/work/k3d-gpu/k3d-gpu/scripts/images-lock", line 605, in registry_digest
-Bump llama-cpp Bump 2026-11-22T19:59:47.9804309Z     raise ValueError("%s:%s: HTTP %d from %s" % (name, tag, e.code, url)) from None
-Bump llama-cpp Bump 2026-11-22T19:59:47.9805908Z ValueError: ghcr.io/ggml-org/llama.cpp:server-intel-b12360: HTTP 404 from https://ghcr.io/v2/ggml-org/llama.cpp/manifests/server-intel-b12360
-Bump llama-cpp Bump 2026-11-22T19:59:48.0027505Z ##[error]Process completed with exit code 1.
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:21.4736496Z Downloading pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (794 kB)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:21.5096426Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 794.2/794.2 kB 27.5 MB/s eta 0:00:00
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:21.5179833Z Installing collected packages: PyYAML, packaging
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:21.6377691Z 
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:21.6388974Z Successfully installed PyYAML-6.0.3 packaging-26.3
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.1832999Z v3.22.1+gd6c1a0e
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2073688Z ##[group]Run out="$RUNNER_TEMP/out"
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2074036Z ^[[36;1mout="$RUNNER_TEMP/out"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2074296Z ^[[36;1mmkdir -p "$out"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2074789Z ^[[36;1mcase "$REASON" in ''|known-issue:*) ;; *) echo "::error::reason must be empty or known-issue:<id>"; exit 2;; esac^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2075805Z ^[[36;1m"$RUNNER_TEMP/venv/bin/python" hack/bump "$GROUP" ${REASON:+--reason "$REASON"} \^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2076504Z ^[[36;1m  --summary "$out/summary.json" --body "$out/body.md"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2076832Z ^[[36;1mgit add -A^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2077100Z ^[[36;1mgit diff --cached --binary > "$out/bump.patch"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2077472Z ^[[36;1mki=$(jq -r '.followup // empty' "$out/summary.json")^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2077795Z ^[[36;1mif [ -n "$ki" ]; then^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2078182Z ^[[36;1m  git -c user.name=freshness -c user.email=freshness@localhost commit -qm bump^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2078832Z ^[[36;1m  "$RUNNER_TEMP/venv/bin/python" hack/bump --remove-workaround "$ki" --body "$out/followup.md"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2079300Z ^[[36;1m  git add -A^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2079578Z ^[[36;1m  git diff --cached --binary > "$out/followup.patch"^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2079893Z ^[[36;1mfi^[[0m
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2116463Z shell: /usr/bin/bash -e {0}
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2116721Z env:
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2116917Z   GROUP: llama-cpp
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2117136Z   REASON: 
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2117342Z   PROMETHEUS_VERSION: 3.16.0
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2117754Z   PROMETHEUS_SHA256: 68727009472a2c02e1ff7f062fd5b3e637285bffc8fc2d340c76fb449d6e0f34
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2118200Z   KUBECONFORM_VERSION: v0.8.0
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2118609Z   KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2119333Z   KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0@sha256:faffaf43f95aa6425306e1ab8d6fcad72acb9049158f38e574c085ea1ec0f64e
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2119911Z   CHROME_VERSION: 157.0.8103.78
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2120166Z   JSONSCHEMA_VERSION: 4.26.0
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2120416Z   HELM4_VERSION: v4.3.1
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2120641Z   SHELLCHECK_VERSION: v0.11.0
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2120880Z   PACKAGING_VERSION: 26.3
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2121113Z   PYYAML_VERSION: 6.0.3
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2123949Z   GH_TOKEN: ***
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2124248Z   VLLM_RECIPES_PYTHON: /home/runner/work/_temp/venv/bin/python
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:22.2124585Z ##[endgroup]
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9788321Z Traceback (most recent call last):
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9794586Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 785, in <module>
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9795392Z     sys.exit(main(sys.argv))
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9795862Z              ~~~~^^^^^^^^^^
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9796557Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 757, in main
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9797578Z     out = bump(root, a.group, a.reason, a.dry_run, resolved, not a.no_tests, a.fixed_in)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9798505Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 659, in bump
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9799075Z     edits += edits_for(p, spans, cur, r)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9799540Z              ~~~~~~~~~^^^^^^^^^^^^^^^^^^
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9800141Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 140, in edits_for
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9800602Z     new = _digest_for(s, vals)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9801022Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/bump", line 128, in _digest_for
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9801497Z     return oci.digest(name, tag)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9801780Z            ~~~~~~~~~~^^^^^^^^^^^
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9802212Z   File "/home/runner/work/k3d-gpu/k3d-gpu/hack/pinlib/oci.py", line 103, in digest
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9802749Z     return images_lock().registry_digest(name, tag)
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9803139Z            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9803656Z   File "/home/runner/work/k3d-gpu/k3d-gpu/scripts/images-lock", line 605, in registry_digest
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9804733Z     raise ValueError("%s:%s: HTTP %d from %s" % (name, tag, e.code, url)) from None
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:47.9805914Z ValueError: ghcr.io/ggml-org/llama.cpp:server-intel-b12360: HTTP 404 from https://ghcr.io/v2/ggml-org/llama.cpp/manifests/server-intel-b12360
+Bump llama-cpp UNKNOWN STEP 2026-11-22T19:59:48.0027522Z ##[error]Process completed with exit code 1.
 ```
 </details>
 
