@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-22 07:42 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-22 20:08 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,12 +8,13 @@ blind-spot:llama-cpp
 ci-missing
 red:freshness.yml
 stale:freshness.yml
+stale:watchdog.yml
 
 ## Pins behind (24)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 2d |
+| examples | `examples-crewai` | `1.15.40` | `1.15.44` | patch | 2026-11-19 | 3d |
 | examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 2d |
 | examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 2d |
 | examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 2d |
@@ -22,20 +23,20 @@ stale:freshness.yml
 | examples | `examples-openai` | `3.49.0` | `3.57.0` | minor | 2026-11-20 | 2d |
 | examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 4d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
-| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `94c3211b0ee8ba969a3f12eb4aff8ba0f72971dd` | revision | 2026-11-21 | 20h |
-| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.0` | minor | 2026-11-21 | 19h |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `94c3211b0ee8ba969a3f12eb4aff8ba0f72971dd` | revision | 2026-11-21 | 1d |
+| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.0` | minor | 2026-11-21 | 1d |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 8d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
-| host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 2d |
+| host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 3d |
 | images | `image:images:ollama/ollama:0.40.16` | `0.40.16` | `0.40.17` | patch | 2026-11-21 | 1d |
-| llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 8d |
+| llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 9d |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.15` | patch | ? | ? |
 | packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 2d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.36` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 9d |
 | tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 1d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 5d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `35e2c00604ad85fe477f1db05404278cb13d9f80` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `1485aacf6e7f0aac05b0d6749dca0e34f45ff0fe` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 5d |
 
 ## Open bot PRs (11)
@@ -221,4 +222,4 @@ GitHub Actions are pinned by commit SHA and only a human (or Dependabot) moves t
 
 ## Lag tripwire
 
-- blind-spot:llama-cpp: llama-cpp is 8d behind upstream with no open PR
+- blind-spot:llama-cpp: llama-cpp is 9d behind upstream with no open PR
