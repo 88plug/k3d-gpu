@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-22 07:23 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-22 07:42 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -23,7 +23,7 @@ stale:freshness.yml
 | examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 4d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
 | flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `94c3211b0ee8ba969a3f12eb4aff8ba0f72971dd` | revision | 2026-11-21 | 20h |
-| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.0` | minor | 2026-11-21 | 18h |
+| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.0` | minor | 2026-11-21 | 19h |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 8d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.5` | patch | ? | ? |
 | host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 2d |
