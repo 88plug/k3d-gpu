@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-23 08:12 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-23 08:31 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -9,6 +9,7 @@ bot-pr-stuck
 ci-missing
 red:freshness.yml
 stale:freshness.yml
+stale:watchdog.yml
 
 ## Pins behind (24)
 
