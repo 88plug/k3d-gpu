@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-24 10:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-24 22:57 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,40 +8,39 @@ blind-spot:llama-cpp
 bot-pr-stuck
 ci-missing
 red:freshness.yml
-stale:bot-sweep.yml
 stale:freshness.yml
 
 ## Pins behind (27)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
-| examples | `examples-crewai` | `1.15.40` | `1.15.45` | patch | 2026-11-24 | 6h |
-| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 4d |
+| examples | `examples-crewai` | `1.15.40` | `1.15.45` | patch | 2026-11-24 | 19h |
+| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 5d |
 | examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 4d |
 | examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 4d |
-| examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 10d |
+| examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 11d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 10d |
-| examples | `examples-openai` | `3.49.0` | `3.58.0` | minor | 2026-11-23 | 15h |
-| examples | `examples-openai-agents` | `0.24.0` | `0.26.0` | minor | 2026-11-24 | 7h |
+| examples | `examples-openai` | `3.49.0` | `3.59.0` | minor | 2026-11-24 | 3h |
+| examples | `examples-openai-agents` | `0.24.0` | `0.26.0` | minor | 2026-11-24 | 19h |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.3` | minor | ? | ? |
-| examples | `image:examples:redis:8.10.3` | `8.10.3` | `8.12.0` | minor | 2026-11-24 | 1h |
-| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `0dc498bfe49baeb18b0f9891e800b53bb2603193` | revision | 2026-11-22 | 1d |
-| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.0` | minor | 2026-11-21 | 2d |
+| examples | `image:examples:redis:8.10.3` | `8.10.3` | `8.12.0` | minor | 2026-11-24 | 10h |
+| flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `0dc498bfe49baeb18b0f9891e800b53bb2603193` | revision | 2026-11-22 | 2d |
+| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.1` | minor | 2026-11-24 | 6h |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 10d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.6` | patch | ? | ? |
-| host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 4d |
-| images | `image:images:ollama/ollama:0.40.16` | `0.40.16` | `0.40.18` | patch | 2026-11-24 | 2h |
+| host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 5d |
+| images | `image:images:ollama/ollama:0.40.16` | `0.40.16` | `0.40.18` | patch | 2026-11-24 | 14h |
 | llama-cpp | `llama-cpp` | `v0.9.0` | `v1.0.0` | major | 2026-11-13 | 11d |
 | nri | `nri-balloons` | `v0.15.1` | `v0.15.2` | patch | ? | ? |
 | packaging-images | `image:packaging-images:ghcr.io/homebrew/brew:7.0.13` | `7.0.13` | `7.0.16` | patch | ? | ? |
-| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 4d |
+| packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 5d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.88` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 11d |
-| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 13h |
+| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 1d |
 | tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 3d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 7d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `46e14156b380a62d6e94d3a7b619439f966bee7e` | revision | ? | ? |
-| vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 7d |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `8a653cefb2aff0d256d52967645a0c0ae651a2f6` | revision | ? | ? |
+| vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 8d |
 
 ## Open bot PRs (12)
 
