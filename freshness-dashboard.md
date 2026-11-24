@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-24 00:24 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-24 00:44 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -10,7 +10,6 @@ ci-missing
 red:freshness.yml
 stale:bot-sweep.yml
 stale:freshness.yml
-stale:watchdog.yml
 
 ## Pins behind (27)
 
@@ -23,7 +22,7 @@ stale:watchdog.yml
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 10d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 9d |
 | examples | `examples-openai` | `3.49.0` | `3.58.0` | minor | 2026-11-23 | 5h |
-| examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 5d |
+| examples | `examples-openai-agents` | `0.24.0` | `0.25.0` | minor | 2026-11-18 | 6d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.110.2` | minor | ? | ? |
 | examples | `image:examples:redis:8.10.3` | `8.10.3` | `8.12.0` | minor | 2026-11-23 | 3h |
 | flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `0dc498bfe49baeb18b0f9891e800b53bb2603193` | revision | 2026-11-22 | 1d |
@@ -38,7 +37,7 @@ stale:watchdog.yml
 | packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 4d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.88` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 10d |
-| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 2h |
+| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 3h |
 | tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 3d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 7d |
 | vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `48760b85cabf1e651e9bf54a6208a368d4175ea1` | revision | ? | ? |
