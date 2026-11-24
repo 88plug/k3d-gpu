@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-24T22:58:17Z. 5 open.
+Updated 2026-11-24T22:58:35Z. 5 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 11d behind upstream with no open PR
 
@@ -15,12 +15,16 @@ Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 20
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
-Opened 2026-11-22T21:49:57Z, updated 2026-11-24T14:13:25Z.
+Opened 2026-11-22T21:49:57Z, updated 2026-11-24T22:58:35Z.
 
 These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
 
+- https://github.com/88plug/k3d-gpu/pull/438 chore(digests): move the digests the registries re-pointed (`autobump/digests`, open since 2026-11-19T21:10:29Z): ci.yml at 50130281b241: pull_request action_required, workflow_dispatch queued
+- https://github.com/88plug/k3d-gpu/pull/440 chore(examples): examples-crewai 1.15.45, examples-langgraph 1.2.24, examples-langchain-openai 1.8.5 and 8 more (`autobump/examples`, open since 2026-11-19T21:11:34Z): ci.yml at 4820a4dc6834: pull_request action_required, workflow_dispatch queued
 - https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure
+- https://github.com/88plug/k3d-gpu/pull/450 chore(vllm-recipes): vllm-recipes 8a653cefb2aff0d256d52967645a0c0ae651a2f6 (`autobump/vllm-recipes`, open since 2026-11-19T21:18:51Z): ci.yml at 3811d520b112: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure
+- https://github.com/88plug/k3d-gpu/pull/454 chore(gguf-convert-pip): gguf-transformers 5.24.1 (`autobump/gguf-convert-pip`, open since 2026-11-21T19:44:25Z): ci.yml at faae78401754: pull_request action_required
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
 
