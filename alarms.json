@@ -12,7 +12,7 @@
     "body": "`freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43089875836 at 2026-11-11T19:43:39Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
     "opened_at": "2026-11-12T09:33:09Z",
     "updated_at": "2026-11-12T09:33:09Z",
-    "notified_at": "2026-11-22T23:51:23Z",
+    "notified_at": "2026-11-24T00:25:38Z",
     "acked": true
   },
   "blind-spot:llama-cpp": {
