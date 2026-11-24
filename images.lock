@@ -309,13 +309,13 @@
       "tag": "v1.83.14-stable.patch.2"
     },
     {
-      "digest": "sha256:8a6bdb2382dcf191ec49d9760ea9317ab35d2a07f971e091bf2ebcf9b0770a07",
+      "digest": "sha256:5b5164458fcebdd9fd14413bfa7b16a477d37d9f9d03771ac13fae69c00bdd7f",
       "name": "ghcr.io/containers/nri-plugins/nri-resource-policy-balloons",
       "sources": [
         "share/nri-balloons-guard.yml",
         "share/nri-balloons.yml"
       ],
-      "tag": "v0.15.1"
+      "tag": "v0.15.2"
     },
     {
       "digest": "sha256:93573d882ea21d1b77712a33162934daaabcdf3a076dfff91a9ed3c2aed8cd41",
