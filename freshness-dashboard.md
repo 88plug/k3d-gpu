@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-24 10:26 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-24 10:45 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,8 +8,8 @@ blind-spot:llama-cpp
 bot-pr-stuck
 ci-missing
 red:freshness.yml
+stale:bot-sweep.yml
 stale:freshness.yml
-stale:watchdog.yml
 
 ## Pins behind (27)
 
@@ -37,7 +37,7 @@ stale:watchdog.yml
 | packaging-images | `image:packaging-images:nixos/nix:2.35.6` | `2.35.6` | `2.36.0` | minor | 2026-11-19 | 4d |
 | tools | `ci-chrome` | `157.0.8103.78` | `158.0.8127.88` | major | ? | ? |
 | tools | `ci-helm4` | `v4.3.1` | `v4.3.2` | patch | 2026-11-13 | 11d |
-| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 12h |
+| tools | `ci-packaging` | `26.3` | `26.4` | minor | 2026-11-23 | 13h |
 | tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 3d |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 7d |
 | vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `46e14156b380a62d6e94d3a7b619439f966bee7e` | revision | ? | ? |
