@@ -374,12 +374,12 @@
       "tag": "v2.4.0"
     },
     {
-      "digest": "sha256:d5168bfbc28609eff5bea1b438dd864cf64d185cf6582c02244865e18385b901",
+      "digest": "sha256:e0dc5a8bf5c71cadf339d1e7b9408b357da75fb2854f82cad57a1609fadf2a22",
       "name": "ghcr.io/open-webui/open-webui",
       "sources": [
         "share/agent-chat-ui.yml"
       ],
-      "tag": "v0.13.4"
+      "tag": "v0.13.5"
     },
     {
       "digest": "sha256:7673383d44a84bece724d9ca8feeadf4eee69cd46475fdff614cbbca6732d463",
