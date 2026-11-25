@@ -127,7 +127,7 @@ class Tokens(unittest.TestCase):
             "x = 'registry.ollama.ai/library/qwen3:4b-q4_K_M'": ["registry.ollama.ai/library/qwen3:4b-q4_K_M"],
             "pip install vllm==0.24.0 torch==2.9.0+cpu": ["vllm==0.24.0", "torch==2.9.0+cpu"],
             "REV = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678'": ["a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"],
-            "KUBECTL_VERSION=v1.37.2  # newest": ["KUBECTL_VERSION=v1.37.2"],
+            "KUBECTL_VERSION=v1.37.3  # newest": ["KUBECTL_VERSION=v1.37.3"],
             "B1_TAG=v0.28.0@" + DIGEST: ["B1_TAG=v0.28.0@" + DIGEST, "v0.28.0@" + DIGEST],
             "manifest " + DIGEST: [DIGEST],
             # not pins: comments, awk, sysfs, command substitutions, plain variables
