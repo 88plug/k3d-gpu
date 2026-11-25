@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-25 09:10 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-25 09:29 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -9,6 +9,7 @@ bot-pr-stuck
 ci-missing
 red:freshness.yml
 stale:freshness.yml
+stale:watchdog.yml
 
 ## Pins behind (27)
 
@@ -20,12 +21,12 @@ stale:freshness.yml
 | examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 5d |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 11d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 11d |
-| examples | `examples-openai` | `3.49.0` | `3.59.0` | minor | 2026-11-24 | 13h |
+| examples | `examples-openai` | `3.49.0` | `3.59.0` | minor | 2026-11-24 | 14h |
 | examples | `examples-openai-agents` | `0.24.0` | `0.26.0` | minor | 2026-11-24 | 1d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.111.0` | minor | ? | ? |
 | examples | `image:examples:redis:8.10.3` | `8.10.3` | `8.12.0` | minor | 2026-11-24 | 21h |
 | flake | `nixpkgs` | `ac588ef1c914865dad517b337ea0eb9694a4021c` | `0dc498bfe49baeb18b0f9891e800b53bb2603193` | revision | 2026-11-22 | 2d |
-| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.1` | minor | 2026-11-24 | 16h |
+| gguf-convert-pip | `gguf-transformers` | `5.23.0` | `5.24.1` | minor | 2026-11-24 | 17h |
 | host-intel | `level-zero` | `1.35.0` | `1.36.0` | minor | 2026-11-13 | 11d |
 | host-intel | `linux-tools` | `7.3.4` | `7.3.6` | patch | ? | ? |
 | host-intel | `npu-driver` | `1.38.0` | `1.39.1` | minor | 2026-11-19 | 5d |
