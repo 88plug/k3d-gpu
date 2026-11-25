@@ -38,5 +38,13 @@
     "updated_at": "2026-11-25T10:31:09Z",
     "notified_at": "2026-11-25T10:31:09Z",
     "acked": false
+  },
+  "stale:watchdog.yml": {
+    "title": "no successful scheduled run within 7 h",
+    "body": "`watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/45595594017 at 2026-11-25T10:30:14Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-25T20:12:57Z",
+    "updated_at": "2026-11-25T20:12:57Z",
+    "notified_at": "2026-11-25T20:12:57Z",
+    "acked": false
   }
 }
