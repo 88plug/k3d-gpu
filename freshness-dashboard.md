@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-25 22:08 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-25 22:28 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -9,14 +9,13 @@ bot-pr-stuck
 ci-missing
 red:freshness.yml
 stale:freshness.yml
-stale:watchdog.yml
 
 ## Pins behind (29)
 
 | Group | Pin | Pinned | Latest | Type | Published | Age |
 |---|---|---|---|---|---|---|
 | examples | `examples-crewai` | `1.15.40` | `1.15.45` | patch | 2026-11-24 | 1d |
-| examples | `examples-langchain-core` | `1.8.0` | `1.8.4` | patch | 2026-11-19 | 5d |
+| examples | `examples-langchain-core` | `1.8.0` | `1.8.5` | patch | 2026-11-25 | 0h |
 | examples | `examples-langchain-openai` | `1.7.4` | `1.8.5` | minor | 2026-11-19 | 5d |
 | examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 5d |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 11d |
