@@ -5,13 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-26T19:41:50Z. 5 open.
-
-## `blind-spot:llama-cpp`: llama-cpp is 12d behind upstream with no open PR
-
-Opened 2026-11-20T21:01:29Z, updated 2026-11-25T22:09:10Z.
-
-Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 2026-11-13T10:20:19Z (12d ago, limit 7 days). No autobump/llama-cpp PR is open: the bumper is not moving it. Check the Freshness run's bump job for this group.
+Updated 2026-11-26T22:09:13Z. 4 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
