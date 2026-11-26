@@ -1,6 +1,6 @@
 # Freshness dashboard
 
-Updated 2026-11-26 08:55 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
+Updated 2026-11-26 09:15 UTC by the Freshness workflow (`hack/pins report`). Every pin of class ours or eat-stock in `pins/registry.toml` against its upstream's newest stable release.
 
 ## Open alarms
 
@@ -8,6 +8,7 @@ blind-spot:llama-cpp
 bot-pr-stuck
 ci-missing
 red:freshness.yml
+stale:bot-sweep.yml
 stale:freshness.yml
 
 ## Pins behind (29)
@@ -20,7 +21,7 @@ stale:freshness.yml
 | examples | `examples-langgraph` | `1.2.20` | `1.2.24` | patch | 2026-11-20 | 6d |
 | examples | `examples-llama-index-core` | `0.14.25` | `0.14.26` | patch | 2026-11-13 | 12d |
 | examples | `examples-llama-index-llms-openai-like` | `0.8.1` | `0.9.0` | minor | 2026-11-14 | 12d |
-| examples | `examples-openai` | `3.49.0` | `3.60.0` | minor | 2026-11-26 | 1h |
+| examples | `examples-openai` | `3.49.0` | `3.60.0` | minor | 2026-11-26 | 2h |
 | examples | `examples-openai-agents` | `0.24.0` | `0.26.0` | minor | 2026-11-24 | 2d |
 | examples | `image:examples:ghcr.io/berriai/litellm:v1.109.1` | `v1.109.1` | `v1.111.0` | minor | ? | ? |
 | examples | `image:examples:redis:8.10.3` | `8.10.3` | `8.12.0` | minor | 2026-11-24 | 1d |
@@ -41,7 +42,7 @@ stale:freshness.yml
 | tools | `ci-pyyaml` | `6.0.3` | `6.0.4` | patch | 2026-11-20 | 5d |
 | tools | `kubectl` | `v1.37.2` | `v1.37.3` | patch | ? | ? |
 | vllm-cpu | `vllm-cpu` | `v0.32.0` | `v0.34.0` | minor | 2026-11-16 | 9d |
-| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `b0ac52e1b79b9c754595781c757f0fac8876495b` | revision | ? | ? |
+| vllm-recipes | `vllm-recipes` | `294a6d27809e3b6543554214a8d99116bd7d13dd` | `84b47c9a13ae489d60d46b631a5217180605f29c` | revision | ? | ? |
 | vllm-xpu | `vllm-xpu` | `v0.33.0` | `v0.34.0` | minor | 2026-11-16 | 9d |
 
 ## Open bot PRs (13)
