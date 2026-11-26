@@ -28,7 +28,7 @@
     "body": "main's HEAD `4d2f2e7209f39de6fcb39e2883860d252f41ae06` (committed 2026-11-21T03:24:33Z) has no ci.yml run from a push or workflow_dispatch, 2 h after the commit.\n\nA push made with GITHUB_TOKEN starts no workflow; the watchdog dispatched ci.yml on main once when HEAD was 30 min old. Dispatch it: `gh workflow run ci.yml --ref main`.",
     "opened_at": "2026-11-21T07:45:23Z",
     "updated_at": "2026-11-21T07:45:23Z",
-    "notified_at": "2026-11-25T15:40:10Z",
+    "notified_at": "2026-11-26T19:41:50Z",
     "acked": false
   },
   "bot-pr-stuck": {
