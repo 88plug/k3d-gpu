@@ -8009,10 +8009,10 @@ cmd_model_share() {
 # a y/N prompt. Kernel boot options are printed, never applied.
 #
 # Pins, taken from each upstream release page:
-#   intel/compute-runtime 26.40.40196.8 with intel-graphics-compiler v2.42.6
-#   oneapi-src/level-zero v1.35.0 (libze1, the Ubuntu 24.04 build; it publishes no
+#   intel/compute-runtime 26.44.40734.8 with intel-graphics-compiler v2.43.9
+#   oneapi-src/level-zero v1.36.0 (libze1, the Ubuntu 24.04 build; it publishes no
 #     26.04 build, so 26.04 has no pinned loader and host-setup says so)
-#   intel/linux-npu-driver v1.38.0 (UMD, NPU compiler, intel-fw-npu firmware)
+#   intel/linux-npu-driver v1.39.1 (UMD, NPU compiler, intel-fw-npu firmware)
 #   ppa:kobuk-team/intel-graphics media driver, libva and gmmlib (HS_PPA_*; Intel
 #     publishes no media-driver .debs, and this is Intel's Ubuntu package source).
 #     The compute .debs need gmmlib 22.10 or later, newer than either release
@@ -8025,9 +8025,9 @@ cmd_model_share() {
 # the current build, so an exact version cannot be requested there. Arch and
 # Manjaro always install with -Syu, because a partial upgrade is what leaves the
 # media driver ahead of libva or the compute runtime ahead of libstdc++.
-HS_CR=26.40.40196.8
-HS_NPU_REL=v1.38.0
-HS_NPU_BUILD=1.38.0.20260910-34487311128
+HS_CR=26.44.40734.8
+HS_NPU_REL=v1.39.1
+HS_NPU_BUILD=1.39.1.20261119-44517102376
 HS_NVCTK=1.20.2-1
 # PPA builds with the Ubuntu release taken out (hs_ppa puts it back).
 HS_PPA_MEDIA=26.4.1-1~ppa1
@@ -8040,21 +8040,21 @@ HS_LIBDIRS="usr/lib/x86_64-linux-gnu usr/lib64 usr/lib"
 # the ones the compute-runtime and IGC release notes publish.
 hs_intel_debs() {
     local cr="https://github.com/intel/compute-runtime/releases/download/${HS_CR}"
-    local igc="https://github.com/intel/intel-graphics-compiler/releases/download/v2.42.6"
+    local igc="https://github.com/intel/intel-graphics-compiler/releases/download/v2.43.9"
     cat <<EOF
-intel-igc-core-2_2.42.6+23070_amd64.deb e20539632f2d99875d8f8b225d5da58b31f98baa54bb47c6328aa98ec473ab9d ${igc}
-intel-igc-opencl-2_2.42.6+23070_amd64.deb 7f5593cf828503ffb8450967768bde9209e22753bc576296e846b5a751011fa3 ${igc}
-intel-opencl-icd_${HS_CR}-0_amd64.deb 96046069e94680b761df6e83ddc64244721178b826e3e1f8af3ca104cfd0c7c2 ${cr}
-libze-intel-gpu1_${HS_CR}-0_amd64.deb d9c86b2bb195baea6936c2708846cd1fceeadc39bc5e167f728858a5ca6fb86e ${cr}
+intel-igc-core-2_2.43.9+23453_amd64.deb 552916f771d8ec69a04e88f7c5a760f29c9cb2302dbf721ebde2144eae94817f ${igc}
+intel-igc-opencl-2_2.43.9+23453_amd64.deb aec09bf2e1f30f6bfb79597a42b3f7d9935c5835c5cfbf863f28ceff48fc88d6 ${igc}
+intel-opencl-icd_${HS_CR}-0_amd64.deb 9d54a23957cb695a9602d389e70d124b3734331a732e7e20074bb6894e221d22 ${cr}
+libze-intel-gpu1_${HS_CR}-0_amd64.deb 9e0a335ffeee6d38974b275d074ef2a95c48ddddbd507af810418857278e8142 ${cr}
 EOF
 }
-HS_ZE_DEB="libze1_1.35.0+u24.04_amd64.deb 8420f4fd710a44bed054afad2f7e0fbc408d8b3e266a2b5464bd4ab71a0dfcf3 https://github.com/oneapi-src/level-zero/releases/download/v1.35.0"
+HS_ZE_DEB="libze1_1.36.0+u24.04_amd64.deb 28ad4a3ac9dd429265729eb935e33300ba6ca4212f8b24b36b14339d83b9c33f https://github.com/oneapi-src/level-zero/releases/download/v1.36.0"
 
 # NPU driver archive per Ubuntu release: "<file> <sha256>" (GitHub asset digests).
 hs_npu_tarball() {
     case "$1" in
-        24.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2404.tar.gz 1efcd4b60c22abee751d8f2705962cbcc2a569de45c7e0e670cf08afbfcdc1d2" ;;
-        26.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2604.tar.gz 83685e6d92f4db1ca65e442846d487c7feb1335634b33994292ceb38f933bcc7" ;;
+        24.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2404.tar.gz 884a461b152281f259cd6759a8ae17a77968712b939543607360ec562d4741fc" ;;
+        26.04) echo "linux-npu-driver-v${HS_NPU_BUILD}-ubuntu2604.tar.gz 8003e3edc70ba5e4015df3c526a263fc950ee451d05d10c32813debad8957e96" ;;
     esac
 }
 
