@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-26T00:24:32Z. 5 open.
+Updated 2026-11-26T00:24:50Z. 5 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 12d behind upstream with no open PR
 
@@ -15,14 +15,11 @@ Pin `llama-cpp` (group llama-cpp) is at v0.9.0; upstream v1.0.0 was published 20
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
-Opened 2026-11-22T21:49:57Z, updated 2026-11-25T22:10:20Z.
+Opened 2026-11-22T21:49:57Z, updated 2026-11-26T00:24:50Z.
 
 These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
 
-- https://github.com/88plug/k3d-gpu/pull/440 chore(examples): examples-crewai 1.15.45, examples-langgraph 1.2.24, examples-langchain-openai 1.8.5 and 8 more (`autobump/examples`, open since 2026-11-19T21:11:34Z): ci.yml at 4b648a5185c0: pull_request action_required, workflow_dispatch in_progress
-- https://github.com/88plug/k3d-gpu/pull/448 chore(tools): ci-chrome 158.0.8127.88, ci-helm4 v4.3.2, ci-packaging 26.4 and 2 more (`autobump/tools`, open since 2026-11-19T21:17:32Z): ci.yml at 67de9ba7c1f8: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure
-- https://github.com/88plug/k3d-gpu/pull/450 chore(vllm-recipes): vllm-recipes 92c19251c8723e362371639c709522a4528769dd (`autobump/vllm-recipes`, open since 2026-11-19T21:18:51Z): ci.yml at 0c2c82c79387: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
