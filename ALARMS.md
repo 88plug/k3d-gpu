@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-26T00:24:50Z. 5 open.
+Updated 2026-11-26T03:09:07Z. 5 open.
 
 ## `blind-spot:llama-cpp`: llama-cpp is 12d behind upstream with no open PR
 
