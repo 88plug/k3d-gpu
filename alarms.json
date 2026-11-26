@@ -7,14 +7,6 @@
     "notified_at": "2026-11-26T13:09:52Z",
     "acked": true
   },
-  "stale:freshness.yml": {
-    "title": "no successful scheduled run within 12 h",
-    "body": "`freshness.yml` (cron `23 */6 * * *`, every 6 h) has no successful scheduled run within 12 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/43089875836 at 2026-11-11T19:43:39Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
-    "opened_at": "2026-11-12T09:33:09Z",
-    "updated_at": "2026-11-12T09:33:09Z",
-    "notified_at": "2026-11-26T03:09:07Z",
-    "acked": true
-  },
   "ci-missing": {
     "title": "main's HEAD has no ci.yml run",
     "body": "main's HEAD `4d2f2e7209f39de6fcb39e2883860d252f41ae06` (committed 2026-11-21T03:24:33Z) has no ci.yml run from a push or workflow_dispatch, 2 h after the commit.\n\nA push made with GITHUB_TOKEN starts no workflow; the watchdog dispatched ci.yml on main once when HEAD was 30 min old. Dispatch it: `gh workflow run ci.yml --ref main`.",
