@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-27T21:53:14Z. 4 open.
+Updated 2026-11-27T21:53:20Z. 4 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
