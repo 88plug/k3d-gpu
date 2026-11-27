@@ -22,5 +22,13 @@
     "updated_at": "2026-11-27T12:20:40Z",
     "notified_at": "2026-11-27T12:20:40Z",
     "acked": false
+  },
+  "stale:bot-sweep.yml": {
+    "title": "no successful scheduled run within 7 h",
+    "body": "`bot-sweep.yml` (cron `13 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).\n\nLast successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/45997079180 at 2026-11-27T12:15:10Z\n\nA scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.",
+    "opened_at": "2026-11-27T21:53:05Z",
+    "updated_at": "2026-11-27T21:53:05Z",
+    "notified_at": "2026-11-27T21:53:05Z",
+    "acked": false
   }
 }
