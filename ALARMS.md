@@ -5,7 +5,7 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-27T21:53:05Z. 4 open.
+Updated 2026-11-27T21:53:14Z. 4 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
@@ -39,11 +39,11 @@ A scheduled run that never starts leaves no red run: check the workflow is enabl
 
 ## `stale:watchdog.yml`: no successful scheduled run within 7 h
 
-Opened 2026-11-27T12:20:40Z, updated 2026-11-27T12:20:40Z.
+Opened 2026-11-27T12:20:40Z, updated 2026-11-27T21:53:14Z.
 
 `watchdog.yml` (cron `47 * * * *`, every 1 h) has no successful scheduled run within 7 h (period + 6 h).
 
-Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/45940700410 at 2026-11-27T04:34:08Z
+Last successful scheduled run: https://github.com/88plug/k3d-gpu/actions/runs/46015482221 at 2026-11-27T14:23:23Z
 
 A scheduled run that never starts leaves no red run: check the workflow is enabled and that its last runs were not skipped.
 
