@@ -5,20 +5,17 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-27T22:01:49Z. 3 open.
+Updated 2026-11-27T22:58:15Z. 3 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
-Opened 2026-11-22T21:49:57Z, updated 2026-11-27T21:53:40Z.
+Opened 2026-11-22T21:49:57Z, updated 2026-11-27T22:58:15Z.
 
 These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
 
-- https://github.com/88plug/k3d-gpu/pull/440 chore(examples): examples-crewai 1.15.45, examples-langgraph 1.2.24, examples-langchain-openai 1.8.5 and 8 more (`autobump/examples`, open since 2026-11-19T21:11:34Z): ci.yml at 3d5edcb82ad1: pull_request action_required, workflow_dispatch in_progress
-- https://github.com/88plug/k3d-gpu/pull/441 chore(flake): nixpkgs 5b31ff946309736077f0c4ee23bb85d0a0a1c181 (`autobump/flake`, open since 2026-11-19T21:12:25Z): ci.yml at e6ea5fb0cc05: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure
-- https://github.com/88plug/k3d-gpu/pull/450 chore(vllm-recipes): vllm-recipes 6534c550134b6fdc01732b06439c67722efc76b7 (`autobump/vllm-recipes`, open since 2026-11-19T21:18:51Z): ci.yml at 702aa0c990a4: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure
-- https://github.com/88plug/k3d-gpu/pull/453 chore(images): image:images:ollama/ollama:0.40.16 0.40.19 (`autobump/images`, open since 2026-11-21T07:40:17Z): ci.yml at 8074bc53f88b: pull_request action_required
+- https://github.com/88plug/k3d-gpu/pull/453 chore(images): image:images:ollama/ollama:0.40.16 0.40.19 (`autobump/images`, open since 2026-11-21T07:40:17Z): ci.yml at 8074bc53f88b: pull_request action_required, workflow_dispatch in_progress
 - https://github.com/88plug/k3d-gpu/pull/455 chore(nri): nri-balloons v0.15.2 (`autobump/nri`, open since 2026-11-24T00:22:01Z): ci.yml at e6621bce36f7: pull_request action_required, workflow_dispatch failure
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
