@@ -5,19 +5,17 @@ alarms.json, rendered here. A new alarm, or a new text, notifies @88plug by a co
 on main (again every 24 h while it stays open), and the `ci-alarm` commit status on main's newest
 commit is red while any alarm is open. `hack/ci_alarm ack <key>` marks one read.
 
-Updated 2026-11-27T02:55:57Z. 2 open.
+Updated 2026-11-27T02:56:17Z. 2 open.
 
 ## `bot-pr-stuck`: bot PRs open over 72 h without green CI
 
-Opened 2026-11-22T21:49:57Z, updated 2026-11-26T22:37:40Z.
+Opened 2026-11-22T21:49:57Z, updated 2026-11-27T02:56:17Z.
 
 These autobump PRs are open over 72 h and their head SHA has no successful ci.yml run:
 
-- https://github.com/88plug/k3d-gpu/pull/443 chore(host-intel): compute-runtime 26.44.40734.8, level-zero 1.36.0, npu-driver 1.39.1 and 1 more (`autobump/host-intel`, open since 2026-11-19T21:13:04Z): ci.yml at 995dfba92bea: pull_request action_required, workflow_dispatch in_progress
 - https://github.com/88plug/k3d-gpu/pull/449 chore(vllm-cpu): vllm-cpu v0.34.0 (`autobump/vllm-cpu`, open since 2026-11-19T21:18:03Z): ci.yml at e57476f8f846: pull_request action_required, workflow_dispatch failure
-- https://github.com/88plug/k3d-gpu/pull/450 chore(vllm-recipes): vllm-recipes 1736d0812625149c303bf071641aef44532b9935 (`autobump/vllm-recipes`, open since 2026-11-19T21:18:51Z): ci.yml at c1f5608f5a4b: pull_request action_required
 - https://github.com/88plug/k3d-gpu/pull/451 chore(vllm-xpu): vllm-xpu v0.34.0 (`autobump/vllm-xpu`, open since 2026-11-19T21:19:18Z): ci.yml at 969edfef1241: pull_request action_required, workflow_dispatch failure
-- https://github.com/88plug/k3d-gpu/pull/454 chore(gguf-convert-pip): gguf-transformers 5.24.1, gguf-huggingface-hub 2.5.0 (`autobump/gguf-convert-pip`, open since 2026-11-21T19:44:25Z): ci.yml at 6cc9b48bb13f: pull_request action_required
+- https://github.com/88plug/k3d-gpu/pull/455 chore(nri): nri-balloons v0.15.2 (`autobump/nri`, open since 2026-11-24T00:22:01Z): ci.yml at e6621bce36f7: pull_request action_required, workflow_dispatch failure
 
 A PR that GITHUB_TOKEN opened or updated gets approval-held CI runs (action_required): approve them, or dispatch ci.yml on the branch.
 
