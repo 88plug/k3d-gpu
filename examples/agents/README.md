@@ -6,10 +6,10 @@ endpoint: OpenVINO Model Server (OVMS) serving `OpenVINO/Qwen3-4B-int4-ov` as
 
 | Directory | Framework | Pinned packages |
 |---|---|---|
-| [`openai-agents/`](openai-agents/) | OpenAI Agents SDK, tool served over MCP (stdio) | `openai-agents==0.24.0`, `openai==3.49.0`, `mcp==2.3.0` |
-| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.20`, `langchain-openai==1.7.4`, `langchain-core==1.8.0` |
-| [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.40` |
-| [`llamaindex/`](llamaindex/) | LlamaIndex `FunctionAgent` | `llama-index-core==0.14.25`, `llama-index-llms-openai-like==0.8.1` |
+| [`openai-agents/`](openai-agents/) | OpenAI Agents SDK, tool served over MCP (stdio) | `openai-agents==0.26.0`, `openai==3.60.0`, `mcp==2.3.0` |
+| [`langgraph/`](langgraph/) | LangGraph `StateGraph` + `ToolNode` | `langgraph==1.2.24`, `langchain-openai==1.8.5`, `langchain-core==1.8.5` |
+| [`crewai/`](crewai/) | CrewAI agent + task | `crewai==1.15.45` |
+| [`llamaindex/`](llamaindex/) | LlamaIndex `FunctionAgent` | `llama-index-core==0.14.26`, `llama-index-llms-openai-like==0.9.0` |
 | [`litellm-gateway/`](litellm-gateway/) | Intel Enterprise Agent Toolkit GenAI gateway (LiteLLM) | `litellm==1.83.14` (see [the gateway section](#enterprise-agent-toolkit-gateway)) |
 
 Each example asks "What is 6 times 7?", the model calls a `multiply` tool, and the
