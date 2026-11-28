@@ -1,7 +1,7 @@
-# Node Feature Discovery v0.20.1 + Intel device-plugin NodeFeatureRules v0.37.1
+# Node Feature Discovery v0.20.1 + Intel device-plugin NodeFeatureRules v0.37.2
 # Sources (pinned):
 #   https://github.com/kubernetes-sigs/node-feature-discovery/tree/v0.20.1/deployment/overlays/default
-#   https://github.com/intel/intel-device-plugins-for-kubernetes/tree/v0.37.1/deployments/nfd/overlays/node-feature-rules
+#   https://github.com/intel/intel-device-plugins-for-kubernetes/tree/v0.37.2/deployments/nfd/overlays/node-feature-rules
 #   image registry.k8s.io/nfd/node-feature-discovery:v0.20.1, pinned to its multi-arch index digest
 # Rendered with `kubectl kustomize` over the kustomization below (the two upstream
 # trees unpacked from their release tarballs next to it). Re-render to bump.
@@ -26,7 +26,7 @@
 # kustomization.yaml:
 #   resources:
 #   - node-feature-discovery-0.20.1/deployment/overlays/default
-#   - intel-device-plugins-for-kubernetes-0.37.1/deployments/nfd/overlays/node-feature-rules
+#   - intel-device-plugins-for-kubernetes-0.37.2/deployments/nfd/overlays/node-feature-rules
 #   images:
 #   - name: registry.k8s.io/nfd/node-feature-discovery
 #     newTag: v0.20.1@sha256:6fc5c9af9176e1acb5ce57a4a1d0c0d3eb25cd34f5bdd0efefebf0efe45a8379

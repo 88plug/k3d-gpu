@@ -73,53 +73,53 @@
       "tag": "1.24.2-481"
     },
     {
-      "digest": "sha256:e7673d0b4fa60d846b7be037953c81bb0c9805ab75a6f790cb68c486b99d3c93",
+      "digest": "sha256:033d04f8aa708c5e1977e18c833836850a6228fa4dc8f14c5e6365031af73cdb",
       "name": "docker.io/intel/intel-dsa-plugin",
       "sources": [
         "share/intel-dsa-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
-      "digest": "sha256:edf037861d5c6c8b15a76a595645564f5b53858c641345e7b630b31b05cf9c5c",
+      "digest": "sha256:76be4d43fed32bb6a26c57b41de7818337e04361601cf80e632f3eac6c983058",
       "name": "docker.io/intel/intel-gpu-levelzero",
       "sources": [
         "share/intel-gpu-wsl-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
-      "digest": "sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33",
+      "digest": "sha256:d8c5d202e53a5ca4ea4105f0b2729b3108ac4304aba948e956f80f5f38ae119b",
       "name": "docker.io/intel/intel-gpu-plugin",
       "sources": [
         "share/intel-gpu-plugin.yml",
         "share/intel-gpu-wsl-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
-      "digest": "sha256:6391dcd3b2f3ca487675503e850db5ec77ec3dd2054867e1de196d4986bc60bc",
+      "digest": "sha256:63e2653669280dc8e780fa9f242993f3b07d6635882cf61b6391401fb4955fcf",
       "name": "docker.io/intel/intel-iaa-plugin",
       "sources": [
         "share/intel-iaa-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
-      "digest": "sha256:cdcf6f4c662c0d1ee4e3fc841a56e1a097706c880f8f98fd3ff51d7a8f02b547",
+      "digest": "sha256:573435b6e44b22bd1f2a7493ad89ae910d9096d3f5cdedb4f242b71372ba1729",
       "name": "docker.io/intel/intel-npu-plugin",
       "sources": [
         "share/intel-npu-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
-      "digest": "sha256:4751706168d6d0e100e6391e3bb288fc9386920c5c2f733f2073d04f830c7418",
+      "digest": "sha256:516d4bdaaa2835641c2abf35ff1536878bdba33c54e56facd951cbed46ec1a0b",
       "name": "docker.io/intel/intel-qat-plugin",
       "sources": [
         "share/intel-qat-plugin.yml"
       ],
-      "tag": "0.37.1"
+      "tag": "0.37.2"
     },
     {
       "digest": "sha256:52218ad85513ab6686d4c090c83c2bd8c5b02423c63aa4dabd41837fe641fe3b",

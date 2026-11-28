@@ -8,7 +8,7 @@
       "subject": "0.0.0.0:39651 kube-apiserver"
     },
     {
-      "detail": "sha256:004641b2547d in images.lock (share/intel-gpu-plugin.yml, share/intel-gpu-wsl-plugin.yml); on k3d-gpu-server-0",
+      "detail": "sha256:d8c5d202e53a in images.lock (share/intel-gpu-plugin.yml, share/intel-gpu-wsl-plugin.yml); on k3d-gpu-server-0",
       "fix": null,
       "rule": "image",
       "status": "pass",

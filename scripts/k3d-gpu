@@ -1804,7 +1804,7 @@ npu_platform() {
 # for any other id, advertising no npu.intel.com/accel for it. Upstream also lists
 # 0x7e4c, which pci.ids names the Meteor Lake GNA; intel_vpu never binds it, so
 # detection never sees it. Bump NPU_PLUGIN_TAG and the list together.
-NPU_PLUGIN_TAG="0.37.1"
+NPU_PLUGIN_TAG="0.37.2"
 NPU_PLUGIN_IDS="0x7e4c 0x643e 0xad1d 0x7d1d 0xb03e 0xfd3e 0xd71d"
 npu_plugin_serves() { [[ " ${NPU_PLUGIN_IDS} " == *" $1 "* ]]; }
 

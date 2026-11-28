@@ -35,7 +35,7 @@ spec:
             valueFrom:
               fieldRef:
                 fieldPath: spec.nodeName
-        image: intel/intel-dsa-plugin:0.37.1@sha256:e7673d0b4fa60d846b7be037953c81bb0c9805ab75a6f790cb68c486b99d3c93
+        image: intel/intel-dsa-plugin:0.37.2@sha256:033d04f8aa708c5e1977e18c833836850a6228fa4dc8f14c5e6365031af73cdb
         imagePullPolicy: IfNotPresent
         securityContext:
           seLinuxOptions:
