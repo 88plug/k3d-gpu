@@ -11,12 +11,12 @@
 # redis:8.10.2 is Debian trixie (docker-library/official-images library/redis),
 # so libdto is built on trixie too and links against the same glibc.
 
-ARG REDIS_IMAGE=redis:8.10.3@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53
+ARG REDIS_IMAGE=redis:8.12.0@sha256:56a1737794e36c3ebe8a4544a8ab421af3ab1a6488fb2238aec228c404933fed
 # intel/DTO has no release after v1.1 (2024-07); this main commit carries the
 # CMake build and the DTO_ACCEL_CONFIG_SUPPORT / DTO_NUMA_SUPPORT switches.
 ARG DTO_COMMIT=fbf41a67e3719a1c9a8692b6952afe0d88043c76
 
-FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2 AS build
+FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0 AS build
 ARG DTO_COMMIT
 # Toolchain only; the source is pinned to DTO_COMMIT.
 # hadolint ignore=DL3008
