@@ -4342,7 +4342,7 @@ pci "${r}" 0000:00:02.0 0x8086 0xa780 i915; render "${r}" 0000:00:02.0 128
 
 n=$(node_with_manifest igpu-auto)
 up_check "up adds shared-dev-num and allocation-policy under the plugin image" "${r}" "${n}" 0 "${MF}" \
-'          image: intel/intel-gpu-plugin:0.37.1@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33
+'          image: intel/intel-gpu-plugin:0.37.2@sha256:d8c5d202e53a5ca4ea4105f0b2729b3108ac4304aba948e956f80f5f38ae119b
           args:
             - "-shared-dev-num=8"
             - "-allocation-policy=balanced"

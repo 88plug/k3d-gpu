@@ -11,7 +11,7 @@
     },
     {
       "digests": [
-        "docker.io/intel/intel-gpu-plugin@sha256:004641b2547d58f1eadce58473fa160ad71377de1eb588cf1f82832387bf3e33"
+        "docker.io/intel/intel-gpu-plugin@sha256:d8c5d202e53a5ca4ea4105f0b2729b3108ac4304aba948e956f80f5f38ae119b"
       ],
       "node": "k3d-gpu-server-0",
       "tags": [

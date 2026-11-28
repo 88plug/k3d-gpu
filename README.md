@@ -1932,6 +1932,7 @@ Contributions, issues, and feature requests are welcome! Please fork the reposit
 
 | Date       | K3s Tag             | NVIDIA Plugin | Intel GPU Plugin | Gaudi Plugin |
 |------------|---------------------|---------------|------------------|--------------|
+| 2026-11-28 | v1.37.2-k3s1 | v0.20.2 | v0.37.2 | 1.24.2-481 |
 | 2026-11-21 | v1.37.2-k3s1 | v0.20.2 | v0.37.1 | 1.24.2-481 |
 | 2026-11-10 | v1.37.2-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
 | 2026-10-17 | v1.37.1-k3s1 | v0.20.1 | v0.37.1 | 1.24.2-481 |
